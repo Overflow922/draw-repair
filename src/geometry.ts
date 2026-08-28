@@ -38,12 +38,28 @@ const ORTHO_TAN = Math.tan((15 * Math.PI) / 180)
 export function snap(cursor: Point, walls: Wall[], gridStepCm: number, radiusCm: number, orthoFrom?: Point): Point {
   let best: Point | null = null
   let bestDist = radiusCm
-  for (const w of walls) {
-    const c = projectOnSegment(cursor, w)
-    const d = distance(cursor, c)
+  const consider = (p: Point, d: number) => {
     if (d <= bestDist) {
-      best = c
+      best = p
       bestDist = d
+    }
+  }
+  for (const w of walls) {
+    const dx = w.b.x - w.a.x
+    const dy = w.b.y - w.a.y
+    const len2 = dx * dx + dy * dy
+    if (len2 < EPS) {
+      consider(w.a, distance(cursor, w.a))
+      continue
+    }
+    const raw = ((cursor.x - w.a.x) * dx + (cursor.y - w.a.y) * dy) / len2
+    const foot = { x: w.a.x + raw * dx, y: w.a.y + raw * dy }
+    if (raw < 0 || raw > 1) {
+      const end = raw < 0 ? w.a : w.b
+      const dEnd = distance(cursor, end)
+      consider(dEnd <= radiusCm ? end : foot, dEnd <= radiusCm ? dEnd : distance(cursor, foot))
+    } else {
+      consider(foot, distance(cursor, foot))
     }
   }
   if (best) return best
@@ -57,5 +73,34 @@ export function snap(cursor: Point, walls: Wall[], gridStepCm: number, radiusCm:
   return {
     x: Math.round(p.x / gridStepCm) * gridStepCm,
     y: Math.round(p.y / gridStepCm) * gridStepCm,
+  }
+}
+
+export function hitWall(p: Point, walls: Wall[], toleranceCm: number): Wall | null {
+  let best: Wall | null = null
+  let bestDist = Infinity
+  for (const w of walls) {
+    const d = distance(p, projectOnSegment(p, w))
+    if (d <= Math.max(w.thicknessCm / 2, toleranceCm) && d < bestDist) {
+      best = w
+      bestDist = d
+    }
+  }
+  return best
+}
+
+export function endpointAt(p: Point, wall: Wall, radiusCm: number): "a" | "b" | null {
+  if (distance(p, wall.a) <= radiusCm) return "a"
+  if (distance(p, wall.b) <= radiusCm) return "b"
+  return null
+}
+
+export function moveEndpoint(walls: Wall[], wall: Wall, end: "a" | "b", pos: Point): void {
+  const old = wall[end]
+  wall[end] = pos
+  for (const w of walls) {
+    if (w === wall) continue
+    if (pointsEqual(w.a, old)) w.a = pos
+    if (pointsEqual(w.b, old)) w.b = pos
   }
 }

@@ -114,6 +114,26 @@ body {
   padding: 2px 4px;
 }
 
+#ortho-toggle {
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  background: #fff;
+  color: #444;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+#ortho-toggle.active {
+  background: #dbeafe;
+  border-color: #2563eb;
+  color: #1d4ed8;
+}
+
 #unit-row {
   display: flex;
   gap: 2px;

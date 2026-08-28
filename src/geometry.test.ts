@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { pointsEqual, snap, visibleWorld, zoomAt } from "./geometry"
+import { endpointAt, hitWall, moveEndpoint, pointsEqual, snap, visibleWorld, zoomAt } from "./geometry"
 import type { Point, Wall } from "./types"
 
 const GRID = 10
@@ -70,6 +70,16 @@ describe("snap с орто-привязкой 90°", () => {
   })
 })
 
+describe("snap к продолжению линии за концом стены", () => {
+  it("тянет к продолжению линии за концом, если конец вне радиуса", () => {
+    expect(snap({ x: 356, y: 98 }, [wall(100, 100, 300, 100)], GRID, RADIUS)).toEqual({ x: 356, y: 100 })
+  })
+
+  it("конец стены в радиусе приоритетнее продолжения линии", () => {
+    expect(snap({ x: 103, y: 3 }, [wall(0, 0, 100, 0)], GRID, RADIUS)).toEqual({ x: 100, y: 0 })
+  })
+})
+
 describe("zoomAt", () => {
   it("сохраняет мировую точку под курсором", () => {
     const view = { zoom: 1, pan: { x: 100, y: 50 } }
@@ -102,5 +112,57 @@ describe("pointsEqual", () => {
     const p: Point = { x: 5, y: 5 }
     expect(pointsEqual(p, { x: 5, y: 5 })).toBe(true)
     expect(pointsEqual(p, { x: 5.1, y: 5 })).toBe(false)
+  })
+})
+
+describe("hitWall", () => {
+  it("попадает в тонкую стену только в пределах допуска", () => {
+    const w = wall(0, 0, 100, 0)
+    expect(hitWall({ x: 50, y: 9 }, [w], 10)).toBe(w)
+    expect(hitWall({ x: 50, y: 11 }, [w], 10)).toBeNull()
+  })
+
+  it("попадает в толстую стену по полосе даже вне допуска", () => {
+    const w = wall(0, 0, 100, 0)
+    w.thicknessCm = 40
+    expect(hitWall({ x: 50, y: 19 }, [w], 5)).toBe(w)
+    expect(hitWall({ x: 50, y: 21 }, [w], 5)).toBeNull()
+  })
+
+  it("выбирает ближайшую из перекрывающихся стен", () => {
+    const w1 = wall(0, 0, 100, 0)
+    const w2 = wall(50, 0, 50, 100)
+    expect(hitWall({ x: 40, y: 6 }, [w1, w2], 10)).toBe(w1)
+    expect(hitWall({ x: 40, y: 14 }, [w1, w2], 10)).toBe(w2)
+  })
+})
+
+describe("endpointAt", () => {
+  it("попадает в концы стены", () => {
+    const w = wall(0, 0, 100, 0)
+    expect(endpointAt({ x: 3, y: 4 }, w, 6)).toBe("a")
+    expect(endpointAt({ x: 97, y: -4 }, w, 6)).toBe("b")
+  })
+
+  it("не попадает в середину стены", () => {
+    expect(endpointAt({ x: 50, y: 0 }, wall(0, 0, 100, 0), 6)).toBeNull()
+  })
+})
+
+describe("moveEndpoint", () => {
+  it("перемещает конец стены", () => {
+    const w = wall(0, 0, 100, 0)
+    moveEndpoint([w], w, "b", { x: 150, y: 0 })
+    expect(w.b).toEqual({ x: 150, y: 0 })
+    expect(w.a).toEqual({ x: 0, y: 0 })
+  })
+
+  it("тянет совпавшие концы соседних стен", () => {
+    const w1 = wall(0, 0, 100, 0)
+    const w2 = wall(100, 0, 100, 100)
+    const w3 = wall(200, 0, 200, 100)
+    moveEndpoint([w1, w2, w3], w1, "b", { x: 120, y: 0 })
+    expect(w2.a).toEqual({ x: 120, y: 0 })
+    expect(w3.a).toEqual({ x: 200, y: 0 })
   })
 })

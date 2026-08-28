@@ -2,7 +2,17 @@ import { pointsEqual, visibleWorld } from "./geometry"
 import { GRID_STEP_CM, PX_PER_CM, WALL_TYPES } from "./types"
 import type { Unit, View, Wall } from "./types"
 
-export function render(canvas: HTMLCanvasElement, walls: Wall[], preview: Wall | null, unit: Unit, view: View): void {
+const OUTLINE_PX = 4
+const HANDLE_PX = 5
+
+export function render(
+  canvas: HTMLCanvasElement,
+  walls: Wall[],
+  preview: Wall | null,
+  unit: Unit,
+  view: View,
+  selected: Wall | null = null,
+): void {
   const dpr = window.devicePixelRatio || 1
   const w = canvas.clientWidth
   const h = canvas.clientHeight
@@ -32,8 +42,10 @@ export function render(canvas: HTMLCanvasElement, walls: Wall[], preview: Wall |
   }
   ctx.stroke()
   ctx.lineCap = "square"
+  if (selected) drawOutline(ctx, selected, k)
   for (const wall of walls) drawWall(ctx, wall, 1)
   if (preview) drawWall(ctx, preview, 0.4)
+  if (selected) drawHandles(ctx, selected, k)
   ctx.restore()
   ctx.font = "14px sans-serif"
   ctx.textAlign = "center"
@@ -59,6 +71,27 @@ function drawWall(ctx: CanvasRenderingContext2D, wall: Wall, alpha: number): voi
   ctx.lineTo(wall.b.x, wall.b.y)
   ctx.stroke()
   ctx.globalAlpha = 1
+}
+
+function drawOutline(ctx: CanvasRenderingContext2D, wall: Wall, k: number): void {
+  ctx.strokeStyle = "rgba(8, 145, 178, 0.5)"
+  ctx.lineWidth = wall.thicknessCm + (OUTLINE_PX * 2) / k
+  ctx.beginPath()
+  ctx.moveTo(wall.a.x, wall.a.y)
+  ctx.lineTo(wall.b.x, wall.b.y)
+  ctx.stroke()
+}
+
+function drawHandles(ctx: CanvasRenderingContext2D, wall: Wall, k: number): void {
+  ctx.fillStyle = "#fff"
+  ctx.strokeStyle = "#0f172a"
+  ctx.lineWidth = 1.5 / k
+  for (const p of [wall.a, wall.b]) {
+    ctx.beginPath()
+    ctx.arc(p.x, p.y, HANDLE_PX / k, 0, Math.PI * 2)
+    ctx.fill()
+    ctx.stroke()
+  }
 }
 
 function drawLengthLabel(ctx: CanvasRenderingContext2D, wall: Wall, text: string, color: string, view: View): void {
