@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>draw-repair</title>
+  </head>
+  <body>
+    <div id="app">
+      <aside id="toolbar">
+        <button id="tool-wall" class="tool active" title="Стена">
+          <svg width="24" height="24" viewBox="0 0 24 24"><rect x="3" y="10" width="18" height="4" rx="1" fill="currentColor"/></svg>
+        </button>
+        <label id="thickness-label" title="Толщина стены">
+          <span id="thickness-unit">мм</span>
+          <input id="thickness" type="number" value="200" />
+        </label>
+        <div id="wall-types" aria-label="Тип стены">
+          <button class="wall-type" data-type="bearing" title="Несущая" type="button"></button>
+          <button class="wall-type active" data-type="partition" title="Перегородка" type="button"></button>
+          <button class="wall-type" data-type="drywall" title="Гипрок" type="button"></button>
+        </div>
+      </aside>
+      <main id="canvas-wrap">
+        <canvas id="canvas"></canvas>
+        <div id="size-box">
+          <label id="length-label">Длина<input id="length" type="text" inputmode="decimal" placeholder="—" /></label>
+          <div id="unit-row" aria-label="Единицы длины">
+            <button class="unit" data-unit="m" type="button">м</button>
+            <button class="unit" data-unit="cm" type="button">см</button>
+            <button class="unit active" data-unit="mm" type="button">мм</button>
+          </div>
+        </div>
+      </main>
+    </div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
