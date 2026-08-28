@@ -1,8 +1,8 @@
 import "./style.css"
-import { pointsEqual, snap } from "./geometry"
+import { pointsEqual, snap, zoomAt } from "./geometry"
 import { render } from "./render"
 import { GRID_STEP_CM, PX_PER_CM, SNAP_RADIUS_PX, WALL_TYPES } from "./types"
-import type { Point, Unit, Wall, WallType } from "./types"
+import type { Point, Unit, View, Wall, WallType } from "./types"
 
 const canvas = document.querySelector<HTMLCanvasElement>("#canvas")!
 const thicknessInput = document.querySelector<HTMLInputElement>("#thickness")!
@@ -18,6 +18,7 @@ let thicknessCm = 20
 let wallType: WallType = "partition"
 let unit: Unit = "mm"
 let lengthDirty = false
+let view: View = { zoom: 1, pan: { x: 0, y: 0 } }
 
 const UNIT_TO_CM: Record<Unit, number> = { m: 100, cm: 1, mm: 0.1 }
 const UNIT_LABEL: Record<Unit, string> = { m: "м", cm: "см", mm: "мм" }
@@ -61,17 +62,18 @@ function updateLengthBox(): void {
 
 function redraw(): void {
   const p = previewPoint()
-  render(canvas, walls, chainStart && p ? { a: chainStart, b: p, thicknessCm, type: wallType } : null, unit)
+  render(canvas, walls, chainStart && p ? { a: chainStart, b: p, thicknessCm, type: wallType } : null, unit, view)
   updateLengthBox()
 }
 
 function toSnappedPoint(e: MouseEvent): Point {
   const r = canvas.getBoundingClientRect()
+  const k = PX_PER_CM * view.zoom
   return snap(
-    { x: (e.clientX - r.left) / PX_PER_CM, y: (e.clientY - r.top) / PX_PER_CM },
+    { x: (e.clientX - r.left) / k + view.pan.x, y: (e.clientY - r.top) / k + view.pan.y },
     walls,
     GRID_STEP_CM,
-    SNAP_RADIUS_PX / PX_PER_CM,
+    SNAP_RADIUS_PX / k,
     chainStart ?? undefined,
   )
 }
@@ -95,10 +97,46 @@ function commitPoint(p: Point): void {
   redraw()
 }
 
+let panDrag: { start: Point; pan: Point } | null = null
+
 canvas.addEventListener("pointermove", (e) => {
+  if (panDrag) {
+    const r = canvas.getBoundingClientRect()
+    const k = PX_PER_CM * view.zoom
+    view.pan = {
+      x: panDrag.pan.x - (e.clientX - r.left - panDrag.start.x) / k,
+      y: panDrag.pan.y - (e.clientY - r.top - panDrag.start.y) / k,
+    }
+    redraw()
+    return
+  }
   cursor = toSnappedPoint(e)
   redraw()
 })
+
+canvas.addEventListener("pointerdown", (e) => {
+  if (e.button !== 1) return
+  e.preventDefault()
+  canvas.setPointerCapture(e.pointerId)
+  const r = canvas.getBoundingClientRect()
+  panDrag = { start: { x: e.clientX - r.left, y: e.clientY - r.top }, pan: view.pan }
+})
+
+canvas.addEventListener("pointerup", (e) => {
+  if (!panDrag || e.button !== 1) return
+  panDrag = null
+  cursor = toSnappedPoint(e)
+  redraw()
+})
+
+canvas.addEventListener("auxclick", (e) => e.preventDefault())
+
+canvas.addEventListener("wheel", (e) => {
+  e.preventDefault()
+  const r = canvas.getBoundingClientRect()
+  view = zoomAt(view, 1.1 ** -Math.sign(e.deltaY), { x: e.clientX - r.left, y: e.clientY - r.top }, PX_PER_CM)
+  redraw()
+}, { passive: false })
 
 canvas.addEventListener("click", (e) => commitPoint(toSnappedPoint(e)))
 

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { pointsEqual, snap } from "./geometry"
+import { pointsEqual, snap, visibleWorld, zoomAt } from "./geometry"
 import type { Point, Wall } from "./types"
 
 const GRID = 10
@@ -67,6 +67,33 @@ describe("snap с орто-привязкой 90°", () => {
 
   it("без орто-точки привязка к сетке как раньше", () => {
     expect(snap({ x: 45.4, y: 46 }, [], GRID, RADIUS)).toEqual({ x: 50, y: 50 })
+  })
+})
+
+describe("zoomAt", () => {
+  it("сохраняет мировую точку под курсором", () => {
+    const view = { zoom: 1, pan: { x: 100, y: 50 } }
+    const anchor = { x: 80, y: 60 }
+    const next = zoomAt(view, 1.1, anchor, 2)
+    expect(next.pan.x + anchor.x / (2 * next.zoom)).toBeCloseTo(view.pan.x + anchor.x / 2)
+    expect(next.pan.y + anchor.y / (2 * next.zoom)).toBeCloseTo(view.pan.y + anchor.y / 2)
+  })
+
+  it("ограничивает масштаб сверху", () => {
+    expect(zoomAt({ zoom: 10, pan: { x: 0, y: 0 } }, 1.1, { x: 40, y: 40 }, 2).zoom).toBe(10)
+  })
+
+  it("ограничивает масштаб снизу", () => {
+    expect(zoomAt({ zoom: 0.1, pan: { x: 0, y: 0 } }, 0.9, { x: 40, y: 40 }, 2).zoom).toBe(0.1)
+  })
+})
+
+describe("visibleWorld", () => {
+  it("возвращает видимый мировой прямоугольник", () => {
+    expect(visibleWorld({ zoom: 2, pan: { x: 100, y: 50 } }, 800, 600, 2)).toEqual({
+      min: { x: 100, y: 50 },
+      max: { x: 300, y: 200 },
+    })
   })
 })
 

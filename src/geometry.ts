@@ -1,6 +1,20 @@
-import type { Point, Wall } from "./types"
+import { ZOOM_MAX, ZOOM_MIN } from "./types"
+import type { Point, View, Wall } from "./types"
 
 const EPS = 1e-6
+
+export function zoomAt(view: View, factor: number, anchor: Point, pxPerCm: number): View {
+  const zoom = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, view.zoom * factor))
+  const world = { x: view.pan.x + anchor.x / (pxPerCm * view.zoom), y: view.pan.y + anchor.y / (pxPerCm * view.zoom) }
+  return { zoom, pan: { x: world.x - anchor.x / (pxPerCm * zoom), y: world.y - anchor.y / (pxPerCm * zoom) } }
+}
+
+export function visibleWorld(view: View, w: number, h: number, pxPerCm: number): { min: Point; max: Point } {
+  return {
+    min: view.pan,
+    max: { x: view.pan.x + w / (pxPerCm * view.zoom), y: view.pan.y + h / (pxPerCm * view.zoom) },
+  }
+}
 
 export function pointsEqual(a: Point, b: Point): boolean {
   return Math.abs(a.x - b.x) < EPS && Math.abs(a.y - b.y) < EPS

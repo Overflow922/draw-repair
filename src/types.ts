@@ -10,6 +10,11 @@ export interface Wall {
   type: WallType
 }
 
+export interface View {
+  zoom: number
+  pan: Point
+}
+
 export const WALL_TYPES = [
   { id: "bearing", label: "Несущая", color: "#b91c1c" },
   { id: "partition", label: "Перегородка", color: "#44403c" },
@@ -21,5 +26,7 @@ export type WallType = (typeof WALL_TYPES)[number]["id"]
 export const PX_PER_CM = 2
 export const GRID_STEP_CM = 10
 export const SNAP_RADIUS_PX = 12
+export const ZOOM_MIN = 0.1
+export const ZOOM_MAX = 10
 
 export type Unit = "m" | "cm" | "mm"
