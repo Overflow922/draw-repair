@@ -86,7 +86,7 @@ function drawHandles(ctx: CanvasRenderingContext2D, wall: Wall, k: number): void
   ctx.fillStyle = "#fff"
   ctx.strokeStyle = "#0f172a"
   ctx.lineWidth = 1.5 / k
-  for (const p of [wall.a, wall.b]) {
+  for (const p of [wall.a, wall.b, { x: (wall.a.x + wall.b.x) / 2, y: (wall.a.y + wall.b.y) / 2 }]) {
     ctx.beginPath()
     ctx.arc(p.x, p.y, HANDLE_PX / k, 0, Math.PI * 2)
     ctx.fill()

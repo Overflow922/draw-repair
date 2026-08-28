@@ -95,6 +95,12 @@ export function endpointAt(p: Point, wall: Wall, radiusCm: number): "a" | "b" | 
   return null
 }
 
+export function handleAt(p: Point, wall: Wall, radiusCm: number): "a" | "b" | "mid" | null {
+  const end = endpointAt(p, wall, radiusCm)
+  if (end) return end
+  return distance(p, { x: (wall.a.x + wall.b.x) / 2, y: (wall.a.y + wall.b.y) / 2 }) <= radiusCm ? "mid" : null
+}
+
 export function moveEndpoint(walls: Wall[], wall: Wall, end: "a" | "b", pos: Point): void {
   const old = wall[end]
   wall[end] = pos
@@ -102,5 +108,18 @@ export function moveEndpoint(walls: Wall[], wall: Wall, end: "a" | "b", pos: Poi
     if (w === wall) continue
     if (pointsEqual(w.a, old)) w.a = pos
     if (pointsEqual(w.b, old)) w.b = pos
+  }
+}
+
+export function moveWall(walls: Wall[], wall: Wall, delta: Point): void {
+  const { a, b } = wall
+  wall.a = { x: a.x + delta.x, y: a.y + delta.y }
+  wall.b = { x: b.x + delta.x, y: b.y + delta.y }
+  for (const w of walls) {
+    if (w === wall) continue
+    if (pointsEqual(w.a, a)) w.a = wall.a
+    if (pointsEqual(w.b, a)) w.b = wall.a
+    if (pointsEqual(w.a, b)) w.a = wall.b
+    if (pointsEqual(w.b, b)) w.b = wall.b
   }
 }

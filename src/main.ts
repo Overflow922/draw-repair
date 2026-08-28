@@ -1,5 +1,5 @@
 import "./style.css"
-import { endpointAt, hitWall, moveEndpoint, pointsEqual, snap, zoomAt } from "./geometry"
+import { handleAt, hitWall, moveEndpoint, moveWall, pointsEqual, snap, zoomAt } from "./geometry"
 import { render } from "./render"
 import { GRID_STEP_CM, PX_PER_CM, SNAP_RADIUS_PX, WALL_TYPES } from "./types"
 import type { Point, Unit, View, Wall, WallType } from "./types"
@@ -22,6 +22,7 @@ let lengthDirty = false
 let view: View = { zoom: 1, pan: { x: 0, y: 0 } }
 let selectedWall: Wall | null = null
 let endpointDrag: { wall: Wall; end: "a" | "b" } | null = null
+let wallMove: { wall: Wall; baseA: Point; baseB: Point; grab: Point; others: Wall[] } | null = null
 let suppressClick = false
 let ortho = false
 
@@ -117,6 +118,20 @@ function commitPoint(p: Point): void {
 let panDrag: { start: Point; pan: Point } | null = null
 
 canvas.addEventListener("pointermove", (e) => {
+  if (wallMove) {
+    const { wall, baseA, grab, others } = wallMove
+    const p = toWorld(e)
+    const next = snap(
+      { x: baseA.x + p.x - grab.x, y: baseA.y + p.y - grab.y },
+      others,
+      GRID_STEP_CM,
+      SNAP_RADIUS_PX / (PX_PER_CM * view.zoom),
+      ortho ? baseA : undefined,
+    )
+    moveWall(walls, wall, { x: next.x - wall.a.x, y: next.y - wall.a.y })
+    redraw()
+    return
+  }
   if (endpointDrag) {
     const { wall, end } = endpointDrag
     const other = end === "a" ? wall.b : wall.a
@@ -155,16 +170,25 @@ canvas.addEventListener("pointerdown", (e) => {
     return
   }
   if (e.button !== 0 || !selectedWall) return
-  const end = endpointAt(toWorld(e), selectedWall, SNAP_RADIUS_PX / (PX_PER_CM * view.zoom))
-  if (!end) return
-  endpointDrag = { wall: selectedWall, end }
+  const sel = selectedWall
+  const p = toWorld(e)
+  const handle = handleAt(p, sel, SNAP_RADIUS_PX / (PX_PER_CM * view.zoom))
+  if (!handle) return
   suppressClick = true
+  if (handle === "mid") {
+    const jointed = (c: Wall) => pointsEqual(c.a, sel.a) || pointsEqual(c.b, sel.a) || pointsEqual(c.a, sel.b) || pointsEqual(c.b, sel.b)
+    wallMove = { wall: sel, baseA: sel.a, baseB: sel.b, grab: p, others: walls.filter((c) => c !== sel && !jointed(c)) }
+  } else endpointDrag = { wall: sel, end: handle }
   canvas.setPointerCapture(e.pointerId)
 })
 
 canvas.addEventListener("pointerup", (e) => {
   if (endpointDrag) {
     if (e.button === 0) endpointDrag = null
+    return
+  }
+  if (wallMove) {
+    if (e.button === 0) wallMove = null
     return
   }
   if (!panDrag || e.button !== 1) return

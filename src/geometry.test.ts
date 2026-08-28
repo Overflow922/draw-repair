@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { endpointAt, hitWall, moveEndpoint, pointsEqual, snap, visibleWorld, zoomAt } from "./geometry"
+import { endpointAt, handleAt, hitWall, moveEndpoint, moveWall, pointsEqual, snap, visibleWorld, zoomAt } from "./geometry"
 import type { Point, Wall } from "./types"
 
 const GRID = 10
@@ -149,6 +149,20 @@ describe("endpointAt", () => {
   })
 })
 
+describe("handleAt", () => {
+  it("попадает в середину стены", () => {
+    expect(handleAt({ x: 52, y: 3 }, wall(0, 0, 100, 0), 6)).toBe("mid")
+  })
+
+  it("конец имеет приоритет над серединой на короткой стене", () => {
+    expect(handleAt({ x: 6, y: 0 }, wall(0, 0, 10, 0), 6)).toBe("a")
+  })
+
+  it("не попадает вне радиуса", () => {
+    expect(handleAt({ x: 50, y: 8 }, wall(0, 0, 100, 0), 6)).toBeNull()
+  })
+})
+
 describe("moveEndpoint", () => {
   it("перемещает конец стены", () => {
     const w = wall(0, 0, 100, 0)
@@ -164,5 +178,32 @@ describe("moveEndpoint", () => {
     moveEndpoint([w1, w2, w3], w1, "b", { x: 120, y: 0 })
     expect(w2.a).toEqual({ x: 120, y: 0 })
     expect(w3.a).toEqual({ x: 200, y: 0 })
+  })
+})
+
+describe("moveWall", () => {
+  it("смещает оба конца на вектор", () => {
+    const w = wall(0, 0, 100, 0)
+    moveWall([w], w, { x: 10, y: 20 })
+    expect(w.a).toEqual({ x: 10, y: 20 })
+    expect(w.b).toEqual({ x: 110, y: 20 })
+  })
+
+  it("тянет приваренные концы соседних стен", () => {
+    const w1 = wall(0, 0, 100, 0)
+    const w2 = wall(100, 0, 100, 100)
+    const w3 = wall(200, 0, 200, 100)
+    moveWall([w1, w2, w3], w1, { x: 10, y: 0 })
+    expect(w2.a).toEqual({ x: 110, y: 0 })
+    expect(w2.b).toEqual({ x: 100, y: 100 })
+    expect(w3.a).toEqual({ x: 200, y: 0 })
+  })
+
+  it("не изменяет несвязанные стены", () => {
+    const w1 = wall(0, 0, 100, 0)
+    const w2 = wall(200, 0, 200, 100)
+    moveWall([w1, w2], w1, { x: 10, y: 0 })
+    expect(w2.a).toEqual({ x: 200, y: 0 })
+    expect(w2.b).toEqual({ x: 200, y: 100 })
   })
 })
