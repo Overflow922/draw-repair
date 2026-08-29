@@ -9,7 +9,7 @@ const wall = (ax: number, ay: number, bx: number, by: number): Wall => ({
   a: { x: ax, y: ay },
   b: { x: bx, y: by },
   thicknessCm: 20,
-  type: "partition",
+  type: "brick",
 })
 
 describe("snap", () => {

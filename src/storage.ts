@@ -1,3 +1,4 @@
+import { normalizeMaterial } from "./types"
 import type { Drawing, DrawingStore, Point, View, Wall } from "./types"
 
 const KEY = "draw-repair:drawing"
@@ -18,6 +19,8 @@ export const isWall = (w: unknown): w is Wall =>
   typeof w === "object" && w !== null && isPoint((w as Wall).a) && isPoint((w as Wall).b) &&
   typeof (w as Wall).thicknessCm === "number" && (w as Wall).thicknessCm > 0 &&
   typeof (w as Wall).type === "string"
+
+const normalizeWalls = (walls: Wall[]): Wall[] => walls.map((w) => ({ ...w, type: normalizeMaterial(w.type) }))
 
 export const isDrawing = (d: unknown): d is Drawing =>
   typeof d === "object" && d !== null && typeof (d as Drawing).id === "string" &&
@@ -52,12 +55,14 @@ export function parseStore(raw: string): LoadedStore | null {
   if (typeof d.version === "number" && d.version > 1) return { store: emptyStore(), readOnly: true }
   if (d.version !== 1) return null
   if (Array.isArray(d.drawings)) {
-    if (typeof d.activeId === "string" && d.drawings.every(isDrawing) && d.drawings.some((x) => x.id === d.activeId))
-      return { store: { version: 1, activeId: d.activeId, drawings: d.drawings }, readOnly: false }
+    if (typeof d.activeId === "string" && d.drawings.every(isDrawing) && d.drawings.some((x) => x.id === d.activeId)) {
+      const drawings = (d.drawings as Drawing[]).map((dr) => ({ ...dr, walls: normalizeWalls(dr.walls) }))
+      return { store: { version: 1, activeId: d.activeId, drawings }, readOnly: false }
+    }
     return null
   }
   if (Array.isArray(d.walls) && d.walls.every(isWall) && isView(d.view)) {
-    const drawing: Drawing = { id: crypto.randomUUID(), name: "Чертёж 1", walls: d.walls as Wall[], view: d.view }
+    const drawing: Drawing = { id: crypto.randomUUID(), name: "Чертёж 1", walls: normalizeWalls(d.walls as Wall[]), view: d.view }
     return { store: { version: 1, activeId: drawing.id, drawings: [drawing] }, readOnly: false }
   }
   return null

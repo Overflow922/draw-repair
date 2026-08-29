@@ -3,25 +3,30 @@ export interface Point {
   y: number
 }
 
+export const MATERIALS = [
+  { id: "brick", label: "Кирпич" },
+  { id: "concrete", label: "Бетон" },
+  { id: "reinforced", label: "Железобетон" },
+  { id: "wood-long", label: "Дерево (вдоль)" },
+] as const
+
+export type Material = (typeof MATERIALS)[number]["id"]
+
+export function normalizeMaterial(type: string): Material {
+  return (MATERIALS.some((m) => m.id === type) ? type : "brick") as Material
+}
+
 export interface Wall {
   a: Point
   b: Point
   thicknessCm: number
-  type: WallType
+  type: Material
 }
 
 export interface View {
   zoom: number
   pan: Point
 }
-
-export const WALL_TYPES = [
-  { id: "bearing", label: "Несущая", color: "#b91c1c" },
-  { id: "partition", label: "Перегородка", color: "#44403c" },
-  { id: "drywall", label: "Гипрок", color: "#2563eb" },
-] as const
-
-export type WallType = (typeof WALL_TYPES)[number]["id"]
 
 export const PX_PER_CM = 2
 export const GRID_STEP_CM = 10

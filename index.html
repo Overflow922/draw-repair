@@ -7,45 +7,53 @@
   </head>
   <body>
     <div id="app">
-      <header id="tabbar">
-        <div id="tabs"></div>
-        <button id="tab-add" title="Новый чертёж" type="button">+</button>
-      </header>
       <div id="main">
-        <aside id="toolbar">
-        <button id="tool-wall" class="tool active" title="Стена">
-          <svg width="24" height="24" viewBox="0 0 24 24"><rect x="3" y="10" width="18" height="4" rx="1" fill="currentColor"/></svg>
-        </button>
-        <label id="thickness-label" title="Толщина стены">
-          <span id="thickness-unit">мм</span>
-          <input id="thickness" type="number" value="200" />
-        </label>
-        <div id="wall-types" aria-label="Тип стены">
-          <button class="wall-type" data-type="bearing" title="Несущая" type="button"></button>
-          <button class="wall-type active" data-type="partition" title="Перегородка" type="button"></button>
-          <button class="wall-type" data-type="drywall" title="Гипрок" type="button"></button>
-        </div>
-      </aside>
-      <main id="canvas-wrap">
-        <canvas id="canvas"></canvas>
-        <div id="size-box">
-          <button id="undo-btn" title="Отменить (Ctrl+Z)" type="button" disabled>
-            <svg width="16" height="16" viewBox="0 0 24 24"><path d="M9 14 4 9l5-5" stroke="currentColor" stroke-width="2.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/><path d="M4 9h10a5 5 0 0 1 5 5v1a5 5 0 0 1-5 5h-4" stroke="currentColor" stroke-width="2.5" fill="none" stroke-linecap="round"/></svg>
-          </button>
-          <button id="redo-btn" title="Повторить (Ctrl+Shift+Z)" type="button" disabled>
-            <svg width="16" height="16" viewBox="0 0 24 24"><path d="m15 14 5-5-5-5" stroke="currentColor" stroke-width="2.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/><path d="M20 9H10a5 5 0 0 0-5 5v1a5 5 0 0 0 5 5h4" stroke="currentColor" stroke-width="2.5" fill="none" stroke-linecap="round"/></svg>
-          </button>
-          <button id="ortho-toggle" title="Орто-привязка" type="button">
-            <svg width="16" height="16" viewBox="0 0 24 24"><path d="M7 17V7h10" stroke="currentColor" stroke-width="2.5" fill="none"/></svg>
-          </button>
-          <label id="length-label">Длина<input id="length" type="text" inputmode="decimal" placeholder="—" /></label>
-          <div id="unit-row" aria-label="Единицы длины">
-            <button class="unit" data-unit="m" type="button">м</button>
-            <button class="unit" data-unit="cm" type="button">см</button>
-            <button class="unit active" data-unit="mm" type="button">мм</button>
+        <main id="canvas-wrap">
+          <canvas id="canvas"></canvas>
+          <header id="tabbar" class="panel">
+            <div id="tabs"></div>
+            <button id="tab-add" title="Новый чертёж" type="button">+</button>
+          </header>
+          <aside id="toolbar" class="panel">
+            <div class="tool-anchor">
+              <button id="tool-wall" class="tool active" title="Стена" type="button">
+                <svg width="24" height="24" viewBox="0 0 24 24"><rect x="3" y="10" width="18" height="4" rx="1" fill="currentColor"/></svg>
+              </button>
+              <div id="wall-panel" class="panel tool-panel">
+                <label id="thickness-label" title="Толщина стены">
+                  <span id="thickness-unit">мм</span>
+                  <input id="thickness" type="number" value="200" />
+                </label>
+                <div id="wall-types" aria-label="Материал стены">
+                  <button class="wall-type active" data-material="brick" title="Кирпич" type="button"><canvas width="36" height="14"></canvas><span>Кирпич</span></button>
+                  <button class="wall-type" data-material="concrete" title="Бетон" type="button"><canvas width="36" height="14"></canvas><span>Бетон</span></button>
+                  <button class="wall-type" data-material="reinforced" title="Железобетон" type="button"><canvas width="36" height="14"></canvas><span>Железобетон</span></button>
+                  <button class="wall-type" data-material="wood-long" title="Дерево (вдоль)" type="button"><canvas width="36" height="14"></canvas><span>Дерево (вдоль)</span></button>
+                </div>
+              </div>
+            </div>
+          </aside>
+          <div id="size-box" class="panel">
+            <select id="render-style" title="Стиль отображения">
+              <option value="gost" selected>ГОСТ</option>
+            </select>
+            <button id="undo-btn" title="Отменить (Ctrl+Z)" type="button" disabled>
+              <svg width="16" height="16" viewBox="0 0 24 24"><path d="M9 14 4 9l5-5" stroke="currentColor" stroke-width="2.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/><path d="M4 9h10a5 5 0 0 1 5 5v1a5 5 0 0 1-5 5h-4" stroke="currentColor" stroke-width="2.5" fill="none" stroke-linecap="round"/></svg>
+            </button>
+            <button id="redo-btn" title="Повторить (Ctrl+Shift+Z)" type="button" disabled>
+              <svg width="16" height="16" viewBox="0 0 24 24"><path d="m15 14 5-5-5-5" stroke="currentColor" stroke-width="2.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/><path d="M20 9H10a5 5 0 0 0-5 5v1a5 5 0 0 0 5 5h4" stroke="currentColor" stroke-width="2.5" fill="none" stroke-linecap="round"/></svg>
+            </button>
+            <button id="ortho-toggle" title="Орто-привязка" type="button">
+              <svg width="16" height="16" viewBox="0 0 24 24"><path d="M7 17V7h10" stroke="currentColor" stroke-width="2.5" fill="none"/></svg>
+            </button>
+            <label id="length-label">Длина<input id="length" type="text" inputmode="decimal" placeholder="—" /></label>
+            <div id="unit-row" aria-label="Единицы длины">
+              <button class="unit" data-unit="m" type="button">м</button>
+              <button class="unit" data-unit="cm" type="button">см</button>
+              <button class="unit active" data-unit="mm" type="button">мм</button>
+            </div>
           </div>
-        </div>
-      </main>
+        </main>
       </div>
     </div>
     <script type="module" src="/src/main.ts"></script>

@@ -1,10 +1,10 @@
 import "./style.css"
 import { cloneWalls, drawingHistory, loadHistory, record, recordSnapshot, redoEntry, saveHistory, undoEntry } from "./history"
 import { handleAt, hitWall, moveEndpoint, moveWall, pointsEqual, snap, zoomAt } from "./geometry"
-import { render } from "./render"
+import { drawPatternPreview, render } from "./render"
 import { loadStore, saveStore } from "./storage"
-import { GRID_STEP_CM, PX_PER_CM, SNAP_RADIUS_PX, WALL_TYPES } from "./types"
-import type { Drawing, Point, Unit, View, Wall, WallType } from "./types"
+import { GRID_STEP_CM, MATERIALS, PX_PER_CM, SNAP_RADIUS_PX } from "./types"
+import type { Drawing, Material, Point, Unit, View, Wall } from "./types"
 
 const canvas = document.querySelector<HTMLCanvasElement>("#canvas")!
 const thicknessInput = document.querySelector<HTMLInputElement>("#thickness")!
@@ -17,6 +17,8 @@ const tabsEl = document.querySelector<HTMLElement>("#tabs")!
 const tabAdd = document.querySelector<HTMLButtonElement>("#tab-add")!
 const undoBtn = document.querySelector<HTMLButtonElement>("#undo-btn")!
 const redoBtn = document.querySelector<HTMLButtonElement>("#redo-btn")!
+const toolWallBtn = document.querySelector<HTMLButtonElement>("#tool-wall")!
+const wallPanel = document.querySelector<HTMLElement>("#wall-panel")!
 
 const loaded = loadStore()
 const readOnly = loaded.readOnly
@@ -29,7 +31,7 @@ let walls: Wall[] = current().walls
 let chainStart: Point | null = null
 let cursor: Point | null = null
 let thicknessCm = 20
-let wallType: WallType = "partition"
+let wallMaterial: Material = "brick"
 let unit: Unit = "mm"
 let lengthDirty = false
 let view: View = current().view
@@ -39,6 +41,12 @@ let endpointDrag: { wall: Wall; end: "a" | "b"; base: Point; snapshot: Wall[] } 
 let wallMove: { wall: Wall; baseA: Point; baseB: Point; grab: Point; others: Wall[]; snapshot: Wall[] } | null = null
 let suppressClick = false
 let ortho = false
+let wallPanelOpen = false
+
+function setWallPanel(open: boolean): void {
+  wallPanelOpen = open
+  wallPanel.classList.toggle("open", open)
+}
 
 const UNIT_TO_CM: Record<Unit, number> = { m: 100, cm: 1, mm: 0.1 }
 const UNIT_LABEL: Record<Unit, string> = { m: "м", cm: "см", mm: "мм" }
@@ -107,7 +115,7 @@ function syncHistoryButtons(): void {
 
 function redraw(): void {
   const p = previewPoint()
-  render(canvas, walls, chainStart && p ? { a: chainStart, b: p, thicknessCm, type: wallType } : null, unit, view, selectedWall)
+  render(canvas, walls, chainStart && p ? { a: chainStart, b: p, thicknessCm, type: wallMaterial } : null, unit, view, selectedWall)
   updateLengthBox()
   syncHistoryButtons()
   if (dirty) {
@@ -139,7 +147,7 @@ function commitPoint(p: Point): void {
     if (!pointsEqual(chainStart, end)) {
       record(drawingHistory(historyStore, store.activeId), walls)
       dirty = true
-      walls.push({ a: chainStart, b: end, thicknessCm, type: wallType })
+      walls.push({ a: chainStart, b: end, thicknessCm, type: wallMaterial })
     }
     chainStart = end
   } else {
@@ -272,7 +280,8 @@ canvas.addEventListener("click", (e) => {
       selectedWall = hit
       lengthDirty = false
       syncThicknessBox()
-      setWallType(hit.type)
+      setWallMaterial(hit.type)
+      setWallPanel(true)
       return
     }
     selectedWall = null
@@ -323,14 +332,14 @@ unitRow.addEventListener("click", (e) => {
   redraw()
 })
 
-function setWallType(t: WallType): void {
-  wallType = t
-  if (selectedWall && selectedWall.type !== t) {
+function setWallMaterial(m: Material): void {
+  wallMaterial = m
+  if (selectedWall && selectedWall.type !== m) {
     record(drawingHistory(historyStore, store.activeId), walls)
-    selectedWall.type = t
+    selectedWall.type = m
     dirty = true
   }
-  wallTypesRow.querySelectorAll(".wall-type").forEach((b) => b.classList.toggle("active", b.getAttribute("data-type") === t))
+  wallTypesRow.querySelectorAll(".wall-type").forEach((b) => b.classList.toggle("active", b.getAttribute("data-material") === m))
   redraw()
 }
 
@@ -340,9 +349,11 @@ orthoToggle.addEventListener("click", () => {
   redraw()
 })
 
+toolWallBtn.addEventListener("click", () => setWallPanel(!wallPanelOpen))
+
 wallTypesRow.addEventListener("click", (e) => {
   const btn = (e.target as HTMLElement).closest<HTMLButtonElement>(".wall-type")
-  if (btn) setWallType(btn.dataset.type as WallType)
+  if (btn) setWallMaterial(btn.dataset.material as Material)
 })
 
 function renderTabs(): void {
@@ -531,11 +542,13 @@ window.addEventListener("keydown", (e) => {
   if (e.key !== "ArrowUp" && e.key !== "ArrowDown") return
   if ((e.target as HTMLElement) === thicknessInput) return
   const delta = e.key === "ArrowUp" ? -1 : 1
-  const idx = WALL_TYPES.findIndex((t) => t.id === wallType)
-  setWallType(WALL_TYPES[(idx + delta + WALL_TYPES.length) % WALL_TYPES.length].id)
+  const idx = MATERIALS.findIndex((m) => m.id === wallMaterial)
+  setWallMaterial(MATERIALS[(idx + delta + MATERIALS.length) % MATERIALS.length].id)
 })
 
 window.addEventListener("resize", redraw)
 syncThicknessBox()
+for (const btn of wallTypesRow.querySelectorAll<HTMLButtonElement>(".wall-type"))
+  drawPatternPreview(btn.querySelector("canvas")!, btn.dataset.material as Material)
 renderTabs()
 redraw()

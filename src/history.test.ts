@@ -13,7 +13,7 @@ import {
 import type { DrawingHistory, HistoryEntry, HistoryStore } from "./history"
 import type { View, Wall } from "./types"
 
-const wall = (x: number): Wall => ({ a: { x, y: 0 }, b: { x: x + 100, y: 0 }, thicknessCm: 20, type: "partition" })
+const wall = (x: number): Wall => ({ a: { x, y: 0 }, b: { x: x + 100, y: 0 }, thicknessCm: 20, type: "brick" })
 const view: View = { zoom: 1, pan: { x: 0, y: 0 } }
 const history = (): DrawingHistory => ({ past: [], future: [] })
 

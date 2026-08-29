@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest"
 import { parseStore, serializeStore } from "./storage"
 import type { Drawing, DrawingStore, View, Wall } from "./types"
 
-const wall: Wall = { a: { x: 0, y: 0 }, b: { x: 300, y: 0 }, thicknessCm: 20, type: "partition" }
+const wall: Wall = { a: { x: 0, y: 0 }, b: { x: 300, y: 0 }, thicknessCm: 20, type: "brick" }
 const view: View = { zoom: 1.5, pan: { x: -10, y: 20 } }
 
 const drawing = (id: string, name: string): Drawing => ({ id, name, walls: [wall], view })
@@ -28,6 +28,35 @@ describe("serializeStore/parseStore", () => {
     expect(parsed?.store.drawings[0].walls).toEqual([wall])
     expect(parsed?.store.drawings[0].view).toEqual(view)
     expect(parsed?.store.activeId).toBe(parsed?.store.drawings[0].id)
+  })
+
+  it("все старые типы мигрируют в brick, валидные материалы сохраняются", () => {
+    const legacy = JSON.stringify({
+      version: 1,
+      walls: [
+        { ...wall, type: "partition" },
+        { ...wall, type: "drywall" },
+        { ...wall, type: "bearing" },
+        { ...wall, type: "selfbearing" },
+        { ...wall, type: "nonbearing" },
+      ],
+      view,
+    })
+    const parsed = parseStore(legacy)
+    expect(parsed?.store.drawings[0].walls.map((w) => w.type)).toEqual([
+      "brick",
+      "brick",
+      "brick",
+      "brick",
+      "brick",
+    ])
+    const envelope = JSON.stringify({
+      version: 1,
+      activeId: "a",
+      drawings: [{ ...drawing("a", "Чертёж 1"), walls: [{ ...wall, type: "wood-long" }] }],
+    })
+    const parsedEnvelope = parseStore(envelope)
+    expect(parsedEnvelope?.store.drawings[0].walls[0].type).toBe("wood-long")
   })
 
   it("битый JSON отклоняется", () => {
