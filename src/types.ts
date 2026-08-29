@@ -30,3 +30,16 @@ export const ZOOM_MIN = 0.1
 export const ZOOM_MAX = 10
 
 export type Unit = "m" | "cm" | "mm"
+
+export interface Drawing {
+  id: string
+  name: string
+  walls: Wall[]
+  view: View
+}
+
+export interface DrawingStore {
+  version: 1
+  activeId: string
+  drawings: Drawing[]
+}

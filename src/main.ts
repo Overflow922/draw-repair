@@ -1,8 +1,9 @@
 import "./style.css"
 import { handleAt, hitWall, moveEndpoint, moveWall, pointsEqual, snap, zoomAt } from "./geometry"
 import { render } from "./render"
+import { loadStore, saveStore } from "./storage"
 import { GRID_STEP_CM, PX_PER_CM, SNAP_RADIUS_PX, WALL_TYPES } from "./types"
-import type { Point, Unit, View, Wall, WallType } from "./types"
+import type { Drawing, Point, Unit, View, Wall, WallType } from "./types"
 
 const canvas = document.querySelector<HTMLCanvasElement>("#canvas")!
 const thicknessInput = document.querySelector<HTMLInputElement>("#thickness")!
@@ -11,15 +12,22 @@ const lengthInput = document.querySelector<HTMLInputElement>("#length")!
 const unitRow = document.querySelector<HTMLElement>("#unit-row")!
 const wallTypesRow = document.querySelector<HTMLElement>("#wall-types")!
 const orthoToggle = document.querySelector<HTMLButtonElement>("#ortho-toggle")!
+const tabsEl = document.querySelector<HTMLElement>("#tabs")!
+const tabAdd = document.querySelector<HTMLButtonElement>("#tab-add")!
 
-const walls: Wall[] = []
+const loaded = loadStore()
+const readOnly = loaded.readOnly
+const store = loaded.store
+const current = () => store.drawings.find((d) => d.id === store.activeId)!
+let walls: Wall[] = current().walls
 let chainStart: Point | null = null
 let cursor: Point | null = null
 let thicknessCm = 20
 let wallType: WallType = "partition"
 let unit: Unit = "mm"
 let lengthDirty = false
-let view: View = { zoom: 1, pan: { x: 0, y: 0 } }
+let view: View = current().view
+let dirty = false
 let selectedWall: Wall | null = null
 let endpointDrag: { wall: Wall; end: "a" | "b" } | null = null
 let wallMove: { wall: Wall; baseA: Point; baseB: Point; grab: Point; others: Wall[] } | null = null
@@ -70,7 +78,10 @@ function resizeSelected(): void {
   if (!len || !selectedWall) return
   const { a, b } = selectedWall
   const cm = Math.hypot(b.x - a.x, b.y - a.y)
-  if (cm) moveEndpoint(walls, selectedWall, "b", { x: a.x + ((b.x - a.x) / cm) * len, y: a.y + ((b.y - a.y) / cm) * len })
+  if (cm) {
+    dirty = true
+    moveEndpoint(walls, selectedWall, "b", { x: a.x + ((b.x - a.x) / cm) * len, y: a.y + ((b.y - a.y) / cm) * len })
+  }
 }
 
 function updateLengthBox(): void {
@@ -84,6 +95,10 @@ function redraw(): void {
   const p = previewPoint()
   render(canvas, walls, chainStart && p ? { a: chainStart, b: p, thicknessCm, type: wallType } : null, unit, view, selectedWall)
   updateLengthBox()
+  if (dirty) {
+    dirty = false
+    if (!readOnly) saveStore(store)
+  }
 }
 
 function toWorld(e: MouseEvent): Point {
@@ -105,7 +120,10 @@ function commitPoint(p: Point): void {
       ? { x: (p.x - chainStart.x) / cm, y: (p.y - chainStart.y) / cm }
       : null
     const end = target !== null && dir ? { x: chainStart.x + dir.x * target, y: chainStart.y + dir.y * target } : p
-    if (!pointsEqual(chainStart, end)) walls.push({ a: chainStart, b: end, thicknessCm, type: wallType })
+    if (!pointsEqual(chainStart, end)) {
+      dirty = true
+      walls.push({ a: chainStart, b: end, thicknessCm, type: wallType })
+    }
     chainStart = end
   } else {
     chainStart = p
@@ -129,6 +147,7 @@ canvas.addEventListener("pointermove", (e) => {
       ortho ? baseA : undefined,
     )
     moveWall(walls, wall, { x: next.x - wall.a.x, y: next.y - wall.a.y })
+    dirty = true
     redraw()
     return
   }
@@ -142,7 +161,10 @@ canvas.addEventListener("pointermove", (e) => {
       SNAP_RADIUS_PX / (PX_PER_CM * view.zoom),
       ortho ? other : undefined,
     )
-    if (!pointsEqual(next, other)) moveEndpoint(walls, wall, end, next)
+    if (!pointsEqual(next, other)) {
+      dirty = true
+      moveEndpoint(walls, wall, end, next)
+    }
     redraw()
     return
   }
@@ -153,6 +175,7 @@ canvas.addEventListener("pointermove", (e) => {
       x: panDrag.pan.x - (e.clientX - r.left - panDrag.start.x) / k,
       y: panDrag.pan.y - (e.clientY - r.top - panDrag.start.y) / k,
     }
+    dirty = true
     redraw()
     return
   }
@@ -203,6 +226,8 @@ canvas.addEventListener("wheel", (e) => {
   e.preventDefault()
   const r = canvas.getBoundingClientRect()
   view = zoomAt(view, 1.1 ** -Math.sign(e.deltaY), { x: e.clientX - r.left, y: e.clientY - r.top }, PX_PER_CM)
+  current().view = view
+  dirty = true
   redraw()
 }, { passive: false })
 
@@ -254,6 +279,7 @@ thicknessInput.addEventListener("input", () => {
   thicknessCm = v * UNIT_TO_CM[unit]
   if (selectedWall) {
     selectedWall.thicknessCm = thicknessCm
+    dirty = true
     redraw()
   }
 })
@@ -269,7 +295,10 @@ unitRow.addEventListener("click", (e) => {
 
 function setWallType(t: WallType): void {
   wallType = t
-  if (selectedWall) selectedWall.type = t
+  if (selectedWall) {
+    selectedWall.type = t
+    dirty = true
+  }
   wallTypesRow.querySelectorAll(".wall-type").forEach((b) => b.classList.toggle("active", b.getAttribute("data-type") === t))
   redraw()
 }
@@ -284,6 +313,115 @@ wallTypesRow.addEventListener("click", (e) => {
   const btn = (e.target as HTMLElement).closest<HTMLButtonElement>(".wall-type")
   if (btn) setWallType(btn.dataset.type as WallType)
 })
+
+function renderTabs(): void {
+  for (const el of [...tabsEl.children]) el.remove()
+  for (const d of store.drawings) {
+    const tab = document.createElement("div")
+    tab.className = d.id === store.activeId ? "tab active" : "tab"
+    tab.dataset.id = d.id
+    const name = document.createElement("span")
+    name.className = "tab-name"
+    name.textContent = d.name
+    const close = document.createElement("button")
+    close.className = "tab-close"
+    close.type = "button"
+    close.textContent = "×"
+    tab.append(name, close)
+    tabsEl.append(tab)
+  }
+}
+
+function nextName(): string {
+  const used = new Set(store.drawings.map((d) => d.name))
+  for (let n = 1; ; n++) if (!used.has(`Чертёж ${n}`)) return `Чертёж ${n}`
+}
+
+function newDrawing(): void {
+  const drawing: Drawing = { id: crypto.randomUUID(), name: nextName(), walls: [], view: { zoom: 1, pan: { x: 0, y: 0 } } }
+  store.drawings.push(drawing)
+  dirty = true
+  activate(drawing.id)
+}
+
+function activate(id: string): void {
+  store.activeId = id
+  walls = current().walls
+  view = current().view
+  chainStart = null
+  selectedWall = null
+  lengthDirty = false
+  endpointDrag = null
+  wallMove = null
+  dirty = true
+  renderTabs()
+  redraw()
+}
+
+function closeDrawing(id: string): void {
+  const drawing = store.drawings.find((d) => d.id === id)!
+  if (!confirm(`Удалить чертёж «${drawing.name}»?`)) return
+  const idx = store.drawings.indexOf(drawing)
+  store.drawings.splice(idx, 1)
+  if (store.drawings.length === 0) {
+    newDrawing()
+    return
+  }
+  if (store.activeId === id) activate(store.drawings[Math.min(idx, store.drawings.length - 1)].id)
+  else {
+    dirty = true
+    renderTabs()
+    redraw()
+  }
+}
+
+tabsEl.addEventListener("click", (e) => {
+  const tab = (e.target as HTMLElement).closest<HTMLElement>(".tab")
+  if (!tab) return
+  const { id } = tab.dataset
+  if (!id) return
+  if ((e.target as HTMLElement).closest(".tab-close")) closeDrawing(id)
+  else if (id !== store.activeId) activate(id)
+})
+
+tabAdd.addEventListener("click", newDrawing)
+
+tabsEl.addEventListener("dblclick", (e) => {
+  const tab = (e.target as HTMLElement).closest<HTMLElement>(".tab")
+  if (tab && (e.target as HTMLElement).closest(".tab-name")) startRename(tab)
+})
+
+function startRename(tab: HTMLElement): void {
+  const drawing = store.drawings.find((d) => d.id === tab.dataset.id)
+  const nameEl = tab.querySelector<HTMLElement>(".tab-name")
+  if (!drawing || !nameEl || tab.querySelector(".tab-rename")) return
+  const input = document.createElement("input")
+  input.className = "tab-rename"
+  input.value = drawing.name
+  nameEl.replaceWith(input)
+  input.focus()
+  input.select()
+  let finishing = false
+  const finish = () => {
+    if (finishing) return
+    finishing = true
+    const name = input.value.trim()
+    if (name && name !== drawing.name) {
+      drawing.name = name
+      dirty = true
+      redraw()
+    }
+    renderTabs()
+  }
+  input.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") input.blur()
+    else if (e.key === "Escape") {
+      input.value = drawing.name
+      input.blur()
+    }
+  })
+  input.addEventListener("blur", finish)
+}
 
 window.addEventListener("keydown", (e) => {
   if (e.key === "Escape") {
@@ -303,4 +441,5 @@ window.addEventListener("keydown", (e) => {
 
 window.addEventListener("resize", redraw)
 syncThicknessBox()
+renderTabs()
 redraw()
