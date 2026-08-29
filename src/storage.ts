@@ -14,12 +14,12 @@ const isView = (v: unknown): v is View =>
   typeof v === "object" && v !== null && isPoint((v as View).pan) &&
   Number.isFinite((v as View).zoom) && (v as View).zoom > 0
 
-const isWall = (w: unknown): w is Wall =>
+export const isWall = (w: unknown): w is Wall =>
   typeof w === "object" && w !== null && isPoint((w as Wall).a) && isPoint((w as Wall).b) &&
   typeof (w as Wall).thicknessCm === "number" && (w as Wall).thicknessCm > 0 &&
   typeof (w as Wall).type === "string"
 
-const isDrawing = (d: unknown): d is Drawing =>
+export const isDrawing = (d: unknown): d is Drawing =>
   typeof d === "object" && d !== null && typeof (d as Drawing).id === "string" &&
   typeof (d as Drawing).name === "string" && Array.isArray((d as Drawing).walls) &&
   (d as Drawing).walls.every(isWall) && isView((d as Drawing).view)

@@ -29,6 +29,12 @@
       <main id="canvas-wrap">
         <canvas id="canvas"></canvas>
         <div id="size-box">
+          <button id="undo-btn" title="Отменить (Ctrl+Z)" type="button" disabled>
+            <svg width="16" height="16" viewBox="0 0 24 24"><path d="M9 14 4 9l5-5" stroke="currentColor" stroke-width="2.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/><path d="M4 9h10a5 5 0 0 1 5 5v1a5 5 0 0 1-5 5h-4" stroke="currentColor" stroke-width="2.5" fill="none" stroke-linecap="round"/></svg>
+          </button>
+          <button id="redo-btn" title="Повторить (Ctrl+Shift+Z)" type="button" disabled>
+            <svg width="16" height="16" viewBox="0 0 24 24"><path d="m15 14 5-5-5-5" stroke="currentColor" stroke-width="2.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/><path d="M20 9H10a5 5 0 0 0-5 5v1a5 5 0 0 0 5 5h4" stroke="currentColor" stroke-width="2.5" fill="none" stroke-linecap="round"/></svg>
+          </button>
           <button id="ortho-toggle" title="Орто-привязка" type="button">
             <svg width="16" height="16" viewBox="0 0 24 24"><path d="M7 17V7h10" stroke="currentColor" stroke-width="2.5" fill="none"/></svg>
           </button>

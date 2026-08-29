@@ -1,4 +1,5 @@
 import "./style.css"
+import { cloneWalls, drawingHistory, loadHistory, record, recordSnapshot, redoEntry, saveHistory, undoEntry } from "./history"
 import { handleAt, hitWall, moveEndpoint, moveWall, pointsEqual, snap, zoomAt } from "./geometry"
 import { render } from "./render"
 import { loadStore, saveStore } from "./storage"
@@ -14,10 +15,15 @@ const wallTypesRow = document.querySelector<HTMLElement>("#wall-types")!
 const orthoToggle = document.querySelector<HTMLButtonElement>("#ortho-toggle")!
 const tabsEl = document.querySelector<HTMLElement>("#tabs")!
 const tabAdd = document.querySelector<HTMLButtonElement>("#tab-add")!
+const undoBtn = document.querySelector<HTMLButtonElement>("#undo-btn")!
+const redoBtn = document.querySelector<HTMLButtonElement>("#redo-btn")!
 
 const loaded = loadStore()
 const readOnly = loaded.readOnly
 const store = loaded.store
+const loadedHistory = loadHistory()
+const historyReadOnly = loadedHistory.readOnly
+const historyStore = loadedHistory.history
 const current = () => store.drawings.find((d) => d.id === store.activeId)!
 let walls: Wall[] = current().walls
 let chainStart: Point | null = null
@@ -29,8 +35,8 @@ let lengthDirty = false
 let view: View = current().view
 let dirty = false
 let selectedWall: Wall | null = null
-let endpointDrag: { wall: Wall; end: "a" | "b" } | null = null
-let wallMove: { wall: Wall; baseA: Point; baseB: Point; grab: Point; others: Wall[] } | null = null
+let endpointDrag: { wall: Wall; end: "a" | "b"; base: Point; snapshot: Wall[] } | null = null
+let wallMove: { wall: Wall; baseA: Point; baseB: Point; grab: Point; others: Wall[]; snapshot: Wall[] } | null = null
 let suppressClick = false
 let ortho = false
 
@@ -78,10 +84,12 @@ function resizeSelected(): void {
   if (!len || !selectedWall) return
   const { a, b } = selectedWall
   const cm = Math.hypot(b.x - a.x, b.y - a.y)
-  if (cm) {
-    dirty = true
-    moveEndpoint(walls, selectedWall, "b", { x: a.x + ((b.x - a.x) / cm) * len, y: a.y + ((b.y - a.y) / cm) * len })
-  }
+  if (!cm) return
+  const end = { x: a.x + ((b.x - a.x) / cm) * len, y: a.y + ((b.y - a.y) / cm) * len }
+  if (pointsEqual(end, b)) return
+  record(drawingHistory(historyStore, store.activeId), walls)
+  dirty = true
+  moveEndpoint(walls, selectedWall, "b", end)
 }
 
 function updateLengthBox(): void {
@@ -91,13 +99,21 @@ function updateLengthBox(): void {
   if (document.activeElement === lengthInput) lengthInput.select()
 }
 
+function syncHistoryButtons(): void {
+  const h = drawingHistory(historyStore, store.activeId)
+  undoBtn.disabled = h.past.length === 0
+  redoBtn.disabled = h.future.length === 0
+}
+
 function redraw(): void {
   const p = previewPoint()
   render(canvas, walls, chainStart && p ? { a: chainStart, b: p, thicknessCm, type: wallType } : null, unit, view, selectedWall)
   updateLengthBox()
+  syncHistoryButtons()
   if (dirty) {
     dirty = false
     if (!readOnly) saveStore(store)
+    if (!readOnly && !historyReadOnly) saveHistory(historyStore)
   }
 }
 
@@ -121,6 +137,7 @@ function commitPoint(p: Point): void {
       : null
     const end = target !== null && dir ? { x: chainStart.x + dir.x * target, y: chainStart.y + dir.y * target } : p
     if (!pointsEqual(chainStart, end)) {
+      record(drawingHistory(historyStore, store.activeId), walls)
       dirty = true
       walls.push({ a: chainStart, b: end, thicknessCm, type: wallType })
     }
@@ -200,18 +217,30 @@ canvas.addEventListener("pointerdown", (e) => {
   suppressClick = true
   if (handle === "mid") {
     const jointed = (c: Wall) => pointsEqual(c.a, sel.a) || pointsEqual(c.b, sel.a) || pointsEqual(c.a, sel.b) || pointsEqual(c.b, sel.b)
-    wallMove = { wall: sel, baseA: sel.a, baseB: sel.b, grab: p, others: walls.filter((c) => c !== sel && !jointed(c)) }
-  } else endpointDrag = { wall: sel, end: handle }
+    wallMove = { wall: sel, baseA: sel.a, baseB: sel.b, grab: p, others: walls.filter((c) => c !== sel && !jointed(c)), snapshot: cloneWalls(walls) }
+  } else endpointDrag = { wall: sel, end: handle, base: sel[handle], snapshot: cloneWalls(walls) }
   canvas.setPointerCapture(e.pointerId)
 })
 
 canvas.addEventListener("pointerup", (e) => {
   if (endpointDrag) {
-    if (e.button === 0) endpointDrag = null
+    if (e.button === 0) {
+      if (!pointsEqual(endpointDrag.wall[endpointDrag.end], endpointDrag.base)) {
+        recordSnapshot(drawingHistory(historyStore, store.activeId), endpointDrag.snapshot)
+        dirty = true
+      }
+      endpointDrag = null
+    }
     return
   }
   if (wallMove) {
-    if (e.button === 0) wallMove = null
+    if (e.button === 0) {
+      if (!pointsEqual(wallMove.wall.a, wallMove.baseA)) {
+        recordSnapshot(drawingHistory(historyStore, store.activeId), wallMove.snapshot)
+        dirty = true
+      }
+      wallMove = null
+    }
     return
   }
   if (!panDrag || e.button !== 1) return
@@ -277,11 +306,12 @@ thicknessInput.addEventListener("input", () => {
   const v = parseFloat(thicknessInput.value.replace(",", "."))
   if (!Number.isFinite(v) || v <= 0) return
   thicknessCm = v * UNIT_TO_CM[unit]
-  if (selectedWall) {
+  if (selectedWall && selectedWall.thicknessCm !== thicknessCm) {
+    record(drawingHistory(historyStore, store.activeId), walls)
     selectedWall.thicknessCm = thicknessCm
     dirty = true
-    redraw()
   }
+  redraw()
 })
 
 unitRow.addEventListener("click", (e) => {
@@ -295,7 +325,8 @@ unitRow.addEventListener("click", (e) => {
 
 function setWallType(t: WallType): void {
   wallType = t
-  if (selectedWall) {
+  if (selectedWall && selectedWall.type !== t) {
+    record(drawingHistory(historyStore, store.activeId), walls)
     selectedWall.type = t
     dirty = true
   }
@@ -362,18 +393,74 @@ function closeDrawing(id: string): void {
   const drawing = store.drawings.find((d) => d.id === id)!
   if (!confirm(`Удалить чертёж «${drawing.name}»?`)) return
   const idx = store.drawings.indexOf(drawing)
-  store.drawings.splice(idx, 1)
-  if (store.drawings.length === 0) {
-    newDrawing()
-    return
-  }
-  if (store.activeId === id) activate(store.drawings[Math.min(idx, store.drawings.length - 1)].id)
+  removeDrawing(id, idx)
+  const h = drawingHistory(historyStore, store.activeId)
+  h.past.push({ kind: "close", index: idx, drawingId: id })
+  h.future = []
+  dirty = true
+  redraw()
+}
+
+function removeDrawing(id: string, index: number): void {
+  const [drawing] = store.drawings.splice(index, 1)
+  historyStore.trash.push({ index, drawing })
+  if (store.drawings.length === 0) newDrawing()
+  else if (store.activeId === id) activate(store.drawings[Math.min(index, store.drawings.length - 1)].id)
   else {
     dirty = true
     renderTabs()
     redraw()
   }
 }
+
+function resetEditing(): void {
+  chainStart = null
+  selectedWall = null
+  lengthDirty = false
+  suppressClick = false
+  syncThicknessBox()
+}
+
+function undo(): void {
+  if (wallMove || endpointDrag || panDrag) return
+  const h = drawingHistory(historyStore, store.activeId)
+  const e = undoEntry(h, walls)
+  if (!e) return
+  if (e.kind === "walls") {
+    current().walls = e.walls
+    walls = e.walls
+  } else {
+    const i = historyStore.trash.findIndex((t) => t.drawing.id === e.drawingId)
+    if (i < 0) return
+    const { drawing } = historyStore.trash.splice(i, 1)[0]
+    store.drawings.splice(e.index, 0, drawing)
+    activate(drawing.id)
+  }
+  dirty = true
+  resetEditing()
+  redraw()
+}
+
+function redo(): void {
+  if (wallMove || endpointDrag || panDrag) return
+  const h = drawingHistory(historyStore, store.activeId)
+  const e = redoEntry(h, walls)
+  if (!e) return
+  if (e.kind === "walls") {
+    current().walls = e.walls
+    walls = e.walls
+  } else {
+    const idx = store.drawings.findIndex((d) => d.id === e.drawingId)
+    if (idx < 0) return
+    removeDrawing(e.drawingId, idx)
+  }
+  dirty = true
+  resetEditing()
+  redraw()
+}
+
+undoBtn.addEventListener("click", undo)
+redoBtn.addEventListener("click", redo)
 
 tabsEl.addEventListener("click", (e) => {
   const tab = (e.target as HTMLElement).closest<HTMLElement>(".tab")
@@ -424,6 +511,15 @@ function startRename(tab: HTMLElement): void {
 }
 
 window.addEventListener("keydown", (e) => {
+  if ((e.ctrlKey || e.metaKey) && !e.altKey) {
+    const undoKey = e.code === "KeyZ"
+    const redoKey = e.code === "KeyY"
+    if (!undoKey && !redoKey) return
+    e.preventDefault()
+    if (redoKey || e.shiftKey) redo()
+    else undo()
+    return
+  }
   if (e.key === "Escape") {
     if (chainStart) endChain()
     else {

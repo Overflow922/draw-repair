@@ -112,6 +112,28 @@ body {
   color: #1d4ed8;
 }
 
+#undo-btn,
+#redo-btn,
+#ortho-toggle {
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  background: #fff;
+  color: #444;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+#undo-btn:disabled,
+#redo-btn:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
 #thickness-label {
   font-size: 10px;
   color: #555;
@@ -184,20 +206,6 @@ body {
   width: 68px;
   font-size: 14px;
   padding: 2px 4px;
-}
-
-#ortho-toggle {
-  width: 28px;
-  height: 28px;
-  padding: 0;
-  border: 1px solid #ccc;
-  border-radius: 4px;
-  background: #fff;
-  color: #444;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
 }
 
 #ortho-toggle.active {
