@@ -123,3 +123,163 @@ export function moveWall(walls: Wall[], wall: Wall, delta: Point): void {
     if (pointsEqual(w.b, b)) w.b = wall.b
   }
 }
+
+const MITER_MIN = Math.PI / 6
+
+interface Cap {
+  plus: Point
+  minus: Point
+}
+
+function cross(a: Point, b: Point): number {
+  return a.x * b.y - a.y * b.x
+}
+
+function dot(a: Point, b: Point): number {
+  return a.x * b.x + a.y * b.y
+}
+
+function dirOf(from: Point, to: Point): Point {
+  const dx = to.x - from.x
+  const dy = to.y - from.y
+  const len = Math.hypot(dx, dy)
+  return len < EPS ? { x: 0, y: 0 } : { x: dx / len, y: dy / len }
+}
+
+function lineIntersect(p1: Point, d1: Point, p2: Point, d2: Point): Point | null {
+  const denom = cross(d1, d2)
+  if (Math.abs(denom) < 1e-9) return null
+  const t = cross({ x: p2.x - p1.x, y: p2.y - p1.y }, d2) / denom
+  return { x: p1.x + t * d1.x, y: p1.y + t * d1.y }
+}
+
+function capOnFaces(n: Point, u: Point, E: Point, h: number, linePoint: Point, lineDir: Point): Cap | null {
+  const plus = lineIntersect({ x: E.x + n.x * h, y: E.y + n.y * h }, u, linePoint, lineDir)
+  const minus = lineIntersect({ x: E.x - n.x * h, y: E.y - n.y * h }, u, linePoint, lineDir)
+  return plus && minus ? { plus, minus } : null
+}
+
+function buttCap(V: Point, v: Point, hT: number, u: Point, n: Point, E: Point, h: number, flat: Cap): Cap {
+  const nT = { x: -v.y, y: v.x }
+  const side = dot(u, nT)
+  if (Math.abs(side) < EPS) return flat
+  const sgn = side > 0 ? 1 : -1
+  const p0 = {
+    x: V.x + nT.x * sgn * hT,
+    y: V.y + nT.y * sgn * hT,
+  }
+  return capOnFaces(n, u, E, h, p0, v) ?? flat
+}
+
+interface Joint {
+  c: Wall
+  cEnd: Point
+  vertex: Point
+  corner: boolean
+}
+
+function jointAt(wall: Wall, E: Point, walls: Wall[]): Joint | null {
+  let match: { c: Wall; cEnd: Point; d: number } | null = null
+  let count = 0
+  for (const w of walls) {
+    if (w === wall || pointsEqual(w.a, w.b)) continue
+    const tol = Math.max(wall.thicknessCm, w.thicknessCm) / 2
+    for (const end of [w.a, w.b] as const) {
+      const d = distance(E, end)
+      if (d > tol) continue
+      count++
+      if (!match || d < match.d) match = { c: w, cEnd: end, d }
+    }
+  }
+  if (count > 1) return null
+  if (match)
+    return {
+      c: match.c,
+      cEnd: match.cEnd,
+      vertex: walls.indexOf(match.c) < walls.indexOf(wall) ? match.cEnd : E,
+      corner: true,
+    }
+  for (const w of walls) {
+    if (w === wall || pointsEqual(w.a, w.b)) continue
+    const dx = w.b.x - w.a.x
+    const dy = w.b.y - w.a.y
+    const len2 = dx * dx + dy * dy
+    const t = ((E.x - w.a.x) * dx + (E.y - w.a.y) * dy) / len2
+    if (t <= 0 || t >= 1) continue
+    const d = { x: dx / Math.sqrt(len2), y: dy / Math.sqrt(len2) }
+    if (Math.abs(cross(d, { x: E.x - w.a.x, y: E.y - w.a.y })) > EPS) continue
+    return { c: w, cEnd: E, vertex: E, corner: false }
+  }
+  return null
+}
+
+function dirFromBody(p: Point, q: Point, end: Point): Point {
+  return pointsEqual(p, end) ? dirOf(p, q) : dirOf(q, p)
+}
+
+function endCap(wall: Wall, E: Point, u: Point, walls: Wall[]): Cap {
+  const n = { x: -u.y, y: u.x }
+  const h = wall.thicknessCm / 2
+  const capAt = (P: Point): Cap => ({
+    plus: { x: P.x + n.x * h, y: P.y + n.y * h },
+    minus: { x: P.x - n.x * h, y: P.y - n.y * h },
+  })
+  const j = jointAt(wall, E, walls)
+  if (!j) return capAt(E)
+  const hC = j.c.thicknessCm / 2
+  if (!j.corner) return buttCap(E, dirFromBody(j.c.a, j.c.b, j.cEnd), hC, u, n, E, h, capAt(E))
+  const V = j.vertex
+  const flat = capAt(V)
+  const v = dirFromBody(j.c.a, j.c.b, j.cEnd)
+  const cr = cross(u, v)
+  if (Math.abs(cr) < EPS) return flat
+  const phi = Math.acos(Math.max(-1, Math.min(1, dot(u, v))))
+  const same = j.c.type === wall.type && j.c.thicknessCm === wall.thicknessCm
+  if (!(same && phi >= MITER_MIN)) {
+    if (phi < MITER_MIN) {
+      return walls.indexOf(j.c) < walls.indexOf(wall) ? buttCap(j.cEnd, v, hC, u, n, E, h, flat) : flat
+    }
+    if (walls.indexOf(j.c) < walls.indexOf(wall)) return buttCap(j.cEnd, v, hC, u, n, E, h, flat)
+    const nC = { x: -v.y, y: v.x }
+    const s = dot(u, nC) > 0 ? 1 : -1
+    const far = capOnFaces(n, u, E, h, { x: j.cEnd.x - nC.x * s * hC, y: j.cEnd.y - nC.y * s * hC }, v)
+    return far ?? flat
+  }
+  const s = cr > 0 ? 1 : -1
+  const nC = { x: -v.y, y: v.x }
+  const inner = capOnFaces(
+    n,
+    u,
+    E,
+    h,
+    { x: j.cEnd.x - nC.x * s * hC, y: j.cEnd.y - nC.y * s * hC },
+    v,
+  )
+  const outer = capOnFaces(
+    { x: -n.x, y: -n.y },
+    u,
+    E,
+    h,
+    { x: j.cEnd.x + nC.x * s * hC, y: j.cEnd.y + nC.y * s * hC },
+    v,
+  )
+  if (inner && outer) return s > 0 ? { plus: inner.plus, minus: outer.plus } : { plus: outer.minus, minus: inner.minus }
+  return flat
+}
+
+export function sameTypeJoint(wall: Wall, E: Point, walls: Wall[]): boolean {
+  const j = jointAt(wall, E, walls)
+  if (!j || j.c.type !== wall.type || j.c.thicknessCm !== wall.thicknessCm) return false
+  if (!j.corner) return true
+  const u = dirFromBody(wall.a, wall.b, E)
+  const v = dirFromBody(j.c.a, j.c.b, j.cEnd)
+  const cr = cross(u, v)
+  if (Math.abs(cr) < EPS) return true
+  return Math.acos(Math.max(-1, Math.min(1, dot(u, v)))) >= MITER_MIN
+}
+
+export function wallShape(wall: Wall, walls: Wall[]): Point[] {
+  const capA = endCap(wall, wall.a, dirOf(wall.a, wall.b), walls)
+  const capB = endCap(wall, wall.b, dirOf(wall.b, wall.a), walls)
+  return [capA.plus, capB.minus, capB.plus, capA.minus]
+}

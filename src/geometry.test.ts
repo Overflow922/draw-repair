@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { endpointAt, handleAt, hitWall, moveEndpoint, moveWall, pointsEqual, snap, visibleWorld, zoomAt } from "./geometry"
+import { endpointAt, handleAt, hitWall, moveEndpoint, moveWall, pointsEqual, sameTypeJoint, snap, visibleWorld, wallShape, zoomAt } from "./geometry"
 import type { Point, Wall } from "./types"
 
 const GRID = 10
@@ -205,5 +205,251 @@ describe("moveWall", () => {
     moveWall([w1, w2], w1, { x: 10, y: 0 })
     expect(w2.a).toEqual({ x: 200, y: 0 })
     expect(w2.b).toEqual({ x: 200, y: 100 })
+  })
+})
+
+describe("sameTypeJoint", () => {
+  it("одинаковые стены под 90° сливаются с обеих сторон", () => {
+    const a = wall(0, 0, 100, 0)
+    const b = wall(100, 0, 100, 80)
+    expect(sameTypeJoint(a, a.b, [a, b])).toBe(true)
+    expect(sameTypeJoint(b, b.a, [a, b])).toBe(true)
+  })
+
+  it("разный материал — стык рисуется", () => {
+    const a = wall(0, 0, 100, 0)
+    const b = wall(100, 0, 100, 80)
+    b.type = "concrete"
+    expect(sameTypeJoint(a, a.b, [a, b])).toBe(false)
+  })
+
+  it("разная толщина — стык рисуется", () => {
+    const a = wall(0, 0, 100, 0)
+    const b = wall(100, 0, 100, 80)
+    b.thicknessCm = 40
+    expect(sameTypeJoint(a, a.b, [a, b])).toBe(false)
+  })
+
+  it("Т-стык одного типа слияется, у сквозной соседа на конце нет", () => {
+    const through = wall(0, 0, 100, 0)
+    const incoming = wall(50, 0, 50, -40)
+    expect(sameTypeJoint(incoming, incoming.a, [through, incoming])).toBe(true)
+    expect(sameTypeJoint(through, through.a, [through, incoming])).toBe(false)
+    expect(sameTypeJoint(through, through.b, [through, incoming])).toBe(false)
+  })
+
+  it("острый угол 20°: торцы рисуются даже у одного типа", () => {
+    const a = wall(0, 0, 100, 0)
+    const b = wall(0, 0, 100 * Math.cos((20 * Math.PI) / 180), 100 * Math.sin((20 * Math.PI) / 180))
+    expect(sameTypeJoint(a, a.a, [a, b])).toBe(false)
+    expect(sameTypeJoint(b, b.a, [a, b])).toBe(false)
+  })
+
+  it("коллинеарные одного типа сливаются", () => {
+    const a = wall(0, 0, 100, 0)
+    const b = wall(100, 0, 60, 0)
+    expect(sameTypeJoint(a, a.b, [a, b])).toBe(true)
+  })
+
+  it("три стены в одной вершине — без слияния", () => {
+    const a = wall(0, 0, 100, 0)
+    const b = wall(100, 0, 100, 80)
+    const c = wall(100, 0, 170.71, 70.71)
+    expect(sameTypeJoint(a, a.b, [a, b, c])).toBe(false)
+  })
+
+  it("свободный конец — без слияния", () => {
+    const a = wall(0, 0, 100, 0)
+    expect(sameTypeJoint(a, a.a, [a])).toBe(false)
+    expect(sameTypeJoint(a, a.b, [a])).toBe(false)
+  })
+})
+
+describe("wallShape", () => {
+  const wallT = (ax: number, ay: number, bx: number, by: number, t: number): Wall => ({
+    a: { x: ax, y: ay },
+    b: { x: bx, y: by },
+    thicknessCm: t,
+    type: "brick",
+  })
+
+  it("одиночная стена — прежний прямоугольник", () => {
+    expect(wallShape(wall(0, 0, 100, 0), [wall(0, 0, 100, 0)])).toEqual([
+      { x: 0, y: 10 },
+      { x: 100, y: 10 },
+      { x: 100, y: -10 },
+      { x: 0, y: -10 },
+    ])
+  })
+
+  it("угол 90°: диагональный срез, общий у обеих стен", () => {
+    const a = wall(0, 0, 100, 0)
+    const b = wall(100, 0, 100, 80)
+    const shapeA = wallShape(a, [a, b])
+    expect(shapeA[1].x).toBeCloseTo(90)
+    expect(shapeA[1].y).toBeCloseTo(10)
+    expect(shapeA[2].x).toBeCloseTo(110)
+    expect(shapeA[2].y).toBeCloseTo(-10)
+    const shapeB = wallShape(b, [a, b])
+    expect(shapeB[0]).toEqual(shapeA[1])
+    expect(shapeB[3]).toEqual(shapeA[2])
+  })
+
+  it("поворот цепочки на 45°: срез по пересечениям граней", () => {
+    const a = wall(0, 0, 100, 0)
+    const b = wall(100, 0, 100 + 70.7107, 70.7107)
+    const shapeA = wallShape(a, [a, b])
+    expect(shapeA[1].x).toBeCloseTo(95.858, 2)
+    expect(shapeA[1].y).toBeCloseTo(10)
+    expect(shapeA[2].x).toBeCloseTo(104.142, 2)
+    expect(shapeA[2].y).toBeCloseTo(-10)
+  })
+
+  it("разная толщина: примыкание прямой линией, угол заполнен без диагонали", () => {
+    const a = wallT(0, 0, 100, 0, 20)
+    const b = wallT(100, 0, 100, 80, 40)
+    expect(wallShape(a, [a, b])).toEqual([
+      { x: 0, y: 10 },
+      { x: 120, y: 10 },
+      { x: 120, y: -10 },
+      { x: 0, y: -10 },
+    ])
+    expect(wallShape(b, [a, b])).toEqual([
+      { x: 80, y: 10 },
+      { x: 80, y: 80 },
+      { x: 120, y: 80 },
+      { x: 120, y: 10 },
+    ])
+  })
+
+  it("острый угол 20°: примыкание впритык, обе стены прямоугольные", () => {
+    const a = wall(0, 0, 100, 0)
+    const b = wall(0, 0, 100 * Math.cos((20 * Math.PI) / 180), 100 * Math.sin((20 * Math.PI) / 180))
+    expect(wallShape(a, [a, b])).toEqual([
+      { x: 0, y: 10 },
+      { x: 100, y: 10 },
+      { x: 100, y: -10 },
+      { x: 0, y: -10 },
+    ])
+    const shapeB = wallShape(b, [a, b])
+    expect(shapeB[0].x).toBeCloseTo(-1.763, 2)
+    expect(shapeB[0].y).toBeCloseTo(10)
+    expect(shapeB[3].x).toBeCloseTo(56.713, 2)
+    expect(shapeB[3].y).toBeCloseTo(10)
+  })
+
+  it("излом 150°: митра с коротким срезом", () => {
+    const a = wall(0, 0, 100, 0)
+    const b = wall(100, 0, 100 + 100 * Math.cos(Math.PI / 6), 100 * Math.sin(Math.PI / 6))
+    const shapeA = wallShape(a, [a, b])
+    expect(shapeA[1].x).toBeCloseTo(97.32, 2)
+    expect(shapeA[1].y).toBeCloseTo(10)
+    expect(shapeA[2].x).toBeCloseTo(102.68, 2)
+    expect(shapeA[2].y).toBeCloseTo(-10)
+  })
+
+  it("лёгкий излом 170°: митра заполняет стык без щели", () => {
+    const a = wall(0, 0, 100, 0)
+    const b = wall(100, 0, 100 + 100 * Math.cos((10 * Math.PI) / 180), 100 * Math.sin((10 * Math.PI) / 180))
+    const shapeA = wallShape(a, [a, b])
+    expect(shapeA[1].x).toBeCloseTo(99.125, 2)
+    expect(shapeA[1].y).toBeCloseTo(10)
+    expect(shapeA[2].x).toBeCloseTo(100.875, 2)
+    expect(shapeA[2].y).toBeCloseTo(-10)
+  })
+
+  it("коллинеарные стены: плоские торцы", () => {
+    const a = wall(0, 0, 100, 0)
+    const b = wall(100, 0, 60, 0)
+    const shapeA = wallShape(a, [a, b])
+    expect(shapeA[1]).toEqual({ x: 100, y: 10 })
+    expect(shapeA[2]).toEqual({ x: 100, y: -10 })
+  })
+
+  it("три стены в одной вершине: плоские торцы", () => {
+    const a = wall(0, 0, 100, 0)
+    const b = wall(100, 0, 100, 80)
+    const c = wall(100, 0, 170.71, 70.71)
+    const shapeA = wallShape(a, [a, b, c])
+    expect(shapeA[1]).toEqual({ x: 100, y: 10 })
+    expect(shapeA[2]).toEqual({ x: 100, y: -10 })
+  })
+
+  it("T-стык 90°: торец заподлицо с гранью сквозной стены", () => {
+    const through = wall(0, 0, 100, 0)
+    const incoming = wall(50, 0, 50, -40)
+    const shape = wallShape(incoming, [through, incoming])
+    expect(shape[0]).toEqual({ x: 60, y: -10 })
+    expect(shape[3]).toEqual({ x: 40, y: -10 })
+    expect(shape[1]).toEqual({ x: 60, y: -40 })
+    expect(shape[2]).toEqual({ x: 40, y: -40 })
+    expect(wallShape(through, [through, incoming])).toEqual([
+      { x: 0, y: 10 },
+      { x: 100, y: 10 },
+      { x: 100, y: -10 },
+      { x: 0, y: -10 },
+    ])
+  })
+
+  it("T-стык 30°: торец подрезан по грани сквозной", () => {
+    const through = wall(0, 0, 100, 0)
+    const incoming = wall(50, 0, 50 + 40 * Math.cos(Math.PI / 6), -40 * Math.sin(Math.PI / 6))
+    const shape = wallShape(incoming, [through, incoming])
+    expect(shape[0].x).toBeCloseTo(87.32, 2)
+    expect(shape[0].y).toBeCloseTo(-10)
+    expect(shape[3].x).toBeCloseTo(47.32, 2)
+    expect(shape[3].y).toBeCloseTo(-10)
+  })
+
+  it("конец на оси у торца: угол строится по вершине более ранней стены", () => {
+    const a = wall(0, 0, 100, 0)
+    const b = wall(103, 0, 103, -80)
+    const shapeA = wallShape(a, [a, b])
+    const shapeB = wallShape(b, [a, b])
+    expect(shapeA[1]).toEqual({ x: 113, y: 10 })
+    expect(shapeA[2]).toEqual({ x: 93, y: -10 })
+    expect(shapeB[0]).toEqual(shapeA[1])
+    expect(shapeB[3]).toEqual(shapeA[2])
+    expect(sameTypeJoint(a, a.b, [a, b])).toBe(true)
+    expect(sameTypeJoint(b, b.a, [a, b])).toBe(true)
+  })
+
+  it("коллинеарные с зазором меньше полутолщины: торцы сведены", () => {
+    const a = wall(0, 0, 100, 0)
+    const b = wall(103, 0, 200, 0)
+    expect(wallShape(b, [a, b])).toEqual([
+      { x: 100, y: 10 },
+      { x: 200, y: 10 },
+      { x: 200, y: -10 },
+      { x: 100, y: -10 },
+    ])
+  })
+
+  it("три конца в пределах допуска: плоские торцы", () => {
+    const a = wall(0, 0, 100, 0)
+    const b = wall(100, 0, 100, 80)
+    const c = wall(103, 0, 103, -80)
+    const shapeA = wallShape(a, [a, b, c])
+    expect(shapeA[1]).toEqual({ x: 100, y: 10 })
+    expect(shapeA[2]).toEqual({ x: 100, y: -10 })
+  })
+
+  it("полигон не выходит за полосу ось ± полтолщины при любом угле", () => {
+    for (const deg of [20, 30, 45, 60, 90, 120, 135, 150, 170]) {
+      const rad = (deg * Math.PI) / 180
+      const a = wall(0, 0, 100, 0)
+      const b = wall(100, 0, 100 + 100 * Math.cos(rad), 100 * Math.sin(rad))
+      for (const [w, shape] of [
+        [a, wallShape(a, [a, b])],
+        [b, wallShape(b, [a, b])],
+      ] as const) {
+        const u = { x: w.b.x - w.a.x, y: w.b.y - w.a.y }
+        const len = Math.hypot(u.x, u.y)
+        for (const p of shape) {
+          const rel = { x: p.x - w.a.x, y: p.y - w.a.y }
+          expect(Math.abs((rel.x * -u.y + rel.y * u.x) / len)).toBeLessThanOrEqual(w.thicknessCm / 2 + 1e-6)
+        }
+      }
+    }
   })
 })

@@ -1,4 +1,4 @@
-import { pointsEqual, visibleWorld } from "./geometry"
+import { pointsEqual, sameTypeJoint, visibleWorld, wallShape } from "./geometry"
 import { GRID_STEP_CM, PX_PER_CM, normalizeMaterial } from "./types"
 import type { Material, Point, Unit, View, Wall } from "./types"
 
@@ -49,9 +49,11 @@ export function render(
   }
   ctx.stroke()
   ctx.restore()
-  if (selected) drawOutline(ctx, selected, k, toScreen)
-  for (const wall of walls) drawWall(ctx, wall, 1, toScreen, k)
-  if (preview) drawWall(ctx, preview, 0.4, toScreen, k)
+  if (selected) drawOutline(ctx, selected, walls, toScreen)
+  const o = toScreen({ x: 0, y: 0 })
+  const anchorC = o.x + o.y
+  for (const wall of walls) drawWall(ctx, wall, walls, 1, toScreen, k, anchorC)
+  if (preview) drawWall(ctx, preview, [], 0.4, toScreen, k, anchorC)
   if (selected) drawHandles(ctx, selected, toScreen)
   ctx.font = "14px sans-serif"
   ctx.textAlign = "center"
@@ -68,20 +70,6 @@ function formatLength(wall: Wall, unit: Unit): string {
   return `${(Math.round(cm) / 100).toString().replace(".", ",")} м`
 }
 
-function wallPolygon(wall: Wall): Point[] {
-  const dx = wall.b.x - wall.a.x
-  const dy = wall.b.y - wall.a.y
-  const len = Math.hypot(dx, dy) || 1
-  const ox = (-dy / len) * wall.thicknessCm * 0.5
-  const oy = (dx / len) * wall.thicknessCm * 0.5
-  return [
-    { x: wall.a.x + ox, y: wall.a.y + oy },
-    { x: wall.b.x + ox, y: wall.b.y + oy },
-    { x: wall.b.x - ox, y: wall.b.y - oy },
-    { x: wall.a.x - ox, y: wall.a.y - oy },
-  ]
-}
-
 function tracePolygon(ctx: CanvasRenderingContext2D, poly: Point[]): void {
   ctx.beginPath()
   poly.forEach((p, i) => (i ? ctx.lineTo(p.x, p.y) : ctx.moveTo(p.x, p.y)))
@@ -94,12 +82,24 @@ function polyBounds(poly: Point[]): [number, number, number, number] {
   return [Math.min(...xs), Math.min(...ys), Math.max(...xs), Math.max(...ys)]
 }
 
-function strokeHatch45(ctx: CanvasRenderingContext2D, poly: Point[], dash: number[], phase: number, stride: number): void {
+function mod(x: number, m: number): number {
+  return ((x % m) + m) % m
+}
+
+function strokeHatch45(
+  ctx: CanvasRenderingContext2D,
+  poly: Point[],
+  dash: number[],
+  phase: number,
+  stride: number,
+  anchorC: number,
+): void {
   const [minX, minY, maxX, maxY] = polyBounds(poly)
   const step = HATCH_STEP * Math.SQRT2 * stride
+  const minC = minX + minY
   ctx.setLineDash(dash)
   ctx.beginPath()
-  for (let c = minX + minY + phase * HATCH_STEP * Math.SQRT2; c <= maxX + maxY; c += step) {
+  for (let c = minC - mod(minC - anchorC - phase * HATCH_STEP * Math.SQRT2, step); c <= maxX + maxY; c += step) {
     ctx.moveTo(minX, c - minX)
     ctx.lineTo(maxX, c - maxX)
   }
@@ -116,14 +116,18 @@ function woodLong(ctx: CanvasRenderingContext2D, a: Point, b: Point, thicknessPx
   const ny = ux
   const amp = 0.6 * MM
   const wave = 8 * MM
+  const margin = thicknessPx * 2
   ctx.beginPath()
   for (let off = -thicknessPx / 2 + HATCH_STEP / 2; off <= thicknessPx / 2; off += HATCH_STEP) {
-    for (let t = 0; t <= len; t += 2 * MM) {
+    let first = true
+    for (let t = -margin; t <= len + margin; t += 2 * MM) {
       const lateral = off + amp * Math.sin((t / wave) * Math.PI * 2)
       const px = a.x + ux * t + nx * lateral
       const py = a.y + uy * t + ny * lateral
-      if (t === 0) ctx.moveTo(px, py)
-      else ctx.lineTo(px, py)
+      if (first) {
+        ctx.moveTo(px, py)
+        first = false
+      } else ctx.lineTo(px, py)
     }
   }
   ctx.stroke()
@@ -136,29 +140,53 @@ function drawMaterial(
   a: Point,
   b: Point,
   thicknessPx: number,
+  anchorC: number,
 ): void {
   ctx.save()
   tracePolygon(ctx, poly)
   ctx.clip()
-  if (mat === "brick") strokeHatch45(ctx, poly, [], 0, 1)
-  else if (mat === "concrete") strokeHatch45(ctx, poly, DASHDOT, 0, 1)
+  if (mat === "brick") strokeHatch45(ctx, poly, [], 0, 1, anchorC)
+  else if (mat === "concrete") strokeHatch45(ctx, poly, DASHDOT, 0, 1, anchorC)
   else if (mat === "reinforced") {
-    strokeHatch45(ctx, poly, [], 0, 2)
-    strokeHatch45(ctx, poly, DASHDOT_SMALL, 1, 2)
+    strokeHatch45(ctx, poly, [], 0, 2, anchorC)
+    strokeHatch45(ctx, poly, DASHDOT_SMALL, 1, 2, anchorC)
   } else woodLong(ctx, a, b, thicknessPx)
   ctx.restore()
 }
 
-function drawWall(ctx: CanvasRenderingContext2D, wall: Wall, alpha: number, toScreen: (p: Point) => Point, k: number): void {
+function strokeContour(ctx: CanvasRenderingContext2D, wall: Wall, poly: Point[], walls: Wall[]): void {
+  const [aPlus, bMinus, bPlus, aMinus] = poly
+  const mergeA = sameTypeJoint(wall, wall.a, walls)
+  const mergeB = sameTypeJoint(wall, wall.b, walls)
+  ctx.lineCap = "square"
+  ctx.beginPath()
+  ctx.moveTo(aPlus.x, aPlus.y)
+  ctx.lineTo(bMinus.x, bMinus.y)
+  if (mergeB) ctx.moveTo(bPlus.x, bPlus.y)
+  else ctx.lineTo(bPlus.x, bPlus.y)
+  ctx.lineTo(aMinus.x, aMinus.y)
+  if (!mergeA) ctx.lineTo(aPlus.x, aPlus.y)
+  ctx.stroke()
+  ctx.lineCap = "butt"
+}
+
+function drawWall(
+  ctx: CanvasRenderingContext2D,
+  wall: Wall,
+  walls: Wall[],
+  alpha: number,
+  toScreen: (p: Point) => Point,
+  k: number,
+  anchorC: number,
+): void {
   const mat = normalizeMaterial(wall.type)
-  const poly = wallPolygon(wall).map(toScreen)
+  const poly = wallShape(wall, walls).map(toScreen)
   ctx.globalAlpha = alpha
   ctx.strokeStyle = INK
   ctx.lineWidth = 1
-  drawMaterial(ctx, mat, poly, toScreen(wall.a), toScreen(wall.b), wall.thicknessCm * k)
+  drawMaterial(ctx, mat, poly, toScreen(wall.a), toScreen(wall.b), wall.thicknessCm * k, anchorC)
   ctx.lineWidth = CONTOUR_PX
-  tracePolygon(ctx, poly)
-  ctx.stroke()
+  strokeContour(ctx, wall, poly, walls)
   ctx.globalAlpha = 1
 }
 
@@ -176,17 +204,15 @@ export function drawPatternPreview(canvas: HTMLCanvasElement, material: Material
     { x: w - 1, y: h - 1 },
     { x: 1, y: h - 1 },
   ]
-  drawMaterial(ctx, material, poly, { x: 1, y: h / 2 }, { x: w - 1, y: h / 2 }, h - 2)
+  drawMaterial(ctx, material, poly, { x: 1, y: h / 2 }, { x: w - 1, y: h / 2 }, h - 2, 0)
 }
 
-function drawOutline(ctx: CanvasRenderingContext2D, wall: Wall, k: number, toScreen: (p: Point) => Point): void {
-  const a = toScreen(wall.a)
-  const b = toScreen(wall.b)
+function drawOutline(ctx: CanvasRenderingContext2D, wall: Wall, walls: Wall[], toScreen: (p: Point) => Point): void {
   ctx.strokeStyle = "rgba(8, 145, 178, 0.5)"
-  ctx.lineWidth = wall.thicknessCm * k + OUTLINE_PX * 2
-  ctx.beginPath()
-  ctx.moveTo(a.x, a.y)
-  ctx.lineTo(b.x, b.y)
+  ctx.fillStyle = "rgba(8, 145, 178, 0.5)"
+  ctx.lineWidth = OUTLINE_PX * 2
+  tracePolygon(ctx, wallShape(wall, walls).map(toScreen))
+  ctx.fill()
   ctx.stroke()
 }
 
