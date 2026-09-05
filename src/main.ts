@@ -2,13 +2,14 @@ import "./style.css"
 import { cloneWalls, drawingHistory, loadHistory, record, recordSnapshot, redoEntry, saveHistory, undoEntry } from "./history"
 import { handleAt, hitWall, moveEndpoint, moveWall, pointsEqual, snap, zoomAt } from "./geometry"
 import { drawPatternPreview, render } from "./render"
-import { exportDrawing } from "./export/pdf"
+import { availableFormats, exportDrawing, PAGE_FORMATS_MM } from "./export/pdf"
 import type { PageFormat } from "./export/pdf"
 import { loadStore, saveStore } from "./storage"
 import { GRID_STEP_CM, MATERIALS, PX_PER_CM, SNAP_RADIUS_PX } from "./types"
 import type { Drawing, Material, Point, Unit, View, Wall } from "./types"
 
 const canvas = document.querySelector<HTMLCanvasElement>("#canvas")!
+const canvasWrap = document.querySelector<HTMLElement>("#canvas-wrap")!
 const thicknessInput = document.querySelector<HTMLInputElement>("#thickness")!
 const thicknessUnitLabel = document.querySelector<HTMLElement>("#thickness-unit")!
 const lengthInput = document.querySelector<HTMLInputElement>("#length")!
@@ -21,6 +22,7 @@ const undoBtn = document.querySelector<HTMLButtonElement>("#undo-btn")!
 const redoBtn = document.querySelector<HTMLButtonElement>("#redo-btn")!
 const toolWallBtn = document.querySelector<HTMLButtonElement>("#tool-wall")!
 const wallPanel = document.querySelector<HTMLElement>("#wall-panel")!
+const pdfScale = document.querySelector<HTMLSelectElement>("#pdf-scale")!
 const pdfFormat = document.querySelector<HTMLSelectElement>("#pdf-format")!
 const pdfExportBtn = document.querySelector<HTMLButtonElement>("#pdf-export")!
 
@@ -122,12 +124,45 @@ function redraw(): void {
   render(canvas, walls, chainStart && p ? { a: chainStart, b: p, thicknessCm, type: wallMaterial } : null, unit, view, selectedWall)
   updateLengthBox()
   syncHistoryButtons()
-  pdfExportBtn.disabled = walls.length === 0
+  syncFormats()
   if (dirty) {
     dirty = false
     if (!readOnly) saveStore(store)
     if (!readOnly && !historyReadOnly) saveHistory(historyStore)
   }
+}
+
+let unavailableFormats: PageFormat[] | null = null
+
+function hideFitPopup(): void {
+  document.querySelector("#fit-popup")?.remove()
+}
+
+function showFitPopup(unavailable: PageFormat[]): void {
+  hideFitPopup()
+  const el = document.createElement("div")
+  el.id = "fit-popup"
+  el.className = "panel"
+  el.textContent = `Невозможно экспортировать в ${unavailable.join(", ")} — чертёж не влезает`
+  el.addEventListener("click", hideFitPopup)
+  canvasWrap.append(el)
+}
+
+function syncFormats(): void {
+  const available = availableFormats(walls, current().scale)
+  const all = Object.keys(PAGE_FORMATS_MM) as PageFormat[]
+  const unavailable = all.filter((f) => !available.includes(f))
+  pdfFormat.replaceChildren(...available.map((f) => new Option(f, f)))
+  if (!available.includes(pdfFormat.value as PageFormat)) pdfFormat.value = available[0] ?? ""
+  pdfFormat.disabled = available.length === 0
+  pdfExportBtn.disabled = walls.length === 0 || available.length === 0
+  if (unavailableFormats !== null && unavailable.length > unavailableFormats.length) showFitPopup(unavailable)
+  else if (unavailableFormats !== null && unavailable.length < unavailableFormats.length) hideFitPopup()
+  unavailableFormats = unavailable
+}
+
+function syncScaleSelector(): void {
+  pdfScale.value = String(current().scale)
 }
 
 function toWorld(e: MouseEvent): Point {
@@ -385,7 +420,7 @@ function nextName(): string {
 }
 
 function newDrawing(): void {
-  const drawing: Drawing = { id: crypto.randomUUID(), name: nextName(), walls: [], view: { zoom: 1, pan: { x: 0, y: 0 } } }
+  const drawing: Drawing = { id: crypto.randomUUID(), name: nextName(), walls: [], view: { zoom: 1, pan: { x: 0, y: 0 } }, scale: 100 }
   store.drawings.push(drawing)
   dirty = true
   activate(drawing.id)
@@ -400,6 +435,9 @@ function activate(id: string): void {
   lengthDirty = false
   endpointDrag = null
   wallMove = null
+  unavailableFormats = null
+  hideFitPopup()
+  syncScaleSelector()
   dirty = true
   renderTabs()
   redraw()
@@ -480,7 +518,13 @@ redoBtn.addEventListener("click", redo)
 
 pdfExportBtn.addEventListener("click", () => {
   const drawing = current()
-  exportDrawing(drawing.walls, unit, pdfFormat.value as PageFormat, drawing.name)
+  exportDrawing(drawing.walls, unit, drawing.scale, pdfFormat.value as PageFormat, drawing.name)
+})
+
+pdfScale.addEventListener("change", () => {
+  current().scale = Number(pdfScale.value) as Drawing["scale"]
+  dirty = true
+  redraw()
 })
 
 tabsEl.addEventListener("click", (e) => {

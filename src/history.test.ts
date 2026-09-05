@@ -97,7 +97,7 @@ describe("serializeHistory/parseHistory", () => {
     histories: {
       a: { past: [{ kind: "walls", walls: [wall(0)] }, { kind: "close", index: 1, drawingId: "b" }], future: [{ kind: "walls", walls: [] }] },
     },
-    trash: [{ index: 1, drawing: { id: "b", name: "Чертёж 2", walls: [wall(0)], view } }],
+    trash: [{ index: 1, drawing: { id: "b", name: "Чертёж 2", walls: [wall(0)], view, scale: 100 } }],
   }
 
   it("roundtrip сохраняет истории и корзину", () => {

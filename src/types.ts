@@ -36,15 +36,23 @@ export const ZOOM_MAX = 10
 
 export type Unit = "m" | "cm" | "mm"
 
+export const SCALE_DENOMINATORS = [50, 100, 200, 500] as const
+export type ScaleDenominator = (typeof SCALE_DENOMINATORS)[number]
+export const DEFAULT_SCALE: ScaleDenominator = 100
+
+export const isScale = (value: unknown): value is ScaleDenominator =>
+  typeof value === "number" && (SCALE_DENOMINATORS as readonly unknown[]).includes(value)
+
 export interface Drawing {
   id: string
   name: string
   walls: Wall[]
   view: View
+  scale: ScaleDenominator
 }
 
 export interface DrawingStore {
-  version: 1
+  version: 2
   activeId: string
   drawings: Drawing[]
 }
