@@ -4,6 +4,7 @@ import type { Material, Point, Unit, View, Wall } from "./types"
 
 const OUTLINE_PX = 4
 const HANDLE_PX = 5
+const HOVER_ERASE_COLOR = "rgba(220, 38, 38, 0.5)"
 const INK = "#333"
 const MM = 96 / 25.4
 
@@ -43,6 +44,7 @@ export const PDF_METRICS: RenderMetrics = {
 export interface RenderOptions {
   grid?: boolean
   metrics?: RenderMetrics
+  hover?: Wall | null
 }
 
 export function render(
@@ -102,6 +104,7 @@ export function drawScene(
     ctx.restore()
   }
   if (selected) drawOutline(ctx, selected, walls, toScreen)
+  if (opts.hover && opts.hover !== selected) drawOutline(ctx, opts.hover, walls, toScreen, HOVER_ERASE_COLOR)
   const o = toScreen({ x: 0, y: 0 })
   const anchorC = o.x + o.y
   for (const wall of walls) drawWall(ctx, wall, walls, 1, toScreen, k, anchorC, m)
@@ -263,9 +266,15 @@ export function drawPatternPreview(canvas: HTMLCanvasElement, material: Material
   drawMaterial(ctx, material, poly, { x: 1, y: h / 2 }, { x: w - 1, y: h / 2 }, h - 2, 0, SCREEN_METRICS)
 }
 
-function drawOutline(ctx: CanvasRenderingContext2D, wall: Wall, walls: Wall[], toScreen: (p: Point) => Point): void {
-  ctx.strokeStyle = "rgba(8, 145, 178, 0.5)"
-  ctx.fillStyle = "rgba(8, 145, 178, 0.5)"
+function drawOutline(
+  ctx: CanvasRenderingContext2D,
+  wall: Wall,
+  walls: Wall[],
+  toScreen: (p: Point) => Point,
+  color = "rgba(8, 145, 178, 0.5)",
+): void {
+  ctx.strokeStyle = color
+  ctx.fillStyle = color
   ctx.lineWidth = OUTLINE_PX * 2
   tracePolygon(ctx, wallShape(wall, walls).map(toScreen))
   ctx.fill()

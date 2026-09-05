@@ -21,6 +21,7 @@ const tabAdd = document.querySelector<HTMLButtonElement>("#tab-add")!
 const undoBtn = document.querySelector<HTMLButtonElement>("#undo-btn")!
 const redoBtn = document.querySelector<HTMLButtonElement>("#redo-btn")!
 const toolWallBtn = document.querySelector<HTMLButtonElement>("#tool-wall")!
+const toolEraserBtn = document.querySelector<HTMLButtonElement>("#tool-eraser")!
 const wallPanel = document.querySelector<HTMLElement>("#wall-panel")!
 const pdfScale = document.querySelector<HTMLSelectElement>("#pdf-scale")!
 const pdfFormat = document.querySelector<HTMLSelectElement>("#pdf-format")!
@@ -48,10 +49,31 @@ let wallMove: { wall: Wall; baseA: Point; baseB: Point; grab: Point; others: Wal
 let suppressClick = false
 let ortho = false
 let wallPanelOpen = false
+type Tool = "wall" | "eraser" | "none"
+let tool: Tool = "wall"
 
 function setWallPanel(open: boolean): void {
   wallPanelOpen = open
   wallPanel.classList.toggle("open", open)
+}
+
+function syncToolUI(): void {
+  toolWallBtn.classList.toggle("active", tool === "wall")
+  toolEraserBtn.classList.toggle("active", tool === "eraser")
+  canvas.classList.toggle("tool-eraser", tool === "eraser")
+}
+
+function setTool(next: Tool): void {
+  if (tool === next) return
+  tool = next
+  chainStart = null
+  lengthDirty = false
+  selectedWall = null
+  suppressClick = false
+  setWallPanel(false)
+  syncToolUI()
+  syncThicknessBox()
+  redraw()
 }
 
 const UNIT_TO_CM: Record<Unit, number> = { m: 100, cm: 1, mm: 0.1 }
@@ -121,7 +143,8 @@ function syncHistoryButtons(): void {
 
 function redraw(): void {
   const p = previewPoint()
-  render(canvas, walls, chainStart && p ? { a: chainStart, b: p, thicknessCm, type: wallMaterial } : null, unit, view, selectedWall)
+  const hover = tool === "eraser" && cursor ? hitWall(cursor, walls, SNAP_RADIUS_PX / (PX_PER_CM * view.zoom)) : null
+  render(canvas, walls, chainStart && p ? { a: chainStart, b: p, thicknessCm, type: wallMaterial } : null, unit, view, selectedWall, { hover })
   updateLengthBox()
   syncHistoryButtons()
   syncFormats()
@@ -314,6 +337,11 @@ canvas.addEventListener("click", (e) => {
     return
   }
   const p = toSnappedPoint(e)
+  if (tool === "eraser") {
+    const hit = hitWall(p, walls, SNAP_RADIUS_PX / (PX_PER_CM * view.zoom))
+    if (hit) deleteWall(hit)
+    return
+  }
   if (!chainStart) {
     const hit = hitWall(p, walls, SNAP_RADIUS_PX / (PX_PER_CM * view.zoom))
     if (hit) {
@@ -325,6 +353,10 @@ canvas.addEventListener("click", (e) => {
       return
     }
     selectedWall = null
+    if (tool !== "wall") {
+      redraw()
+      return
+    }
   }
   commitPoint(p)
 })
@@ -346,6 +378,18 @@ function endChain(): void {
   chainStart = null
   lengthDirty = false
   lengthInput.blur()
+  redraw()
+}
+
+function deleteWall(wall: Wall): void {
+  record(drawingHistory(historyStore, store.activeId), walls)
+  walls.splice(walls.indexOf(wall), 1)
+  if (selectedWall === wall) {
+    selectedWall = null
+    lengthDirty = false
+    syncThicknessBox()
+  }
+  dirty = true
   redraw()
 }
 
@@ -389,7 +433,12 @@ orthoToggle.addEventListener("click", () => {
   redraw()
 })
 
-toolWallBtn.addEventListener("click", () => setWallPanel(!wallPanelOpen))
+toolWallBtn.addEventListener("click", () => {
+  if (tool !== "wall") setTool("wall")
+  else setWallPanel(!wallPanelOpen)
+})
+
+toolEraserBtn.addEventListener("click", () => setTool("eraser"))
 
 wallTypesRow.addEventListener("click", (e) => {
   const btn = (e.target as HTMLElement).closest<HTMLButtonElement>(".wall-type")
@@ -430,6 +479,8 @@ function activate(id: string): void {
   store.activeId = id
   walls = current().walls
   view = current().view
+  tool = "wall"
+  syncToolUI()
   chainStart = null
   selectedWall = null
   lengthDirty = false
@@ -585,8 +636,15 @@ window.addEventListener("keydown", (e) => {
     else undo()
     return
   }
+  if (e.key === "Delete") {
+    if (!selectedWall || e.target instanceof HTMLInputElement) return
+    if (wallMove || endpointDrag || panDrag) return
+    deleteWall(selectedWall)
+    return
+  }
   if (e.key === "Escape") {
     if (chainStart) endChain()
+    else if (tool === "eraser") setTool("none")
     else {
       selectedWall = null
       lengthDirty = false
@@ -602,6 +660,7 @@ window.addEventListener("keydown", (e) => {
 
 window.addEventListener("resize", redraw)
 syncThicknessBox()
+syncToolUI()
 for (const btn of wallTypesRow.querySelectorAll<HTMLButtonElement>(".wall-type"))
   drawPatternPreview(btn.querySelector("canvas")!, btn.dataset.material as Material)
 renderTabs()
