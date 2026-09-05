@@ -171,7 +171,8 @@ body {
   display: flex;
 }
 
-#render-style {
+#render-style,
+#pdf-format {
   height: 28px;
   padding: 0 4px;
   border: 1px solid #ccc;
@@ -180,6 +181,25 @@ body {
   color: #444;
   font-size: 12px;
   cursor: pointer;
+}
+
+#pdf-export {
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  background: #fff;
+  color: #444;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+#pdf-export:disabled {
+  opacity: 0.35;
+  cursor: default;
 }
 
 #undo-btn,

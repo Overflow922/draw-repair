@@ -2,6 +2,8 @@ import "./style.css"
 import { cloneWalls, drawingHistory, loadHistory, record, recordSnapshot, redoEntry, saveHistory, undoEntry } from "./history"
 import { handleAt, hitWall, moveEndpoint, moveWall, pointsEqual, snap, zoomAt } from "./geometry"
 import { drawPatternPreview, render } from "./render"
+import { exportDrawing } from "./export/pdf"
+import type { PageFormat } from "./export/pdf"
 import { loadStore, saveStore } from "./storage"
 import { GRID_STEP_CM, MATERIALS, PX_PER_CM, SNAP_RADIUS_PX } from "./types"
 import type { Drawing, Material, Point, Unit, View, Wall } from "./types"
@@ -19,6 +21,8 @@ const undoBtn = document.querySelector<HTMLButtonElement>("#undo-btn")!
 const redoBtn = document.querySelector<HTMLButtonElement>("#redo-btn")!
 const toolWallBtn = document.querySelector<HTMLButtonElement>("#tool-wall")!
 const wallPanel = document.querySelector<HTMLElement>("#wall-panel")!
+const pdfFormat = document.querySelector<HTMLSelectElement>("#pdf-format")!
+const pdfExportBtn = document.querySelector<HTMLButtonElement>("#pdf-export")!
 
 const loaded = loadStore()
 const readOnly = loaded.readOnly
@@ -118,6 +122,7 @@ function redraw(): void {
   render(canvas, walls, chainStart && p ? { a: chainStart, b: p, thicknessCm, type: wallMaterial } : null, unit, view, selectedWall)
   updateLengthBox()
   syncHistoryButtons()
+  pdfExportBtn.disabled = walls.length === 0
   if (dirty) {
     dirty = false
     if (!readOnly) saveStore(store)
@@ -472,6 +477,11 @@ function redo(): void {
 
 undoBtn.addEventListener("click", undo)
 redoBtn.addEventListener("click", redo)
+
+pdfExportBtn.addEventListener("click", () => {
+  const drawing = current()
+  exportDrawing(drawing.walls, unit, pdfFormat.value as PageFormat, drawing.name)
+})
 
 tabsEl.addEventListener("click", (e) => {
   const tab = (e.target as HTMLElement).closest<HTMLElement>(".tab")
