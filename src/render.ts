@@ -1,4 +1,4 @@
-import { pointsEqual, sameTypeJoint, visibleWorld, wallShape } from "./geometry"
+import { dimensionSide, pointsEqual, sameTypeJoint, visibleWorld, wallShape } from "./geometry"
 import { GRID_STEP_CM, PX_PER_CM, normalizeMaterial } from "./types"
 import type { Material, Point, Unit, View, Wall } from "./types"
 
@@ -15,7 +15,11 @@ export interface RenderMetrics {
   dashdot: number[]
   dashdotSmall: number[]
   labelPx: number
-  labelGapPx: number
+  dimOffsetPx: number
+  dimOvershootPx: number
+  dimGapPx: number
+  dimArrowPx: number
+  dimTextGapPx: number
   font: string
 }
 
@@ -26,7 +30,11 @@ export const SCREEN_METRICS: RenderMetrics = {
   dashdot: [3.5 * MM, 1.2 * MM, 0.3 * MM, 1.2 * MM],
   dashdotSmall: [2.5 * MM, 1 * MM, 0.3 * MM, 1 * MM],
   labelPx: 14,
-  labelGapPx: 4,
+  dimOffsetPx: 18,
+  dimOvershootPx: 4,
+  dimGapPx: 2,
+  dimArrowPx: 9,
+  dimTextGapPx: 1.5,
   font: "sans-serif",
 }
 
@@ -37,7 +45,11 @@ export const PDF_METRICS: RenderMetrics = {
   dashdot: [3.5, 1.2, 0.3, 1.2],
   dashdotSmall: [2.5, 1, 0.3, 1],
   labelPx: 3.5,
-  labelGapPx: 1.5,
+  dimOffsetPx: 5,
+  dimOvershootPx: 1.5,
+  dimGapPx: 0.8,
+  dimArrowPx: 2.5,
+  dimTextGapPx: 0.6,
   font: "PTSans",
 }
 
@@ -113,16 +125,15 @@ export function drawScene(
   ctx.font = `${m.labelPx}px ${m.font}`
   ctx.textAlign = "center"
   ctx.textBaseline = "bottom"
-  for (const wall of walls) drawLengthLabel(ctx, wall, formatLength(wall, unit), "#333", view, m)
+  for (const wall of walls) drawDimension(ctx, wall, walls, unit, "#333", view, m)
   if (preview && !pointsEqual(preview.a, preview.b))
-    drawLengthLabel(ctx, preview, formatLength(preview, unit), "#555", view, m)
+    drawDimension(ctx, preview, walls, unit, "#555", view, m)
 }
 
-function formatLength(wall: Wall, unit: Unit): string {
-  const cm = Math.hypot(wall.b.x - wall.a.x, wall.b.y - wall.a.y)
-  if (unit === "cm") return `${Math.round(cm)} см`
-  if (unit === "mm") return `${Math.round(cm * 10)} мм`
-  return `${(Math.round(cm) / 100).toString().replace(".", ",")} м`
+function formatLength(cm: number, unit: Unit): string {
+  if (unit === "cm") return `${Math.round(cm)}`
+  if (unit === "mm") return `${Math.round(cm * 10)}`
+  return `${(Math.round(cm) / 100).toString().replace(".", ",")}`
 }
 
 function tracePolygon(ctx: CanvasRenderingContext2D, poly: Point[]): void {
@@ -294,10 +305,11 @@ function drawHandles(ctx: CanvasRenderingContext2D, wall: Wall, toScreen: (p: Po
   }
 }
 
-function drawLengthLabel(
+function drawDimension(
   ctx: CanvasRenderingContext2D,
   wall: Wall,
-  text: string,
+  walls: Wall[],
+  unit: Unit,
   color: string,
   view: View,
   m: RenderMetrics,
@@ -305,14 +317,42 @@ function drawLengthLabel(
   let angle = Math.atan2(wall.b.y - wall.a.y, wall.b.x - wall.a.x)
   if (angle > Math.PI / 2 || angle < -Math.PI / 2) angle += Math.PI
   const k = PX_PER_CM * view.zoom
+  const side = dimensionSide(wall, walls)
+  const flip = -(wall.b.y - wall.a.y) * -Math.sin(angle) + (wall.b.x - wall.a.x) * Math.cos(angle) >= 0 ? 1 : -1
+  const s = side * flip
+  const half = (Math.hypot(wall.b.x - wall.a.x, wall.b.y - wall.a.y) * k) / 2
+  const face = (wall.thicknessCm * k) / 2
+  const y = s * (face + m.dimOffsetPx)
   ctx.save()
   ctx.translate(((wall.a.x + wall.b.x) / 2 - view.pan.x) * k, ((wall.a.y + wall.b.y) / 2 - view.pan.y) * k)
   ctx.rotate(angle)
-  const y = -(wall.thicknessCm * k) / 2 - m.labelGapPx
+  ctx.strokeStyle = color
+  ctx.fillStyle = color
+  ctx.lineWidth = m.hatchPx
+  ctx.beginPath()
+  ctx.moveTo(-half, y)
+  ctx.lineTo(half, y)
+  ctx.stroke()
+  for (const tip of [-half, half]) {
+    const dir = tip < 0 ? 1 : -1
+    ctx.beginPath()
+    ctx.moveTo(tip, y)
+    ctx.lineTo(tip + dir * m.dimArrowPx, y - m.dimArrowPx / 3)
+    ctx.lineTo(tip + dir * m.dimArrowPx, y + m.dimArrowPx / 3)
+    ctx.closePath()
+    ctx.fill()
+  }
+  ctx.beginPath()
+  for (const x of [-half, half]) {
+    ctx.moveTo(x, s * (face + m.dimGapPx))
+    ctx.lineTo(x, s * (face + m.dimOffsetPx + m.dimOvershootPx))
+  }
+  ctx.stroke()
+  const ty = y - m.dimTextGapPx
   ctx.lineWidth = (4 * m.labelPx) / 14
   ctx.strokeStyle = "#fff"
-  ctx.strokeText(text, 0, y)
+  ctx.strokeText(formatLength(Math.hypot(wall.b.x - wall.a.x, wall.b.y - wall.a.y), unit), 0, ty)
   ctx.fillStyle = color
-  ctx.fillText(text, 0, y)
+  ctx.fillText(formatLength(Math.hypot(wall.b.x - wall.a.x, wall.b.y - wall.a.y), unit), 0, ty)
   ctx.restore()
 }

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { endpointAt, handleAt, hitWall, moveEndpoint, moveWall, pointsEqual, sameTypeJoint, snap, visibleWorld, wallShape, zoomAt } from "./geometry"
+import { dimensionSide, endpointAt, handleAt, hitWall, moveEndpoint, moveWall, pointsEqual, sameTypeJoint, snap, visibleWorld, wallShape, zoomAt } from "./geometry"
 import type { Point, Wall } from "./types"
 
 const GRID = 10
@@ -262,6 +262,45 @@ describe("sameTypeJoint", () => {
     const a = wall(0, 0, 100, 0)
     expect(sameTypeJoint(a, a.a, [a])).toBe(false)
     expect(sameTypeJoint(a, a.b, [a])).toBe(false)
+  })
+})
+
+describe("dimensionSide", () => {
+  it("замкнутый квадрат: сторона внутрь контура у всех стен", () => {
+    const walls = [wall(0, 0, 100, 0), wall(100, 0, 100, 100), wall(100, 100, 0, 100), wall(0, 100, 0, 0)]
+    for (const w of walls) expect(dimensionSide(w, walls)).toBe(1)
+  })
+
+  it("Г-образный замкнутый контур: сторона внутрь у всех стен", () => {
+    const walls = [
+      wall(0, 0, 210, 0),
+      wall(210, 0, 210, 100),
+      wall(210, 100, 110, 100),
+      wall(110, 100, 110, 210),
+      wall(110, 210, 0, 210),
+      wall(0, 210, 0, 0),
+    ]
+    for (const w of walls) expect(dimensionSide(w, walls)).toBe(1)
+  })
+
+  it("незамкнутая цепочка: угол охвачен соседями, без соседей — фолбэк", () => {
+    const walls = [wall(0, 0, 100, 0), wall(100, 0, 100, 100)]
+    expect(dimensionSide(walls[0], walls)).toBe(1)
+    expect(dimensionSide(walls[1], walls)).toBe(1)
+    expect(dimensionSide(walls[0], [])).toBe(-1)
+  })
+
+  it("перегородка между двумя комнатами: фолбэк", () => {
+    const walls = [wall(0, 0, 300, 0), wall(300, 0, 300, 100), wall(300, 100, 0, 100), wall(0, 100, 0, 0), wall(150, 0, 150, 100)]
+    expect(dimensionSide(walls[4], walls)).toBe(-1)
+  })
+
+  it("комната с перегородкой через середину: внутренняя сторона, а не фолбэк", () => {
+    const walls = [wall(0, 0, 300, 0), wall(300, 0, 300, 200), wall(300, 200, 0, 200), wall(0, 200, 0, 0), wall(0, 100, 300, 100)]
+    expect(dimensionSide(walls[0], walls)).toBe(1)
+    expect(dimensionSide(walls[2], walls)).toBe(1)
+    expect(dimensionSide(walls[1], walls)).toBe(1)
+    expect(dimensionSide(walls[3], walls)).toBe(1)
   })
 })
 

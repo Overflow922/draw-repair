@@ -267,6 +267,42 @@ function endCap(wall: Wall, E: Point, u: Point, walls: Wall[]): Cap {
   return flat
 }
 
+function axisCrossings(o: Point, n: Point, wall: Wall, walls: Wall[]): number {
+  let count = 0
+  for (const w of walls) {
+    if (w === wall || pointsEqual(w.a, w.b)) continue
+    const d1 = (w.a.x - o.x) * n.y - (w.a.y - o.y) * n.x
+    const d2 = (w.b.x - o.x) * n.y - (w.b.y - o.y) * n.x
+    if (d1 > 0 === d2 > 0) continue
+    const t = d1 / (d1 - d2)
+    const ix = w.a.x + t * (w.b.x - w.a.x) - o.x
+    const iy = w.a.y + t * (w.b.y - w.a.y) - o.y
+    if (ix * n.x + iy * n.y > 1e-9) count++
+  }
+  return count
+}
+
+export function dimensionSide(wall: Wall, walls: Wall[]): 1 | -1 {
+  const dx = wall.b.x - wall.a.x
+  const dy = wall.b.y - wall.a.y
+  const len = Math.hypot(dx, dy)
+  if (len < EPS) return -1
+  let votes = 0
+  for (const end of [wall.a, wall.b] as const)
+    for (const w of walls) {
+      if (w === wall || pointsEqual(w.a, w.b)) continue
+      for (const p of [w.a, w.b] as const)
+        if (pointsEqual(p, end)) votes += Math.sign(dx * (w.a.y + w.b.y - p.y - end.y) - dy * (w.a.x + w.b.x - p.x - end.x))
+    }
+  if (votes) return votes > 0 ? 1 : -1
+  const n = { x: -dy / len, y: dx / len }
+  const mid = { x: (wall.a.x + wall.b.x) / 2, y: (wall.a.y + wall.b.y) / 2 }
+  const plus = axisCrossings(mid, n, wall, walls)
+  const minus = axisCrossings(mid, { x: -n.x, y: -n.y }, wall, walls)
+  if (plus === minus) return -1
+  return plus % 2 === 1 ? 1 : -1
+}
+
 export function sameTypeJoint(wall: Wall, E: Point, walls: Wall[]): boolean {
   const j = jointAt(wall, E, walls)
   if (!j || j.c.type !== wall.type || j.c.thicknessCm !== wall.thicknessCm) return false
