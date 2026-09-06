@@ -1,11 +1,12 @@
 import { describe, expect, it } from "vitest"
-import { dimensionSide, endpointAt, handleAt, hitWall, moveEndpoint, moveWall, pointsEqual, sameTypeJoint, snap, visibleWorld, wallShape, zoomAt } from "./geometry"
-import type { Point, Wall } from "./types"
+import { dimensionOffsetAt, dimGeometry, dimHitDistance, dimPointPoint, edgeLine, endpointAt, handleAt, hitWall, jointPullback, moveEndpoint, moveWall, nearestEdgeIntersection, pointOn, pointsEqual, sameTypeJoint, snap, visibleWorld, wallShape, zoomAt } from "./geometry"
+import type { Dimension, Point, Wall } from "./types"
 
 const GRID = 10
 const RADIUS = 6
 
-const wall = (ax: number, ay: number, bx: number, by: number): Wall => ({
+const wall = (ax: number, ay: number, bx: number, by: number, id = "w"): Wall => ({
+  id,
   a: { x: ax, y: ay },
   b: { x: bx, y: by },
   thicknessCm: 20,
@@ -209,11 +210,11 @@ describe("moveWall", () => {
 })
 
 describe("sameTypeJoint", () => {
-  it("одинаковые стены под 90° сливаются с обеих сторон", () => {
+  it("одинаковые стены под 90°: торцы рисуются — ребро внешней границы", () => {
     const a = wall(0, 0, 100, 0)
     const b = wall(100, 0, 100, 80)
-    expect(sameTypeJoint(a, a.b, [a, b])).toBe(true)
-    expect(sameTypeJoint(b, b.a, [a, b])).toBe(true)
+    expect(sameTypeJoint(a, a.b, [a, b])).toBe(false)
+    expect(sameTypeJoint(b, b.a, [a, b])).toBe(false)
   })
 
   it("разный материал — стык рисуется", () => {
@@ -265,47 +266,118 @@ describe("sameTypeJoint", () => {
   })
 })
 
-describe("dimensionSide", () => {
-  it("замкнутый квадрат: сторона внутрь контура у всех стен", () => {
-    const walls = [wall(0, 0, 100, 0), wall(100, 0, 100, 100), wall(100, 100, 0, 100), wall(0, 100, 0, 0)]
-    for (const w of walls) expect(dimensionSide(w, walls)).toBe(1)
+describe("pointOn", () => {
+  it("pointOn интерполирует точку вдоль оси", () => {
+    const w = wall(0, 0, 100, 40)
+    expect(pointOn(w, 0)).toEqual({ x: 0, y: 0 })
+    expect(pointOn(w, 0.5)).toEqual({ x: 50, y: 20 })
+    expect(pointOn(w, 1)).toEqual({ x: 100, y: 40 })
+  })
+})
+
+describe("jointPullback", () => {
+  it("утапливает начало новой стены в тело сквозной на полтолщины", () => {
+    const through = wall(0, 0, 0, 100)
+    expect(jointPullback({ x: 0, y: 100 }, [through], 10, { x: 1, y: 0 })).toEqual({ x: 0, y: 90 })
   })
 
-  it("Г-образный замкнутый контур: сторона внутрь у всех стен", () => {
-    const walls = [
-      wall(0, 0, 210, 0),
-      wall(210, 0, 210, 100),
-      wall(210, 100, 110, 100),
-      wall(110, 100, 110, 210),
-      wall(110, 210, 0, 210),
-      wall(0, 210, 0, 0),
-    ]
-    for (const w of walls) expect(dimensionSide(w, walls)).toBe(1)
+  it("коллинеарное продолжение — без утапливания", () => {
+    const through = wall(0, 0, 100, 0)
+    expect(jointPullback({ x: 100, y: 0 }, [through], 10, { x: 1, y: 0 })).toEqual({ x: 100, y: 0 })
   })
 
-  it("незамкнутая цепочка: угол охвачен соседями, без соседей — фолбэк", () => {
-    const walls = [wall(0, 0, 100, 0), wall(100, 0, 100, 100)]
-    expect(dimensionSide(walls[0], walls)).toBe(1)
-    expect(dimensionSide(walls[1], walls)).toBe(1)
-    expect(dimensionSide(walls[0], [])).toBe(-1)
+  it("свободная точка — без изменений", () => {
+    expect(jointPullback({ x: 50, y: 50 }, [wall(0, 0, 100, 0)], 10, { x: 1, y: 0 })).toEqual({ x: 50, y: 50 })
+  })
+})
+
+describe("dimGeometry", () => {
+  it("линия смещения перпендикулярна оси, offset со знаком", () => {
+    const g = dimGeometry({ x: 0, y: 0 }, { x: 100, y: 0 }, 30)
+    expect(g?.nx).toBeCloseTo(0)
+    expect(g?.ny).toBeCloseTo(1)
+    expect(g?.p1).toEqual({ x: 0, y: 30 })
+    expect(g?.p2).toEqual({ x: 100, y: 30 })
+    expect(dimGeometry({ x: 0, y: 0 }, { x: 100, y: 0 }, -30)?.p1).toEqual({ x: 0, y: -30 })
   })
 
-  it("перегородка между двумя комнатами: фолбэк", () => {
-    const walls = [wall(0, 0, 300, 0), wall(300, 0, 300, 100), wall(300, 100, 0, 100), wall(0, 100, 0, 0), wall(150, 0, 150, 100)]
-    expect(dimensionSide(walls[4], walls)).toBe(-1)
+  it("наклонная ось: единичная нормаль", () => {
+    const g = dimGeometry({ x: 0, y: 0 }, { x: 30, y: 40 }, 0)
+    expect(g?.nx).toBeCloseTo(-0.8)
+    expect(g?.ny).toBeCloseTo(0.6)
   })
 
-  it("комната с перегородкой через середину: внутренняя сторона, а не фолбэк", () => {
-    const walls = [wall(0, 0, 300, 0), wall(300, 0, 300, 200), wall(300, 200, 0, 200), wall(0, 200, 0, 0), wall(0, 100, 300, 100)]
-    expect(dimensionSide(walls[0], walls)).toBe(1)
-    expect(dimensionSide(walls[2], walls)).toBe(1)
-    expect(dimensionSide(walls[1], walls)).toBe(1)
-    expect(dimensionSide(walls[3], walls)).toBe(1)
+  it("вырожденный отрезок даёт null", () => {
+    expect(dimGeometry({ x: 5, y: 5 }, { x: 5, y: 5 }, 10)).toBeNull()
+  })
+})
+
+describe("edgeLine", () => {
+  it("боковые грани параллельны оси на полутолщине, торцы — осевые концы", () => {
+    const w = wall(0, 0, 100, 0)
+    expect(edgeLine(w, 0)).toEqual({ p: { x: 0, y: 10 }, d: { x: 1, y: 0 } })
+    expect(edgeLine(w, 1)).toEqual({ p: { x: 0, y: -10 }, d: { x: 1, y: 0 } })
+    const capA = edgeLine(w, 2)
+    expect(capA.p).toEqual({ x: 0, y: 0 })
+    expect(capA.d.y).toBeCloseTo(1)
+    const capB = edgeLine(w, 3)
+    expect(capB.p).toEqual({ x: 100, y: 0 })
+    expect(capB.d.y).toBeCloseTo(1)
+  })
+})
+
+describe("dimPointPoint", () => {
+  it("пересечение граней двух стен — угол чертежа", () => {
+    const a = wall(0, 0, 100, 0, "w1")
+    const b = wall(100, 0, 100, 80, "w2")
+    expect(dimPointPoint({ a: { wallId: "w1", edge: 0 }, b: { wallId: "w2", edge: 0 } }, [a, b])).toEqual({ x: 90, y: 10 })
+  })
+
+  it("параллельные грани и битая ссылка — null", () => {
+    const a = wall(0, 0, 100, 0, "w1")
+    expect(dimPointPoint({ a: { wallId: "w1", edge: 0 }, b: { wallId: "w1", edge: 1 } }, [a])).toBeNull()
+    expect(dimPointPoint({ a: { wallId: "нет", edge: 0 }, b: { wallId: "w1", edge: 0 } }, [a])).toBeNull()
+  })
+})
+
+describe("nearestEdgeIntersection", () => {
+  it("находит ближайший угол в радиусе", () => {
+    const a = wall(0, 0, 100, 0, "w1")
+    const b = wall(100, 0, 100, 80, "w2")
+    const hit = nearestEdgeIntersection({ x: 92, y: 8 }, [a, b], 6)
+    expect(hit?.point).toEqual({ x: 90, y: 10 })
+    expect(hit?.a).toEqual({ wallId: "w1", edge: 0 })
+    expect(hit?.b).toEqual({ wallId: "w2", edge: 0 })
+  })
+
+  it("вне радиуса — null", () => {
+    expect(nearestEdgeIntersection({ x: 50, y: 0 }, [wall(0, 0, 100, 0)], 6)).toBeNull()
+  })
+})
+
+describe("dimensionOffsetAt/dimHitDistance", () => {
+  it("offset — проекция курсора на нормаль оси", () => {
+    const g = dimGeometry({ x: 0, y: 0 }, { x: 100, y: 0 }, 0)!
+    expect(dimensionOffsetAt({ x: 40, y: 25 }, g)).toBeCloseTo(25)
+    expect(dimensionOffsetAt({ x: 40, y: -8 }, g)).toBeCloseTo(-8)
+  })
+
+  it("dimHitDistance — расстояние до линии, у текста в середине удвоенный радиус", () => {
+    const w1 = wall(0, 0, 100, 0, "w1")
+    const dim: Dimension = {
+      from: { a: { wallId: "w1", edge: 2 }, b: { wallId: "w1", edge: 0 } },
+      to: { a: { wallId: "w1", edge: 3 }, b: { wallId: "w1", edge: 0 } },
+      offset: 20,
+    }
+    expect(dimHitDistance({ x: 50, y: 35 }, dim, [w1], 2)).toBeCloseTo(2.5)
+    expect(dimHitDistance({ x: 50, y: 41 }, dim, [w1], 2)).toBeCloseTo(5.5)
+    expect(dimHitDistance({ x: 50, y: 80 }, dim, [w1], 2)).toBeCloseTo(25)
   })
 })
 
 describe("wallShape", () => {
   const wallT = (ax: number, ay: number, bx: number, by: number, t: number): Wall => ({
+    id: "wt",
     a: { x: ax, y: ay },
     b: { x: bx, y: by },
     thicknessCm: t,
@@ -321,17 +393,21 @@ describe("wallShape", () => {
     ])
   })
 
-  it("угол 90°: диагональный срез, общий у обеих стен", () => {
+  it("угол 90°: сквозная ровно как нарисована, примыкающая подрезана по грани", () => {
     const a = wall(0, 0, 100, 0)
     const b = wall(100, 0, 100, 80)
-    const shapeA = wallShape(a, [a, b])
-    expect(shapeA[1].x).toBeCloseTo(90)
-    expect(shapeA[1].y).toBeCloseTo(10)
-    expect(shapeA[2].x).toBeCloseTo(110)
-    expect(shapeA[2].y).toBeCloseTo(-10)
-    const shapeB = wallShape(b, [a, b])
-    expect(shapeB[0]).toEqual(shapeA[1])
-    expect(shapeB[3]).toEqual(shapeA[2])
+    expect(wallShape(a, [a, b])).toEqual([
+      { x: 0, y: 10 },
+      { x: 100, y: 10 },
+      { x: 100, y: -10 },
+      { x: 0, y: -10 },
+    ])
+    expect(wallShape(b, [a, b])).toEqual([
+      { x: 90, y: 10 },
+      { x: 90, y: 80 },
+      { x: 110, y: 80 },
+      { x: 110, y: 10 },
+    ])
   })
 
   it("поворот цепочки на 45°: срез по пересечениям граней", () => {
@@ -344,13 +420,13 @@ describe("wallShape", () => {
     expect(shapeA[2].y).toBeCloseTo(-10)
   })
 
-  it("разная толщина: примыкание прямой линией, угол заполнен без диагонали", () => {
+  it("разная толщина: примыкание прямой линией, сквозная без заполнения угла", () => {
     const a = wallT(0, 0, 100, 0, 20)
     const b = wallT(100, 0, 100, 80, 40)
     expect(wallShape(a, [a, b])).toEqual([
       { x: 0, y: 10 },
-      { x: 120, y: 10 },
-      { x: 120, y: -10 },
+      { x: 100, y: 10 },
+      { x: 100, y: -10 },
       { x: 0, y: -10 },
     ])
     expect(wallShape(b, [a, b])).toEqual([
@@ -440,17 +516,23 @@ describe("wallShape", () => {
     expect(shape[3].y).toBeCloseTo(-10)
   })
 
-  it("конец на оси у торца: угол строится по вершине более ранней стены", () => {
+  it("конец на оси у торца: сквозная ровно как нарисована, примыкающая подрезана", () => {
     const a = wall(0, 0, 100, 0)
     const b = wall(103, 0, 103, -80)
-    const shapeA = wallShape(a, [a, b])
-    const shapeB = wallShape(b, [a, b])
-    expect(shapeA[1]).toEqual({ x: 113, y: 10 })
-    expect(shapeA[2]).toEqual({ x: 93, y: -10 })
-    expect(shapeB[0]).toEqual(shapeA[1])
-    expect(shapeB[3]).toEqual(shapeA[2])
-    expect(sameTypeJoint(a, a.b, [a, b])).toBe(true)
-    expect(sameTypeJoint(b, b.a, [a, b])).toBe(true)
+    expect(wallShape(a, [a, b])).toEqual([
+      { x: 0, y: 10 },
+      { x: 100, y: 10 },
+      { x: 100, y: -10 },
+      { x: 0, y: -10 },
+    ])
+    expect(wallShape(b, [a, b])).toEqual([
+      { x: 113, y: -10 },
+      { x: 113, y: -80 },
+      { x: 93, y: -80 },
+      { x: 93, y: -10 },
+    ])
+    expect(sameTypeJoint(a, a.b, [a, b])).toBe(false)
+    expect(sameTypeJoint(b, b.a, [a, b])).toBe(false)
   })
 
   it("коллинеарные с зазором меньше полутолщины: торцы сведены", () => {

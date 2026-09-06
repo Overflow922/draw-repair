@@ -1,13 +1,20 @@
 import { readFileSync } from "node:fs"
 import { describe, expect, it } from "vitest"
-import type { Wall } from "../types"
+import type { Dimension, Wall } from "../types"
 import { availableFormats, buildPdf, pdfFileName, placeOnPage, wallsBBox } from "./pdf"
 
-const wall = (ax: number, ay: number, bx: number, by: number): Wall => ({
+const wall = (ax: number, ay: number, bx: number, by: number, id = "w"): Wall => ({
+  id,
   a: { x: ax, y: ay },
   b: { x: bx, y: by },
   thicknessCm: 20,
   type: "brick",
+})
+
+const dim = (wallId: string, offset: number): Dimension => ({
+  from: { a: { wallId, edge: 2 }, b: { wallId, edge: 1 } },
+  to: { a: { wallId, edge: 3 }, b: { wallId, edge: 1 } },
+  offset,
 })
 
 const WIDE = { minX: 0, minY: 0, maxX: 5000, maxY: 3000 }
@@ -52,23 +59,30 @@ describe("placeOnPage", () => {
 
 describe("availableFormats", () => {
   it("пустой чертёж — все форматы", () => {
-    expect(availableFormats([], 100)).toEqual(["A4", "A3", "A2", "A1", "A0"])
+    expect(availableFormats([], [], 100)).toEqual(["A4", "A3", "A2", "A1", "A0"])
   })
 
   it("стена 5 м при 1:100 вмещается в A4", () => {
-    expect(availableFormats([wall(0, 0, 500, 0)], 100)).toEqual(["A4", "A3", "A2", "A1", "A0"])
+    expect(availableFormats([wall(0, 0, 500, 0)], [], 100)).toEqual(["A4", "A3", "A2", "A1", "A0"])
   })
 
   it("стена 20 м при 1:50 не вмещается в A4 и A3", () => {
-    expect(availableFormats([wall(0, 0, 2000, 0)], 50)).toEqual(["A2", "A1", "A0"])
+    expect(availableFormats([wall(0, 0, 2000, 0)], [], 50)).toEqual(["A2", "A1", "A0"])
   })
 
   it("переполнение A0 — пустой список", () => {
-    expect(availableFormats([wall(0, 0, 6000, 0)], 50)).toEqual([])
+    expect(availableFormats([wall(0, 0, 6000, 0)], [], 50)).toEqual([])
   })
 
   it("смена масштаба расширяет список", () => {
-    expect(availableFormats([wall(0, 0, 2000, 0)], 200)).toEqual(["A4", "A3", "A2", "A1", "A0"])
+    expect(availableFormats([wall(0, 0, 2000, 0)], [], 200)).toEqual(["A4", "A3", "A2", "A1", "A0"])
+  })
+
+  it("размер за габаритом стен сужает список форматов", () => {
+    const w = wall(0, 0, 2000, 0, "w")
+    expect(availableFormats([w], [], 100)).toContain("A4")
+    expect(availableFormats([w], [dim("w", 2000)], 100)).not.toContain("A4")
+    expect(availableFormats([w], [dim("w", 2000)], 100)).toEqual(["A3", "A2", "A1", "A0"])
   })
 })
 
@@ -76,6 +90,16 @@ describe("wallsBBox", () => {
   it("охватывает концы стен с половиной толщины", () => {
     const b = wallsBBox([wall(-10, -20, 30, 40), wall(100, 5, 7, 8)])
     expect(b).toEqual({ minX: -20, minY: -30, maxX: 110, maxY: 50 })
+  })
+
+  it("включает точки размерной линии и отступ под текст", () => {
+    const b = wallsBBox([wall(0, 0, 100, 0)], [dim("w", -50)], 10)
+    expect(b).toEqual({ minX: -20, minY: -70, maxX: 120, maxY: 20 })
+  })
+
+  it("размер с битой ссылкой не расширяет bbox", () => {
+    const b = wallsBBox([wall(0, 0, 100, 0)], [dim("нет", 999)])
+    expect(b).toEqual({ minX: -10, minY: -10, maxX: 110, maxY: 10 })
   })
 })
 
@@ -101,7 +125,7 @@ describe("buildPdf", () => {
   const font = readFileSync(new URL("../assets/pt-sans-regular.ttf", import.meta.url)).toString("base64")
 
   it("выдаёт валидный PDF со встроенным шрифтом", () => {
-    const doc = buildPdf([wall(0, 0, 1500, 0), wall(1500, 0, 1500, 1000)], "mm", 100, "A3", font)
+    const doc = buildPdf([wall(0, 0, 1500, 0), wall(1500, 0, 1500, 1000)], [], "mm", 100, "A3", font)
     const buf = Buffer.from(doc.output("arraybuffer"))
     expect(buf.subarray(0, 5).toString()).toBe("%PDF-")
     expect(buf.toString("latin1")).toContain("PTSans")
@@ -109,14 +133,20 @@ describe("buildPdf", () => {
   })
 
   it("широкий чертёж даёт альбомную страницу формата", () => {
-    const doc = buildPdf([wall(0, 0, 5000, 0)], "mm", 100, "A4", font)
+    const doc = buildPdf([wall(0, 0, 5000, 0)], [], "mm", 100, "A4", font)
     expect(doc.internal.pageSize.getWidth()).toBe(297)
     expect(doc.internal.pageSize.getHeight()).toBe(210)
   })
 
   it("высокий чертёж даёт портретную страницу формата", () => {
-    const doc = buildPdf([wall(0, 0, 0, 2000)], "mm", 100, "A2", font)
+    const doc = buildPdf([wall(0, 0, 0, 2000)], [], "mm", 100, "A2", font)
     expect(doc.internal.pageSize.getWidth()).toBe(420)
     expect(doc.internal.pageSize.getHeight()).toBe(594)
+  })
+
+  it("чертёж с размерами строится без ошибок", () => {
+    const w = wall(0, 0, 1500, 0)
+    const doc = buildPdf([w], [dim("w", 60)], "mm", 100, "A4", font)
+    expect(Buffer.from(doc.output("arraybuffer")).subarray(0, 5).toString()).toBe("%PDF-")
   })
 })

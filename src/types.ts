@@ -17,10 +17,27 @@ export function normalizeMaterial(type: string): Material {
 }
 
 export interface Wall {
+  id: string
   a: Point
   b: Point
   thicknessCm: number
   type: Material
+}
+
+export interface EdgeRef {
+  wallId: string
+  edge: number
+}
+
+export interface DimPoint {
+  a: EdgeRef
+  b: EdgeRef
+}
+
+export interface Dimension {
+  from: DimPoint
+  to: DimPoint
+  offset: number
 }
 
 export interface View {
@@ -47,12 +64,13 @@ export interface Drawing {
   id: string
   name: string
   walls: Wall[]
+  dimensions: Dimension[]
   view: View
   scale: ScaleDenominator
 }
 
 export interface DrawingStore {
-  version: 2
+  version: 3
   activeId: string
   drawings: Drawing[]
 }

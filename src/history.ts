@@ -1,11 +1,16 @@
-import { isDrawing, isWall } from "./storage"
-import type { Drawing, Wall } from "./types"
+import { isDimension, isDrawing, isWall } from "./storage"
+import type { Dimension, Drawing, Wall } from "./types"
 
 const KEY = "draw-repair:history"
 export const HISTORY_LIMIT = 50
 
+export interface Scene {
+  walls: Wall[]
+  dimensions: Dimension[]
+}
+
 export type HistoryEntry =
-  | { kind: "walls"; walls: Wall[] }
+  | { kind: "walls"; walls: Wall[]; dimensions: Dimension[] }
   | { kind: "close"; index: number; drawingId: string }
 
 export interface DrawingHistory {
@@ -19,7 +24,7 @@ export interface TrashEntry {
 }
 
 export interface HistoryStore {
-  version: 1
+  version: 2
   histories: Record<string, DrawingHistory>
   trash: TrashEntry[]
 }
@@ -33,36 +38,43 @@ export function drawingHistory(history: HistoryStore, id: string): DrawingHistor
   return (history.histories[id] ??= { past: [], future: [] })
 }
 
-export function cloneWalls(walls: Wall[]): Wall[] {
-  return walls.map((w) => ({ a: { x: w.a.x, y: w.a.y }, b: { x: w.b.x, y: w.b.y }, thicknessCm: w.thicknessCm, type: w.type }))
+export function cloneScene(scene: Scene): Scene {
+  return {
+    walls: scene.walls.map((w) => ({ id: w.id, a: { x: w.a.x, y: w.a.y }, b: { x: w.b.x, y: w.b.y }, thicknessCm: w.thicknessCm, type: w.type })),
+    dimensions: scene.dimensions.map((d) => ({
+      from: { a: { ...d.from.a }, b: { ...d.from.b } },
+      to: { a: { ...d.to.a }, b: { ...d.to.b } },
+      offset: d.offset,
+    })),
+  }
 }
 
-export function record(history: DrawingHistory, walls: Wall[]): void {
-  recordSnapshot(history, cloneWalls(walls))
+export function record(history: DrawingHistory, scene: Scene): void {
+  recordSnapshot(history, cloneScene(scene))
 }
 
-export function recordSnapshot(history: DrawingHistory, snapshot: Wall[]): void {
-  history.past.push({ kind: "walls", walls: snapshot })
+export function recordSnapshot(history: DrawingHistory, snapshot: Scene): void {
+  history.past.push({ kind: "walls", ...snapshot })
   if (history.past.length > HISTORY_LIMIT) history.past.shift()
   history.future = []
 }
 
-export function undoEntry(history: DrawingHistory, walls: Wall[]): HistoryEntry | null {
+export function undoEntry(history: DrawingHistory, scene: Scene): HistoryEntry | null {
   const e = history.past.pop()
   if (!e) return null
-  history.future.push(e.kind === "walls" ? { kind: "walls", walls: cloneWalls(walls) } : e)
+  history.future.push(e.kind === "walls" ? { kind: "walls", ...cloneScene(scene) } : e)
   return e
 }
 
-export function redoEntry(history: DrawingHistory, walls: Wall[]): HistoryEntry | null {
+export function redoEntry(history: DrawingHistory, scene: Scene): HistoryEntry | null {
   const e = history.future.pop()
   if (!e) return null
-  history.past.push(e.kind === "walls" ? { kind: "walls", walls: cloneWalls(walls) } : e)
+  history.past.push(e.kind === "walls" ? { kind: "walls", ...cloneScene(scene) } : e)
   return e
 }
 
 export function emptyHistory(): HistoryStore {
-  return { version: 1, histories: {}, trash: [] }
+  return { version: 2, histories: {}, trash: [] }
 }
 
 export function serializeHistory(history: HistoryStore): string {
@@ -72,7 +84,9 @@ export function serializeHistory(history: HistoryStore): string {
 const isHistoryEntry = (e: unknown): e is HistoryEntry => {
   if (typeof e !== "object" || e === null) return false
   const x = e as Record<string, unknown>
-  if (x.kind === "walls") return Array.isArray(x.walls) && x.walls.every(isWall)
+  if (x.kind === "walls")
+    return Array.isArray(x.walls) && x.walls.every(isWall) &&
+      Array.isArray(x.dimensions) && x.dimensions.every(isDimension)
   return x.kind === "close" && typeof x.drawingId === "string" &&
     typeof x.index === "number" && Number.isInteger(x.index) && x.index >= 0
 }
@@ -88,7 +102,7 @@ const isTrashEntry = (t: unknown): t is TrashEntry =>
   isDrawing((t as TrashEntry).drawing)
 
 const isHistoryStore = (d: unknown): d is HistoryStore => {
-  if (typeof d !== "object" || d === null || (d as HistoryStore).version !== 1) return false
+  if (typeof d !== "object" || d === null || (d as HistoryStore).version !== 2) return false
   const histories = (d as HistoryStore).histories
   return typeof histories === "object" && histories !== null && !Array.isArray(histories) &&
     Object.values(histories).every(isDrawingHistory) &&
@@ -104,7 +118,8 @@ export function parseHistory(raw: string): LoadedHistory | null {
   }
   if (typeof data !== "object" || data === null) return null
   const d = data as Record<string, unknown>
-  if (typeof d.version === "number" && d.version > 1) return { history: emptyHistory(), readOnly: true }
+  if (typeof d.version === "number" && d.version > 2) return { history: emptyHistory(), readOnly: true }
+  if (d.version === 1) return { history: emptyHistory(), readOnly: false }
   if (!isHistoryStore(data)) return null
   return { history: data, readOnly: false }
 }

@@ -1,5 +1,5 @@
 import { ZOOM_MAX, ZOOM_MIN } from "./types"
-import type { Point, View, Wall } from "./types"
+import type { Dimension, DimPoint, EdgeRef, Point, View, Wall } from "./types"
 
 const EPS = 1e-6
 
@@ -80,13 +80,17 @@ export function hitWall(p: Point, walls: Wall[], toleranceCm: number): Wall | nu
   let best: Wall | null = null
   let bestDist = Infinity
   for (const w of walls) {
-    const d = distance(p, projectOnSegment(p, w))
+    const d = distanceToWall(p, w)
     if (d <= Math.max(w.thicknessCm / 2, toleranceCm) && d < bestDist) {
       best = w
       bestDist = d
     }
   }
   return best
+}
+
+export function distanceToWall(p: Point, wall: Wall): number {
+  return distance(p, projectOnSegment(p, wall))
 }
 
 export function endpointAt(p: Point, wall: Wall, radiusCm: number): "a" | "b" | null {
@@ -125,6 +129,7 @@ export function moveWall(walls: Wall[], wall: Wall, delta: Point): void {
 }
 
 const MITER_MIN = Math.PI / 6
+const RIGHT_ANGLE_MAX_COS = Math.sin((5 * Math.PI) / 180)
 
 interface Cap {
   plus: Point
@@ -235,15 +240,9 @@ function endCap(wall: Wall, E: Point, u: Point, walls: Wall[]): Cap {
   if (Math.abs(cr) < EPS) return flat
   const phi = Math.acos(Math.max(-1, Math.min(1, dot(u, v))))
   const same = j.c.type === wall.type && j.c.thicknessCm === wall.thicknessCm
-  if (!(same && phi >= MITER_MIN)) {
-    if (phi < MITER_MIN) {
-      return walls.indexOf(j.c) < walls.indexOf(wall) ? buttCap(j.cEnd, v, hC, u, n, E, h, flat) : flat
-    }
-    if (walls.indexOf(j.c) < walls.indexOf(wall)) return buttCap(j.cEnd, v, hC, u, n, E, h, flat)
-    const nC = { x: -v.y, y: v.x }
-    const s = dot(u, nC) > 0 ? 1 : -1
-    const far = capOnFaces(n, u, E, h, { x: j.cEnd.x - nC.x * s * hC, y: j.cEnd.y - nC.y * s * hC }, v)
-    return far ?? flat
+  const miter = same && phi >= MITER_MIN && Math.abs(dot(u, v)) >= RIGHT_ANGLE_MAX_COS
+  if (!miter) {
+    return walls.indexOf(j.c) < walls.indexOf(wall) ? buttCap(j.cEnd, v, hC, u, n, E, h, flat) : flat
   }
   const s = cr > 0 ? 1 : -1
   const nC = { x: -v.y, y: v.x }
@@ -267,40 +266,114 @@ function endCap(wall: Wall, E: Point, u: Point, walls: Wall[]): Cap {
   return flat
 }
 
-function axisCrossings(o: Point, n: Point, wall: Wall, walls: Wall[]): number {
-  let count = 0
-  for (const w of walls) {
-    if (w === wall || pointsEqual(w.a, w.b)) continue
-    const d1 = (w.a.x - o.x) * n.y - (w.a.y - o.y) * n.x
-    const d2 = (w.b.x - o.x) * n.y - (w.b.y - o.y) * n.x
-    if (d1 > 0 === d2 > 0) continue
-    const t = d1 / (d1 - d2)
-    const ix = w.a.x + t * (w.b.x - w.a.x) - o.x
-    const iy = w.a.y + t * (w.b.y - w.a.y) - o.y
-    if (ix * n.x + iy * n.y > 1e-9) count++
-  }
-  return count
+export function pointOn(wall: Wall, t: number): Point {
+  return { x: wall.a.x + (wall.b.x - wall.a.x) * t, y: wall.a.y + (wall.b.y - wall.a.y) * t }
 }
 
-export function dimensionSide(wall: Wall, walls: Wall[]): 1 | -1 {
+export interface EdgeLine {
+  p: Point
+  d: Point
+}
+
+export function edgeLine(wall: Wall, edge: number): EdgeLine {
   const dx = wall.b.x - wall.a.x
   const dy = wall.b.y - wall.a.y
   const len = Math.hypot(dx, dy)
-  if (len < EPS) return -1
-  let votes = 0
-  for (const end of [wall.a, wall.b] as const)
-    for (const w of walls) {
-      if (w === wall || pointsEqual(w.a, w.b)) continue
-      for (const p of [w.a, w.b] as const)
-        if (pointsEqual(p, end)) votes += Math.sign(dx * (w.a.y + w.b.y - p.y - end.y) - dy * (w.a.x + w.b.x - p.x - end.x))
+  const ux = dx / len
+  const uy = dy / len
+  const nx = -uy
+  const ny = ux
+  const h = wall.thicknessCm / 2
+  if (edge === 0) return { p: { x: wall.a.x + nx * h, y: wall.a.y + ny * h }, d: { x: ux, y: uy } }
+  if (edge === 1) return { p: { x: wall.a.x - nx * h, y: wall.a.y - ny * h }, d: { x: ux, y: uy } }
+  if (edge === 2) return { p: { x: wall.a.x, y: wall.a.y }, d: { x: nx, y: ny } }
+  return { p: { x: wall.b.x, y: wall.b.y }, d: { x: nx, y: ny } }
+}
+
+export function dimPointPoint(point: DimPoint, walls: Wall[]): Point | null {
+  const wa = walls.find((w) => w.id === point.a.wallId)
+  const wb = walls.find((w) => w.id === point.b.wallId)
+  if (!wa || !wb) return null
+  const l1 = edgeLine(wa, point.a.edge)
+  const l2 = edgeLine(wb, point.b.edge)
+  return lineIntersect(l1.p, l1.d, l2.p, l2.d)
+}
+
+export function nearestEdgeIntersection(p: Point, walls: Wall[], radius: number): { point: Point; a: EdgeRef; b: EdgeRef } | null {
+  const lines: { ref: EdgeRef; line: EdgeLine }[] = []
+  for (const w of walls) {
+    if (pointsEqual(w.a, w.b)) continue
+    for (let edge = 0; edge < 4; edge++) lines.push({ ref: { wallId: w.id, edge }, line: edgeLine(w, edge) })
+  }
+  let best: { point: Point; a: EdgeRef; b: EdgeRef } | null = null
+  let bestDist = radius
+  for (let i = 0; i < lines.length; i++)
+    for (let j = i + 1; j < lines.length; j++) {
+      const ip = lineIntersect(lines[i].line.p, lines[i].line.d, lines[j].line.p, lines[j].line.d)
+      if (!ip) continue
+      const d = distance(p, ip)
+      if (d < bestDist) {
+        best = { point: ip, a: lines[i].ref, b: lines[j].ref }
+        bestDist = d
+      }
     }
-  if (votes) return votes > 0 ? 1 : -1
-  const n = { x: -dy / len, y: dx / len }
-  const mid = { x: (wall.a.x + wall.b.x) / 2, y: (wall.a.y + wall.b.y) / 2 }
-  const plus = axisCrossings(mid, n, wall, walls)
-  const minus = axisCrossings(mid, { x: -n.x, y: -n.y }, wall, walls)
-  if (plus === minus) return -1
-  return plus % 2 === 1 ? 1 : -1
+  return best
+}
+
+export function jointPullback(p: Point, walls: Wall[], distance: number, dir: Point): Point {
+  for (const w of walls)
+    for (const [end, other] of [[w.a, w.b], [w.b, w.a]] as const)
+      if (pointsEqual(p, end)) {
+        const d = dirOf(end, other)
+        if (Math.abs(dot(d, dir)) > 1 - 1e-9) return p
+        return { x: p.x + d.x * distance, y: p.y + d.y * distance }
+      }
+  return p
+}
+
+export interface DimGeometry {
+  a: Point
+  b: Point
+  p1: Point
+  p2: Point
+  nx: number
+  ny: number
+}
+
+export function dimGeometry(a: Point, b: Point, offset: number): DimGeometry | null {
+  const dx = b.x - a.x
+  const dy = b.y - a.y
+  const len = Math.hypot(dx, dy)
+  if (len < EPS) return null
+  const nx = -dy / len
+  const ny = dx / len
+  return {
+    a,
+    b,
+    nx,
+    ny,
+    p1: { x: a.x + nx * offset, y: a.y + ny * offset },
+    p2: { x: b.x + nx * offset, y: b.y + ny * offset },
+  }
+}
+
+export function dimensionOffsetAt(p: Point, geom: DimGeometry): number {
+  return (p.x - geom.a.x) * geom.nx + (p.y - geom.a.y) * geom.ny
+}
+
+export function dimHitDistance(p: Point, dim: Dimension, walls: Wall[], textFactor: number): number | null {
+  const fa = dimPointPoint(dim.from, walls)
+  const ta = dimPointPoint(dim.to, walls)
+  if (!fa || !ta) return null
+  const g = dimGeometry(fa, ta, dim.offset)
+  if (!g) return null
+  const dx = g.p2.x - g.p1.x
+  const dy = g.p2.y - g.p1.y
+  const len2 = dx * dx + dy * dy
+  const t = len2 < EPS ? 0 : Math.max(0, Math.min(1, ((p.x - g.p1.x) * dx + (p.y - g.p1.y) * dy) / len2))
+  const foot = { x: g.p1.x + t * dx, y: g.p1.y + t * dy }
+  const mid = { x: (g.p1.x + g.p2.x) / 2, y: (g.p1.y + g.p2.y) / 2 }
+  return Math.min(distance(p, foot), distance(p, mid) / textFactor)
 }
 
 export function sameTypeJoint(wall: Wall, E: Point, walls: Wall[]): boolean {
@@ -311,6 +384,7 @@ export function sameTypeJoint(wall: Wall, E: Point, walls: Wall[]): boolean {
   const v = dirFromBody(j.c.a, j.c.b, j.cEnd)
   const cr = cross(u, v)
   if (Math.abs(cr) < EPS) return true
+  if (Math.abs(dot(u, v)) < RIGHT_ANGLE_MAX_COS) return false
   return Math.acos(Math.max(-1, Math.min(1, dot(u, v)))) >= MITER_MIN
 }
 

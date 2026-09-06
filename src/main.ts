@@ -1,12 +1,14 @@
 import "./style.css"
-import { cloneWalls, drawingHistory, loadHistory, record, recordSnapshot, redoEntry, saveHistory, undoEntry } from "./history"
-import { handleAt, hitWall, moveEndpoint, moveWall, pointsEqual, snap, zoomAt } from "./geometry"
+import { cloneScene, drawingHistory, loadHistory, record, recordSnapshot, redoEntry, saveHistory, undoEntry } from "./history"
+import type { Scene } from "./history"
+import { dimGeometry, dimHitDistance, dimensionOffsetAt, distanceToWall, handleAt, hitWall, jointPullback, moveEndpoint, moveWall, nearestEdgeIntersection, dimPointPoint, pointsEqual, snap, zoomAt } from "./geometry"
+import type { DimGeometry } from "./geometry"
 import { drawPatternPreview, render } from "./render"
 import { availableFormats, exportDrawing, PAGE_FORMATS_MM } from "./export/pdf"
 import type { PageFormat } from "./export/pdf"
 import { loadStore, saveStore } from "./storage"
 import { GRID_STEP_CM, MATERIALS, PX_PER_CM, SNAP_RADIUS_PX } from "./types"
-import type { Drawing, Material, Point, Unit, View, Wall } from "./types"
+import type { Dimension, DimPoint, Drawing, Material, Point, Unit, View, Wall } from "./types"
 
 const canvas = document.querySelector<HTMLCanvasElement>("#canvas")!
 const canvasWrap = document.querySelector<HTMLElement>("#canvas-wrap")!
@@ -21,6 +23,7 @@ const tabAdd = document.querySelector<HTMLButtonElement>("#tab-add")!
 const undoBtn = document.querySelector<HTMLButtonElement>("#undo-btn")!
 const redoBtn = document.querySelector<HTMLButtonElement>("#redo-btn")!
 const toolWallBtn = document.querySelector<HTMLButtonElement>("#tool-wall")!
+const toolDimensionBtn = document.querySelector<HTMLButtonElement>("#tool-dimension")!
 const toolEraserBtn = document.querySelector<HTMLButtonElement>("#tool-eraser")!
 const wallPanel = document.querySelector<HTMLElement>("#wall-panel")!
 const pdfScale = document.querySelector<HTMLSelectElement>("#pdf-scale")!
@@ -35,6 +38,7 @@ const historyReadOnly = loadedHistory.readOnly
 const historyStore = loadedHistory.history
 const current = () => store.drawings.find((d) => d.id === store.activeId)!
 let walls: Wall[] = current().walls
+let dimensions: Dimension[] = current().dimensions
 let chainStart: Point | null = null
 let cursor: Point | null = null
 let thicknessCm = 20
@@ -44,13 +48,21 @@ let lengthDirty = false
 let view: View = current().view
 let dirty = false
 let selectedWall: Wall | null = null
-let endpointDrag: { wall: Wall; end: "a" | "b"; base: Point; snapshot: Wall[] } | null = null
-let wallMove: { wall: Wall; baseA: Point; baseB: Point; grab: Point; others: Wall[]; snapshot: Wall[] } | null = null
+let endpointDrag: { wall: Wall; end: "a" | "b"; base: Point; snapshot: Scene } | null = null
+let wallMove: { wall: Wall; baseA: Point; baseB: Point; grab: Point; others: Wall[]; snapshot: Scene } | null = null
+let dimDraft: { a: DimPoint | null; b: DimPoint | null } = { a: null, b: null }
+let dimDrag: { dim: Dimension; baseOffset: number; snapshot: Scene } | null = null
 let suppressClick = false
 let ortho = false
 let wallPanelOpen = false
-type Tool = "wall" | "eraser" | "none"
+type Tool = "wall" | "dimension" | "eraser" | "none"
 let tool: Tool = "wall"
+
+const emptyDraft = (): { a: DimPoint | null; b: DimPoint | null } => ({ a: null, b: null })
+
+const endPoint = (end: DimPoint): Point | null => dimPointPoint(end, walls)
+
+const radiusCm = (): number => SNAP_RADIUS_PX / (PX_PER_CM * view.zoom)
 
 function setWallPanel(open: boolean): void {
   wallPanelOpen = open
@@ -59,6 +71,7 @@ function setWallPanel(open: boolean): void {
 
 function syncToolUI(): void {
   toolWallBtn.classList.toggle("active", tool === "wall")
+  toolDimensionBtn.classList.toggle("active", tool === "dimension")
   toolEraserBtn.classList.toggle("active", tool === "eraser")
   canvas.classList.toggle("tool-eraser", tool === "eraser")
 }
@@ -67,6 +80,7 @@ function setTool(next: Tool): void {
   if (tool === next) return
   tool = next
   chainStart = null
+  dimDraft = emptyDraft()
   lengthDirty = false
   selectedWall = null
   suppressClick = false
@@ -123,7 +137,7 @@ function resizeSelected(): void {
   if (!cm) return
   const end = { x: a.x + ((b.x - a.x) / cm) * len, y: a.y + ((b.y - a.y) / cm) * len }
   if (pointsEqual(end, b)) return
-  record(drawingHistory(historyStore, store.activeId), walls)
+  record(drawingHistory(historyStore, store.activeId), { walls, dimensions })
   dirty = true
   moveEndpoint(walls, selectedWall, "b", end)
 }
@@ -143,8 +157,23 @@ function syncHistoryButtons(): void {
 
 function redraw(): void {
   const p = previewPoint()
-  const hover = tool === "eraser" && cursor ? hitWall(cursor, walls, SNAP_RADIUS_PX / (PX_PER_CM * view.zoom)) : null
-  render(canvas, walls, chainStart && p ? { a: chainStart, b: p, thicknessCm, type: wallMaterial } : null, unit, view, selectedWall, { hover })
+  const target = tool === "eraser" && cursor ? eraserTarget(cursor) : { wall: null, dim: null }
+  const draft = dimDraftGeometry()
+  let previewWall: Wall | null = null
+  if (chainStart && p) {
+    const dx = p.x - chainStart.x
+    const dy = p.y - chainStart.y
+    const len = Math.hypot(dx, dy)
+    const a = len > 0 ? jointPullback(chainStart, walls, thicknessCm / 2, { x: dx / len, y: dy / len }) : chainStart
+    previewWall = { id: "", a, b: p, thicknessCm, type: wallMaterial }
+  }
+  render(canvas, walls, previewWall, unit, view, selectedWall, {
+    hover: target.wall,
+    hoverDim: target.dim,
+    dimensions,
+    dimDraft: draft,
+    dimRubber: !dimDraft.a || dimDraft.b || !cursor ? null : draftRubber(),
+  })
   updateLengthBox()
   syncHistoryButtons()
   syncFormats()
@@ -153,6 +182,38 @@ function redraw(): void {
     if (!readOnly) saveStore(store)
     if (!readOnly && !historyReadOnly) saveHistory(historyStore)
   }
+}
+
+function eraserTarget(p: Point): { wall: Wall | null; dim: Dimension | null } {
+  const tol = radiusCm()
+  let wall: Wall | null = hitWall(p, walls, tol)
+  let wallDist = wall ? distanceToWall(p, wall) : Infinity
+  let dim: Dimension | null = null
+  let dimDist = Infinity
+  for (const d of dimensions) {
+    const dd = dimHitDistance(p, d, walls, 2)
+    if (dd !== null && dd < dimDist) {
+      dim = d
+      dimDist = dd
+    }
+  }
+  if (dim && dimDist < wallDist) wall = null
+  else dim = null
+  return { wall, dim }
+}
+
+function dimDraftGeometry(): DimGeometry | null {
+  if (!dimDraft.a || !dimDraft.b || !cursor) return null
+  const ea = endPoint(dimDraft.a)
+  const eb = endPoint(dimDraft.b)
+  if (!ea || !eb || pointsEqual(ea, eb)) return null
+  const axis = dimGeometry(ea, eb, 0)!
+  return dimGeometry(ea, eb, dimensionOffsetAt(cursor, axis))
+}
+
+function draftRubber(): [Point, Point] | null {
+  const ea = dimDraft.a ? endPoint(dimDraft.a) : null
+  return ea && cursor ? [ea, cursor] : null
 }
 
 let unavailableFormats: PageFormat[] | null = null
@@ -172,7 +233,7 @@ function showFitPopup(unavailable: PageFormat[]): void {
 }
 
 function syncFormats(): void {
-  const available = availableFormats(walls, current().scale)
+  const available = availableFormats(walls, dimensions, current().scale)
   const all = Object.keys(PAGE_FORMATS_MM) as PageFormat[]
   const unavailable = all.filter((f) => !available.includes(f))
   pdfFormat.replaceChildren(...available.map((f) => new Option(f, f)))
@@ -208,9 +269,10 @@ function commitPoint(p: Point): void {
       : null
     const end = target !== null && dir ? { x: chainStart.x + dir.x * target, y: chainStart.y + dir.y * target } : p
     if (!pointsEqual(chainStart, end)) {
-      record(drawingHistory(historyStore, store.activeId), walls)
+      const a = jointPullback(chainStart, walls, thicknessCm / 2, dir ?? { x: 1, y: 0 })
+      record(drawingHistory(historyStore, store.activeId), { walls, dimensions })
       dirty = true
-      walls.push({ a: chainStart, b: end, thicknessCm, type: wallMaterial })
+      walls.push({ id: crypto.randomUUID(), a, b: end, thicknessCm, type: wallMaterial })
     }
     chainStart = end
   } else {
@@ -231,12 +293,26 @@ canvas.addEventListener("pointermove", (e) => {
       { x: baseA.x + p.x - grab.x, y: baseA.y + p.y - grab.y },
       others,
       GRID_STEP_CM,
-      SNAP_RADIUS_PX / (PX_PER_CM * view.zoom),
+      radiusCm(),
       ortho ? baseA : undefined,
     )
     moveWall(walls, wall, { x: next.x - wall.a.x, y: next.y - wall.a.y })
     dirty = true
     redraw()
+    return
+  }
+  if (dimDrag) {
+    const p = toWorld(e)
+    const ea = endPoint(dimDrag.dim.from)
+    const eb = endPoint(dimDrag.dim.to)
+    if (ea && eb) {
+      const axis = dimGeometry(ea, eb, 0)
+      if (axis) {
+        dimDrag.dim.offset = dimensionOffsetAt(p, axis)
+        dirty = true
+        redraw()
+      }
+    }
     return
   }
   if (endpointDrag) {
@@ -246,7 +322,7 @@ canvas.addEventListener("pointermove", (e) => {
       toWorld(e),
       walls.filter((w) => w !== wall),
       GRID_STEP_CM,
-      SNAP_RADIUS_PX / (PX_PER_CM * view.zoom),
+      radiusCm(),
       ortho ? other : undefined,
     )
     if (!pointsEqual(next, other)) {
@@ -280,17 +356,30 @@ canvas.addEventListener("pointerdown", (e) => {
     panDrag = { start: { x: e.clientX - r.left, y: e.clientY - r.top }, pan: view.pan }
     return
   }
-  if (e.button !== 0 || !selectedWall) return
-  const sel = selectedWall
-  const p = toWorld(e)
-  const handle = handleAt(p, sel, SNAP_RADIUS_PX / (PX_PER_CM * view.zoom))
-  if (!handle) return
-  suppressClick = true
-  if (handle === "mid") {
-    const jointed = (c: Wall) => pointsEqual(c.a, sel.a) || pointsEqual(c.b, sel.a) || pointsEqual(c.a, sel.b) || pointsEqual(c.b, sel.b)
-    wallMove = { wall: sel, baseA: sel.a, baseB: sel.b, grab: p, others: walls.filter((c) => c !== sel && !jointed(c)), snapshot: cloneWalls(walls) }
-  } else endpointDrag = { wall: sel, end: handle, base: sel[handle], snapshot: cloneWalls(walls) }
-  canvas.setPointerCapture(e.pointerId)
+  if (e.button !== 0) return
+  if (selectedWall) {
+    const sel = selectedWall
+    const handle = handleAt(toWorld(e), sel, radiusCm())
+    if (handle) {
+      suppressClick = true
+      const p = toWorld(e)
+      if (handle === "mid") {
+        const jointed = (c: Wall) => pointsEqual(c.a, sel.a) || pointsEqual(c.b, sel.a) || pointsEqual(c.a, sel.b) || pointsEqual(c.b, sel.b)
+        wallMove = { wall: sel, baseA: sel.a, baseB: sel.b, grab: p, others: walls.filter((c) => c !== sel && !jointed(c)), snapshot: cloneScene({ walls, dimensions }) }
+      } else endpointDrag = { wall: sel, end: handle, base: sel[handle], snapshot: cloneScene({ walls, dimensions }) }
+      canvas.setPointerCapture(e.pointerId)
+      return
+    }
+  }
+  if (tool !== "eraser") {
+    const p = toWorld(e)
+    const dim = dimensions.find((d) => (dimHitDistance(p, d, walls, 2) ?? Infinity) <= radiusCm())
+    if (dim) {
+      dimDrag = { dim, baseOffset: dim.offset, snapshot: cloneScene({ walls, dimensions }) }
+      suppressClick = true
+      canvas.setPointerCapture(e.pointerId)
+    }
+  }
 })
 
 canvas.addEventListener("pointerup", (e) => {
@@ -311,6 +400,16 @@ canvas.addEventListener("pointerup", (e) => {
         dirty = true
       }
       wallMove = null
+    }
+    return
+  }
+  if (dimDrag) {
+    if (e.button === 0) {
+      if (dimDrag.dim.offset !== dimDrag.baseOffset) {
+        recordSnapshot(drawingHistory(historyStore, store.activeId), dimDrag.snapshot)
+        dirty = true
+      }
+      dimDrag = null
     }
     return
   }
@@ -338,12 +437,17 @@ canvas.addEventListener("click", (e) => {
   }
   const p = toSnappedPoint(e)
   if (tool === "eraser") {
-    const hit = hitWall(p, walls, SNAP_RADIUS_PX / (PX_PER_CM * view.zoom))
-    if (hit) deleteWall(hit)
+    const { wall, dim } = eraserTarget(p)
+    if (wall) deleteWall(wall)
+    else if (dim) deleteDimension(dim)
+    return
+  }
+  if (tool === "dimension") {
+    placeDimension(p)
     return
   }
   if (!chainStart) {
-    const hit = hitWall(p, walls, SNAP_RADIUS_PX / (PX_PER_CM * view.zoom))
+    const hit = hitWall(p, walls, radiusCm())
     if (hit) {
       selectedWall = hit
       lengthDirty = false
@@ -360,6 +464,31 @@ canvas.addEventListener("click", (e) => {
   }
   commitPoint(p)
 })
+
+function placeDimension(p: Point): void {
+  if (!dimDraft.a || !dimDraft.b) {
+    const hit = nearestEdgeIntersection(p, walls, radiusCm())
+    if (!hit) return
+    const point: DimPoint = { a: hit.a, b: hit.b }
+    if (!dimDraft.a) dimDraft.a = point
+    else dimDraft.b = point
+    redraw()
+    return
+  }
+  const ea = dimPointPoint(dimDraft.a, walls)
+  const eb = dimPointPoint(dimDraft.b, walls)
+  if (!ea || !eb || pointsEqual(ea, eb)) {
+    dimDraft = emptyDraft()
+    redraw()
+    return
+  }
+  const axis = dimGeometry(ea, eb, 0)!
+  record(drawingHistory(historyStore, store.activeId), { walls, dimensions })
+  dimensions.push({ from: dimDraft.a, to: dimDraft.b, offset: dimensionOffsetAt(p, axis) })
+  dimDraft = emptyDraft()
+  dirty = true
+  redraw()
+}
 
 lengthInput.addEventListener("focus", () => lengthInput.select())
 
@@ -382,8 +511,12 @@ function endChain(): void {
 }
 
 function deleteWall(wall: Wall): void {
-  record(drawingHistory(historyStore, store.activeId), walls)
+  record(drawingHistory(historyStore, store.activeId), { walls, dimensions })
   walls.splice(walls.indexOf(wall), 1)
+  dimensions = dimensions.filter((d) =>
+    d.from.a.wallId !== wall.id && d.from.b.wallId !== wall.id &&
+    d.to.a.wallId !== wall.id && d.to.b.wallId !== wall.id)
+  current().dimensions = dimensions
   if (selectedWall === wall) {
     selectedWall = null
     lengthDirty = false
@@ -393,14 +526,27 @@ function deleteWall(wall: Wall): void {
   redraw()
 }
 
-canvas.addEventListener("dblclick", endChain)
+function deleteDimension(dim: Dimension): void {
+  record(drawingHistory(historyStore, store.activeId), { walls, dimensions })
+  dimensions.splice(dimensions.indexOf(dim), 1)
+  dirty = true
+  redraw()
+}
+
+canvas.addEventListener("dblclick", () => {
+  endChain()
+  if (dimDraft.a || dimDraft.b) {
+    dimDraft = emptyDraft()
+    redraw()
+  }
+})
 
 thicknessInput.addEventListener("input", () => {
   const v = parseFloat(thicknessInput.value.replace(",", "."))
   if (!Number.isFinite(v) || v <= 0) return
   thicknessCm = v * UNIT_TO_CM[unit]
   if (selectedWall && selectedWall.thicknessCm !== thicknessCm) {
-    record(drawingHistory(historyStore, store.activeId), walls)
+    record(drawingHistory(historyStore, store.activeId), { walls, dimensions })
     selectedWall.thicknessCm = thicknessCm
     dirty = true
   }
@@ -419,7 +565,7 @@ unitRow.addEventListener("click", (e) => {
 function setWallMaterial(m: Material): void {
   wallMaterial = m
   if (selectedWall && selectedWall.type !== m) {
-    record(drawingHistory(historyStore, store.activeId), walls)
+    record(drawingHistory(historyStore, store.activeId), { walls, dimensions })
     selectedWall.type = m
     dirty = true
   }
@@ -437,6 +583,8 @@ toolWallBtn.addEventListener("click", () => {
   if (tool !== "wall") setTool("wall")
   else setWallPanel(!wallPanelOpen)
 })
+
+toolDimensionBtn.addEventListener("click", () => setTool("dimension"))
 
 toolEraserBtn.addEventListener("click", () => setTool("eraser"))
 
@@ -469,7 +617,7 @@ function nextName(): string {
 }
 
 function newDrawing(): void {
-  const drawing: Drawing = { id: crypto.randomUUID(), name: nextName(), walls: [], view: { zoom: 1, pan: { x: 0, y: 0 } }, scale: 100 }
+  const drawing: Drawing = { id: crypto.randomUUID(), name: nextName(), walls: [], dimensions: [], view: { zoom: 1, pan: { x: 0, y: 0 } }, scale: 100 }
   store.drawings.push(drawing)
   dirty = true
   activate(drawing.id)
@@ -478,11 +626,14 @@ function newDrawing(): void {
 function activate(id: string): void {
   store.activeId = id
   walls = current().walls
+  dimensions = current().dimensions
   view = current().view
   tool = "wall"
   syncToolUI()
   chainStart = null
   selectedWall = null
+  dimDraft = emptyDraft()
+  dimDrag = null
   lengthDirty = false
   endpointDrag = null
   wallMove = null
@@ -521,19 +672,22 @@ function removeDrawing(id: string, index: number): void {
 function resetEditing(): void {
   chainStart = null
   selectedWall = null
+  dimDraft = emptyDraft()
   lengthDirty = false
   suppressClick = false
   syncThicknessBox()
 }
 
 function undo(): void {
-  if (wallMove || endpointDrag || panDrag) return
+  if (wallMove || endpointDrag || panDrag || dimDrag) return
   const h = drawingHistory(historyStore, store.activeId)
-  const e = undoEntry(h, walls)
+  const e = undoEntry(h, { walls, dimensions })
   if (!e) return
   if (e.kind === "walls") {
     current().walls = e.walls
+    current().dimensions = e.dimensions
     walls = e.walls
+    dimensions = e.dimensions
   } else {
     const i = historyStore.trash.findIndex((t) => t.drawing.id === e.drawingId)
     if (i < 0) return
@@ -547,13 +701,15 @@ function undo(): void {
 }
 
 function redo(): void {
-  if (wallMove || endpointDrag || panDrag) return
+  if (wallMove || endpointDrag || panDrag || dimDrag) return
   const h = drawingHistory(historyStore, store.activeId)
-  const e = redoEntry(h, walls)
+  const e = redoEntry(h, { walls, dimensions })
   if (!e) return
   if (e.kind === "walls") {
     current().walls = e.walls
+    current().dimensions = e.dimensions
     walls = e.walls
+    dimensions = e.dimensions
   } else {
     const idx = store.drawings.findIndex((d) => d.id === e.drawingId)
     if (idx < 0) return
@@ -569,7 +725,7 @@ redoBtn.addEventListener("click", redo)
 
 pdfExportBtn.addEventListener("click", () => {
   const drawing = current()
-  exportDrawing(drawing.walls, unit, drawing.scale, pdfFormat.value as PageFormat, drawing.name)
+  exportDrawing(drawing.walls, drawing.dimensions, unit, drawing.scale, pdfFormat.value as PageFormat, drawing.name)
 })
 
 pdfScale.addEventListener("change", () => {
@@ -644,7 +800,10 @@ window.addEventListener("keydown", (e) => {
   }
   if (e.key === "Escape") {
     if (chainStart) endChain()
-    else if (tool === "eraser") setTool("none")
+    else if (dimDraft.a || dimDraft.b) {
+      dimDraft = emptyDraft()
+      redraw()
+    } else if (tool === "eraser" || tool === "dimension") setTool("none")
     else {
       selectedWall = null
       lengthDirty = false
