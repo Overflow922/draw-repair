@@ -29,6 +29,10 @@ const wallPanel = document.querySelector<HTMLElement>("#wall-panel")!
 const pdfScale = document.querySelector<HTMLSelectElement>("#pdf-scale")!
 const pdfFormat = document.querySelector<HTMLSelectElement>("#pdf-format")!
 const pdfExportBtn = document.querySelector<HTMLButtonElement>("#pdf-export")!
+const dimPanel = document.querySelector<HTMLElement>("#dim-panel")!
+const dimOffsetInput = document.querySelector<HTMLInputElement>("#dim-offset")!
+const dimOffsetUnitLabel = document.querySelector<HTMLElement>("#dim-offset-unit")!
+const dimValueInput = document.querySelector<HTMLInputElement>("#dim-value")!
 
 const loaded = loadStore()
 const readOnly = loaded.readOnly
@@ -48,6 +52,7 @@ let lengthDirty = false
 let view: View = current().view
 let dirty = false
 let selectedWall: Wall | null = null
+let selectedDimension: Dimension | null = null
 let endpointDrag: { wall: Wall; end: "a" | "b"; base: Point; snapshot: Scene } | null = null
 let wallMove: { wall: Wall; baseA: Point; baseB: Point; grab: Point; others: Wall[]; snapshot: Scene } | null = null
 let dimDraft: { a: DimPoint | null; b: DimPoint | null } = { a: null, b: null }
@@ -69,6 +74,26 @@ function setWallPanel(open: boolean): void {
   wallPanel.classList.toggle("open", open)
 }
 
+function setDimPanel(open: boolean): void {
+  dimPanel.classList.toggle("open", open)
+}
+
+function selectDimension(dim: Dimension): void {
+  selectedDimension = dim
+  selectedWall = null
+  lengthDirty = false
+  setWallPanel(false)
+  setDimPanel(true)
+  redraw()
+}
+
+function clearDimSelection(): void {
+  if (!selectedDimension) return
+  selectedDimension = null
+  setDimPanel(false)
+  redraw()
+}
+
 function syncToolUI(): void {
   toolWallBtn.classList.toggle("active", tool === "wall")
   toolDimensionBtn.classList.toggle("active", tool === "dimension")
@@ -83,8 +108,10 @@ function setTool(next: Tool): void {
   dimDraft = emptyDraft()
   lengthDirty = false
   selectedWall = null
+  selectedDimension = null
   suppressClick = false
   setWallPanel(false)
+  setDimPanel(false)
   syncToolUI()
   syncThicknessBox()
   redraw()
@@ -102,6 +129,15 @@ function formatCm(cm: number, u: Unit): string {
 function syncThicknessBox(): void {
   thicknessInput.value = formatCm(selectedWall?.thicknessCm ?? thicknessCm, unit)
   thicknessUnitLabel.textContent = UNIT_LABEL[unit]
+}
+
+function syncDimPanel(): void {
+  dimOffsetUnitLabel.textContent = UNIT_LABEL[unit]
+  if (!selectedDimension) return
+  const a = endPoint(selectedDimension.from)
+  const b = endPoint(selectedDimension.to)
+  dimValueInput.value = a && b ? formatCm(Math.hypot(b.x - a.x, b.y - a.y), unit) : ""
+  if (dimDrag || document.activeElement !== dimOffsetInput) dimOffsetInput.value = formatCm(selectedDimension.offset, unit)
 }
 
 function typedLengthCm(): number | null {
@@ -173,8 +209,10 @@ function redraw(): void {
     dimensions,
     dimDraft: draft,
     dimRubber: !dimDraft.a || dimDraft.b || !cursor ? null : draftRubber(),
+    selectedDim: selectedDimension,
   })
   updateLengthBox()
+  syncDimPanel()
   syncHistoryButtons()
   syncFormats()
   if (dirty) {
@@ -309,6 +347,7 @@ canvas.addEventListener("pointermove", (e) => {
       const axis = dimGeometry(ea, eb, 0)
       if (axis) {
         dimDrag.dim.offset = dimensionOffsetAt(p, axis)
+        syncDimPanel()
         dirty = true
         redraw()
       }
@@ -377,6 +416,7 @@ canvas.addEventListener("pointerdown", (e) => {
     if (dim) {
       dimDrag = { dim, baseOffset: dim.offset, snapshot: cloneScene({ walls, dimensions }) }
       suppressClick = true
+      if (!dimDraft.a && !dimDraft.b) selectDimension(dim)
       canvas.setPointerCapture(e.pointerId)
     }
   }
@@ -449,6 +489,7 @@ canvas.addEventListener("click", (e) => {
   if (!chainStart) {
     const hit = hitWall(p, walls, radiusCm())
     if (hit) {
+      clearDimSelection()
       selectedWall = hit
       lengthDirty = false
       syncThicknessBox()
@@ -457,6 +498,7 @@ canvas.addEventListener("click", (e) => {
       return
     }
     selectedWall = null
+    clearDimSelection()
     if (tool !== "wall") {
       redraw()
       return
@@ -468,7 +510,10 @@ canvas.addEventListener("click", (e) => {
 function placeDimension(p: Point): void {
   if (!dimDraft.a || !dimDraft.b) {
     const hit = nearestEdgeIntersection(p, walls, radiusCm())
-    if (!hit) return
+    if (!hit) {
+      clearDimSelection()
+      return
+    }
     const point: DimPoint = { a: hit.a, b: hit.b }
     if (!dimDraft.a) dimDraft.a = point
     else dimDraft.b = point
@@ -517,6 +562,10 @@ function deleteWall(wall: Wall): void {
     d.from.a.wallId !== wall.id && d.from.b.wallId !== wall.id &&
     d.to.a.wallId !== wall.id && d.to.b.wallId !== wall.id)
   current().dimensions = dimensions
+  if (selectedDimension && !dimensions.includes(selectedDimension)) {
+    selectedDimension = null
+    setDimPanel(false)
+  }
   if (selectedWall === wall) {
     selectedWall = null
     lengthDirty = false
@@ -529,6 +578,10 @@ function deleteWall(wall: Wall): void {
 function deleteDimension(dim: Dimension): void {
   record(drawingHistory(historyStore, store.activeId), { walls, dimensions })
   dimensions.splice(dimensions.indexOf(dim), 1)
+  if (selectedDimension === dim) {
+    selectedDimension = null
+    setDimPanel(false)
+  }
   dirty = true
   redraw()
 }
@@ -550,6 +603,18 @@ thicknessInput.addEventListener("input", () => {
     selectedWall.thicknessCm = thicknessCm
     dirty = true
   }
+  redraw()
+})
+
+dimOffsetInput.addEventListener("input", () => {
+  if (!selectedDimension) return
+  const v = parseFloat(dimOffsetInput.value.replace(",", "."))
+  if (!Number.isFinite(v)) return
+  const next = v * UNIT_TO_CM[unit]
+  if (next === selectedDimension.offset) return
+  record(drawingHistory(historyStore, store.activeId), { walls, dimensions })
+  selectedDimension.offset = next
+  dirty = true
   redraw()
 })
 
@@ -632,11 +697,13 @@ function activate(id: string): void {
   syncToolUI()
   chainStart = null
   selectedWall = null
+  selectedDimension = null
   dimDraft = emptyDraft()
   dimDrag = null
   lengthDirty = false
   endpointDrag = null
   wallMove = null
+  setDimPanel(false)
   unavailableFormats = null
   hideFitPopup()
   syncScaleSelector()
@@ -672,6 +739,8 @@ function removeDrawing(id: string, index: number): void {
 function resetEditing(): void {
   chainStart = null
   selectedWall = null
+  selectedDimension = null
+  setDimPanel(false)
   dimDraft = emptyDraft()
   lengthDirty = false
   suppressClick = false
@@ -793,9 +862,13 @@ window.addEventListener("keydown", (e) => {
     return
   }
   if (e.key === "Delete") {
-    if (!selectedWall || e.target instanceof HTMLInputElement) return
-    if (wallMove || endpointDrag || panDrag) return
-    deleteWall(selectedWall)
+    if (e.target instanceof HTMLInputElement) return
+    if (wallMove || endpointDrag || panDrag || dimDrag) return
+    if (selectedWall) {
+      deleteWall(selectedWall)
+      return
+    }
+    if (selectedDimension) deleteDimension(selectedDimension)
     return
   }
   if (e.key === "Escape") {
@@ -803,7 +876,8 @@ window.addEventListener("keydown", (e) => {
     else if (dimDraft.a || dimDraft.b) {
       dimDraft = emptyDraft()
       redraw()
-    } else if (tool === "eraser" || tool === "dimension") setTool("none")
+    } else if (selectedDimension) clearDimSelection()
+    else if (tool === "eraser" || tool === "dimension") setTool("none")
     else {
       selectedWall = null
       lengthDirty = false

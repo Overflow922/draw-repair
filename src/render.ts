@@ -6,6 +6,7 @@ import type { Dimension, Material, Point, Unit, View, Wall } from "./types"
 const OUTLINE_PX = 4
 const HANDLE_PX = 5
 const HOVER_ERASE_COLOR = "rgba(220, 38, 38, 0.5)"
+const SELECTED_DIM_COLOR = "rgba(8, 145, 178, 0.9)"
 const INK = "#333"
 const MM = 96 / 25.4
 
@@ -56,6 +57,7 @@ export interface RenderOptions {
   dimensions?: Dimension[]
   dimDraft?: DimGeometry | null
   dimRubber?: [Point, Point] | null
+  selectedDim?: Dimension | null
 }
 
 export function render(
@@ -126,6 +128,7 @@ export function drawScene(
   ctx.textAlign = "center"
   ctx.textBaseline = "bottom"
   for (const dim of opts.dimensions ?? []) drawDimension(ctx, dim, walls, unit, INK, view, m)
+  if (opts.selectedDim) drawDimension(ctx, opts.selectedDim, walls, unit, SELECTED_DIM_COLOR, view, m, true)
   if (opts.hoverDim) drawDimension(ctx, opts.hoverDim, walls, unit, HOVER_ERASE_COLOR, view, m)
   if (opts.dimRubber) {
     const r1 = toScreen(opts.dimRubber[0])
@@ -331,13 +334,14 @@ function drawDimension(
   color: string,
   view: View,
   m: RenderMetrics,
+  handles = false,
 ): void {
   const from = dimPointPoint(dim.from, walls)
   const to = dimPointPoint(dim.to, walls)
   if (!from || !to) return
   const geom = dimGeometry(from, to, dim.offset)
   if (!geom) return
-  drawDimensionGeom(ctx, geom, formatLength(Math.hypot(to.x - from.x, to.y - from.y), unit), color, view, m)
+  drawDimensionGeom(ctx, geom, formatLength(Math.hypot(to.x - from.x, to.y - from.y), unit), color, view, m, handles)
 }
 
 function drawDimensionGeom(
@@ -347,6 +351,7 @@ function drawDimensionGeom(
   color: string,
   view: View,
   m: RenderMetrics,
+  handles = false,
 ): void {
   const k = PX_PER_CM * view.zoom
   const toScreen = (p: Point): Point => ({ x: (p.x - view.pan.x) * k, y: (p.y - view.pan.y) * k })
@@ -397,4 +402,15 @@ function drawDimensionGeom(
   ctx.fillStyle = color
   ctx.fillText(text, 0, ty)
   ctx.restore()
+  if (handles) {
+    ctx.fillStyle = "#fff"
+    ctx.strokeStyle = "#0f172a"
+    ctx.lineWidth = 1.5
+    for (const s of [s1, s2]) {
+      ctx.beginPath()
+      ctx.arc(s.x, s.y, HANDLE_PX, 0, Math.PI * 2)
+      ctx.fill()
+      ctx.stroke()
+    }
+  }
 }

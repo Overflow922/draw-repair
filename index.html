@@ -32,9 +32,21 @@
                 </div>
               </div>
             </div>
-            <button id="tool-dimension" class="tool" title="Размер" type="button">
-              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 5v14M18 5v14M3 12h18M3 12l3-2.5M3 12l3 2.5M21 12l-3-2.5M21 12l-3 2.5"/></svg>
-            </button>
+            <div class="tool-anchor">
+              <button id="tool-dimension" class="tool" title="Размер" type="button">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 5v14M18 5v14M3 12h18M3 12l3-2.5M3 12l3 2.5M21 12l-3-2.5M21 12l-3 2.5"/></svg>
+              </button>
+              <div id="dim-panel" class="panel tool-panel">
+                <label id="dim-offset-label" title="Смещение размерной линии от точек замера">
+                  <span>Вынос, <span id="dim-offset-unit">мм</span></span>
+                  <input id="dim-offset" type="text" inputmode="decimal" />
+                </label>
+                <label id="dim-value-label" title="Значение размера">
+                  <span>Значение</span>
+                  <input id="dim-value" type="text" readonly />
+                </label>
+              </div>
+            </div>
             <button id="tool-eraser" class="tool" title="Ластик" type="button">
               <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m7 21-4.3-4.3c-1-1-1-2.5 0-3.4l9.6-9.6c1-1 2.5-1 3.4 0l5.6 5.6c1 1 1 2.5 0 3.4L13 21"/><path d="M22 21H7"/><path d="m5 11 9 9"/></svg>
             </button>

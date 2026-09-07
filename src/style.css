@@ -264,6 +264,31 @@ body {
   width: 44px;
 }
 
+#dim-offset-label,
+#dim-value-label {
+  font-size: 10px;
+  color: #555;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  white-space: nowrap;
+}
+
+#dim-offset,
+#dim-value {
+  width: 56px;
+  font-size: 12px;
+  padding: 2px 4px;
+  border: 1px solid #ccc;
+  border-radius: 3px;
+}
+
+#dim-value[readonly] {
+  color: #777;
+  background: #f9fafb;
+}
+
 #wall-types {
   display: flex;
   flex-direction: column;
