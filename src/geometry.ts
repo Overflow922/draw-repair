@@ -105,13 +105,75 @@ export function handleAt(p: Point, wall: Wall, radiusCm: number): "a" | "b" | "m
   return distance(p, { x: (wall.a.x + wall.b.x) / 2, y: (wall.a.y + wall.b.y) / 2 }) <= radiusCm ? "mid" : null
 }
 
+export function jointTol(a: Wall, b: Wall): number {
+  return Math.max(a.thicknessCm, b.thicknessCm) / 2
+}
+
+export function jointedWalls(a: Wall, b: Wall): boolean {
+  const tol = jointTol(a, b) * 1.25
+  return distance(a.a, b.a) <= tol || distance(a.a, b.b) <= tol || distance(a.b, b.a) <= tol || distance(a.b, b.b) <= tol
+}
+
+export function healJoints(walls: Wall[]): boolean {
+  let healed = false
+  for (let i = 1; i < walls.length; i++) {
+    const w = walls[i]
+    if (pointsEqual(w.a, w.b)) continue
+    for (const end of ["a", "b"] as const) {
+      const p = w[end]
+      let best: { x: number; y: number; d: number } | null = null
+      for (let j = 0; j < i; j++) {
+        const v = walls[j]
+        if (pointsEqual(v.a, v.b)) continue
+        const tol = jointTol(w, v) * 2
+        for (const ve of ["a", "b"] as const) {
+          const d = distance(p, v[ve])
+          if (d > EPS && d <= tol && (!best || d < best.d)) best = { x: v[ve].x, y: v[ve].y, d }
+        }
+      }
+      if (best && !pointsEqual(p, best)) {
+        w[end] = { x: best.x, y: best.y }
+        healed = true
+      }
+    }
+  }
+  return healed
+}
+
+function attachedEnds(walls: Wall[], at: Point, self: Wall): { wall: Wall; end: "a" | "b" }[] {
+  const out: { wall: Wall; end: "a" | "b" }[] = []
+  for (const w of walls) {
+    if (w === self || pointsEqual(w.a, w.b)) continue
+    const tol = jointTol(self, w) * 1.25
+    const da = distance(w.a, at)
+    const db = distance(w.b, at)
+    if (da <= tol && da <= db) out.push({ wall: w, end: "a" })
+    else if (db <= tol) out.push({ wall: w, end: "b" })
+  }
+  return out
+}
+
+function axisAttached(w: Wall, wall: Wall): boolean {
+  const dx = wall.b.x - wall.a.x
+  const dy = wall.b.y - wall.a.y
+  const len2 = dx * dx + dy * dy
+  if (len2 < EPS) return false
+  const len = Math.sqrt(len2)
+  const tol = jointTol(wall, w)
+  const d = { x: dx / len, y: dy / len }
+  for (const end of [w.a, w.b] as const) {
+    const t = ((end.x - wall.a.x) * dx + (end.y - wall.a.y) * dy) / len2
+    if (t * len <= tol || t * len >= len - tol) continue
+    if (Math.abs(cross(d, { x: end.x - wall.a.x, y: end.y - wall.a.y })) <= EPS) return true
+  }
+  return false
+}
+
 export function moveEndpoint(walls: Wall[], wall: Wall, end: "a" | "b", pos: Point): void {
   const old = wall[end]
   wall[end] = pos
-  for (const w of walls) {
-    if (w === wall) continue
-    if (pointsEqual(w.a, old)) w.a = pos
-    if (pointsEqual(w.b, old)) w.b = pos
+  for (const { wall: w, end: e } of attachedEnds(walls, old, wall)) {
+    w[e] = { x: pos.x, y: pos.y }
   }
 }
 
@@ -120,11 +182,16 @@ export function moveWall(walls: Wall[], wall: Wall, delta: Point): void {
   wall.a = { x: a.x + delta.x, y: a.y + delta.y }
   wall.b = { x: b.x + delta.x, y: b.y + delta.y }
   for (const w of walls) {
-    if (w === wall) continue
-    if (pointsEqual(w.a, a)) w.a = wall.a
-    if (pointsEqual(w.b, a)) w.b = wall.a
-    if (pointsEqual(w.a, b)) w.a = wall.b
-    if (pointsEqual(w.b, b)) w.b = wall.b
+    if (w === wall || pointsEqual(w.a, w.b)) continue
+    const tol = jointTol(wall, w) * 1.25
+    const endA = distance(w.a, a) <= tol ? "a" : distance(w.b, a) <= tol ? "b" : null
+    const endB = distance(w.a, b) <= tol ? "a" : distance(w.b, b) <= tol ? "b" : null
+    if (endA) w[endA] = { x: wall.a.x, y: wall.a.y }
+    if (endB) w[endB] = { x: wall.b.x, y: wall.b.y }
+    if (!endA && !endB && axisAttached(w, wall)) {
+      w.a = { x: w.a.x + delta.x, y: w.a.y + delta.y }
+      w.b = { x: w.b.x + delta.x, y: w.b.y + delta.y }
+    }
   }
 }
 
@@ -270,51 +337,80 @@ export function pointOn(wall: Wall, t: number): Point {
   return { x: wall.a.x + (wall.b.x - wall.a.x) * t, y: wall.a.y + (wall.b.y - wall.a.y) * t }
 }
 
-export interface EdgeLine {
-  p: Point
-  d: Point
+interface EdgeSeg {
+  ref: EdgeRef
+  p1: Point
+  p2: Point
 }
 
-export function edgeLine(wall: Wall, edge: number): EdgeLine {
-  const dx = wall.b.x - wall.a.x
-  const dy = wall.b.y - wall.a.y
-  const len = Math.hypot(dx, dy)
-  const ux = dx / len
-  const uy = dy / len
-  const nx = -uy
-  const ny = ux
-  const h = wall.thicknessCm / 2
-  if (edge === 0) return { p: { x: wall.a.x + nx * h, y: wall.a.y + ny * h }, d: { x: ux, y: uy } }
-  if (edge === 1) return { p: { x: wall.a.x - nx * h, y: wall.a.y - ny * h }, d: { x: ux, y: uy } }
-  if (edge === 2) return { p: { x: wall.a.x, y: wall.a.y }, d: { x: nx, y: ny } }
-  return { p: { x: wall.b.x, y: wall.b.y }, d: { x: nx, y: ny } }
+function wallSegments(wall: Wall, walls: Wall[]): EdgeSeg[] {
+  const s = wallShape(wall, walls)
+  const seg = (edge: number, p1: Point, p2: Point): EdgeSeg => ({ ref: { wallId: wall.id, edge }, p1, p2 })
+  return [seg(0, s[0], s[1]), seg(3, s[1], s[2]), seg(1, s[2], s[3]), seg(2, s[3], s[0])]
+}
+
+function onSegment(p: Point, s1: Point, s2: Point): boolean {
+  const len = distance(s1, s2)
+  return distance(s1, p) <= len + EPS && distance(s2, p) <= len + EPS
+}
+
+function segTouch(a: EdgeSeg, b: EdgeSeg): Point | null {
+  const ip = lineIntersect(a.p1, dirOf(a.p1, a.p2), b.p1, dirOf(b.p1, b.p2))
+  if (!ip) return null
+  return onSegment(ip, a.p1, a.p2) && onSegment(ip, b.p1, b.p2) ? ip : null
+}
+
+function segClamp(a: EdgeSeg, b: EdgeSeg): Point {
+  const d1 = { x: a.p2.x - a.p1.x, y: a.p2.y - a.p1.y }
+  const d2 = { x: b.p2.x - b.p1.x, y: b.p2.y - b.p1.y }
+  const r = { x: a.p1.x - b.p1.x, y: a.p1.y - b.p1.y }
+  const len1 = d1.x * d1.x + d1.y * d1.y
+  const len2 = d2.x * d2.x + d2.y * d2.y
+  const f = d2.x * r.x + d2.y * r.y
+  let s = 0
+  if (len1 > EPS) {
+    const c = d1.x * r.x + d1.y * r.y
+    if (len2 <= EPS) {
+      s = Math.max(0, Math.min(1, -c / len1))
+    } else {
+      const b = d1.x * d2.x + d1.y * d2.y
+      const denom = len1 * len2 - b * b
+      s = denom > EPS ? Math.max(0, Math.min(1, (b * f - c * len2) / denom)) : 0
+      const t = (b * s + f) / len2
+      if (t < 0) s = Math.max(0, Math.min(1, -c / len1))
+      else if (t > 1) s = Math.max(0, Math.min(1, (b - c) / len1))
+    }
+  }
+  return { x: a.p1.x + d1.x * s, y: a.p1.y + d1.y * s }
 }
 
 export function dimPointPoint(point: DimPoint, walls: Wall[]): Point | null {
   const wa = walls.find((w) => w.id === point.a.wallId)
   const wb = walls.find((w) => w.id === point.b.wallId)
   if (!wa || !wb) return null
-  const l1 = edgeLine(wa, point.a.edge)
-  const l2 = edgeLine(wb, point.b.edge)
-  return lineIntersect(l1.p, l1.d, l2.p, l2.d)
+  const sa = wallSegments(wa, walls).find((s) => s.ref.edge === point.a.edge)!
+  const sb = wallSegments(wb, walls).find((s) => s.ref.edge === point.b.edge)!
+  return segTouch(sa, sb) ?? segClamp(sa, sb)
 }
 
 export function nearestEdgeIntersection(p: Point, walls: Wall[], radius: number): { point: Point; a: EdgeRef; b: EdgeRef } | null {
-  const lines: { ref: EdgeRef; line: EdgeLine }[] = []
-  for (const w of walls) {
-    if (pointsEqual(w.a, w.b)) continue
-    for (let edge = 0; edge < 4; edge++) lines.push({ ref: { wallId: w.id, edge }, line: edgeLine(w, edge) })
-  }
+  const segs = walls.flatMap((w) => (pointsEqual(w.a, w.b) ? [] : wallSegments(w, walls)))
   let best: { point: Point; a: EdgeRef; b: EdgeRef } | null = null
   let bestDist = radius
-  for (let i = 0; i < lines.length; i++)
-    for (let j = i + 1; j < lines.length; j++) {
-      const ip = lineIntersect(lines[i].line.p, lines[i].line.d, lines[j].line.p, lines[j].line.d)
+  let bestScore = Infinity
+  for (let i = 0; i < segs.length; i++)
+    for (let j = i + 1; j < segs.length; j++) {
+      const ip = segTouch(segs[i], segs[j])
       if (!ip) continue
       const d = distance(p, ip)
-      if (d < bestDist) {
-        best = { point: ip, a: lines[i].ref, b: lines[j].ref }
+      if (d > radius) continue
+      const endA = pointsEqual(ip, segs[i].p1) || pointsEqual(ip, segs[i].p2)
+      const endB = pointsEqual(ip, segs[j].p1) || pointsEqual(ip, segs[j].p2)
+      const score = (segs[i].ref.wallId === segs[j].ref.wallId ? 0 : 4) + (endA && endB ? 0 : endA || endB ? 1 : 2)
+      if (d < bestDist - 1e-9 || (d <= bestDist + 1e-9 && score < bestScore)) {
+        best = { point: ip, a: segs[i].ref, b: segs[j].ref }
         bestDist = d
+        bestScore = score
       }
     }
   return best
@@ -359,6 +455,22 @@ export function dimGeometry(a: Point, b: Point, offset: number): DimGeometry | n
 
 export function dimensionOffsetAt(p: Point, geom: DimGeometry): number {
   return (p.x - geom.a.x) * geom.nx + (p.y - geom.a.y) * geom.ny
+}
+
+export function dimLevelSnap(p: Point, axis: DimGeometry, dimensions: Dimension[], walls: Wall[], radius: number): { offset: number; point: Point } | null {
+  const cur = dimensionOffsetAt(p, axis)
+  const u = dirOf(axis.a, axis.b)
+  let best: { offset: number; point: Point } | null = null
+  for (const d of dimensions) {
+    const ea = dimPointPoint(d.from, walls)
+    const eb = dimPointPoint(d.to, walls)
+    const g = ea && eb ? dimGeometry(ea, eb, d.offset) : null
+    if (!g || Math.abs(cross(u, dirOf(g.a, g.b))) >= EPS) continue
+    const level = dimensionOffsetAt(g.p1, axis)
+    if (Math.abs(level - cur) <= radius && (!best || Math.abs(level - cur) < Math.abs(best.offset - cur)))
+      best = { offset: level, point: { x: p.x + axis.nx * (level - cur), y: p.y + axis.ny * (level - cur) } }
+  }
+  return best
 }
 
 export function dimHitDistance(p: Point, dim: Dimension, walls: Wall[], textFactor: number): number | null {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { dimensionOffsetAt, dimGeometry, dimHitDistance, dimPointPoint, edgeLine, endpointAt, handleAt, hitWall, jointPullback, moveEndpoint, moveWall, nearestEdgeIntersection, pointOn, pointsEqual, sameTypeJoint, snap, visibleWorld, wallShape, zoomAt } from "./geometry"
+import { dimensionOffsetAt, dimGeometry, dimHitDistance, dimLevelSnap, dimPointPoint, endpointAt, handleAt, healJoints, hitWall, jointPullback, jointedWalls, moveEndpoint, moveWall, nearestEdgeIntersection, pointOn, pointsEqual, sameTypeJoint, snap, visibleWorld, wallShape, zoomAt } from "./geometry"
 import type { Dimension, Point, Wall } from "./types"
 
 const GRID = 10
@@ -180,6 +180,32 @@ describe("moveEndpoint", () => {
     expect(w2.a).toEqual({ x: 120, y: 0 })
     expect(w3.a).toEqual({ x: 200, y: 0 })
   })
+
+  it("приваривает конец соседа в допуске вершины стыка", () => {
+    const w1 = wall(0, 0, 100, 0)
+    const w2 = wall(90, 0, 90, 80)
+    moveEndpoint([w1, w2], w1, "b", { x: 120, y: 0 })
+    expect(w1.b).toEqual({ x: 120, y: 0 })
+    expect(w2.a).toEqual({ x: 120, y: 0 })
+    expect(w2.b).toEqual({ x: 90, y: 80 })
+  })
+
+  it("приваривает обе стены одной вершины", () => {
+    const w1 = wall(0, 0, 100, 0)
+    const w2 = wall(90, 0, 90, 80)
+    const w3 = wall(110, 0, 110, 80)
+    moveEndpoint([w1, w2, w3], w1, "b", { x: 120, y: 0 })
+    expect(w2.a).toEqual({ x: 120, y: 0 })
+    expect(w3.a).toEqual({ x: 120, y: 0 })
+  })
+
+  it("тянет конец примыкающей — сквозная приваривается к новой позиции", () => {
+    const w1 = wall(0, 0, 100, 0)
+    const w2 = wall(100, 0, 100, 80)
+    moveEndpoint([w1, w2], w2, "a", { x: 110, y: 0 })
+    expect(w2.a).toEqual({ x: 110, y: 0 })
+    expect(w1.b).toEqual({ x: 110, y: 0 })
+  })
 })
 
 describe("moveWall", () => {
@@ -206,6 +232,57 @@ describe("moveWall", () => {
     moveWall([w1, w2], w1, { x: 10, y: 0 })
     expect(w2.a).toEqual({ x: 200, y: 0 })
     expect(w2.b).toEqual({ x: 200, y: 100 })
+  })
+
+  it("приваривает соседа в допуске вершины стыка", () => {
+    const w1 = wall(0, 0, 100, 0)
+    const w2 = wall(90, 0, 90, 80)
+    moveWall([w1, w2], w1, { x: 10, y: 0 })
+    expect(w2.a).toEqual({ x: 110, y: 0 })
+    expect(w2.b).toEqual({ x: 90, y: 80 })
+  })
+
+  it("T-примыкание следует целиком", () => {
+    const w1 = wall(0, 0, 100, 0)
+    const w2 = wall(50, 0, 50, 60)
+    moveWall([w1, w2], w1, { x: 10, y: 0 })
+    expect(w2.a).toEqual({ x: 60, y: 0 })
+    expect(w2.b).toEqual({ x: 60, y: 60 })
+  })
+})
+
+describe("jointedWalls", () => {
+  it("точное совпадение и допуск — да, разрыв — нет", () => {
+    expect(jointedWalls(wall(0, 0, 100, 0), wall(100, 0, 100, 80))).toBe(true)
+    expect(jointedWalls(wall(0, 0, 100, 0), wall(90, 0, 90, 80))).toBe(true)
+    expect(jointedWalls(wall(0, 0, 100, 0), wall(130, 0, 130, 80))).toBe(false)
+  })
+})
+
+describe("healJoints", () => {
+  it("сваривает концы в пределах полутора допусков", () => {
+    const w1 = wall(0, 0, 100, 0)
+    const w2 = wall(111, 0, 111, 80)
+    expect(healJoints([w1, w2])).toBe(true)
+    expect(w2.a).toEqual({ x: 100, y: 0 })
+  })
+
+  it("совпавшие и далёкие концы не трогает", () => {
+    const w1 = wall(0, 0, 100, 0)
+    const w2 = wall(100, 0, 100, 80)
+    const w3 = wall(200, 0, 200, 80)
+    expect(healJoints([w1, w2, w3])).toBe(false)
+    expect(w2.a).toEqual({ x: 100, y: 0 })
+    expect(w3.a).toEqual({ x: 200, y: 0 })
+  })
+
+  it("тянет цепочку транзитивно", () => {
+    const w1 = wall(0, 0, 100, 0)
+    const w2 = wall(105, 0, 200, 0)
+    const w3 = wall(205, 0, 300, 0)
+    healJoints([w1, w2, w3])
+    expect(w2.a).toEqual({ x: 100, y: 0 })
+    expect(w3.a).toEqual({ x: 200, y: 0 })
   })
 })
 
@@ -312,20 +389,6 @@ describe("dimGeometry", () => {
   })
 })
 
-describe("edgeLine", () => {
-  it("боковые грани параллельны оси на полутолщине, торцы — осевые концы", () => {
-    const w = wall(0, 0, 100, 0)
-    expect(edgeLine(w, 0)).toEqual({ p: { x: 0, y: 10 }, d: { x: 1, y: 0 } })
-    expect(edgeLine(w, 1)).toEqual({ p: { x: 0, y: -10 }, d: { x: 1, y: 0 } })
-    const capA = edgeLine(w, 2)
-    expect(capA.p).toEqual({ x: 0, y: 0 })
-    expect(capA.d.y).toBeCloseTo(1)
-    const capB = edgeLine(w, 3)
-    expect(capB.p).toEqual({ x: 100, y: 0 })
-    expect(capB.d.y).toBeCloseTo(1)
-  })
-})
-
 describe("dimPointPoint", () => {
   it("пересечение граней двух стен — угол чертежа", () => {
     const a = wall(0, 0, 100, 0, "w1")
@@ -333,25 +396,127 @@ describe("dimPointPoint", () => {
     expect(dimPointPoint({ a: { wallId: "w1", edge: 0 }, b: { wallId: "w2", edge: 0 } }, [a, b])).toEqual({ x: 90, y: 10 })
   })
 
-  it("параллельные грани и битая ссылка — null", () => {
+  it("угол одной стены — вершина её контура", () => {
+    expect(dimPointPoint({ a: { wallId: "w1", edge: 2 }, b: { wallId: "w1", edge: 0 } }, [wall(0, 0, 100, 0, "w1")])).toEqual({ x: 0, y: 10 })
+  })
+
+  it("митра: точка на срезе, а не в сыром углу", () => {
     const a = wall(0, 0, 100, 0, "w1")
-    expect(dimPointPoint({ a: { wallId: "w1", edge: 0 }, b: { wallId: "w1", edge: 1 } }, [a])).toBeNull()
+    const b = wall(100, 0, 100 + 100 * Math.SQRT1_2, 100 * Math.SQRT1_2, "w2")
+    const p = dimPointPoint({ a: { wallId: "w1", edge: 3 }, b: { wallId: "w1", edge: 0 } }, [a, b])!
+    expect(p.x).toBeCloseTo(95.8579, 3)
+    expect(p.y).toBeCloseTo(10, 6)
+  })
+
+  it("T-примыкание: торец подрезан по грани сквозной", () => {
+    const u = wall(0, 0, 100, 0, "u")
+    const v = wall(50, 0, 50, 60, "v")
+    expect(dimPointPoint({ a: { wallId: "v", edge: 2 }, b: { wallId: "v", edge: 0 } }, [u, v])).toEqual({ x: 40, y: 10 })
+    expect(dimPointPoint({ a: { wallId: "v", edge: 2 }, b: { wallId: "u", edge: 0 } }, [u, v])).toEqual({ x: 60, y: 10 })
+  })
+
+  it("три стены в одной вершине — плоские торцы, угол своей стены", () => {
+    const a = wall(0, 0, 100, 0, "w1")
+    const b = wall(0, 0, 0, 80, "w2")
+    const c = wall(0, 0, -80, 0, "w3")
+    expect(dimPointPoint({ a: { wallId: "w1", edge: 2 }, b: { wallId: "w1", edge: 0 } }, [a, b, c])).toEqual({ x: 0, y: 10 })
+  })
+
+  it("разошедшийся стык — прилипание к ближней вершине", () => {
+    const a = wall(0, 0, 100, 0, "w1")
+    const b = wall(150, 0, 150, 80, "w2")
+    expect(dimPointPoint({ a: { wallId: "w1", edge: 3 }, b: { wallId: "w2", edge: 0 } }, [a, b])).toEqual({ x: 100, y: 10 })
+  })
+
+  it("параллельные грани — прилипание к вершине, битая ссылка — null", () => {
+    const a = wall(0, 0, 100, 0, "w1")
+    expect(dimPointPoint({ a: { wallId: "w1", edge: 0 }, b: { wallId: "w1", edge: 1 } }, [a])).toEqual({ x: 0, y: 10 })
     expect(dimPointPoint({ a: { wallId: "нет", edge: 0 }, b: { wallId: "w1", edge: 0 } }, [a])).toBeNull()
+  })
+
+  it("поворот стены: свой угол следует жёстко, чужая грань не тянет точку", () => {
+    const a = wall(0, 0, 100 * Math.cos(Math.PI / 6), 100 * Math.sin(Math.PI / 6), "w1")
+    const b = wall(100, 0, 100, 80, "w2")
+    const own = dimPointPoint({ a: { wallId: "w1", edge: 2 }, b: { wallId: "w1", edge: 0 } }, [a, b])!
+    expect(own.x).toBeCloseTo(-5, 6)
+    expect(own.y).toBeCloseTo(8.6603, 4)
+    const cross = dimPointPoint({ a: { wallId: "w1", edge: 0 }, b: { wallId: "w2", edge: 0 } }, [a, b])!
+    expect(cross.x).toBeCloseTo(81.6025, 3)
+    expect(cross.y).toBeCloseTo(58.6603, 3)
   })
 })
 
 describe("nearestEdgeIntersection", () => {
-  it("находит ближайший угол в радиусе", () => {
+  it("находит вершину стыка, привязка к своей стене", () => {
     const a = wall(0, 0, 100, 0, "w1")
     const b = wall(100, 0, 100, 80, "w2")
     const hit = nearestEdgeIntersection({ x: 92, y: 8 }, [a, b], 6)
     expect(hit?.point).toEqual({ x: 90, y: 10 })
+    expect(hit?.a).toEqual({ wallId: "w2", edge: 0 })
+    expect(hit?.b).toEqual({ wallId: "w2", edge: 2 })
+  })
+
+  it("угол свободного конца — пара своей стены", () => {
+    const hit = nearestEdgeIntersection({ x: 3, y: 8 }, [wall(0, 0, 100, 0, "w1")], 6)
+    expect(hit?.point).toEqual({ x: 0, y: 10 })
     expect(hit?.a).toEqual({ wallId: "w1", edge: 0 })
-    expect(hit?.b).toEqual({ wallId: "w2", edge: 0 })
+    expect(hit?.b).toEqual({ wallId: "w1", edge: 2 })
+  })
+
+  it("пересечение продолжений за торцом не находится", () => {
+    const a = wall(0, 0, 100, 0, "w1")
+    const b = wall(100, 0, 100, 80, "w2")
+    expect(nearestEdgeIntersection({ x: 105, y: 0 }, [a, b], 6)).toBeNull()
   })
 
   it("вне радиуса — null", () => {
     expect(nearestEdgeIntersection({ x: 50, y: 0 }, [wall(0, 0, 100, 0)], 6)).toBeNull()
+  })
+})
+
+describe("dimLevelSnap", () => {
+  const walls2 = [wall(0, 0, 100, 0, "w1"), wall(100, 0, 100, 80, "w2")]
+  const axis0 = dimGeometry({ x: 0, y: 0 }, { x: 100, y: 0 }, 0)!
+  const dim = (offset: number): Dimension => ({
+    from: { a: { wallId: "w1", edge: 0 }, b: { wallId: "w2", edge: 0 } },
+    to: { a: { wallId: "w1", edge: 0 }, b: { wallId: "w2", edge: 1 } },
+    offset,
+  })
+
+  it("параллельный сосед в радиусе — снап на его уровень", () => {
+    expect(dimLevelSnap({ x: 50, y: 37 }, axis0, [dim(30)], walls2, 6)).toEqual({ offset: 40, point: { x: 50, y: 40 } })
+  })
+
+  it("вне радиуса от всех уровней — null", () => {
+    expect(dimLevelSnap({ x: 50, y: 50 }, axis0, [dim(30), dim(60)], walls2, 6)).toBeNull()
+  })
+
+  it("антипараллельная ось соседа — тот же уровень", () => {
+    const flipped: Dimension = { from: dim(30).to, to: dim(30).from, offset: -30 }
+    expect(dimLevelSnap({ x: 50, y: 37 }, axis0, [flipped], walls2, 6)).toEqual({ offset: 40, point: { x: 50, y: 40 } })
+  })
+
+  it("непараллельная ось соседа не участвует", () => {
+    const vertical: Dimension = {
+      from: { a: { wallId: "w1", edge: 3 }, b: { wallId: "w2", edge: 2 } },
+      to: { a: { wallId: "w1", edge: 3 }, b: { wallId: "w2", edge: 3 } },
+      offset: 0,
+    }
+    expect(dimLevelSnap({ x: 97, y: 37 }, axis0, [vertical], walls2, 6)).toBeNull()
+  })
+
+  it("два соседа — берётся ближайший уровень", () => {
+    expect(dimLevelSnap({ x: 50, y: 43 }, axis0, [dim(30), dim(38)], walls2, 6)).toEqual({ offset: 40, point: { x: 50, y: 40 } })
+    expect(dimLevelSnap({ x: 50, y: 45 }, axis0, [dim(30), dim(38)], walls2, 6)).toEqual({ offset: 48, point: { x: 50, y: 48 } })
+  })
+
+  it("сосед с битой ссылкой пропускается", () => {
+    const broken: Dimension = {
+      from: { a: { wallId: "нет", edge: 0 }, b: { wallId: "w2", edge: 0 } },
+      to: { a: { wallId: "нет", edge: 0 }, b: { wallId: "w2", edge: 3 } },
+      offset: 30,
+    }
+    expect(dimLevelSnap({ x: 50, y: 37 }, axis0, [broken], walls2, 6)).toBeNull()
   })
 })
 

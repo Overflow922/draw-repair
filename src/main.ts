@@ -1,7 +1,7 @@
 import "./style.css"
 import { cloneScene, drawingHistory, loadHistory, record, recordSnapshot, redoEntry, saveHistory, undoEntry } from "./history"
 import type { Scene } from "./history"
-import { dimGeometry, dimHitDistance, dimensionOffsetAt, distanceToWall, handleAt, hitWall, jointPullback, moveEndpoint, moveWall, nearestEdgeIntersection, dimPointPoint, pointsEqual, snap, zoomAt } from "./geometry"
+import { dimGeometry, dimHitDistance, dimLevelSnap, dimensionOffsetAt, distanceToWall, handleAt, healJoints, hitWall, jointPullback, jointedWalls, moveEndpoint, moveWall, nearestEdgeIntersection, dimPointPoint, pointsEqual, snap, zoomAt } from "./geometry"
 import type { DimGeometry } from "./geometry"
 import { drawPatternPreview, render } from "./render"
 import { availableFormats, exportDrawing, PAGE_FORMATS_MM } from "./export/pdf"
@@ -51,6 +51,7 @@ let unit: Unit = "mm"
 let lengthDirty = false
 let view: View = current().view
 let dirty = false
+for (const d of store.drawings) if (healJoints(d.walls)) dirty = true
 let selectedWall: Wall | null = null
 let selectedDimension: Dimension | null = null
 let endpointDrag: { wall: Wall; end: "a" | "b"; base: Point; snapshot: Scene } | null = null
@@ -195,6 +196,7 @@ function redraw(): void {
   const p = previewPoint()
   const target = tool === "eraser" && cursor ? eraserTarget(cursor) : { wall: null, dim: null }
   const draft = dimDraftGeometry()
+  const snapHit = tool === "dimension" && cursor && (!dimDraft.a || !dimDraft.b) ? nearestEdgeIntersection(cursor, walls, radiusCm()) : null
   let previewWall: Wall | null = null
   if (chainStart && p) {
     const dx = p.x - chainStart.x
@@ -208,7 +210,8 @@ function redraw(): void {
     hoverDim: target.dim,
     dimensions,
     dimDraft: draft,
-    dimRubber: !dimDraft.a || dimDraft.b || !cursor ? null : draftRubber(),
+    dimRubber: !dimDraft.a || dimDraft.b || !cursor ? null : draftRubber(snapHit?.point ?? cursor),
+    dimSnap: snapHit?.point ?? null,
     selectedDim: selectedDimension,
   })
   updateLengthBox()
@@ -230,7 +233,7 @@ function eraserTarget(p: Point): { wall: Wall | null; dim: Dimension | null } {
   let dimDist = Infinity
   for (const d of dimensions) {
     const dd = dimHitDistance(p, d, walls, 2)
-    if (dd !== null && dd < dimDist) {
+    if (dd !== null && dd <= tol && dd < dimDist) {
       dim = d
       dimDist = dd
     }
@@ -246,12 +249,12 @@ function dimDraftGeometry(): DimGeometry | null {
   const eb = endPoint(dimDraft.b)
   if (!ea || !eb || pointsEqual(ea, eb)) return null
   const axis = dimGeometry(ea, eb, 0)!
-  return dimGeometry(ea, eb, dimensionOffsetAt(cursor, axis))
+  return dimGeometry(ea, eb, dimLevelSnap(cursor, axis, dimensions, walls, radiusCm())?.offset ?? dimensionOffsetAt(cursor, axis))
 }
 
-function draftRubber(): [Point, Point] | null {
+function draftRubber(end: Point): [Point, Point] | null {
   const ea = dimDraft.a ? endPoint(dimDraft.a) : null
-  return ea && cursor ? [ea, cursor] : null
+  return ea ? [ea, end] : null
 }
 
 let unavailableFormats: PageFormat[] | null = null
@@ -346,7 +349,9 @@ canvas.addEventListener("pointermove", (e) => {
     if (ea && eb) {
       const axis = dimGeometry(ea, eb, 0)
       if (axis) {
-        dimDrag.dim.offset = dimensionOffsetAt(p, axis)
+        const dragged = dimDrag.dim
+        const level = dimLevelSnap(p, axis, dimensions.filter((d) => d !== dragged), walls, radiusCm())
+        dragged.offset = level ? level.offset : dimensionOffsetAt(p, axis)
         syncDimPanel()
         dirty = true
         redraw()
@@ -403,7 +408,7 @@ canvas.addEventListener("pointerdown", (e) => {
       suppressClick = true
       const p = toWorld(e)
       if (handle === "mid") {
-        const jointed = (c: Wall) => pointsEqual(c.a, sel.a) || pointsEqual(c.b, sel.a) || pointsEqual(c.a, sel.b) || pointsEqual(c.b, sel.b)
+        const jointed = (c: Wall) => jointedWalls(c, sel)
         wallMove = { wall: sel, baseA: sel.a, baseB: sel.b, grab: p, others: walls.filter((c) => c !== sel && !jointed(c)), snapshot: cloneScene({ walls, dimensions }) }
       } else endpointDrag = { wall: sel, end: handle, base: sel[handle], snapshot: cloneScene({ walls, dimensions }) }
       canvas.setPointerCapture(e.pointerId)
@@ -529,7 +534,7 @@ function placeDimension(p: Point): void {
   }
   const axis = dimGeometry(ea, eb, 0)!
   record(drawingHistory(historyStore, store.activeId), { walls, dimensions })
-  dimensions.push({ from: dimDraft.a, to: dimDraft.b, offset: dimensionOffsetAt(p, axis) })
+  dimensions.push({ from: dimDraft.a, to: dimDraft.b, offset: dimLevelSnap(p, axis, dimensions, walls, radiusCm())?.offset ?? dimensionOffsetAt(p, axis) })
   dimDraft = emptyDraft()
   dirty = true
   redraw()

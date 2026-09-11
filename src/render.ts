@@ -57,6 +57,7 @@ export interface RenderOptions {
   dimensions?: Dimension[]
   dimDraft?: DimGeometry | null
   dimRubber?: [Point, Point] | null
+  dimSnap?: Point | null
   selectedDim?: Dimension | null
 }
 
@@ -149,6 +150,16 @@ export function drawScene(
       view,
       m,
     )
+  if (opts.dimSnap) {
+    const s = toScreen(opts.dimSnap)
+    ctx.beginPath()
+    ctx.arc(s.x, s.y, 3.5, 0, Math.PI * 2)
+    ctx.fillStyle = "#dc2626"
+    ctx.fill()
+    ctx.lineWidth = 1.5
+    ctx.strokeStyle = "#fff"
+    ctx.stroke()
+  }
 }
 
 function formatLength(cm: number, unit: Unit): string {
