@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { dimensionOffsetAt, dimGeometry, dimHitDistance, dimLevelSnap, dimPointPoint, endpointAt, handleAt, healJoints, hitWall, jointPullback, jointedWalls, moveEndpoint, moveWall, nearestEdgeIntersection, pointOn, pointsEqual, sameTypeJoint, snap, visibleWorld, wallShape, zoomAt } from "./geometry"
+import { dimensionOffsetAt, dimGeometry, dimHitDistance, dimLevelSnap, dimPointPoint, endpointAt, handleAt, healJoints, hitWall, jointPullback, jointedWalls, moveEndpoint, moveWall, moveWalls, nearestEdgeIntersection, pointOn, pointsEqual, sameTypeJoint, segmentIntersectsRect, snap, visibleWorld, wallShape, zoomAt } from "./geometry"
 import type { Dimension, Point, Wall } from "./types"
 
 const GRID = 10
@@ -12,6 +12,8 @@ const wall = (ax: number, ay: number, bx: number, by: number, id = "w"): Wall =>
   thicknessCm: 20,
   type: "brick",
 })
+
+const rect = { min: { x: 0, y: 0 }, max: { x: 100, y: 50 } }
 
 describe("snap", () => {
   it("привязывается к концу стены в пределах радиуса", () => {
@@ -251,11 +253,83 @@ describe("moveWall", () => {
   })
 })
 
+describe("moveWalls", () => {
+  it("смещает группу одним вектором, чужие стены не трогает", () => {
+    const g1 = wall(0, 0, 100, 0, "g1")
+    const g2 = wall(0, 40, 80, 40, "g2")
+    const far = wall(300, 0, 300, 100, "far")
+    moveWalls([g1, g2, far], [g1, g2], { x: 10, y: 5 })
+    expect(g1.a).toEqual({ x: 10, y: 5 })
+    expect(g2.b).toEqual({ x: 90, y: 45 })
+    expect(far.a).toEqual({ x: 300, y: 0 })
+    expect(far.b).toEqual({ x: 300, y: 100 })
+  })
+
+  it("приваривает стыковой конец соседа к точному новому концу группы", () => {
+    const g1 = wall(0, 0, 100, 0, "g1")
+    const n = wall(105, 0, 105, 80, "n")
+    moveWalls([g1, n], [g1], { x: 10, y: 0 })
+    expect(n.a).toEqual({ x: 110, y: 0 })
+    expect(n.b).toEqual({ x: 105, y: 80 })
+  })
+
+  it("T-примыкание к двум выделенным сдвигается ровно один вектор", () => {
+    const g1 = wall(0, 0, 100, 0, "g1")
+    const g2 = wall(0, 60, 100, 60, "g2")
+    const t = wall(50, 0, 50, 60, "t")
+    moveWalls([g1, g2, t], [g1, g2], { x: 10, y: 0 })
+    expect(t.a).toEqual({ x: 60, y: 0 })
+    expect(t.b).toEqual({ x: 60, y: 60 })
+  })
+
+  it("стена между концами двух стен группы растягивается между ними", () => {
+    const g1 = wall(0, 0, 100, 0, "g1")
+    const g2 = wall(110, 40, 210, 40, "g2")
+    const span = wall(100, 0, 110, 40, "span")
+    moveWalls([g1, g2, span], [g1, g2], { x: 0, y: 20 })
+    expect(span.a).toEqual({ x: 100, y: 20 })
+    expect(span.b).toEqual({ x: 110, y: 60 })
+  })
+})
+
 describe("jointedWalls", () => {
   it("точное совпадение и допуск — да, разрыв — нет", () => {
     expect(jointedWalls(wall(0, 0, 100, 0), wall(100, 0, 100, 80))).toBe(true)
     expect(jointedWalls(wall(0, 0, 100, 0), wall(90, 0, 90, 80))).toBe(true)
     expect(jointedWalls(wall(0, 0, 100, 0), wall(130, 0, 130, 80))).toBe(false)
+  })
+})
+
+describe("segmentIntersectsRect", () => {
+  it("отрезок целиком внутри прямоугольника", () => {
+    expect(segmentIntersectsRect({ x: 20, y: 10 }, { x: 80, y: 40 }, rect.min, rect.max)).toBe(true)
+  })
+
+  it("отрезок пересекает границу прямоугольника", () => {
+    expect(segmentIntersectsRect({ x: -50, y: 25 }, { x: 50, y: 25 }, rect.min, rect.max)).toBe(true)
+    expect(segmentIntersectsRect({ x: 50, y: -30 }, { x: 50, y: 80 }, rect.min, rect.max)).toBe(true)
+    expect(segmentIntersectsRect({ x: -40, y: -40 }, { x: 140, y: 90 }, rect.min, rect.max)).toBe(true)
+  })
+
+  it("касание границы — пересечение", () => {
+    expect(segmentIntersectsRect({ x: -50, y: 25 }, { x: 0, y: 25 }, rect.min, rect.max)).toBe(true)
+  })
+
+  it("отрезок вне прямоугольника", () => {
+    expect(segmentIntersectsRect({ x: -50, y: 25 }, { x: -10, y: 25 }, rect.min, rect.max)).toBe(false)
+    expect(segmentIntersectsRect({ x: -40, y: 60 }, { x: 140, y: 60 }, rect.min, rect.max)).toBe(false)
+    expect(segmentIntersectsRect({ x: 150, y: 10 }, { x: 160, y: 40 }, rect.min, rect.max)).toBe(false)
+  })
+
+  it("нулевая длина — попадание точки", () => {
+    expect(segmentIntersectsRect({ x: 50, y: 25 }, { x: 50, y: 25 }, rect.min, rect.max)).toBe(true)
+    expect(segmentIntersectsRect({ x: -50, y: 25 }, { x: -50, y: 25 }, rect.min, rect.max)).toBe(false)
+  })
+
+  it("запас (полутолщина стены) расширяет прямоугольник", () => {
+    expect(segmentIntersectsRect({ x: 50, y: -8 }, { x: 50, y: -8 }, rect.min, rect.max, 10)).toBe(true)
+    expect(segmentIntersectsRect({ x: 50, y: -12 }, { x: 50, y: -12 }, rect.min, rect.max, 10)).toBe(false)
+    expect(segmentIntersectsRect({ x: -8, y: 25 }, { x: -8, y: 25 }, rect.min, rect.max, 10)).toBe(true)
   })
 })
 

@@ -116,7 +116,7 @@ export function buildPdf(walls: Wall[], dimensions: Dimension[], unit: Unit, sca
       zoom: placement.mmPerCm / PX_PER_CM,
       pan: { x: -placement.offsetX / placement.mmPerCm, y: -placement.offsetY / placement.mmPerCm },
     },
-    null,
+    [],
     { grid: false, metrics: PDF_METRICS, dimensions },
   )
   return doc

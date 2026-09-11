@@ -7,6 +7,8 @@ const OUTLINE_PX = 4
 const HANDLE_PX = 5
 const HOVER_ERASE_COLOR = "rgba(220, 38, 38, 0.5)"
 const SELECTED_DIM_COLOR = "rgba(8, 145, 178, 0.9)"
+const MARQUEE_WALL_COLOR = "rgba(8, 145, 178, 0.25)"
+const MARQUEE_DIM_COLOR = "rgba(8, 145, 178, 0.4)"
 const INK = "#333"
 const MM = 96 / 25.4
 
@@ -58,7 +60,9 @@ export interface RenderOptions {
   dimDraft?: DimGeometry | null
   dimRubber?: [Point, Point] | null
   dimSnap?: Point | null
-  selectedDim?: Dimension | null
+  selectedDims?: Dimension[]
+  marquee?: { x1: number; y1: number; x2: number; y2: number } | null
+  marqueeHits?: { walls: Wall[]; dims: Dimension[] } | null
 }
 
 export function render(
@@ -67,7 +71,7 @@ export function render(
   preview: Wall | null,
   unit: Unit,
   view: View,
-  selected: Wall | null = null,
+  selectedWalls: Wall[] = [],
   opts: RenderOptions = {},
 ): void {
   const dpr = window.devicePixelRatio || 1
@@ -81,7 +85,7 @@ export function render(
   if (!ctx) return
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
   ctx.clearRect(0, 0, w, h)
-  drawScene(ctx, w, h, walls, preview, unit, view, selected, opts)
+  drawScene(ctx, w, h, walls, preview, unit, view, selectedWalls, opts)
 }
 
 export function drawScene(
@@ -92,7 +96,7 @@ export function drawScene(
   preview: Wall | null,
   unit: Unit,
   view: View,
-  selected: Wall | null,
+  selectedWalls: Wall[],
   opts: RenderOptions = {},
 ): void {
   const m = opts.metrics ?? SCREEN_METRICS
@@ -118,19 +122,35 @@ export function drawScene(
     ctx.restore()
   }
   const sceneWalls = preview ? [...walls, preview] : walls
-  if (selected) drawOutline(ctx, selected, sceneWalls, toScreen)
-  if (opts.hover && opts.hover !== selected) drawOutline(ctx, opts.hover, sceneWalls, toScreen, HOVER_ERASE_COLOR)
+  const selectedDims = opts.selectedDims ?? []
+  const singleWalls = selectedWalls.length === 1 && !selectedDims.length
+  const singleDim = selectedDims.length === 1 && !selectedWalls.length
+  for (const wall of selectedWalls) drawOutline(ctx, wall, sceneWalls, toScreen)
+  for (const wall of opts.marqueeHits?.walls ?? [])
+    if (!selectedWalls.includes(wall)) drawOutline(ctx, wall, sceneWalls, toScreen, MARQUEE_WALL_COLOR)
+  if (opts.hover && !selectedWalls.includes(opts.hover)) drawOutline(ctx, opts.hover, sceneWalls, toScreen, HOVER_ERASE_COLOR)
   const o = toScreen({ x: 0, y: 0 })
   const anchorC = o.x + o.y
   for (const wall of walls) drawWall(ctx, wall, sceneWalls, 1, toScreen, k, anchorC, m)
   if (preview) drawWall(ctx, preview, sceneWalls, 0.4, toScreen, k, anchorC, m)
-  if (selected) drawHandles(ctx, selected, toScreen)
+  if (singleWalls) drawHandles(ctx, selectedWalls[0], toScreen)
   ctx.font = `${m.labelPx}px ${m.font}`
   ctx.textAlign = "center"
   ctx.textBaseline = "bottom"
   for (const dim of opts.dimensions ?? []) drawDimension(ctx, dim, walls, unit, INK, view, m)
-  if (opts.selectedDim) drawDimension(ctx, opts.selectedDim, walls, unit, SELECTED_DIM_COLOR, view, m, true)
+  for (const dim of opts.marqueeHits?.dims ?? [])
+    if (!selectedDims.includes(dim)) drawDimension(ctx, dim, walls, unit, MARQUEE_DIM_COLOR, view, m)
+  for (const dim of selectedDims) drawDimension(ctx, dim, walls, unit, SELECTED_DIM_COLOR, view, m, singleDim)
   if (opts.hoverDim) drawDimension(ctx, opts.hoverDim, walls, unit, HOVER_ERASE_COLOR, view, m)
+  if (opts.marquee) {
+    const { x1, y1, x2, y2 } = opts.marquee
+    ctx.save()
+    ctx.strokeStyle = INK
+    ctx.lineWidth = m.hatchPx
+    ctx.setLineDash([4, 3])
+    ctx.strokeRect(Math.min(x1, x2), Math.min(y1, y2), Math.abs(x2 - x1), Math.abs(y2 - y1))
+    ctx.restore()
+  }
   if (opts.dimRubber) {
     const r1 = toScreen(opts.dimRubber[0])
     const r2 = toScreen(opts.dimRubber[1])

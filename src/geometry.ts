@@ -105,6 +105,27 @@ export function handleAt(p: Point, wall: Wall, radiusCm: number): "a" | "b" | "m
   return distance(p, { x: (wall.a.x + wall.b.x) / 2, y: (wall.a.y + wall.b.y) / 2 }) <= radiusCm ? "mid" : null
 }
 
+export function segmentIntersectsRect(p1: Point, p2: Point, min: Point, max: Point, pad = 0): boolean {
+  let t0 = 0
+  let t1 = 1
+  const dx = p2.x - p1.x
+  const dy = p2.y - p1.y
+  const clip = (p: number, q: number): boolean => {
+    if (p === 0) return q >= 0
+    const r = q / p
+    if (p < 0) {
+      if (r > t1) return false
+      if (r > t0) t0 = r
+    } else {
+      if (r < t0) return false
+      if (r < t1) t1 = r
+    }
+    return true
+  }
+  return clip(-dx, p1.x - min.x + pad) && clip(dx, max.x - p1.x + pad) &&
+    clip(-dy, p1.y - min.y + pad) && clip(dy, max.y - p1.y + pad)
+}
+
 export function jointTol(a: Wall, b: Wall): number {
   return Math.max(a.thicknessCm, b.thicknessCm) / 2
 }
@@ -193,6 +214,43 @@ export function moveWall(walls: Wall[], wall: Wall, delta: Point): void {
       w.b = { x: w.b.x + delta.x, y: w.b.y + delta.y }
     }
   }
+}
+
+export function moveWalls(walls: Wall[], group: Wall[], delta: Point): void {
+  const pre = group.map((g) => ({ a: { ...g.a }, b: { ...g.b } }))
+  for (const g of group) {
+    g.a = { x: g.a.x + delta.x, y: g.a.y + delta.y }
+    g.b = { x: g.b.x + delta.x, y: g.b.y + delta.y }
+  }
+  for (const w of walls) {
+    if (group.includes(w) || pointsEqual(w.a, w.b)) continue
+    let pullA: Point | null = null
+    let pullB: Point | null = null
+    let axis = false
+    group.forEach((g, i) => {
+      const tol = jointTol(g, w) * 1.25
+      if (!pullA) {
+        if (distance(w.a, pre[i].a) <= tol) pullA = g.a
+        else if (distance(w.a, pre[i].b) <= tol) pullA = g.b
+      }
+      if (!pullB) {
+        if (distance(w.b, pre[i].a) <= tol) pullB = g.a
+        else if (distance(w.b, pre[i].b) <= tol) pullB = g.b
+      }
+      if (!pullA && !pullB && !axis && axisAttached(w, { ...g, a: pre[i].a, b: pre[i].b })) axis = true
+    })
+    if (pullA) w.a = pullA
+    if (pullB) w.b = pullB
+    if (axis && !pullA && !pullB) {
+      w.a = { x: w.a.x + delta.x, y: w.a.y + delta.y }
+      w.b = { x: w.b.x + delta.x, y: w.b.y + delta.y }
+    }
+  }
+}
+
+export function snapOthers(walls: Wall[], group: Wall[]): Wall[] {
+  return walls.filter((w) => !group.includes(w) && !pointsEqual(w.a, w.b) &&
+    !group.some((g) => jointedWalls(g, w) || axisAttached(w, g)))
 }
 
 const MITER_MIN = Math.PI / 6
