@@ -34,6 +34,33 @@ function projectOnSegment(p: Point, w: Wall): Point {
 }
 
 const ORTHO_TAN = Math.tan((15 * Math.PI) / 180)
+const PERP_MAX_DOT = Math.sin((15 * Math.PI) / 180)
+const COLIN_MIN_DOT = Math.cos((15 * Math.PI) / 180)
+
+export function lockedDirection(p: Point, v: Point, walls: Wall[]): Point | null {
+  for (const w of walls) {
+    if (bodyGap(p, w) > 0.01) continue
+    const dx = w.b.x - w.a.x
+    const dy = w.b.y - w.a.y
+    const len2 = dx * dx + dy * dy
+    if (len2 < EPS) continue
+    const len = Math.sqrt(len2)
+    const u = { x: dx / len, y: dy / len }
+    const n = { x: -u.y, y: u.x }
+    const a1 = dot(v, u)
+    if (Math.abs(a1) <= PERP_MAX_DOT) return dot(v, n) >= 0 ? n : { x: -n.x, y: -n.y }
+    if (Math.abs(a1) >= COLIN_MIN_DOT) return a1 >= 0 ? u : { x: -u.x, y: -u.y }
+  }
+  return null
+}
+
+export function orthoAxis(p: Point, from: Point): Point {
+  const dx = p.x - from.x
+  const dy = p.y - from.y
+  if (Math.abs(dy) <= ORTHO_TAN * Math.abs(dx)) return { x: p.x, y: from.y }
+  if (Math.abs(dx) <= ORTHO_TAN * Math.abs(dy)) return { x: from.x, y: p.y }
+  return p
+}
 
 export function snap(cursor: Point, walls: Wall[], gridStepCm: number, radiusCm: number, orthoFrom?: Point): Point {
   let best: Point | null = null
@@ -76,6 +103,91 @@ export function snap(cursor: Point, walls: Wall[], gridStepCm: number, radiusCm:
   }
 }
 
+function bodyGap(p: Point, w: Wall): number {
+  const dx = w.b.x - w.a.x
+  const dy = w.b.y - w.a.y
+  const len2 = dx * dx + dy * dy
+  if (len2 < EPS) return distance(p, w.a)
+  const len = Math.sqrt(len2)
+  const s = ((p.x - w.a.x) * dx + (p.y - w.a.y) * dy) / len2
+  const lat = ((p.x - w.a.x) * -dy + (p.y - w.a.y) * dx) / len
+  const ds = s < 0 ? -s * len : s > 1 ? (s - 1) * len : 0
+  const dl = Math.abs(lat) - w.thicknessCm / 2
+  return Math.hypot(ds, Math.max(0, dl))
+}
+
+function distToSegment(p: Point, q1: Point, q2: Point): number {
+  const dx = q2.x - q1.x
+  const dy = q2.y - q1.y
+  const len2 = dx * dx + dy * dy
+  if (len2 < EPS) return distance(p, q1)
+  const t = Math.max(0, Math.min(1, ((p.x - q1.x) * dx + (p.y - q1.y) * dy) / len2))
+  return distance(p, { x: q1.x + t * dx, y: q1.y + t * dy })
+}
+
+export function findVertexSnap(
+  p: Point,
+  walls: Wall[],
+  hCm: number,
+): { point: Point; contact: boolean; block: Point | null } | null {
+  let best: { point: Point; d: number; prio: number; block: Point | null } | null = null
+  const consider = (point: Point, d: number, prio: number, block: Point | null = null) => {
+    if (d > hCm) return
+    if (!best || prio < best.prio || (prio === best.prio && d < best.d)) best = { point, d, prio, block }
+  }
+  for (const w of walls) {
+    const dx = w.b.x - w.a.x
+    const dy = w.b.y - w.a.y
+    const len2 = dx * dx + dy * dy
+    if (len2 < EPS) continue
+    const len = Math.sqrt(len2)
+    const u = { x: dx / len, y: dy / len }
+    const n = { x: -u.y, y: u.x }
+    const hW = w.thicknessCm / 2
+    const s = (p.x - w.a.x) * u.x + (p.y - w.a.y) * u.y
+    const d = (p.x - w.a.x) * n.x + (p.y - w.a.y) * n.y
+    const sC = len >= 2 * hCm ? Math.max(hCm, Math.min(len - hCm, s)) : len / 2
+    // ось/торец: курсор на осевой линии в пределах полблока от торца — продолжение
+    if (Math.abs(d) <= hCm) {
+      const capEnd = s >= len / 2 ? w.b : w.a
+      const capDist = distToSegment(p, { x: capEnd.x - n.x * hW, y: capEnd.y - n.y * hW }, { x: capEnd.x + n.x * hW, y: capEnd.y + n.y * hW })
+      if (capDist <= hCm && distance(p, capEnd) <= 2 * hCm) consider(capEnd, capDist, 0)
+    }
+    // грань: курсор в пределах полблока от линии грани — квадрат прилипает краем к грани
+    const faceDist = Math.abs(Math.abs(d) - hW)
+    if (faceDist <= hCm) {
+      const sd = d >= 0 ? 1 : -1
+      const point = { x: w.a.x + u.x * sC + n.x * sd * hW, y: w.a.y + u.y * sC + n.y * sd * hW }
+      if (distance(p, point) <= 2 * hCm) {
+        const block = { x: point.x + n.x * sd * hCm, y: point.y + n.y * sd * hCm }
+        consider(point, faceDist, 0, block)
+      }
+    }
+  }
+  if (best !== null) {
+    const found = best as { point: Point; d: number; prio: number; block: Point | null }
+    return { point: found.point, contact: found.prio === 0, block: found.block }
+  }
+  return null
+}
+
+export function snapVertex(
+  p: Point,
+  walls: Wall[],
+  gridStepCm: number,
+  hCm: number,
+  orthoFrom?: Point,
+): Point {
+  const found = findVertexSnap(p, walls, hCm)
+  if (found) return found.point
+  let q = p
+  if (orthoFrom) q = orthoAxis(p, orthoFrom)
+  return {
+    x: Math.round(q.x / gridStepCm) * gridStepCm,
+    y: Math.round(q.y / gridStepCm) * gridStepCm,
+  }
+}
+
 export function hitWall(p: Point, walls: Wall[], toleranceCm: number): Wall | null {
   let best: Wall | null = null
   let bestDist = Infinity
@@ -86,7 +198,22 @@ export function hitWall(p: Point, walls: Wall[], toleranceCm: number): Wall | nu
       bestDist = d
     }
   }
-  return best
+  if (best) return best
+  // fallback: зона залива за пределами полосы (угловое примыкание), принадлежит поздней стене
+  for (let i = walls.length - 1; i >= 0; i--) {
+    const w = walls[i]
+    if (pointsEqual(w.a, w.b) || inBand(p, w)) continue
+    if (!pointInConvex(p, wallShape(w, walls))) continue
+    let covered = false
+    for (let k = 0; k < i; k++) {
+      if (jointedWalls(w, walls[k]) && pointInConvex(p, wallShape(walls[k], walls))) {
+        covered = true
+        break
+      }
+    }
+    if (!covered) return w
+  }
+  return null
 }
 
 export function distanceToWall(p: Point, wall: Wall): number {
@@ -133,32 +260,6 @@ export function jointTol(a: Wall, b: Wall): number {
 export function jointedWalls(a: Wall, b: Wall): boolean {
   const tol = jointTol(a, b) * 1.25
   return distance(a.a, b.a) <= tol || distance(a.a, b.b) <= tol || distance(a.b, b.a) <= tol || distance(a.b, b.b) <= tol
-}
-
-export function healJoints(walls: Wall[]): boolean {
-  let healed = false
-  for (let i = 1; i < walls.length; i++) {
-    const w = walls[i]
-    if (pointsEqual(w.a, w.b)) continue
-    for (const end of ["a", "b"] as const) {
-      const p = w[end]
-      let best: { x: number; y: number; d: number } | null = null
-      for (let j = 0; j < i; j++) {
-        const v = walls[j]
-        if (pointsEqual(v.a, v.b)) continue
-        const tol = jointTol(w, v) * 2
-        for (const ve of ["a", "b"] as const) {
-          const d = distance(p, v[ve])
-          if (d > EPS && d <= tol && (!best || d < best.d)) best = { x: v[ve].x, y: v[ve].y, d }
-        }
-      }
-      if (best && !pointsEqual(p, best)) {
-        w[end] = { x: best.x, y: best.y }
-        healed = true
-      }
-    }
-  }
-  return healed
 }
 
 function attachedEnds(walls: Wall[], at: Point, self: Wall): { wall: Wall; end: "a" | "b" }[] {
@@ -253,9 +354,6 @@ export function snapOthers(walls: Wall[], group: Wall[]): Wall[] {
     !group.some((g) => jointedWalls(g, w) || axisAttached(w, g)))
 }
 
-const MITER_MIN = Math.PI / 6
-const RIGHT_ANGLE_MAX_COS = Math.sin((5 * Math.PI) / 180)
-
 interface Cap {
   plus: Point
   minus: Point
@@ -308,7 +406,7 @@ interface Joint {
   corner: boolean
 }
 
-function jointAt(wall: Wall, E: Point, walls: Wall[]): Joint | null {
+export function jointAt(wall: Wall, E: Point, walls: Wall[]): Joint | null {
   let match: { c: Wall; cEnd: Point; d: number } | null = null
   let count = 0
   for (const w of walls) {
@@ -360,35 +458,20 @@ function endCap(wall: Wall, E: Point, u: Point, walls: Wall[]): Cap {
   if (!j.corner) return buttCap(E, dirFromBody(j.c.a, j.c.b, j.cEnd), hC, u, n, E, h, capAt(E))
   const V = j.vertex
   const flat = capAt(V)
+  const iWall = walls.indexOf(wall)
+  const earlier = iWall === -1 ? true : walls.indexOf(j.c) < iWall
+  if (!earlier) return flat
   const v = dirFromBody(j.c.a, j.c.b, j.cEnd)
   const cr = cross(u, v)
   if (Math.abs(cr) < EPS) return flat
-  const phi = Math.acos(Math.max(-1, Math.min(1, dot(u, v))))
-  const same = j.c.type === wall.type && j.c.thicknessCm === wall.thicknessCm
-  const miter = same && phi >= MITER_MIN && Math.abs(dot(u, v)) >= RIGHT_ANGLE_MAX_COS
-  if (!miter) {
-    return walls.indexOf(j.c) < walls.indexOf(wall) ? buttCap(j.cEnd, v, hC, u, n, E, h, flat) : flat
-  }
-  const s = cr > 0 ? 1 : -1
-  const nC = { x: -v.y, y: v.x }
-  const inner = capOnFaces(
-    n,
-    u,
-    E,
-    h,
-    { x: j.cEnd.x - nC.x * s * hC, y: j.cEnd.y - nC.y * s * hC },
-    v,
+  const s = dot(u, nCOf(v)) > 0 ? 1 : -1
+  return (
+    capOnFaces(n, u, E, h, { x: j.cEnd.x - nCOf(v).x * s * hC, y: j.cEnd.y - nCOf(v).y * s * hC }, v) ?? flat
   )
-  const outer = capOnFaces(
-    { x: -n.x, y: -n.y },
-    u,
-    E,
-    h,
-    { x: j.cEnd.x + nC.x * s * hC, y: j.cEnd.y + nC.y * s * hC },
-    v,
-  )
-  if (inner && outer) return s > 0 ? { plus: inner.plus, minus: outer.plus } : { plus: outer.minus, minus: inner.minus }
-  return flat
+}
+
+function nCOf(v: Point): Point {
+  return { x: -v.y, y: v.x }
 }
 
 export function pointOn(wall: Wall, t: number): Point {
@@ -474,17 +557,6 @@ export function nearestEdgeIntersection(p: Point, walls: Wall[], radius: number)
   return best
 }
 
-export function jointPullback(p: Point, walls: Wall[], distance: number, dir: Point): Point {
-  for (const w of walls)
-    for (const [end, other] of [[w.a, w.b], [w.b, w.a]] as const)
-      if (pointsEqual(p, end)) {
-        const d = dirOf(end, other)
-        if (Math.abs(dot(d, dir)) > 1 - 1e-9) return p
-        return { x: p.x + d.x * distance, y: p.y + d.y * distance }
-      }
-  return p
-}
-
 export interface DimGeometry {
   a: Point
   b: Point
@@ -548,18 +620,168 @@ export function dimHitDistance(p: Point, dim: Dimension, walls: Wall[], textFact
 
 export function sameTypeJoint(wall: Wall, E: Point, walls: Wall[]): boolean {
   const j = jointAt(wall, E, walls)
-  if (!j || j.c.type !== wall.type || j.c.thicknessCm !== wall.thicknessCm) return false
-  if (!j.corner) return true
-  const u = dirFromBody(wall.a, wall.b, E)
-  const v = dirFromBody(j.c.a, j.c.b, j.cEnd)
-  const cr = cross(u, v)
-  if (Math.abs(cr) < EPS) return true
-  if (Math.abs(dot(u, v)) < RIGHT_ANGLE_MAX_COS) return false
-  return Math.acos(Math.max(-1, Math.min(1, dot(u, v)))) >= MITER_MIN
+  return !!j && j.c.type === wall.type && j.c.thicknessCm === wall.thicknessCm
 }
 
 export function wallShape(wall: Wall, walls: Wall[]): Point[] {
   const capA = endCap(wall, wall.a, dirOf(wall.a, wall.b), walls)
   const capB = endCap(wall, wall.b, dirOf(wall.b, wall.a), walls)
   return [capA.plus, capB.minus, capB.plus, capA.minus]
+}
+
+function clipHalf(poly: Point[], origin: Point, normal: Point, lo: number): Point[] {
+  const out: Point[] = []
+  const val = (p: Point) => (p.x - origin.x) * normal.x + (p.y - origin.y) * normal.y - lo
+  for (let i = 0; i < poly.length; i++) {
+    const a = poly[i]
+    const b = poly[(i + 1) % poly.length]
+    const va = val(a)
+    const vb = val(b)
+    if (va >= 0) out.push(a)
+    if ((va > 0 && vb < 0) || (va < 0 && vb > 0)) {
+      const t = va / (va - vb)
+      out.push({ x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t })
+    }
+  }
+  return out
+}
+
+function isEarlierWall(w: Wall, of: Wall, walls: Wall[]): boolean {
+  const i = walls.indexOf(of)
+  return i === -1 ? true : walls.indexOf(w) < i
+}
+
+export function wallDisplayPolys(wall: Wall, walls: Wall[]): Point[][] {
+  let pieces: Point[][] = [wallShape(wall, walls)]
+  for (const end of [wall.a, wall.b] as const) {
+    const j = jointAt(wall, end, walls)
+    if (!j || !j.corner) continue
+    if (!isEarlierWall(j.c, wall, walls)) continue
+    const c = j.c
+    const dx = c.b.x - c.a.x
+    const dy = c.b.y - c.a.y
+    const lenC = Math.hypot(dx, dy)
+    if (lenC < EPS) continue
+    const uC = { x: dx / lenC, y: dy / lenC }
+    const nC = { x: -uC.y, y: uC.x }
+    const hC = c.thicknessCm / 2
+    const into = dirFromBody(c.a, c.b, j.cEnd)
+    const next: Point[][] = []
+    for (const pc of pieces) {
+      next.push(clipHalf(pc, c.a, nC, hC))
+      next.push(clipHalf(pc, c.a, { x: -nC.x, y: -nC.y }, hC))
+      next.push(clipHalf(pc, j.cEnd, { x: -into.x, y: -into.y }, 0))
+    }
+    pieces = next
+  }
+  return pieces.filter((p) => p.length >= 3)
+}
+
+export function pointInConvex(p: Point, poly: Point[]): boolean {
+  let sign = 0
+  for (let i = 0; i < poly.length; i++) {
+    const a = poly[i]
+    const b = poly[(i + 1) % poly.length]
+    const c = cross({ x: b.x - a.x, y: b.y - a.y }, { x: p.x - a.x, y: p.y - a.y })
+    if (Math.abs(c) < EPS) continue
+    const s = c > 0 ? 1 : -1
+    if (sign === 0) sign = s
+    else if (s !== sign) return false
+  }
+  return true
+}
+
+function inBand(p: Point, w: Wall): boolean {
+  const dx = w.b.x - w.a.x
+  const dy = w.b.y - w.a.y
+  const len2 = dx * dx + dy * dy
+  if (len2 < EPS) return false
+  const len = Math.sqrt(len2)
+  const s = ((p.x - w.a.x) * dx + (p.y - w.a.y) * dy) / len2
+  const lat = ((p.x - w.a.x) * -dy + (p.y - w.a.y) * dx) / len
+  return s >= 0 && s <= 1 && Math.abs(lat) <= w.thicknessCm / 2
+}
+
+export function subtractCovered(p1: Point, p2: Point, walls: Wall[], self: Wall, exempt: Wall[]): [number, number][] {
+  const dx = p2.x - p1.x
+  const dy = p2.y - p1.y
+  const len2 = dx * dx + dy * dy
+  if (len2 < EPS) return []
+  const len = Math.sqrt(len2)
+  const du = { x: dx / len, y: dy / len }
+  const hidden: [number, number][] = []
+  const SHAVE = 1e-6
+  const SLACK = 1e-4
+  for (const w of walls) {
+    if (w === self) continue
+    const wx = w.b.x - w.a.x
+    const wy = w.b.y - w.a.y
+    const wlen2 = wx * wx + wy * wy
+    if (wlen2 < EPS) continue
+    const wlen = Math.sqrt(wlen2)
+    const u = { x: wx / wlen, y: wy / wlen }
+    const n = { x: -u.y, y: u.x }
+    const h = w.thicknessCm / 2
+    const rx = p1.x - w.a.x
+    const ry = p1.y - w.a.y
+    const s0 = rx * u.x + ry * u.y
+    const dS = dx * u.x + dy * u.y
+    const l0 = rx * n.x + ry * n.y
+    const dL = dx * n.x + dy * n.y
+    let t0 = 0
+    let t1 = 1
+    const band = (v0: number, dv: number, lo: number, hi: number): boolean => {
+      if (Math.abs(dv) < EPS) return v0 >= lo && v0 <= hi
+      const ta = (lo - v0) / dv
+      const tb = (hi - v0) / dv
+      t0 = Math.max(t0, Math.min(ta, tb))
+      t1 = Math.min(t1, Math.max(ta, tb))
+      return t0 <= t1
+    }
+    if (band(l0, dL, -h + SHAVE, h - SHAVE) && band(s0, dS, SHAVE, wlen - SHAVE) && t1 > t0 && !exempt.includes(w)) {
+      hidden.push([t0, t1])
+    }
+    // край, лежащий прямо на границе однотипной соседки: контакт монолитных стен не рисуется
+    if (w.type === self.type && w.thicknessCm === self.thicknessCm && !exempt.includes(w)) {
+      const hFull = w.thicknessCm / 2
+      const c1 = { x: w.a.x + n.x * hFull, y: w.a.y + n.y * hFull }
+      const c2 = { x: w.b.x + n.x * hFull, y: w.b.y + n.y * hFull }
+      const c3 = { x: w.a.x - n.x * hFull, y: w.a.y - n.y * hFull }
+      const c4 = { x: w.b.x - n.x * hFull, y: w.b.y - n.y * hFull }
+      for (const [q1, q2] of [[c1, c2], [c3, c4], [c1, c3], [c2, c4]] as const) {
+        const qx = q2.x - q1.x
+        const qy = q2.y - q1.y
+        const qlen2 = qx * qx + qy * qy
+        if (qlen2 < EPS) continue
+        const ql = Math.sqrt(qlen2)
+        const qu = { x: qx / ql, y: qy / ql }
+        if (Math.abs(cross(du, qu)) > 1e-6) continue
+        if (Math.abs(cross(qu, { x: p1.x - q1.x, y: p1.y - q1.y })) > SLACK) continue
+        const proj = (p: Point) => ((p.x - q1.x) * qx + (p.y - q1.y) * qy) / qlen2
+        const e1 = proj(p1)
+        const e2 = proj(p2)
+        const lo = Math.max(0, Math.min(e1, e2))
+        const hi = Math.min(1, Math.max(e1, e2))
+        if (hi - lo <= SLACK || Math.abs(e2 - e1) <= SLACK) continue
+        const tA = (lo - e1) / (e2 - e1)
+        const tB = (hi - e1) / (e2 - e1)
+        hidden.push([Math.min(tA, tB), Math.max(tA, tB)])
+      }
+    }
+  }
+  hidden.sort((a, b) => a[0] - b[0])
+  const merged: [number, number][] = []
+  for (const iv of hidden) {
+    const last = merged[merged.length - 1]
+    if (last && iv[0] <= last[1]) last[1] = Math.max(last[1], iv[1])
+    else merged.push([iv[0], iv[1]])
+  }
+  const visible: [number, number][] = []
+  let cursor = 0
+  for (const [a, b] of merged) {
+    if (a > cursor) visible.push([cursor, a])
+    cursor = Math.max(cursor, b)
+  }
+  if (cursor < 1) visible.push([cursor, 1])
+  return visible
 }

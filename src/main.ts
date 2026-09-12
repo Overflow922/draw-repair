@@ -1,7 +1,7 @@
 import "./style.css"
 import { cloneScene, drawingHistory, loadHistory, record, recordSnapshot, redoEntry, saveHistory, undoEntry } from "./history"
 import type { Scene } from "./history"
-import { dimGeometry, dimHitDistance, dimLevelSnap, dimensionOffsetAt, distanceToWall, endpointAt, healJoints, hitWall, jointPullback, moveEndpoint, moveWalls, nearestEdgeIntersection, dimPointPoint, pointsEqual, segmentIntersectsRect, snap, snapOthers, zoomAt } from "./geometry"
+import { dimGeometry, dimHitDistance, dimLevelSnap, dimensionOffsetAt, distanceToWall, endpointAt, findVertexSnap, hitWall, lockedDirection, moveEndpoint, moveWalls, nearestEdgeIntersection, dimPointPoint, orthoAxis, pointsEqual, segmentIntersectsRect, snap, snapOthers, zoomAt } from "./geometry"
 import type { DimGeometry } from "./geometry"
 import { drawPatternPreview, render } from "./render"
 import { availableFormats, exportDrawing, PAGE_FORMATS_MM } from "./export/pdf"
@@ -45,13 +45,14 @@ let walls: Wall[] = current().walls
 let dimensions: Dimension[] = current().dimensions
 let chainStart: Point | null = null
 let cursor: Point | null = null
+let cursorV: Point | null = null
+let squareBlock: Point | null = null
 let thicknessCm = 20
 let wallMaterial: Material = "brick"
 let unit: Unit = "mm"
 let lengthDirty = false
 let view: View = current().view
 let dirty = false
-for (const d of store.drawings) if (healJoints(d.walls)) dirty = true
 let selectedWalls: Wall[] = []
 let selectedDimensions: Dimension[] = []
 let endpointDrag: { wall: Wall; end: "a" | "b"; base: Point; snapshot: Scene } | null = null
@@ -141,6 +142,7 @@ function setTool(next: Tool): void {
   if (tool === next) return
   tool = next
   chainStart = null
+  cursorV = null
   dimDraft = emptyDraft()
   lengthDirty = false
   selectedWalls = []
@@ -188,8 +190,10 @@ function typedLengthCm(): number | null {
 }
 
 function previewLengthCm(): number | null {
-  if (!chainStart || !cursor || pointsEqual(chainStart, cursor)) return null
-  return Math.hypot(cursor.x - chainStart.x, cursor.y - chainStart.y)
+  if (!chainStart || !cursor) return null
+  const base = chainStart
+  if (pointsEqual(base, cursor)) return null
+  return Math.hypot(cursor.x - base.x, cursor.y - base.y)
 }
 
 function previewPoint(): Point | null {
@@ -197,8 +201,9 @@ function previewPoint(): Point | null {
   const target = lengthDirty ? typedLengthCm() : null
   const cm = previewLengthCm()
   if (target === null || cm === null) return cursor
+  const base = chainStart
   const k = target / cm
-  return { x: chainStart.x + (cursor.x - chainStart.x) * k, y: chainStart.y + (cursor.y - chainStart.y) * k }
+  return { x: base.x + (cursor.x - base.x) * k, y: base.y + (cursor.y - base.y) * k }
 }
 
 function liveLengthCm(): number | null {
@@ -240,12 +245,11 @@ function redraw(): void {
   const draft = dimDraftGeometry()
   const snapHit = tool === "dimension" && cursor && (!dimDraft.a || !dimDraft.b) ? nearestEdgeIntersection(cursor, walls, radiusCm()) : null
   let previewWall: Wall | null = null
-  if (chainStart && p) {
-    const dx = p.x - chainStart.x
-    const dy = p.y - chainStart.y
-    const len = Math.hypot(dx, dy)
-    const a = len > 0 ? jointPullback(chainStart, walls, thicknessCm / 2, { x: dx / len, y: dy / len }) : chainStart
-    previewWall = { id: "", a, b: p, thicknessCm, type: wallMaterial }
+  if (chainStart && p) previewWall = { id: "", a: chainStart, b: p, thicknessCm, type: wallMaterial }
+  let square: { at: Point; dir: Point | null; size: number } | null = null
+  if (tool === "wall" && cursor) {
+    if (chainStart && p && cursorV) square = { at: { x: p.x - cursorV.x * thicknessCm, y: p.y - cursorV.y * thicknessCm }, dir: cursorV, size: thicknessCm }
+    else if (!chainStart) square = { at: squareBlock ?? cursor, dir: null, size: thicknessCm }
   }
   render(canvas, walls, previewWall, unit, view, selectedWalls, {
     hover: target.wall,
@@ -257,6 +261,7 @@ function redraw(): void {
     selectedDims: selectedDimensions,
     marquee,
     marqueeHits,
+    square,
   })
   updateLengthBox()
   syncDimPanel()
@@ -344,25 +349,69 @@ function toSnappedPoint(e: MouseEvent): Point {
   return snap(toWorld(e), walls, GRID_STEP_CM, SNAP_RADIUS_PX / (PX_PER_CM * view.zoom), ortho ? (chainStart ?? undefined) : undefined)
 }
 
-function commitPoint(p: Point): void {
-  cursor = p
-  if (chainStart) {
-    const target = lengthDirty ? typedLengthCm() : null
-    const cm = previewLengthCm()
-    const dir = cm !== null && !pointsEqual(chainStart, p)
-      ? { x: (p.x - chainStart.x) / cm, y: (p.y - chainStart.y) / cm }
-      : null
-    const end = target !== null && dir ? { x: chainStart.x + dir.x * target, y: chainStart.y + dir.y * target } : p
-    if (!pointsEqual(chainStart, end)) {
-      const a = jointPullback(chainStart, walls, thicknessCm / 2, dir ?? { x: 1, y: 0 })
-      pushRecord()
-      dirty = true
-      walls.push({ id: crypto.randomUUID(), a, b: end, thicknessCm, type: wallMaterial })
+function updateWallCursor(e: MouseEvent): void {
+  const raw = toWorld(e)
+  if (!chainStart) {
+    // старт ещё не зафиксирован: квадрат липнет к грани или торцу
+    cursorV = null
+    const found = findVertexSnap(raw, walls, thicknessCm / 2)
+    if (found) {
+      cursor = found.point
+      squareBlock = found.block
+    } else {
+      cursor = { x: Math.round(raw.x / GRID_STEP_CM) * GRID_STEP_CM, y: Math.round(raw.y / GRID_STEP_CM) * GRID_STEP_CM }
+      squareBlock = null
     }
-    chainStart = end
-  } else {
-    chainStart = p
+    return
   }
+  // старт зафиксирован кликом — его координаты больше не меняются
+  const dx = raw.x - chainStart.x
+  const dy = raw.y - chainStart.y
+  const len = Math.hypot(dx, dy)
+  let v = len > 1e-9 ? { x: dx / len, y: dy / len } : null
+  if (v) {
+    // начало касается стены — направление фиксируется точно вдоль/поперёк её оси
+    const locked = lockedDirection(chainStart, v, walls)
+    if (locked) v = locked
+  }
+  cursorV = v
+  const found = findVertexSnap(raw, walls, thicknessCm / 2)
+  if (found) {
+    // свободный конец липнет к стенам, пока не зафиксирован
+    cursor = found.point
+  } else if (v) {
+    const proj = dx * v.x + dy * v.y
+    cursor = { x: chainStart.x + v.x * proj, y: chainStart.y + v.y * proj }
+  } else {
+    let q = raw
+    if (ortho) q = orthoAxis(q, chainStart)
+    cursor = { x: Math.round(q.x / GRID_STEP_CM) * GRID_STEP_CM, y: Math.round(q.y / GRID_STEP_CM) * GRID_STEP_CM }
+  }
+}
+
+function commitPoint(): void {
+  if (!chainStart) {
+    if (!cursor) return
+    chainStart = cursor
+    cursorV = null
+    lengthDirty = false
+    lengthInput.focus()
+    redraw()
+    return
+  }
+  const a = chainStart
+  const target = lengthDirty ? typedLengthCm() : null
+  const end = target !== null && cursorV
+    ? { x: a.x + cursorV.x * target, y: a.y + cursorV.y * target }
+    : cursor ?? chainStart
+  if (!pointsEqual(a, end)) {
+    pushRecord()
+    dirty = true
+    walls.push({ id: crypto.randomUUID(), a, b: end, thicknessCm, type: wallMaterial })
+  }
+  // стена не продолжается автоматически: инструмент ждёт новый старт
+  chainStart = null
+  cursorV = null
   lengthDirty = false
   lengthInput.focus()
   redraw()
@@ -443,7 +492,9 @@ canvas.addEventListener("pointermove", (e) => {
     }
     return
   }
-  cursor = toSnappedPoint(e)
+  if (tool === "wall") updateWallCursor(e)
+  else if (tool === "dimension") cursor = toWorld(e)
+  else cursor = toSnappedPoint(e)
   redraw()
 })
 
@@ -544,7 +595,9 @@ canvas.addEventListener("pointerup", (e) => {
   }
   if (!panDrag || e.button !== 1) return
   panDrag = null
-  cursor = toSnappedPoint(e)
+  if (tool === "wall") updateWallCursor(e)
+  else if (tool === "dimension") cursor = toWorld(e)
+  else cursor = toSnappedPoint(e)
   redraw()
 })
 
@@ -600,6 +653,7 @@ canvas.addEventListener("click", (e) => {
     return
   }
   const p = toSnappedPoint(e)
+  const raw = toWorld(e)
   if (tool === "eraser") {
     const { wall, dim } = eraserTarget(p)
     if (wall) deleteWall(wall)
@@ -607,11 +661,12 @@ canvas.addEventListener("click", (e) => {
     return
   }
   if (tool === "dimension") {
-    placeDimension(p)
+    placeDimension(raw)
     return
   }
   if (!chainStart) {
-    const hit = hitWall(p, walls, radiusCm())
+    // клик по телу стены — выделение; клик снаружи (по прилипшему квадрату) — рисование
+    const hit = hitWall(raw, walls, radiusCm())
     if (hit) {
       selectWall(hit)
       return
@@ -624,7 +679,8 @@ canvas.addEventListener("click", (e) => {
       return
     }
   }
-  commitPoint(p)
+  if (tool === "wall") updateWallCursor(e)
+  commitPoint()
 })
 
 function placeDimension(p: Point): void {
@@ -664,12 +720,13 @@ lengthInput.addEventListener("input", () => {
 })
 
 lengthInput.addEventListener("keydown", (e) => {
-  if (e.key === "Enter" && chainStart) commitPoint(cursor ?? chainStart)
+  if (e.key === "Enter" && chainStart) commitPoint()
 })
 
 function endChain(): void {
   if (!chainStart) return
   chainStart = null
+  cursorV = null
   lengthDirty = false
   lengthInput.blur()
   redraw()
@@ -838,6 +895,7 @@ function activate(id: string): void {
   tool = "wall"
   syncToolUI()
   chainStart = null
+  cursorV = null
   selectedWalls = []
   selectedDimensions = []
   dimDraft = emptyDraft()
@@ -884,6 +942,7 @@ function removeDrawing(id: string, index: number): void {
 
 function resetEditing(): void {
   chainStart = null
+  cursorV = null
   selectedWalls = []
   selectedDimensions = []
   setDimPanel(false)

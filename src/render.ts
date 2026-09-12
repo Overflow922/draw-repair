@@ -1,4 +1,4 @@
-import { dimGeometry, dimPointPoint, sameTypeJoint, visibleWorld, wallShape } from "./geometry"
+import { dimGeometry, dimPointPoint, jointAt, sameTypeJoint, subtractCovered, visibleWorld, wallDisplayPolys, wallShape } from "./geometry"
 import type { DimGeometry } from "./geometry"
 import { GRID_STEP_CM, PX_PER_CM, normalizeMaterial } from "./types"
 import type { Dimension, Material, Point, Unit, View, Wall } from "./types"
@@ -63,6 +63,7 @@ export interface RenderOptions {
   selectedDims?: Dimension[]
   marquee?: { x1: number; y1: number; x2: number; y2: number } | null
   marqueeHits?: { walls: Wall[]; dims: Dimension[] } | null
+  square?: { at: Point; dir: Point | null; size: number } | null
 }
 
 export function render(
@@ -134,6 +135,30 @@ export function drawScene(
   for (const wall of walls) drawWall(ctx, wall, sceneWalls, 1, toScreen, k, anchorC, m)
   if (preview) drawWall(ctx, preview, sceneWalls, 0.4, toScreen, k, anchorC, m)
   if (singleWalls) drawHandles(ctx, selectedWalls[0], toScreen)
+  if (opts.square) {
+    const { at, dir, size } = opts.square
+    const h = size / 2
+    const corners: Point[] = dir
+      ? [
+          { x: at.x - dir.y * h, y: at.y + dir.x * h },
+          { x: at.x + dir.x * size - dir.y * h, y: at.y + dir.y * size + dir.x * h },
+          { x: at.x + dir.x * size + dir.y * h, y: at.y + dir.y * size - dir.x * h },
+          { x: at.x + dir.y * h, y: at.y - dir.x * h },
+        ].map(toScreen)
+      : [
+          { x: at.x - h, y: at.y - h },
+          { x: at.x + h, y: at.y - h },
+          { x: at.x + h, y: at.y + h },
+          { x: at.x - h, y: at.y + h },
+        ].map(toScreen)
+    ctx.save()
+    ctx.strokeStyle = "#999"
+    ctx.lineWidth = 1
+    ctx.setLineDash([4, 3])
+    tracePolygon(ctx, corners)
+    ctx.stroke()
+    ctx.restore()
+  }
   ctx.font = `${m.labelPx}px ${m.font}`
   ctx.textAlign = "center"
   ctx.textBaseline = "bottom"
@@ -189,9 +214,15 @@ function formatLength(cm: number, unit: Unit): string {
 }
 
 function tracePolygon(ctx: CanvasRenderingContext2D, poly: Point[]): void {
+  tracePolygons(ctx, [poly])
+}
+
+function tracePolygons(ctx: CanvasRenderingContext2D, polys: Point[][]): void {
   ctx.beginPath()
-  poly.forEach((p, i) => (i ? ctx.lineTo(p.x, p.y) : ctx.moveTo(p.x, p.y)))
-  ctx.closePath()
+  for (const poly of polys) {
+    poly.forEach((p, i) => (i ? ctx.lineTo(p.x, p.y) : ctx.moveTo(p.x, p.y)))
+    ctx.closePath()
+  }
 }
 
 function polyBounds(poly: Point[]): [number, number, number, number] {
@@ -255,7 +286,7 @@ function woodLong(ctx: CanvasRenderingContext2D, a: Point, b: Point, thicknessPx
 function drawMaterial(
   ctx: CanvasRenderingContext2D,
   mat: Material,
-  poly: Point[],
+  polys: Point[][],
   a: Point,
   b: Point,
   thicknessPx: number,
@@ -263,30 +294,45 @@ function drawMaterial(
   m: RenderMetrics,
 ): void {
   ctx.save()
-  tracePolygon(ctx, poly)
+  tracePolygons(ctx, polys)
   ctx.clip()
   ctx.lineWidth = m.hatchPx
-  if (mat === "brick") strokeHatch45(ctx, poly, [], 0, 1, anchorC, m)
-  else if (mat === "concrete") strokeHatch45(ctx, poly, m.dashdot, 0, 1, anchorC, m)
+  const bounds = polys.flat()
+  if (mat === "brick") strokeHatch45(ctx, bounds, [], 0, 1, anchorC, m)
+  else if (mat === "concrete") strokeHatch45(ctx, bounds, m.dashdot, 0, 1, anchorC, m)
   else if (mat === "reinforced") {
-    strokeHatch45(ctx, poly, [], 0, 2, anchorC, m)
-    strokeHatch45(ctx, poly, m.dashdotSmall, 1, 2, anchorC, m)
+    strokeHatch45(ctx, bounds, [], 0, 2, anchorC, m)
+    strokeHatch45(ctx, bounds, m.dashdotSmall, 1, 2, anchorC, m)
   } else woodLong(ctx, a, b, thicknessPx, m)
   ctx.restore()
 }
 
+function seamExempt(wall: Wall, E: Point, walls: Wall[]): Wall | null {
+  const j = jointAt(wall, E, walls)
+  if (!j) return null
+  const i = walls.indexOf(wall)
+  const later = i === -1 ? false : walls.indexOf(j.c) > i
+  return later && !(j.c.type === wall.type && j.c.thicknessCm === wall.thicknessCm) ? j.c : null
+}
+
 function strokeContour(ctx: CanvasRenderingContext2D, wall: Wall, poly: Point[], walls: Wall[]): void {
-  const [aPlus, bMinus, bPlus, aMinus] = poly
   const mergeA = sameTypeJoint(wall, wall.a, walls)
   const mergeB = sameTypeJoint(wall, wall.b, walls)
+  const edges: [Point, Point, boolean, Wall | null][] = [
+    [poly[0], poly[1], false, null],
+    [poly[1], poly[2], mergeB, seamExempt(wall, wall.b, walls)],
+    [poly[2], poly[3], false, null],
+    [poly[3], poly[0], mergeA, seamExempt(wall, wall.a, walls)],
+  ]
   ctx.lineCap = "square"
   ctx.beginPath()
-  ctx.moveTo(aPlus.x, aPlus.y)
-  ctx.lineTo(bMinus.x, bMinus.y)
-  if (mergeB) ctx.moveTo(bPlus.x, bPlus.y)
-  else ctx.lineTo(bPlus.x, bPlus.y)
-  ctx.lineTo(aMinus.x, aMinus.y)
-  if (!mergeA) ctx.lineTo(aPlus.x, aPlus.y)
+  for (const [p1, p2, skip, exempt] of edges) {
+    if (skip) continue
+    for (const [t0, t1] of subtractCovered(p1, p2, walls, wall, exempt ? [exempt] : [])) {
+      ctx.moveTo(p1.x + (p2.x - p1.x) * t0, p1.y + (p2.y - p1.y) * t0)
+      ctx.lineTo(p1.x + (p2.x - p1.x) * t1, p1.y + (p2.y - p1.y) * t1)
+    }
+  }
   ctx.stroke()
   ctx.lineCap = "butt"
 }
@@ -302,13 +348,13 @@ function drawWall(
   m: RenderMetrics,
 ): void {
   const mat = normalizeMaterial(wall.type)
-  const poly = wallShape(wall, walls).map(toScreen)
+  const polys = wallDisplayPolys(wall, walls).map((poly) => poly.map(toScreen))
   ctx.globalAlpha = alpha
   ctx.strokeStyle = INK
   ctx.lineWidth = 1
-  drawMaterial(ctx, mat, poly, toScreen(wall.a), toScreen(wall.b), wall.thicknessCm * k, anchorC, m)
+  drawMaterial(ctx, mat, polys, toScreen(wall.a), toScreen(wall.b), wall.thicknessCm * k, anchorC, m)
   ctx.lineWidth = m.contourPx
-  strokeContour(ctx, wall, poly, walls)
+  strokeContour(ctx, wall, wallShape(wall, walls).map(toScreen), walls)
   ctx.globalAlpha = 1
 }
 
@@ -326,7 +372,7 @@ export function drawPatternPreview(canvas: HTMLCanvasElement, material: Material
     { x: w - 1, y: h - 1 },
     { x: 1, y: h - 1 },
   ]
-  drawMaterial(ctx, material, poly, { x: 1, y: h / 2 }, { x: w - 1, y: h / 2 }, h - 2, 0, SCREEN_METRICS)
+  drawMaterial(ctx, material, [poly], { x: 1, y: h / 2 }, { x: w - 1, y: h / 2 }, h - 2, 0, SCREEN_METRICS)
 }
 
 function drawOutline(
@@ -339,7 +385,7 @@ function drawOutline(
   ctx.strokeStyle = color
   ctx.fillStyle = color
   ctx.lineWidth = OUTLINE_PX * 2
-  tracePolygon(ctx, wallShape(wall, walls).map(toScreen))
+  tracePolygons(ctx, wallDisplayPolys(wall, walls).map((poly) => poly.map(toScreen)))
   ctx.fill()
   ctx.stroke()
 }
