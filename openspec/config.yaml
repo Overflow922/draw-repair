@@ -1,32 +1,59 @@
-schema: spec-driven
+schema: test-gated
 
-# Project context (optional)
-# This is shown to AI when creating artifacts.
-# Add your tech stack, conventions, style guides, domain knowledge, etc.
-# Example:
-#   context: |
-#     Tech stack: TypeScript, React, Node.js
-#     We use conventional commits
-#     Domain: e-commerce platform
+context: |
+  The project uses spec-driven development.
 
-# Per-artifact rules (optional)
-# Add custom rules for specific artifacts.
-# Example:
-#   rules:
-#     proposal:
-#       - Keep proposals under 500 words
-#       - Always include a "Non-goals" section
-#     tasks:
-#       - Break tasks into chunks of max 2 hours
+  Specifications define expected behavior.
 
-# Per-operation guidance (optional)
-# Add advisory guidance for how apply and archive work should be conducted.
-# This is separate from artifact rules above.
-# Example:
-#   operations:
-#     apply:
-#       guidance:
-#         - Keep test summaries concise
-#     archive:
-#       guidance:
-#         - Summarize the archive outcome before finishing
+  Approved tests are contractual and must not be
+  changed by implementation agents.
+
+  Production implementation must adapt to approved tests,
+  not the other way around.
+
+  Test quality is more important than code coverage.
+
+  Prefer observable behavior over implementation details.
+
+  Use mutation testing for critical business logic
+  whenever the project has suitable mutation tooling.
+
+rules:
+  test-plan:
+    - Every important requirement must map to at least one test.
+    - Include boundary and negative cases.
+    - Identify important invariants.
+    - Identify potential surviving mutations.
+
+  test-suite:
+    - Create executable tests, not merely test descriptions.
+    - Do not modify production code.
+    - Do not weaken existing approved tests.
+    - Record every executable test in test-suite.md.
+
+  test-validation:
+    - Use a fresh context.
+    - Do not modify tests or production code.
+    - Be adversarial.
+    - A weak assertion is a validation failure.
+    - A surviving critical mutation is a validation failure.
+    - Always produce an explicit VERDICT.
+
+  tasks:
+    - Do not proceed when test-validation verdict is FAIL.
+    - Reference approved tests in implementation tasks.
+    - Do not include tasks that modify approved tests.
+
+operations:
+  apply:
+    guidance:
+      - Approved tests are read-only during implementation.
+      - Never change a test merely to make it pass.
+      - If an approved test appears incorrect, stop and report it.
+      - Run focused tests before completing each task.
+      - Run the full suite before completing the change.
+
+  archive:
+    guidance:
+      - Do not archive a change with failed test validation.
+      - Do not archive when approved tests were modified after validation.

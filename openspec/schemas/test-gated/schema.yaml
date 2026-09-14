@@ -1,0 +1,398 @@
+name: test-gated
+version: 1
+description: >
+  Spec-driven workflow with independent test design,
+  test writing, adversarial test validation and
+  implementation gates.
+
+artifacts:
+
+  - id: proposal
+    generates: proposal.md
+    description: Change proposal
+    template: proposal.md
+    instruction: |
+      Create the change proposal.
+
+      Clearly describe:
+      - why the change is needed;
+      - what behavior is changing;
+      - affected capabilities;
+      - important constraints.
+
+      Do not define implementation details prematurely.
+    requires: []
+
+  - id: specs
+    generates: "specs/**/*.md"
+    description: Behavioral specification
+    template: spec.md
+    instruction: |
+      Create the behavioral specification.
+
+      The specification is the source of truth for
+      expected system behavior.
+
+      Requirements must describe observable behavior,
+      inputs, outputs, errors, boundaries, invariants,
+      and important state transitions.
+
+      Do not derive expected behavior from the current
+      implementation.
+
+      Do not weaken requirements to match existing code.
+    requires:
+      - proposal
+
+  - id: design
+    generates: design.md
+    description: Technical implementation design
+    template: design.md
+    instruction: |
+      Describe HOW the specification will be implemented.
+
+      The design must not redefine expected behavior.
+
+      Identify:
+      - affected components;
+      - data flow;
+      - integration points;
+      - risks;
+      - backwards compatibility concerns;
+      - migration requirements.
+
+      Do not write implementation code.
+    requires:
+      - proposal
+      - specs
+
+  - id: test-plan
+    generates: test-plan.md
+    description: Test design derived from the specification
+    template: test-plan.md
+    instruction: |
+      Design the test strategy BEFORE implementation.
+
+      Map every important specification scenario
+      to one or more concrete tests.
+
+      For every requirement consider:
+
+      - happy path;
+      - boundary conditions;
+      - invalid input;
+      - negative cases;
+      - authorization/security cases;
+      - state transitions;
+      - important invariants;
+      - integration behavior;
+      - concurrency/race conditions where relevant;
+      - failure and rollback behavior;
+      - backwards compatibility.
+
+      Explicitly identify cases that could pass with
+      a superficially correct but actually broken implementation.
+
+      Do not write production code.
+      Do not modify existing tests.
+    requires:
+      - specs
+      - design
+
+  - id: test-suite
+    generates: test-suite.md
+    description: Executable test suite
+    template: test-suite.md
+
+    instruction: |
+      Act as the Test Writer.
+
+      Your task is to translate test-plan.md into
+      executable tests.
+
+      Read:
+      - proposal.md
+      - specs/
+      - design.md
+      - test-plan.md
+
+      Before writing tests, inspect:
+      - existing test directories;
+      - test configuration;
+      - test framework;
+      - existing fixtures and helpers;
+      - relevant production code.
+
+      You may:
+      - create new test files;
+      - create test fixtures;
+      - create test helpers when required.
+
+      You MUST NOT:
+      - modify production code;
+      - modify specifications;
+      - modify design.md;
+      - weaken existing tests;
+      - change expected behavior to match implementation.
+
+      IMPORTANT:
+
+      test-suite.md is a manifest of REAL executable tests.
+      It is not a plan or a description of future tests.
+
+      For every important scenario in test-plan.md:
+      - create an actual executable test;
+      - give the test a meaningful name;
+      - assert the expected behavior;
+      - map it to the relevant requirement.
+
+      Tests must verify observable behavior.
+
+      Cover, where applicable:
+      - happy paths;
+      - boundaries;
+      - invalid input;
+      - negative cases;
+      - error handling;
+      - state transitions;
+      - important invariants;
+      - authorization/security;
+      - integration behavior.
+
+      Do not write tests that merely execute code.
+
+      Avoid assertions such as:
+      - "does not throw" when a specific result is required;
+      - truthiness checks when an exact value is required;
+      - assertions that accept multiple incorrect outcomes.
+
+      Prefer precise assertions about externally observable behavior.
+
+      Do not mock the system under test itself.
+
+      For new behavior, tests should normally fail before
+      the production implementation exists.
+
+      If a new test unexpectedly passes before implementation,
+      investigate why. Do not modify production code to force
+      the test to fail.
+
+      After writing the tests:
+      1. Run the relevant tests.
+      2. Verify that each test is actually discovered by the test runner.
+      3. Verify that each test contains meaningful assertions.
+      4. Create/update test-suite.md.
+      5. Record every executable test.
+      6. Record unexpected passes.
+      7. Record tests that could not be executed.
+
+      Do not proceed to implementation.
+
+    requires:
+      - test-plan
+
+  - id: test-validation
+    generates: test-validation.md
+    description: Independent adversarial validation of executable tests
+    template: test-validation.md
+
+    instruction: |
+      Act as an independent adversarial Test Validator.
+
+      IMPORTANT:
+      You are reviewing tests, not implementing the feature.
+  
+      Assume that the Test Writer may have made mistakes.
+  
+      Do not trust test-suite.md.
+      Verify the actual executable test files yourself.
+      
+      Read:
+      - proposal.md
+      - specs/
+      - design.md
+      - test-plan.md
+      - test-suite.md
+      - all executable tests
+      - relevant production code
+
+      You MUST NOT modify:
+      - production code;
+      - tests;
+      - fixtures;
+      - specifications;
+      - design.md;
+      - test-plan.md.
+
+      You may create or modify ONLY test-validation.md.
+
+      Check:
+
+      1. Requirement coverage
+      2. Boundary coverage
+      3. Negative cases
+      4. Error handling
+      5. Invariants
+      6. State transitions
+      7. Integration behavior
+      8. Authorization/security where relevant
+      9. Assertion strength
+      10. Implementation independence
+      11. Mocking
+      12. Regression protection
+
+      Ask the following question:
+
+      "Can an incorrect implementation pass all these tests?"
+
+      Try to construct concrete incorrect implementations.
+
+      Consider mutations such as:
+
+      - >= changed to >
+      - > changed to >=
+      - validation removed
+      - error handling removed
+      - wrong return value
+      - authorization check removed
+      - persistence skipped
+      - rollback removed
+      - operation executed twice
+      - state transition skipped
+
+      If mutation testing is available, use it for
+      the changed functionality.
+
+      A surviving critical mutation is a validation failure.
+
+      Do not fix the tests yourself.
+
+      If the test suite is insufficient, explain exactly
+      what is missing.
+      
+      Before giving PASS, verify all of the following:
+
+      - every important requirement has executable coverage;
+      - every important scenario from test-plan.md has coverage;
+      - tests are actually discovered by the test runner;
+      - assertions are strong enough to distinguish correct
+        and incorrect implementations;
+      - important boundary cases are covered;
+      - important negative cases are covered;
+      - critical invariants are tested;
+      - tests do not merely reproduce the implementation;
+      - critical mutations would be detected.
+      
+      PASS means that the test suite provides meaningful
+      regression protection.
+      
+      If any important requirement is insufficiently protected,
+      verdict MUST be FAIL.
+      
+      Do not give PASS because the tests are numerous,
+      because coverage is high, or because all tests are green.
+      
+      Test quantity and code coverage are NOT sufficient
+      evidence of test quality.
+
+      The final line MUST be:
+
+      VERDICT: PASS
+
+      or:
+
+      VERDICT: FAIL
+    requires:
+      - specs
+      - test-plan
+      - test-suite
+
+  - id: tasks
+    generates: tasks.md
+    description: Implementation checklist
+    template: tasks.md
+    instruction: |
+      Create implementation tasks.
+
+      FIRST read test-validation.md.
+
+      The test validation must end with:
+
+      VERDICT: PASS
+
+      If it ends with:
+
+      VERDICT: FAIL
+
+      do NOT create implementation tasks.
+
+      Do not proceed to implementation until
+      test validation passes.
+
+      Every implementation task must reference
+      the relevant specification and approved tests.
+
+      Implementation tasks must modify production code,
+      not approved tests.
+
+      Include a final verification task that runs:
+
+      - approved tests;
+      - full test suite;
+      - type checking;
+      - linting;
+      - relevant integration tests;
+      - mutation testing where configured.
+
+      Every task must use:
+
+      - [ ] X.Y Description
+    requires:
+      - specs
+      - design
+      - test-validation
+
+apply:
+  requires:
+    - tasks
+    - test-validation
+
+  tracks: tasks.md
+
+  instruction: |
+    Implement the approved tasks.
+
+    Before starting, read test-validation.md.
+
+    The validation verdict MUST be:
+
+    VERDICT: PASS
+
+    If it is not PASS, stop.
+
+    Approved tests are immutable.
+
+    Do NOT:
+    - modify approved tests;
+    - delete assertions;
+    - weaken assertions;
+    - broaden expected values;
+    - replace exact assertions with loose assertions;
+    - change test expectations merely to make tests pass.
+
+    If production code does not satisfy a test,
+    fix production code.
+
+    If an approved test appears incorrect,
+    STOP and report the conflict.
+    Do not modify the test.
+
+    Do not perform unrelated refactoring.
+
+    After implementation:
+    - run focused tests;
+    - run integration tests;
+    - run the full test suite;
+    - run type checking;
+    - run linting;
+    - run mutation testing where configured.
