@@ -57,14 +57,6 @@ export function lockedDirection(p: Point, v: Point, walls: Wall[]): Point | null
   return null
 }
 
-export function orthoAxis(p: Point, from: Point): Point {
-  const dx = p.x - from.x
-  const dy = p.y - from.y
-  if (Math.abs(dy) <= ORTHO_TAN * Math.abs(dx)) return { x: p.x, y: from.y }
-  if (Math.abs(dx) <= ORTHO_TAN * Math.abs(dy)) return { x: from.x, y: p.y }
-  return p
-}
-
 export function snap(cursor: Point, walls: Wall[], gridStepCm: number, radiusCm: number, orthoFrom?: Point): Point {
   let best: Point | null = null
   let bestDist = radiusCm
@@ -119,78 +111,6 @@ function bodyGap(p: Point, w: Wall): number {
   return Math.hypot(ds, Math.max(0, dl))
 }
 
-function distToSegment(p: Point, q1: Point, q2: Point): number {
-  const dx = q2.x - q1.x
-  const dy = q2.y - q1.y
-  const len2 = dx * dx + dy * dy
-  if (len2 < EPS) return distance(p, q1)
-  const t = Math.max(0, Math.min(1, ((p.x - q1.x) * dx + (p.y - q1.y) * dy) / len2))
-  return distance(p, { x: q1.x + t * dx, y: q1.y + t * dy })
-}
-
-export function findVertexSnap(
-  p: Point,
-  walls: Wall[],
-  hCm: number,
-): { point: Point; contact: boolean; block: Point | null } | null {
-  let best: { point: Point; d: number; prio: number; block: Point | null } | null = null
-  const consider = (point: Point, d: number, prio: number, block: Point | null = null) => {
-    if (d > hCm) return
-    if (!best || prio < best.prio || (prio === best.prio && d < best.d)) best = { point, d, prio, block }
-  }
-  for (const w of walls) {
-    const dx = w.b.x - w.a.x
-    const dy = w.b.y - w.a.y
-    const len2 = dx * dx + dy * dy
-    if (len2 < EPS) continue
-    const len = Math.sqrt(len2)
-    const u = { x: dx / len, y: dy / len }
-    const n = { x: -u.y, y: u.x }
-    const hW = w.thicknessCm / 2
-    const s = (p.x - w.a.x) * u.x + (p.y - w.a.y) * u.y
-    const d = (p.x - w.a.x) * n.x + (p.y - w.a.y) * n.y
-    const sC = len >= 2 * hCm ? Math.max(hCm, Math.min(len - hCm, s)) : len / 2
-    // ось/торец: курсор на осевой линии в пределах полблока от торца — продолжение
-    if (Math.abs(d) <= hCm) {
-      const capEnd = s >= len / 2 ? w.b : w.a
-      const capDist = distToSegment(p, { x: capEnd.x - n.x * hW, y: capEnd.y - n.y * hW }, { x: capEnd.x + n.x * hW, y: capEnd.y + n.y * hW })
-      if (capDist <= hCm && distance(p, capEnd) <= 2 * hCm) consider(capEnd, capDist, 0)
-    }
-    // грань: курсор в пределах полблока от линии грани — квадрат прилипает краем к грани
-    const faceDist = Math.abs(Math.abs(d) - hW)
-    if (faceDist <= hCm) {
-      const sd = d >= 0 ? 1 : -1
-      const point = { x: w.a.x + u.x * sC + n.x * sd * hW, y: w.a.y + u.y * sC + n.y * sd * hW }
-      if (distance(p, point) <= 2 * hCm) {
-        const block = { x: point.x + n.x * sd * hCm, y: point.y + n.y * sd * hCm }
-        consider(point, faceDist, 0, block)
-      }
-    }
-  }
-  if (best !== null) {
-    const found = best as { point: Point; d: number; prio: number; block: Point | null }
-    return { point: found.point, contact: found.prio === 0, block: found.block }
-  }
-  return null
-}
-
-export function snapVertex(
-  p: Point,
-  walls: Wall[],
-  gridStepCm: number,
-  hCm: number,
-  orthoFrom?: Point,
-): Point {
-  const found = findVertexSnap(p, walls, hCm)
-  if (found) return found.point
-  let q = p
-  if (orthoFrom) q = orthoAxis(p, orthoFrom)
-  return {
-    x: Math.round(q.x / gridStepCm) * gridStepCm,
-    y: Math.round(q.y / gridStepCm) * gridStepCm,
-  }
-}
-
 export function distanceToWall(p: Point, wall: Wall): number {
   return distance(p, projectOnSegment(p, wall))
 }
@@ -199,12 +119,6 @@ export function endpointAt(p: Point, wall: Wall, radiusCm: number): "a" | "b" | 
   if (distance(p, wall.a) <= radiusCm) return "a"
   if (distance(p, wall.b) <= radiusCm) return "b"
   return null
-}
-
-export function handleAt(p: Point, wall: Wall, radiusCm: number): "a" | "b" | "mid" | null {
-  const end = endpointAt(p, wall, radiusCm)
-  if (end) return end
-  return distance(p, { x: (wall.a.x + wall.b.x) / 2, y: (wall.a.y + wall.b.y) / 2 }) <= radiusCm ? "mid" : null
 }
 
 export function segmentIntersectsRect(p1: Point, p2: Point, min: Point, max: Point, pad = 0): boolean {
@@ -271,24 +185,6 @@ export function moveEndpoint(walls: Wall[], wall: Wall, end: "a" | "b", pos: Poi
   wall[end] = pos
   for (const { wall: w, end: e } of attachedEnds(walls, old, wall)) {
     w[e] = { x: pos.x, y: pos.y }
-  }
-}
-
-export function moveWall(walls: Wall[], wall: Wall, delta: Point): void {
-  const { a, b } = wall
-  wall.a = { x: a.x + delta.x, y: a.y + delta.y }
-  wall.b = { x: b.x + delta.x, y: b.y + delta.y }
-  for (const w of walls) {
-    if (w === wall || pointsEqual(w.a, w.b)) continue
-    const tol = jointTol(wall, w) * 1.25
-    const endA = distance(w.a, a) <= tol ? "a" : distance(w.b, a) <= tol ? "b" : null
-    const endB = distance(w.a, b) <= tol ? "a" : distance(w.b, b) <= tol ? "b" : null
-    if (endA) w[endA] = { x: wall.a.x, y: wall.a.y }
-    if (endB) w[endB] = { x: wall.b.x, y: wall.b.y }
-    if (!endA && !endB && axisAttached(w, wall)) {
-      w.a = { x: w.a.x + delta.x, y: w.a.y + delta.y }
-      w.b = { x: w.b.x + delta.x, y: w.b.y + delta.y }
-    }
   }
 }
 
@@ -449,10 +345,6 @@ function nCOf(v: Point): Point {
   return { x: -v.y, y: v.x }
 }
 
-export function pointOn(wall: Wall, t: number): Point {
-  return { x: wall.a.x + (wall.b.x - wall.a.x) * t, y: wall.a.y + (wall.b.y - wall.a.y) * t }
-}
-
 interface EdgeSeg {
   ref: EdgeRef
   p1: Point
@@ -593,159 +485,8 @@ export function dimHitDistance(p: Point, dim: Dimension, walls: Wall[], textFact
   return Math.min(distance(p, foot), distance(p, mid) / textFactor)
 }
 
-export function sameTypeJoint(wall: Wall, E: Point, walls: Wall[]): boolean {
-  const j = jointAt(wall, E, walls)
-  return !!j && j.c.type === wall.type && j.c.thicknessCm === wall.thicknessCm
-}
-
 export function wallShape(wall: Wall, walls: Wall[]): Point[] {
   const capA = endCap(wall, wall.a, dirOf(wall.a, wall.b), walls)
   const capB = endCap(wall, wall.b, dirOf(wall.b, wall.a), walls)
   return [capA.plus, capB.minus, capB.plus, capA.minus]
-}
-
-function clipHalf(poly: Point[], origin: Point, normal: Point, lo: number): Point[] {
-  const out: Point[] = []
-  const val = (p: Point) => (p.x - origin.x) * normal.x + (p.y - origin.y) * normal.y - lo
-  for (let i = 0; i < poly.length; i++) {
-    const a = poly[i]
-    const b = poly[(i + 1) % poly.length]
-    const va = val(a)
-    const vb = val(b)
-    if (va >= 0) out.push(a)
-    if ((va > 0 && vb < 0) || (va < 0 && vb > 0)) {
-      const t = va / (va - vb)
-      out.push({ x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t })
-    }
-  }
-  return out
-}
-
-function isEarlierWall(w: Wall, of: Wall, walls: Wall[]): boolean {
-  const i = walls.indexOf(of)
-  return i === -1 ? true : walls.indexOf(w) < i
-}
-
-export function wallDisplayPolys(wall: Wall, walls: Wall[]): Point[][] {
-  let pieces: Point[][] = [wallShape(wall, walls)]
-  for (const end of [wall.a, wall.b] as const) {
-    const j = jointAt(wall, end, walls)
-    if (!j || !j.corner) continue
-    if (!isEarlierWall(j.c, wall, walls)) continue
-    const c = j.c
-    const dx = c.b.x - c.a.x
-    const dy = c.b.y - c.a.y
-    const lenC = Math.hypot(dx, dy)
-    if (lenC < EPS) continue
-    const uC = { x: dx / lenC, y: dy / lenC }
-    const nC = { x: -uC.y, y: uC.x }
-    const hC = c.thicknessCm / 2
-    const into = dirFromBody(c.a, c.b, j.cEnd)
-    const next: Point[][] = []
-    for (const pc of pieces) {
-      next.push(clipHalf(pc, c.a, nC, hC))
-      next.push(clipHalf(pc, c.a, { x: -nC.x, y: -nC.y }, hC))
-      next.push(clipHalf(pc, j.cEnd, { x: -into.x, y: -into.y }, 0))
-    }
-    pieces = next
-  }
-  return pieces.filter((p) => p.length >= 3)
-}
-
-export function pointInConvex(p: Point, poly: Point[]): boolean {
-  let sign = 0
-  for (let i = 0; i < poly.length; i++) {
-    const a = poly[i]
-    const b = poly[(i + 1) % poly.length]
-    const c = cross({ x: b.x - a.x, y: b.y - a.y }, { x: p.x - a.x, y: p.y - a.y })
-    if (Math.abs(c) < EPS) continue
-    const s = c > 0 ? 1 : -1
-    if (sign === 0) sign = s
-    else if (s !== sign) return false
-  }
-  return true
-}
-
-export function subtractCovered(p1: Point, p2: Point, walls: Wall[], self: Wall, exempt: Wall[]): [number, number][] {
-  const dx = p2.x - p1.x
-  const dy = p2.y - p1.y
-  const len2 = dx * dx + dy * dy
-  if (len2 < EPS) return []
-  const len = Math.sqrt(len2)
-  const du = { x: dx / len, y: dy / len }
-  const hidden: [number, number][] = []
-  const SHAVE = 1e-6
-  const SLACK = 1e-4
-  for (const w of walls) {
-    if (w === self) continue
-    const wx = w.b.x - w.a.x
-    const wy = w.b.y - w.a.y
-    const wlen2 = wx * wx + wy * wy
-    if (wlen2 < EPS) continue
-    const wlen = Math.sqrt(wlen2)
-    const u = { x: wx / wlen, y: wy / wlen }
-    const n = { x: -u.y, y: u.x }
-    const h = w.thicknessCm / 2
-    const rx = p1.x - w.a.x
-    const ry = p1.y - w.a.y
-    const s0 = rx * u.x + ry * u.y
-    const dS = dx * u.x + dy * u.y
-    const l0 = rx * n.x + ry * n.y
-    const dL = dx * n.x + dy * n.y
-    let t0 = 0
-    let t1 = 1
-    const band = (v0: number, dv: number, lo: number, hi: number): boolean => {
-      if (Math.abs(dv) < EPS) return v0 >= lo && v0 <= hi
-      const ta = (lo - v0) / dv
-      const tb = (hi - v0) / dv
-      t0 = Math.max(t0, Math.min(ta, tb))
-      t1 = Math.min(t1, Math.max(ta, tb))
-      return t0 <= t1
-    }
-    if (band(l0, dL, -h + SHAVE, h - SHAVE) && band(s0, dS, SHAVE, wlen - SHAVE) && t1 > t0 && !exempt.includes(w)) {
-      hidden.push([t0, t1])
-    }
-    // край, лежащий прямо на границе однотипной соседки: контакт монолитных стен не рисуется
-    if (w.type === self.type && w.thicknessCm === self.thicknessCm && !exempt.includes(w)) {
-      const hFull = w.thicknessCm / 2
-      const c1 = { x: w.a.x + n.x * hFull, y: w.a.y + n.y * hFull }
-      const c2 = { x: w.b.x + n.x * hFull, y: w.b.y + n.y * hFull }
-      const c3 = { x: w.a.x - n.x * hFull, y: w.a.y - n.y * hFull }
-      const c4 = { x: w.b.x - n.x * hFull, y: w.b.y - n.y * hFull }
-      for (const [q1, q2] of [[c1, c2], [c3, c4], [c1, c3], [c2, c4]] as const) {
-        const qx = q2.x - q1.x
-        const qy = q2.y - q1.y
-        const qlen2 = qx * qx + qy * qy
-        if (qlen2 < EPS) continue
-        const ql = Math.sqrt(qlen2)
-        const qu = { x: qx / ql, y: qy / ql }
-        if (Math.abs(cross(du, qu)) > 1e-6) continue
-        if (Math.abs(cross(qu, { x: p1.x - q1.x, y: p1.y - q1.y })) > SLACK) continue
-        const proj = (p: Point) => ((p.x - q1.x) * qx + (p.y - q1.y) * qy) / qlen2
-        const e1 = proj(p1)
-        const e2 = proj(p2)
-        const lo = Math.max(0, Math.min(e1, e2))
-        const hi = Math.min(1, Math.max(e1, e2))
-        if (hi - lo <= SLACK || Math.abs(e2 - e1) <= SLACK) continue
-        const tA = (lo - e1) / (e2 - e1)
-        const tB = (hi - e1) / (e2 - e1)
-        hidden.push([Math.min(tA, tB), Math.max(tA, tB)])
-      }
-    }
-  }
-  hidden.sort((a, b) => a[0] - b[0])
-  const merged: [number, number][] = []
-  for (const iv of hidden) {
-    const last = merged[merged.length - 1]
-    if (last && iv[0] <= last[1]) last[1] = Math.max(last[1], iv[1])
-    else merged.push([iv[0], iv[1]])
-  }
-  const visible: [number, number][] = []
-  let cursor = 0
-  for (const [a, b] of merged) {
-    if (a > cursor) visible.push([cursor, a])
-    cursor = Math.max(cursor, b)
-  }
-  if (cursor < 1) visible.push([cursor, 1])
-  return visible
 }

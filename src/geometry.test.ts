@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { dimensionOffsetAt, dimGeometry, lockedDirection, dimHitDistance, dimLevelSnap, dimPointPoint, endpointAt, handleAt, hitWall, jointedWalls, moveEndpoint, moveWall, moveWalls, nearestEdgeIntersection, pointInConvex, pointOn, pointsEqual, sameTypeJoint, segmentIntersectsRect, snap, snapVertex, subtractCovered, visibleWorld, wallDisplayPolys, wallShape, zoomAt } from "./geometry"
+import { dimensionOffsetAt, dimGeometry, lockedDirection, dimHitDistance, dimLevelSnap, dimPointPoint, endpointAt, hitWall, jointedWalls, moveEndpoint, moveWalls, nearestEdgeIntersection, pointsEqual, segmentIntersectsRect, snap, visibleWorld, wallShape, zoomAt } from "./geometry"
 import type { Dimension, Point, Wall } from "./types"
 
 const GRID = 10
@@ -152,20 +152,6 @@ describe("endpointAt", () => {
   })
 })
 
-describe("handleAt", () => {
-  it("попадает в середину стены", () => {
-    expect(handleAt({ x: 52, y: 3 }, wall(0, 0, 100, 0), 6)).toBe("mid")
-  })
-
-  it("конец имеет приоритет над серединой на короткой стене", () => {
-    expect(handleAt({ x: 6, y: 0 }, wall(0, 0, 10, 0), 6)).toBe("a")
-  })
-
-  it("не попадает вне радиуса", () => {
-    expect(handleAt({ x: 50, y: 8 }, wall(0, 0, 100, 0), 6)).toBeNull()
-  })
-})
-
 describe("moveEndpoint", () => {
   it("перемещает конец стены", () => {
     const w = wall(0, 0, 100, 0)
@@ -207,49 +193,6 @@ describe("moveEndpoint", () => {
     moveEndpoint([w1, w2], w2, "a", { x: 110, y: 0 })
     expect(w2.a).toEqual({ x: 110, y: 0 })
     expect(w1.b).toEqual({ x: 110, y: 0 })
-  })
-})
-
-describe("moveWall", () => {
-  it("смещает оба конца на вектор", () => {
-    const w = wall(0, 0, 100, 0)
-    moveWall([w], w, { x: 10, y: 20 })
-    expect(w.a).toEqual({ x: 10, y: 20 })
-    expect(w.b).toEqual({ x: 110, y: 20 })
-  })
-
-  it("тянет приваренные концы соседних стен", () => {
-    const w1 = wall(0, 0, 100, 0)
-    const w2 = wall(100, 0, 100, 100)
-    const w3 = wall(200, 0, 200, 100)
-    moveWall([w1, w2, w3], w1, { x: 10, y: 0 })
-    expect(w2.a).toEqual({ x: 110, y: 0 })
-    expect(w2.b).toEqual({ x: 100, y: 100 })
-    expect(w3.a).toEqual({ x: 200, y: 0 })
-  })
-
-  it("не изменяет несвязанные стены", () => {
-    const w1 = wall(0, 0, 100, 0)
-    const w2 = wall(200, 0, 200, 100)
-    moveWall([w1, w2], w1, { x: 10, y: 0 })
-    expect(w2.a).toEqual({ x: 200, y: 0 })
-    expect(w2.b).toEqual({ x: 200, y: 100 })
-  })
-
-  it("приваривает соседа в допуске вершины стыка", () => {
-    const w1 = wall(0, 0, 100, 0)
-    const w2 = wall(90, 0, 90, 80)
-    moveWall([w1, w2], w1, { x: 10, y: 0 })
-    expect(w2.a).toEqual({ x: 110, y: 0 })
-    expect(w2.b).toEqual({ x: 90, y: 80 })
-  })
-
-  it("T-примыкание следует целиком", () => {
-    const w1 = wall(0, 0, 100, 0)
-    const w2 = wall(50, 0, 50, 60)
-    moveWall([w1, w2], w1, { x: 10, y: 0 })
-    expect(w2.a).toEqual({ x: 60, y: 0 })
-    expect(w2.b).toEqual({ x: 60, y: 60 })
   })
 })
 
@@ -333,75 +276,10 @@ describe("segmentIntersectsRect", () => {
   })
 })
 
-describe("snapVertex", () => {
+describe("lockedDirection", () => {
   const w40 = (ax: number, ay: number, bx: number, by: number, id = "w40"): Wall => ({
     ...wall(ax, ay, bx, by, id),
     thicknessCm: 40,
-  })
-
-  it("T-контакт: конец стены поднимается заподлицо с гранью", () => {
-    const a = w40(0, 0, 200, 0)
-    // курсор чуть ниже нижней грани a
-    expect(snapVertex({ x: 100, y: 26 }, [a], 10, 20)).toEqual({ x: 100, y: 20 })
-  })
-
-  it("T-контакт с другой стороны — верхняя грань", () => {
-    const a = w40(0, 0, 200, 0)
-    expect(snapVertex({ x: 100, y: -26 }, [a], 10, 20)).toEqual({ x: 100, y: -20 })
-  })
-
-  it("угловой контакт: старт у торца смещает ось на грань с совмещением наружных граней", () => {
-    const a = w40(200, 200, 350, 200)
-    // клик чуть ниже и правее конца стены A, у её грани
-    expect(snapVertex({ x: 355, y: 230 }, [a], 10, 20)).toEqual({ x: 330, y: 220 })
-  })
-
-  it("коллинеарное продолжение: вершина в плоскости торца на оси", () => {
-    const a = w40(0, 0, 250, 0)
-    expect(snapVertex({ x: 250, y: 0 }, [a], 10, 20)).toEqual({ x: 250, y: 0 })
-  })
-
-  it("конец у торца: продолжение по оси, дальше — свободная установка", () => {
-    const a = w40(0, 0, 250, 0)
-    expect(snapVertex({ x: 260, y: -10 }, [a], 10, 20)).toEqual({ x: 250, y: 0 })
-    expect(snapVertex({ x: 300, y: -10 }, [a], 10, 20)).toEqual({ x: 300, y: -10 })
-  })
-
-  it("старт в середине стены прилипает к её грани (T-старт)", () => {
-    const a = w40(0, 0, 200, 0)
-    expect(snapVertex({ x: 100, y: 0 }, [a], 10, 20)).toEqual({ x: 100, y: 20 })
-  })
-
-  it("контакт побеждает сетку у курсора на оси", () => {
-    const a = w40(0, 0, 200, 0)
-    const r = snapVertex({ x: 100, y: 4 }, [a], 10, 20)
-    expect(r).toEqual({ x: 100, y: 20 })
-  })
-
-  it("вне радиуса — привязка к сетке", () => {
-    expect(snapVertex({ x: 303, y: 296 }, [w40(0, 0, 200, 0)], 10, 20)).toEqual({ x: 300, y: 300 })
-  })
-
-  it("без направления квадрат липнет к грани у торца", () => {
-    // клик на осевой линии у торца — продолжение
-    expect(snapVertex({ x: 248, y: 2 }, [w40(0, 0, 250, 0)], 10, 20)).toEqual({ x: 250, y: 0 })
-  })
-
-  it("старт рядом со стеной липнет к её грани — без зазора в полтолщины", () => {
-    const a = wall(200, 200, 350, 200)
-    // клик в 7.5 см ниже конца стены: вне радиуса от оси, но квадрат краем касается грани
-    expect(snapVertex({ x: 351, y: 217.5 }, [a], 10, 10)).toEqual({ x: 340, y: 210 })
-  })
-
-  it("без направления в середине стены квадрат прилипает к ближайшей грани", () => {
-    expect(snapVertex({ x: 125, y: 5 }, [w40(0, 0, 250, 0)], 10, 20)).toEqual({ x: 125, y: 20 })
-  })
-
-  it("кейс из хранилища: клик в узел сетки в полтолщины от грани — прилипание к грани", () => {
-    // стена пользователя: (-260,-80)->(60,-80), толщина 20, грань y=-70
-    const a = wall(-260, -80, 60, -80, "a")
-    // клик в узел сетки (-50,-60): квадрат коснулся грани краем — ось встаёт НА грань
-    expect(snapVertex({ x: -50, y: -60 }, [a], 10, 10)).toEqual({ x: -50, y: -70 })
   })
 
   it("направление от грани фиксируется точно перпендикулярно", () => {
@@ -412,16 +290,6 @@ describe("snapVertex", () => {
     expect(locked?.y).toBe(1)
     // дальняя от стены точка не фиксирует направление
     expect(lockedDirection({ x: 340, y: 400 }, { x: 0.085, y: 0.996 }, [a])).toBeNull()
-  })
-
-  it("старт на грани при тяге к стене не перепрыгивает на другую грань", () => {
-    const a = w40(200, 200, 350, 200)
-    expect(snapVertex({ x: 275, y: 220 }, [a], 10, 20)).toEqual({ x: 275, y: 220 })
-  })
-
-  it("коллинейная тяга: курсор на оси у торца — ось стартует в плоскости торца", () => {
-    const a = w40(200, 200, 350, 200)
-    expect(snapVertex({ x: 350, y: 200 }, [a], 10, 20)).toEqual({ x: 350, y: 200 })
   })
 })
 
@@ -444,131 +312,6 @@ describe("прилипание даёт чистые прямоугольник�
       { x: 250, y: 160 },
       { x: 250, y: 20 },
     ])
-  })
-})
-
-describe("sameTypeJoint", () => {
-  it("одинаковые стены под 90°: сливаются, шов не рисуется", () => {
-    const a = wall(0, 0, 100, 0)
-    const b = wall(100, 0, 100, 80)
-    expect(sameTypeJoint(a, a.b, [a, b])).toBe(true)
-    expect(sameTypeJoint(b, b.a, [a, b])).toBe(true)
-  })
-
-  it("разный материал — стык рисуется", () => {
-    const a = wall(0, 0, 100, 0)
-    const b = wall(100, 0, 100, 80)
-    b.type = "concrete"
-    expect(sameTypeJoint(a, a.b, [a, b])).toBe(false)
-  })
-
-  it("разная толщина — стык рисуется", () => {
-    const a = wall(0, 0, 100, 0)
-    const b = wall(100, 0, 100, 80)
-    b.thicknessCm = 40
-    expect(sameTypeJoint(a, a.b, [a, b])).toBe(false)
-  })
-
-  it("Т-стык одного типа слияется, у сквозной соседа на конце нет", () => {
-    const through = wall(0, 0, 100, 0)
-    const incoming = wall(50, 0, 50, -40)
-    expect(sameTypeJoint(incoming, incoming.a, [through, incoming])).toBe(true)
-    expect(sameTypeJoint(through, through.a, [through, incoming])).toBe(false)
-    expect(sameTypeJoint(through, through.b, [through, incoming])).toBe(false)
-  })
-
-  it("острый угол 20°: один тип сливается", () => {
-    const a = wall(0, 0, 100, 0)
-    const b = wall(0, 0, 100 * Math.cos((20 * Math.PI) / 180), 100 * Math.sin((20 * Math.PI) / 180))
-    expect(sameTypeJoint(a, a.a, [a, b])).toBe(true)
-    expect(sameTypeJoint(b, b.a, [a, b])).toBe(true)
-  })
-
-  it("коллинеарные одного типа сливаются", () => {
-    const a = wall(0, 0, 100, 0)
-    const b = wall(100, 0, 60, 0)
-    expect(sameTypeJoint(a, a.b, [a, b])).toBe(true)
-  })
-
-  it("три стены в одной вершине — без слияния", () => {
-    const a = wall(0, 0, 100, 0)
-    const b = wall(100, 0, 100, 80)
-    const c = wall(100, 0, 170.71, 70.71)
-    expect(sameTypeJoint(a, a.b, [a, b, c])).toBe(false)
-  })
-
-  it("свободный конец — без слияния", () => {
-    const a = wall(0, 0, 100, 0)
-    expect(sameTypeJoint(a, a.a, [a])).toBe(false)
-    expect(sameTypeJoint(a, a.b, [a])).toBe(false)
-  })
-})
-
-describe("полигоны отрисовки и заливка клина", () => {
-  it("у чисто уложенных стен — один прямоугольник без разбиения", () => {
-    const a: Wall = { ...wall(0, 0, 250, 0, "a"), thicknessCm: 40 }
-    const b: Wall = { ...wall(230, 20, 230, 160, "b"), thicknessCm: 40 }
-    const walls = [a, b]
-    expect(wallDisplayPolys(a, walls)).toEqual([wallShape(a, walls)])
-    expect(wallDisplayPolys(b, walls)).toEqual([wallShape(b, walls)])
-  })
-
-  it("легаси-угол 90°: наложение вырезано, зазор и тело покрыты", () => {
-    const a = wall(0, 0, 100, 0, "a")
-    const b = wall(100, 0, 100, 80, "b")
-    const walls = [a, b]
-    const polys = wallDisplayPolys(b, walls)
-    expect(polys.length).toBeGreaterThan(1)
-    const inAny = (p: Point) => polys.some((poly) => pointInConvex(p, poly))
-    expect(inAny({ x: 95, y: 0 })).toBe(false)
-    expect(inAny({ x: 105, y: 5 })).toBe(true)
-    expect(inAny({ x: 105, y: 40 })).toBe(true)
-  })
-
-  it("клин заливки попадает в позднюю стену", () => {
-    const a = wall(0, 0, 100, 0, "a")
-    const b = wall(100, 0, 100, 80, "b")
-    expect(hitWall({ x: 109, y: -9 }, [a, b], 6)?.id).toBe("b")
-  })
-})
-
-describe("subtractCovered", () => {
-  it("ребро, проходящее сквозь тело соседа, рисуется кусками", () => {
-    const a = wall(0, 0, 100, 0, "a")
-    const b = wall(100, 0, 100, 80, "b")
-    const segs = subtractCovered({ x: 90, y: -30 }, { x: 90, y: 80 }, [a, b], b, [])
-    expect(segs.length).toBe(2)
-    expect(segs[0][0]).toBeCloseTo(0)
-    expect(segs[0][1]).toBeCloseTo(20 / 110, 3)
-    expect(segs[1][0]).toBeCloseTo(40 / 110, 3)
-    expect(segs[1][1]).toBeCloseTo(1)
-  })
-
-  it("шов разных типов у поздней соседки не скрывается", () => {
-    const a = wall(0, 0, 100, 0, "a")
-    const b: Wall = { ...wall(100, 0, 100, 80, "b"), type: "concrete" }
-    const segs = subtractCovered({ x: 100, y: -10 }, { x: 100, y: 10 }, [a, b], a, [b])
-    expect(segs).toEqual([[0, 1]])
-  })
-
-  it("контакт однотипных стен заподлицо не рисуется", () => {
-    const v = wall(150, 100, 150, 250, "v")
-    const h2 = wall(160, 240, 260, 240, "h")
-    const capSegs = subtractCovered({ x: 160, y: 230 }, { x: 160, y: 250 }, [v, h2], h2, [])
-    expect(capSegs).toEqual([])
-    const faceSegs = subtractCovered({ x: 160, y: 100 }, { x: 160, y: 250 }, [v, h2], v, [])
-    expect(faceSegs).toEqual([[0, 130 / 150]])
-    const h3: Wall = { ...wall(160, 240, 260, 240, "h3"), type: "concrete" }
-    expect(subtractCovered({ x: 160, y: 230 }, { x: 160, y: 250 }, [v, h3], h3, [])).toEqual([[0, 1]])
-  })
-})
-
-describe("pointOn", () => {
-  it("pointOn интерполирует точку вдоль оси", () => {
-    const w = wall(0, 0, 100, 40)
-    expect(pointOn(w, 0)).toEqual({ x: 0, y: 0 })
-    expect(pointOn(w, 0.5)).toEqual({ x: 50, y: 20 })
-    expect(pointOn(w, 1)).toEqual({ x: 100, y: 40 })
   })
 })
 
@@ -894,8 +637,6 @@ describe("wallShape", () => {
       { x: 93, y: -80 },
       { x: 93, y: 10 },
     ])
-    expect(sameTypeJoint(a, a.b, [a, b])).toBe(true)
-    expect(sameTypeJoint(b, b.a, [a, b])).toBe(true)
   })
 
   it("коллинеарные с зазором меньше полутолщины: торцы сведены", () => {
