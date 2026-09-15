@@ -1,13 +1,14 @@
 import "./style.css"
 import { cloneScene, drawingHistory, loadHistory, record, recordSnapshot, redoEntry, saveHistory, undoEntry } from "./history"
 import type { Scene } from "./history"
-import { dimGeometry, dimHitDistance, dimLevelSnap, dimensionOffsetAt, distanceToWall, endpointAt, findVertexSnap, hitWall, lockedDirection, moveEndpoint, moveWalls, nearestEdgeIntersection, dimPointPoint, orthoAxis, pointsEqual, segmentIntersectsRect, snap, snapOthers, zoomAt } from "./geometry"
+import { dimGeometry, dimHitDistance, dimLevelSnap, dimensionOffsetAt, distanceToWall, endpointAt, hitWall, lockedDirection, moveEndpoint, moveWalls, nearestEdgeIntersection, dimPointPoint, pointsEqual, segmentIntersectsRect, snap, snapOthers, zoomAt } from "./geometry"
 import type { DimGeometry } from "./geometry"
+import { snapRadiusCm, snapVertex } from "./wall-geometry"
 import { drawPatternPreview, render } from "./render"
 import { availableFormats, exportDrawing, PAGE_FORMATS_MM } from "./export/pdf"
 import type { PageFormat } from "./export/pdf"
 import { loadStore, saveStore } from "./storage"
-import { GRID_STEP_CM, MATERIALS, PX_PER_CM, SNAP_RADIUS_PX } from "./types"
+import { GRID_STEP_CM, MATERIALS, PX_PER_CM } from "./types"
 import type { Dimension, DimPoint, Drawing, Material, Point, Unit, View, Wall } from "./types"
 
 const canvas = document.querySelector<HTMLCanvasElement>("#canvas")!
@@ -46,7 +47,7 @@ let dimensions: Dimension[] = current().dimensions
 let chainStart: Point | null = null
 let cursor: Point | null = null
 let cursorV: Point | null = null
-let squareBlock: Point | null = null
+let snapNormal: Point | null = null
 let thicknessCm = 20
 let wallMaterial: Material = "brick"
 let unit: Unit = "mm"
@@ -74,7 +75,7 @@ const emptyDraft = (): { a: DimPoint | null; b: DimPoint | null } => ({ a: null,
 
 const endPoint = (end: DimPoint): Point | null => dimPointPoint(end, walls)
 
-const radiusCm = (): number => SNAP_RADIUS_PX / (PX_PER_CM * view.zoom)
+const radiusCm = (): number => snapRadiusCm(view.zoom)
 
 const pushRecord = (): void => {
   nudgeBurst = false
@@ -249,7 +250,11 @@ function redraw(): void {
   let square: { at: Point; dir: Point | null; size: number } | null = null
   if (tool === "wall" && cursor) {
     if (chainStart && p && cursorV) square = { at: { x: p.x - cursorV.x * thicknessCm, y: p.y - cursorV.y * thicknessCm }, dir: cursorV, size: thicknessCm }
-    else if (!chainStart) square = { at: squareBlock ?? cursor, dir: null, size: thicknessCm }
+    else if (!chainStart) {
+      // квадрат установки снаружи тела стены: центр на полтолщины от грани по наружной нормали
+      const at = snapNormal ? { x: cursor.x + (snapNormal.x * thicknessCm) / 2, y: cursor.y + (snapNormal.y * thicknessCm) / 2 } : cursor
+      square = { at, dir: null, size: thicknessCm }
+    }
   }
   render(canvas, walls, previewWall, unit, view, selectedWalls, {
     hover: target.wall,
@@ -346,47 +351,30 @@ function toWorld(e: MouseEvent): Point {
 }
 
 function toSnappedPoint(e: MouseEvent): Point {
-  return snap(toWorld(e), walls, GRID_STEP_CM, SNAP_RADIUS_PX / (PX_PER_CM * view.zoom), ortho ? (chainStart ?? undefined) : undefined)
+  return snap(toWorld(e), walls, GRID_STEP_CM, radiusCm(), ortho ? (chainStart ?? undefined) : undefined)
 }
 
 function updateWallCursor(e: MouseEvent): void {
   const raw = toWorld(e)
+  // единый снаппер для обеих вершин цепочки: стены -> орто -> сетка (design D1/D5)
+  const r = snapVertex(raw, walls, snapRadiusCm(view.zoom), GRID_STEP_CM, thicknessCm, chainStart && ortho ? chainStart : undefined)
+  cursor = r.point
+  snapNormal = r.normal ?? null
   if (!chainStart) {
-    // старт ещё не зафиксирован: квадрат липнет к грани или торцу
     cursorV = null
-    const found = findVertexSnap(raw, walls, thicknessCm / 2)
-    if (found) {
-      cursor = found.point
-      squareBlock = found.block
-    } else {
-      cursor = { x: Math.round(raw.x / GRID_STEP_CM) * GRID_STEP_CM, y: Math.round(raw.y / GRID_STEP_CM) * GRID_STEP_CM }
-      squareBlock = null
-    }
     return
   }
-  // старт зафиксирован кликом — его координаты больше не меняются
-  const dx = raw.x - chainStart.x
-  const dy = raw.y - chainStart.y
+  // старт зафиксирован кликом — его координаты больше не меняются;
+  // направление для точной длины: блокировка осью стены, иначе свободное/осевое
+  const dx = r.point.x - chainStart.x
+  const dy = r.point.y - chainStart.y
   const len = Math.hypot(dx, dy)
   let v = len > 1e-9 ? { x: dx / len, y: dy / len } : null
   if (v) {
-    // начало касается стены — направление фиксируется точно вдоль/поперёк её оси
     const locked = lockedDirection(chainStart, v, walls)
     if (locked) v = locked
   }
   cursorV = v
-  const found = findVertexSnap(raw, walls, thicknessCm / 2)
-  if (found) {
-    // свободный конец липнет к стенам, пока не зафиксирован
-    cursor = found.point
-  } else if (v) {
-    const proj = dx * v.x + dy * v.y
-    cursor = { x: chainStart.x + v.x * proj, y: chainStart.y + v.y * proj }
-  } else {
-    let q = raw
-    if (ortho) q = orthoAxis(q, chainStart)
-    cursor = { x: Math.round(q.x / GRID_STEP_CM) * GRID_STEP_CM, y: Math.round(q.y / GRID_STEP_CM) * GRID_STEP_CM }
-  }
 }
 
 function commitPoint(): void {
@@ -665,8 +653,11 @@ canvas.addEventListener("click", (e) => {
     return
   }
   if (!chainStart) {
-    // клик по телу стены — выделение; клик снаружи (по прилипшему квадрату) — рисование
-    const hit = hitWall(raw, walls, radiusCm())
+    // клик в зоне торца существующей стены начинает цепочку от стыка —
+    // выделение работает только вне зон торцов (иначе цепочку не продолжить)
+    const snap = snapVertex(raw, walls, radiusCm(), GRID_STEP_CM, thicknessCm)
+    const onJoint = snap.source === "wall" && walls.some((w) => pointsEqual(w.a, snap.point) || pointsEqual(w.b, snap.point))
+    const hit = onJoint ? null : hitWall(raw, walls, radiusCm())
     if (hit) {
       selectWall(hit)
       return

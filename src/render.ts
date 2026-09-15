@@ -1,5 +1,6 @@
-import { dimGeometry, dimPointPoint, jointAt, sameTypeJoint, subtractCovered, visibleWorld, wallDisplayPolys, wallShape } from "./geometry"
+import { dimGeometry, dimPointPoint, visibleWorld } from "./geometry"
 import type { DimGeometry } from "./geometry"
+import { contourSegments, displayPolygons } from "./wall-geometry"
 import { GRID_STEP_CM, PX_PER_CM, normalizeMaterial } from "./types"
 import type { Dimension, Material, Point, Unit, View, Wall } from "./types"
 
@@ -307,31 +308,14 @@ function drawMaterial(
   ctx.restore()
 }
 
-function seamExempt(wall: Wall, E: Point, walls: Wall[]): Wall | null {
-  const j = jointAt(wall, E, walls)
-  if (!j) return null
-  const i = walls.indexOf(wall)
-  const later = i === -1 ? false : walls.indexOf(j.c) > i
-  return later && !(j.c.type === wall.type && j.c.thicknessCm === wall.thicknessCm) ? j.c : null
-}
-
-function strokeContour(ctx: CanvasRenderingContext2D, wall: Wall, poly: Point[], walls: Wall[]): void {
-  const mergeA = sameTypeJoint(wall, wall.a, walls)
-  const mergeB = sameTypeJoint(wall, wall.b, walls)
-  const edges: [Point, Point, boolean, Wall | null][] = [
-    [poly[0], poly[1], false, null],
-    [poly[1], poly[2], mergeB, seamExempt(wall, wall.b, walls)],
-    [poly[2], poly[3], false, null],
-    [poly[3], poly[0], mergeA, seamExempt(wall, wall.a, walls)],
-  ]
+function strokeContour(ctx: CanvasRenderingContext2D, wall: Wall, walls: Wall[], toScreen: (p: Point) => Point): void {
   ctx.lineCap = "square"
   ctx.beginPath()
-  for (const [p1, p2, skip, exempt] of edges) {
-    if (skip) continue
-    for (const [t0, t1] of subtractCovered(p1, p2, walls, wall, exempt ? [exempt] : [])) {
-      ctx.moveTo(p1.x + (p2.x - p1.x) * t0, p1.y + (p2.y - p1.y) * t0)
-      ctx.lineTo(p1.x + (p2.x - p1.x) * t1, p1.y + (p2.y - p1.y) * t1)
-    }
+  for (const { p1, p2 } of contourSegments(wall, walls)) {
+    const s1 = toScreen(p1)
+    const s2 = toScreen(p2)
+    ctx.moveTo(s1.x, s1.y)
+    ctx.lineTo(s2.x, s2.y)
   }
   ctx.stroke()
   ctx.lineCap = "butt"
@@ -348,13 +332,13 @@ function drawWall(
   m: RenderMetrics,
 ): void {
   const mat = normalizeMaterial(wall.type)
-  const polys = wallDisplayPolys(wall, walls).map((poly) => poly.map(toScreen))
+  const polys = displayPolygons(wall, walls).map((poly) => poly.map(toScreen))
   ctx.globalAlpha = alpha
   ctx.strokeStyle = INK
   ctx.lineWidth = 1
   drawMaterial(ctx, mat, polys, toScreen(wall.a), toScreen(wall.b), wall.thicknessCm * k, anchorC, m)
   ctx.lineWidth = m.contourPx
-  strokeContour(ctx, wall, wallShape(wall, walls).map(toScreen), walls)
+  strokeContour(ctx, wall, walls, toScreen)
   ctx.globalAlpha = 1
 }
 
@@ -385,7 +369,7 @@ function drawOutline(
   ctx.strokeStyle = color
   ctx.fillStyle = color
   ctx.lineWidth = OUTLINE_PX * 2
-  tracePolygons(ctx, wallDisplayPolys(wall, walls).map((poly) => poly.map(toScreen)))
+  tracePolygons(ctx, displayPolygons(wall, walls).map((poly) => poly.map(toScreen)))
   ctx.fill()
   ctx.stroke()
 }

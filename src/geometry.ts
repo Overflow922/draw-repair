@@ -1,6 +1,9 @@
 import { ZOOM_MAX, ZOOM_MIN } from "./types"
 import type { Dimension, DimPoint, EdgeRef, Point, View, Wall } from "./types"
 
+// попадание курсора — канонический расчёт по отображаемой форме (design D1)
+export { hitWall } from "./wall-geometry"
+
 const EPS = 1e-6
 
 export function zoomAt(view: View, factor: number, anchor: Point, pxPerCm: number): View {
@@ -186,34 +189,6 @@ export function snapVertex(
     x: Math.round(q.x / gridStepCm) * gridStepCm,
     y: Math.round(q.y / gridStepCm) * gridStepCm,
   }
-}
-
-export function hitWall(p: Point, walls: Wall[], toleranceCm: number): Wall | null {
-  let best: Wall | null = null
-  let bestDist = Infinity
-  for (const w of walls) {
-    const d = distanceToWall(p, w)
-    if (d <= Math.max(w.thicknessCm / 2, toleranceCm) && d < bestDist) {
-      best = w
-      bestDist = d
-    }
-  }
-  if (best) return best
-  // fallback: зона залива за пределами полосы (угловое примыкание), принадлежит поздней стене
-  for (let i = walls.length - 1; i >= 0; i--) {
-    const w = walls[i]
-    if (pointsEqual(w.a, w.b) || inBand(p, w)) continue
-    if (!pointInConvex(p, wallShape(w, walls))) continue
-    let covered = false
-    for (let k = 0; k < i; k++) {
-      if (jointedWalls(w, walls[k]) && pointInConvex(p, wallShape(walls[k], walls))) {
-        covered = true
-        break
-      }
-    }
-    if (!covered) return w
-  }
-  return null
 }
 
 export function distanceToWall(p: Point, wall: Wall): number {
@@ -689,17 +664,6 @@ export function pointInConvex(p: Point, poly: Point[]): boolean {
     else if (s !== sign) return false
   }
   return true
-}
-
-function inBand(p: Point, w: Wall): boolean {
-  const dx = w.b.x - w.a.x
-  const dy = w.b.y - w.a.y
-  const len2 = dx * dx + dy * dy
-  if (len2 < EPS) return false
-  const len = Math.sqrt(len2)
-  const s = ((p.x - w.a.x) * dx + (p.y - w.a.y) * dy) / len2
-  const lat = ((p.x - w.a.x) * -dy + (p.y - w.a.y) * dx) / len
-  return s >= 0 && s <= 1 && Math.abs(lat) <= w.thicknessCm / 2
 }
 
 export function subtractCovered(p1: Point, p2: Point, walls: Wall[], self: Wall, exempt: Wall[]): [number, number][] {
