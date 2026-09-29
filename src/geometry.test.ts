@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { dimensionOffsetAt, dimGeometry, lockedDirection, dimHitDistance, dimLevelSnap, dimPointPoint, endpointAt, hitWall, jointedWalls, moveEndpoint, moveWalls, nearestEdgeIntersection, pointsEqual, segmentIntersectsRect, snap, visibleWorld, wallShape, zoomAt } from "./geometry"
+import { dimensionOffsetAt, dimGeometry, lockedDirection, dimHitDistance, dimLevelSnap, dimPointPoint, endpointAt, hitWall, jointedWalls, moveEndpoint, moveWalls, nearestEdgeIntersection, pointsEqual, segmentIntersectsRect, snap, snapOthers, visibleWorld, wallShape, zoomAt } from "./geometry"
 import type { Dimension, Point, Wall } from "./types"
 
 const GRID = 10
@@ -208,12 +208,102 @@ describe("moveWalls", () => {
     expect(far.b).toEqual({ x: 300, y: 100 })
   })
 
-  it("приваривает стыковой конец соседа к точному новому концу группы", () => {
+  it("MV-2: стыковой конец соседа смещается тем же вектором, что и группа", () => {
     const g1 = wall(0, 0, 100, 0, "g1")
     const n = wall(105, 0, 105, 80, "n")
     moveWalls([g1, n], [g1], { x: 10, y: 0 })
-    expect(n.a).toEqual({ x: 110, y: 0 })
+    expect(n.a).toEqual({ x: 115, y: 0 })
     expect(n.b).toEqual({ x: 105, y: 80 })
+    expect(g1.b).toEqual({ x: 110, y: 0 })
+    expect(Math.hypot(n.a.x - g1.b.x, n.a.y - g1.b.y)).toBeCloseTo(5)
+  })
+
+  it("MV-3: присадка стыка сохраняется — смещение осей до и после перемещения равно", () => {
+    const g1 = wall(0, 0, 100, 0, "g1")
+    const n = wall(105, 0, 105, 80, "n")
+    const before = { x: n.a.x - g1.b.x, y: n.a.y - g1.b.y }
+    moveWalls([g1, n], [g1], { x: 10, y: 0 })
+    const after = { x: n.a.x - g1.b.x, y: n.a.y - g1.b.y }
+    expect(after).toEqual(before)
+    expect(after).toEqual({ x: 5, y: 0 })
+  })
+
+  it("MV-3b: порядок стен в массиве не влияет на результат перемещения", () => {
+    const a1 = [wall(0, 0, 100, 0, "g1"), wall(105, 0, 105, 80, "n")]
+    moveWalls(a1, [a1[0]], { x: 10, y: 0 })
+    const a2 = [wall(105, 0, 105, 80, "n"), wall(0, 0, 100, 0, "g1")]
+    moveWalls(a2, [a2[1]], { x: 10, y: 0 })
+    expect(a2[0].a).toEqual(a1[1].a)
+    expect(a2[0].b).toEqual(a1[1].b)
+    expect(a2[1].a).toEqual(a1[0].a)
+  })
+
+  it("MV-B1: конец соседа ровно на границе допуска привязан и смещается тем же вектором", () => {
+    const g1 = wall(0, 0, 100, 0, "g1")
+    const n = wall(112.5, 0, 112.5, 80, "n")
+    moveWalls([g1, n], [g1], { x: 10, y: 0 })
+    expect(n.a).toEqual({ x: 122.5, y: 0 })
+    expect(n.b).toEqual({ x: 112.5, y: 80 })
+  })
+
+  it("MV-B2: конец соседа чуть за границей допуска не смещается", () => {
+    // граница допуска — диагональ угла 10√2 ≈ 14.14 (change wall-move-face-joints)
+    const g1 = wall(0, 0, 100, 0, "g1")
+    const n = wall(114.5, 0, 114.5, 80, "n")
+    moveWalls([g1, n], [g1], { x: 10, y: 0 })
+    expect(n.a).toEqual({ x: 114.5, y: 0 })
+    expect(n.b).toEqual({ x: 114.5, y: 80 })
+  })
+
+  it("MV-B3: при точном совпадении осей стык остаётся точным совпадением", () => {
+    const g1 = wall(0, 0, 100, 0, "g1")
+    const n = wall(100, 0, 100, 80, "n")
+    moveWalls([g1, n], [g1], { x: 10, y: 0 })
+    expect(n.a).toEqual({ x: 110, y: 0 })
+    expect(g1.b).toEqual({ x: 110, y: 0 })
+  })
+
+  it("MV-N1: сосед не смещается, когда конец группы не в допуске от его концов и не на его оси", () => {
+    const g1 = wall(0, 0, 100, 0, "g1")
+    const n = wall(150, -50, 150, 50, "n")
+    moveWalls([g1, n], [g1], { x: 10, y: 0 })
+    expect(n.a).toEqual({ x: 150, y: -50 })
+    expect(n.b).toEqual({ x: 150, y: 50 })
+  })
+
+  it("MV-N2: вырожденная стена нулевой длины не участвует в перемещении", () => {
+    const g1 = wall(0, 0, 100, 0, "g1")
+    const n = wall(105, 0, 105, 0, "n")
+    moveWalls([g1, n], [g1], { x: 10, y: 0 })
+    expect(n.a).toEqual({ x: 105, y: 0 })
+  })
+
+  it("MV-N3: нулевой сдвиг не меняет позиции и не затягивает стык", () => {
+    const g1 = wall(0, 0, 100, 0, "g1")
+    const n = wall(105, 0, 105, 80, "n")
+    moveWalls([g1, n], [g1], { x: 0, y: 0 })
+    expect(g1.a).toEqual({ x: 0, y: 0 })
+    expect(g1.b).toEqual({ x: 100, y: 0 })
+    expect(n.a).toEqual({ x: 105, y: 0 })
+  })
+
+  it("MV-4: T-примыкание к одиночной смещаемой стене сдвигается одним вектором", () => {
+    const g1 = wall(0, 0, 100, 0, "g1")
+    const t = wall(50, 0, 50, 60, "t")
+    moveWalls([g1, t], [g1], { x: 10, y: 0 })
+    expect(t.a).toEqual({ x: 60, y: 0 })
+    expect(t.b).toEqual({ x: 60, y: 60 })
+  })
+
+  it("MV-I3: два последовательных сдвига равны одному суммарному", () => {
+    const s1 = [wall(0, 0, 100, 0, "g1"), wall(105, 0, 105, 80, "n")]
+    moveWalls(s1, [s1[0]], { x: 5, y: 0 })
+    moveWalls(s1, [s1[0]], { x: 5, y: 0 })
+    const s2 = [wall(0, 0, 100, 0, "g1"), wall(105, 0, 105, 80, "n")]
+    moveWalls(s2, [s2[0]], { x: 10, y: 0 })
+    expect(s1[1].a).toEqual(s2[1].a)
+    expect(s1[1].b).toEqual(s2[1].b)
+    expect(s1[1].a).toEqual({ x: 115, y: 0 })
   })
 
   it("T-примыкание к двум выделенным сдвигается ровно один вектор", () => {
@@ -232,6 +322,16 @@ describe("moveWalls", () => {
     moveWalls([g1, g2, span], [g1, g2], { x: 0, y: 20 })
     expect(span.a).toEqual({ x: 100, y: 20 })
     expect(span.b).toEqual({ x: 110, y: 60 })
+  })
+})
+
+describe("snapOthers", () => {
+  it("MV-6: состыкованные и примкнутые стены исключены из привязки, несвязанная участвует", () => {
+    const g1 = wall(0, 0, 100, 0, "g1")
+    const n = wall(105, 0, 105, 80, "n")
+    const t = wall(50, 0, 50, 60, "t")
+    const f = wall(300, 0, 300, 100, "f")
+    expect(snapOthers([g1, n, t, f], [g1])).toEqual([f])
   })
 })
 
