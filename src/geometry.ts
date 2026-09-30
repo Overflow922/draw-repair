@@ -1,5 +1,6 @@
 import { ZOOM_MAX, ZOOM_MIN } from "./types"
 import type { Dimension, DimPoint, EdgeRef, Point, View, Wall } from "./types"
+import { faceCornerTol } from "./wall-geometry"
 
 // попадание курсора — канонический расчёт по отображаемой форме (design D1)
 export { hitWall } from "./wall-geometry"
@@ -146,16 +147,8 @@ export function jointTol(a: Wall, b: Wall): number {
   return Math.max(a.thicknessCm, b.thicknessCm) / 2
 }
 
-// допуск привязки конца при перемещении: допуск вершины стыка с запасом или диагональ
-// угла √(h₁²+h₂²) — точка, в которую рисование ставит вершину, прилипшую к грани у торца
-function endTol(a: Wall, b: Wall): number {
-  const ha = a.thicknessCm / 2
-  const hb = b.thicknessCm / 2
-  return Math.max(Math.max(ha, hb) * 1.25, Math.hypot(ha, hb)) + EPS
-}
-
 export function jointedWalls(a: Wall, b: Wall): boolean {
-  const tol = endTol(a, b)
+  const tol = faceCornerTol(a, b)
   return distance(a.a, b.a) <= tol || distance(a.a, b.b) <= tol || distance(a.b, b.a) <= tol || distance(a.b, b.b) <= tol
 }
 
@@ -212,7 +205,7 @@ export function moveWalls(walls: Wall[], group: Wall[], delta: Point): void {
     let followB = false
     let tee = false
     group.forEach((g, i) => {
-      const tol = endTol(g, w)
+      const tol = faceCornerTol(g, w)
       if (!followA) {
         if (distance(w.a, pre[i].a) <= tol) followA = true
         else if (distance(w.a, pre[i].b) <= tol) followA = true
