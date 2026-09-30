@@ -1,6 +1,6 @@
 import { dimGeometry, dimPointPoint, visibleWorld } from "./geometry"
 import type { DimGeometry } from "./geometry"
-import { contourSegments, displayPolygons } from "./wall-geometry"
+import { contourSegments, displayPolygons, outlineSegments } from "./wall-geometry"
 import { GRID_STEP_CM, PX_PER_CM, normalizeMaterial } from "./types"
 import type { Dimension, Material, Point, Unit, View, Wall } from "./types"
 
@@ -371,7 +371,20 @@ function drawOutline(
   ctx.lineWidth = OUTLINE_PX * 2
   tracePolygons(ctx, displayPolygons(wall, walls).map((poly) => poly.map(toScreen)))
   ctx.fill()
+  // обводится только внешняя граница формы: без полос на границах между телом и заливками
+  // стены; скруглённые стыки — без шипов на острых углах заливок
+  ctx.lineJoin = "round"
+  ctx.lineCap = "round"
+  ctx.beginPath()
+  for (const { p1, p2 } of outlineSegments(wall, walls)) {
+    const s1 = toScreen(p1)
+    const s2 = toScreen(p2)
+    ctx.moveTo(s1.x, s1.y)
+    ctx.lineTo(s2.x, s2.y)
+  }
   ctx.stroke()
+  ctx.lineJoin = "miter"
+  ctx.lineCap = "butt"
 }
 
 function drawHandles(ctx: CanvasRenderingContext2D, wall: Wall, toScreen: (p: Point) => Point): void {

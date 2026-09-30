@@ -1,5 +1,6 @@
 import { ZOOM_MAX, ZOOM_MIN } from "./types"
 import type { Dimension, DimPoint, EdgeRef, Point, View, Wall } from "./types"
+import { faceCornerTol } from "./wall-geometry"
 
 // попадание курсора — канонический расчёт по отображаемой форме (design D1)
 export { hitWall } from "./wall-geometry"
@@ -147,7 +148,7 @@ export function jointTol(a: Wall, b: Wall): number {
 }
 
 export function jointedWalls(a: Wall, b: Wall): boolean {
-  const tol = jointTol(a, b) * 1.25
+  const tol = faceCornerTol(a, b)
   return distance(a.a, b.a) <= tol || distance(a.a, b.b) <= tol || distance(a.b, b.a) <= tol || distance(a.b, b.b) <= tol
 }
 
@@ -164,18 +165,22 @@ function attachedEnds(walls: Wall[], at: Point, self: Wall): { wall: Wall; end: 
   return out
 }
 
-function axisAttached(w: Wall, wall: Wall): boolean {
+// T-примыкание торцом стены w к стене wall: конец на оси (вне зон концов) или на грани
+function teeAttached(w: Wall, wall: Wall): boolean {
   const dx = wall.b.x - wall.a.x
   const dy = wall.b.y - wall.a.y
   const len2 = dx * dx + dy * dy
   if (len2 < EPS) return false
   const len = Math.sqrt(len2)
   const tol = jointTol(wall, w)
+  const h = wall.thicknessCm / 2
   const d = { x: dx / len, y: dy / len }
   for (const end of [w.a, w.b] as const) {
-    const t = ((end.x - wall.a.x) * dx + (end.y - wall.a.y) * dy) / len2
-    if (t * len <= tol || t * len >= len - tol) continue
-    if (Math.abs(cross(d, { x: end.x - wall.a.x, y: end.y - wall.a.y })) <= EPS) return true
+    const rel = { x: end.x - wall.a.x, y: end.y - wall.a.y }
+    const along = dot(d, rel)
+    const lat = Math.abs(cross(d, rel))
+    if (along > tol && along < len - tol && lat <= EPS) return true
+    if (along > 0 && along < len && Math.abs(lat - h) <= EPS) return true
   }
   return false
 }
@@ -196,24 +201,24 @@ export function moveWalls(walls: Wall[], group: Wall[], delta: Point): void {
   }
   for (const w of walls) {
     if (group.includes(w) || pointsEqual(w.a, w.b)) continue
-    let pullA: Point | null = null
-    let pullB: Point | null = null
-    let axis = false
+    let followA = false
+    let followB = false
+    let tee = false
     group.forEach((g, i) => {
-      const tol = jointTol(g, w) * 1.25
-      if (!pullA) {
-        if (distance(w.a, pre[i].a) <= tol) pullA = g.a
-        else if (distance(w.a, pre[i].b) <= tol) pullA = g.b
+      const tol = faceCornerTol(g, w)
+      if (!followA) {
+        if (distance(w.a, pre[i].a) <= tol) followA = true
+        else if (distance(w.a, pre[i].b) <= tol) followA = true
       }
-      if (!pullB) {
-        if (distance(w.b, pre[i].a) <= tol) pullB = g.a
-        else if (distance(w.b, pre[i].b) <= tol) pullB = g.b
+      if (!followB) {
+        if (distance(w.b, pre[i].a) <= tol) followB = true
+        else if (distance(w.b, pre[i].b) <= tol) followB = true
       }
-      if (!pullA && !pullB && !axis && axisAttached(w, { ...g, a: pre[i].a, b: pre[i].b })) axis = true
+      if (!followA && !followB && !tee && teeAttached(w, { ...g, a: pre[i].a, b: pre[i].b })) tee = true
     })
-    if (pullA) w.a = pullA
-    if (pullB) w.b = pullB
-    if (axis && !pullA && !pullB) {
+    if (followA) w.a = { x: w.a.x + delta.x, y: w.a.y + delta.y }
+    if (followB) w.b = { x: w.b.x + delta.x, y: w.b.y + delta.y }
+    if (tee && !followA && !followB) {
       w.a = { x: w.a.x + delta.x, y: w.a.y + delta.y }
       w.b = { x: w.b.x + delta.x, y: w.b.y + delta.y }
     }
@@ -222,7 +227,7 @@ export function moveWalls(walls: Wall[], group: Wall[], delta: Point): void {
 
 export function snapOthers(walls: Wall[], group: Wall[]): Wall[] {
   return walls.filter((w) => !group.includes(w) && !pointsEqual(w.a, w.b) &&
-    !group.some((g) => jointedWalls(g, w) || axisAttached(w, g)))
+    !group.some((g) => jointedWalls(g, w) || teeAttached(w, g)))
 }
 
 interface Cap {
