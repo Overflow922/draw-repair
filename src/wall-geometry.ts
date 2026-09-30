@@ -1,5 +1,9 @@
-import { PX_PER_CM, SNAP_RADIUS_PX } from "./types"
 import type { Point, Wall } from "./types"
+
+// привязка вершины живёт в wall-snap (change fix-wall-snap-overlap, design D8);
+// реэкспорт сохраняет прежний путь импорта
+export { snapRadiusCm, snapVertex } from "./wall-snap"
+export type { VertexSnap } from "./wall-snap"
 
 // Каноническая геометрия стен (change stable-wall-drawing, design D1).
 // Единственный источник отображаемой формы: заливка, контур, подсветка,
@@ -11,29 +15,28 @@ const SLICE = 1e-7
 // допуск прямого угла 0.5°: классификация через скалярное произведение направлений
 const RIGHT_COS = Math.cos((0.5 * Math.PI) / 180)
 const RIGHT_SIN = Math.sin((0.5 * Math.PI) / 180)
-const ORTHO_TAN = Math.tan((15 * Math.PI) / 180)
 
-const dist = (a: Point, b: Point): number => Math.hypot(b.x - a.x, b.y - a.y)
-const cross = (a: Point, b: Point): number => a.x * b.y - a.y * b.x
-const dot = (a: Point, b: Point): number => a.x * b.x + a.y * b.y
-const sub = (a: Point, b: Point): Point => ({ x: a.x - b.x, y: a.y - b.y })
-const add = (a: Point, b: Point): Point => ({ x: a.x + b.x, y: a.y + b.y })
-const mul = (a: Point, k: number): Point => ({ x: a.x * k, y: a.y * k })
+export const dist = (a: Point, b: Point): number => Math.hypot(b.x - a.x, b.y - a.y)
+export const cross = (a: Point, b: Point): number => a.x * b.y - a.y * b.x
+export const dot = (a: Point, b: Point): number => a.x * b.x + a.y * b.y
+export const sub = (a: Point, b: Point): Point => ({ x: a.x - b.x, y: a.y - b.y })
+export const add = (a: Point, b: Point): Point => ({ x: a.x + b.x, y: a.y + b.y })
+export const mul = (a: Point, k: number): Point => ({ x: a.x * k, y: a.y * k })
 const neg = (a: Point): Point => ({ x: -a.x, y: -a.y })
-const signOf = (v: number): number => (v > 0 ? 1 : -1)
+export const signOf = (v: number): number => (v > 0 ? 1 : -1)
 
-function unit(from: Point, to: Point): Point {
+export function unit(from: Point, to: Point): Point {
   const l = dist(from, to)
   return l < EPS ? { x: 0, y: 0 } : mul(sub(to, from), 1 / l)
 }
 
-const perp = (u: Point): Point => ({ x: -u.y, y: u.x })
+export const perp = (u: Point): Point => ({ x: -u.y, y: u.x })
 
 function clampRange(v: number, lo: number, hi: number): number {
   return lo > hi ? (lo + hi) / 2 : Math.max(lo, Math.min(hi, v))
 }
 
-const degenerate = (w: Wall): boolean => dist(w.a, w.b) < EPS
+export const degenerate = (w: Wall): boolean => dist(w.a, w.b) < EPS
 
 const jointTol = (a: Wall, b: Wall): number => Math.max(a.thicknessCm, b.thicknessCm) / 2
 
@@ -45,99 +48,7 @@ export function faceCornerTol(a: Wall, b: Wall): number {
   return Math.max(Math.max(ha, hb) * 1.25, Math.hypot(ha, hb)) + EPS
 }
 
-export function snapRadiusCm(zoom: number): number {
-  return SNAP_RADIUS_PX / (PX_PER_CM * zoom)
-}
-
-export interface VertexSnap {
-  point: Point
-  source: "wall" | "grid"
-  normal?: Point // наружная нормаль грани при прилипании к грани (для квадрата установки)
-}
-
-interface Candidate {
-  point: Point
-  normal?: Point
-}
-
-// Кандидаты прилипания вершины к одной стене (грань / торец / продолжение).
-function wallCandidates(p: Point, w: Wall, radiusCm: number, newHalf: number): Candidate[] {
-  const u = unit(w.a, w.b)
-  if (u.x === 0 && u.y === 0) return []
-  const n = perp(u)
-  const len = dist(w.a, w.b)
-  const rel = sub(p, w.a)
-  const s = dot(rel, u)
-  const lat = dot(rel, n)
-  const hW = w.thicknessCm / 2
-  const facePoint = (sd: number): Candidate => {
-    const sC = clampRange(s, newHalf, len - newHalf)
-    return { point: add(add(w.a, mul(u, sC)), mul(n, sd * hW)), normal: mul(n, sd) }
-  }
-  if (Math.abs(lat) <= hW + SLICE) {
-    // в полосе стены: за торцом / до торца — продолжение на оси
-    if (s > len) return [{ point: w.b }]
-    if (s < 0) return [{ point: w.a }]
-    // курсор на стене (расстояние до неё 0): прилипание к ближайшей грани всегда —
-    // иначе посреди тела возникала дыра с прыжком точки на узел сетки
-    return [facePoint(signOf(lat))]
-  }
-  const faceDist = Math.abs(lat) - hW
-  // зона конца: курсор в пределах радиуса от точки торца — прилипание к самому торцу.
-  // Это делает старт следующей стены цепочки от стыка надёжным (без зазора и прыжков)
-  for (const end of [w.a, w.b]) {
-    if (dist(p, end) <= radiusCm) return [{ point: end }]
-  }
-  const out: Candidate[] = []
-  // зона прилипания к грани: радиус привязки ИЛИ край приставленного квадрата
-  // (квадрат стоит вплотную к грани — тело начинается ровно от него)
-  const reach = Math.max(radiusCm, newHalf)
-  // грань рядом с телом (включая зону конца: проекция не дальше reach за торцом)
-  if (faceDist <= reach && s <= len + reach && s >= -reach) out.push(facePoint(signOf(lat)))
-  // продолжение полосы за торцом в пределах радиуса
-  if (s > len && Math.abs(lat) <= radiusCm) out.push({ point: w.b })
-  if (s < 0 && Math.abs(lat) <= radiusCm) out.push({ point: w.a })
-  return out
-}
-
-export function snapVertex(
-  p: Point,
-  walls: Wall[],
-  radiusCm: number,
-  gridStepCm: number,
-  newWallThicknessCm: number,
-  orthoFrom?: Point,
-): VertexSnap {
-  const newHalf = newWallThicknessCm / 2
-  let best: { point: Point; d: number; normal?: Point } | null = null
-  for (const w of walls) {
-    if (degenerate(w)) continue
-    for (const cand of wallCandidates(p, w, radiusCm, newHalf)) {
-      const d = dist(p, cand.point)
-      // строго меньше: при равенстве побеждает стена раньше в массиве (SNAP-DET-2)
-      if (!best || d < best.d - EPS) best = { point: cand.point, d, normal: cand.normal }
-    }
-  }
-  if (best) {
-    const result: VertexSnap = { point: best.point, source: "wall" }
-    if (best.normal)
-      // вспомогательное поле для квадрата установки (main.ts); замороженный контракт
-      // тестов — {point, source}, поэтому normal неэнумерируемо и невидимо для toEqual
-      Object.defineProperty(result, "normal", { value: best.normal, enumerable: false })
-    return result
-  }
-  const grid = (v: number): number => Math.round(v / gridStepCm) * gridStepCm
-  if (orthoFrom) {
-    const dx = p.x - orthoFrom.x
-    const dy = p.y - orthoFrom.y
-    // неподвижная координата = координата последней вершины точно; гридится только подвижная
-    if (Math.abs(dy) <= ORTHO_TAN * Math.abs(dx)) return { point: { x: grid(p.x), y: orthoFrom.y }, source: "grid" }
-    if (Math.abs(dx) <= ORTHO_TAN * Math.abs(dy)) return { point: { x: orthoFrom.x, y: grid(p.y) }, source: "grid" }
-  }
-  return { point: { x: grid(p.x), y: grid(p.y) }, source: "grid" }
-}
-
-function clipHalfPlane(poly: Point[], origin: Point, normal: Point, lo: number): Point[] {
+export function clipHalfPlane(poly: Point[], origin: Point, normal: Point, lo: number): Point[] {
   const out: Point[] = []
   const val = (q: Point): number => dot(sub(q, origin), normal) - lo
   for (let i = 0; i < poly.length; i++) {
@@ -154,7 +65,7 @@ function clipHalfPlane(poly: Point[], origin: Point, normal: Point, lo: number):
   return out
 }
 
-function polygonArea(poly: Point[]): number {
+export function polygonArea(poly: Point[]): number {
   let s = 0
   for (let i = 0; i < poly.length; i++) {
     const a = poly[i]
@@ -164,7 +75,7 @@ function polygonArea(poly: Point[]): number {
   return Math.abs(s) / 2
 }
 
-function pointInPolygon(p: Point, poly: Point[]): boolean {
+export function pointInPolygon(p: Point, poly: Point[]): boolean {
   let inside = false
   for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
     const yi = poly[i].y
@@ -506,10 +417,10 @@ export interface Seg {
   p2: Point
 }
 
-const lerp = (a: Point, b: Point, t: number): Point => add(a, mul(sub(b, a), t))
+export const lerp = (a: Point, b: Point, t: number): Point => add(a, mul(sub(b, a), t))
 
 // параметрический интервал ребра внутри выпуклого куска (пусто, если ребро снаружи)
-function coveredInterval(p1: Point, p2: Point, piece: Point[]): [number, number] | null {
+export function coveredInterval(p1: Point, p2: Point, piece: Point[]): [number, number] | null {
   const cx = piece.reduce((acc, q) => acc + q.x, 0) / piece.length
   const cy = piece.reduce((acc, q) => acc + q.y, 0) / piece.length
   const d = sub(p2, p1)
@@ -539,12 +450,13 @@ function subtractIntervals(hidden: [number, number][], add: [number, number] | n
   hidden.push(add)
 }
 
-function mergeIntervals(hidden: [number, number][]): [number, number][] {
+// слияние интервалов; tol — зазор, который ещё считается касанием
+export function mergeIntervals(hidden: [number, number][], tol = 0): [number, number][] {
   const sorted = [...hidden].sort((x, y) => x[0] - y[0])
   const merged: [number, number][] = []
   for (const iv of sorted) {
     const last = merged[merged.length - 1]
-    if (last && iv[0] <= last[1]) last[1] = Math.max(last[1], iv[1])
+    if (last && iv[0] <= last[1] + tol) last[1] = Math.max(last[1], iv[1])
     else merged.push([iv[0], iv[1]])
   }
   return merged
@@ -580,7 +492,7 @@ function onSameTypeFace(wall: Wall, p1: Point, p2: Point, walls: Wall[]): boolea
 }
 
 // участки [0, 1], не накрытые скрытыми интервалами
-function uncovered(hidden: [number, number][]): [number, number][] {
+export function uncovered(hidden: [number, number][]): [number, number][] {
   const visible: [number, number][] = []
   let cursor = 0
   for (const [t0, t1] of mergeIntervals(hidden)) {
