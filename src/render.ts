@@ -64,7 +64,7 @@ export interface RenderOptions {
   selectedDims?: Dimension[]
   marquee?: { x1: number; y1: number; x2: number; y2: number } | null
   marqueeHits?: { walls: Wall[]; dims: Dimension[] } | null
-  square?: { at: Point; dir: Point | null; size: number } | null
+  square?: Point[] | null // вершины квадрата установки в мировых координатах
 }
 
 export function render(
@@ -137,21 +137,7 @@ export function drawScene(
   if (preview) drawWall(ctx, preview, sceneWalls, 0.4, toScreen, k, anchorC, m)
   if (singleWalls) drawHandles(ctx, selectedWalls[0], toScreen)
   if (opts.square) {
-    const { at, dir, size } = opts.square
-    const h = size / 2
-    const corners: Point[] = dir
-      ? [
-          { x: at.x - dir.y * h, y: at.y + dir.x * h },
-          { x: at.x + dir.x * size - dir.y * h, y: at.y + dir.y * size + dir.x * h },
-          { x: at.x + dir.x * size + dir.y * h, y: at.y + dir.y * size - dir.x * h },
-          { x: at.x + dir.y * h, y: at.y - dir.x * h },
-        ].map(toScreen)
-      : [
-          { x: at.x - h, y: at.y - h },
-          { x: at.x + h, y: at.y - h },
-          { x: at.x + h, y: at.y + h },
-          { x: at.x - h, y: at.y + h },
-        ].map(toScreen)
+    const corners = opts.square.map(toScreen)
     ctx.save()
     ctx.strokeStyle = "#999"
     ctx.lineWidth = 1

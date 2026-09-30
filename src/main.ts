@@ -3,7 +3,8 @@ import { cloneScene, drawingHistory, loadHistory, record, recordSnapshot, redoEn
 import type { Scene } from "./history"
 import { dimGeometry, dimHitDistance, dimLevelSnap, dimensionOffsetAt, distanceToWall, endpointAt, hitWall, lockedDirection, moveEndpoint, moveWalls, nearestEdgeIntersection, dimPointPoint, pointsEqual, segmentIntersectsRect, snap, snapOthers, zoomAt } from "./geometry"
 import type { DimGeometry } from "./geometry"
-import { snapRadiusCm, snapVertex } from "./wall-geometry"
+import { chainEndSquare, placementSquare, snapRadiusCm, snapVertex, wallClickAction } from "./wall-snap"
+import type { VertexSnap } from "./wall-snap"
 import { drawPatternPreview, render } from "./render"
 import { availableFormats, exportDrawing, PAGE_FORMATS_MM } from "./export/pdf"
 import type { PageFormat } from "./export/pdf"
@@ -47,7 +48,8 @@ let dimensions: Dimension[] = current().dimensions
 let chainStart: Point | null = null
 let cursor: Point | null = null
 let cursorV: Point | null = null
-let snapNormal: Point | null = null
+let cursorSnap: VertexSnap | null = null // сам результат привязки: normal в нём неперечислима
+let wallCursorRaw: Point | null = null // сырая позиция курсора последней привязки — для пересчёта
 let thicknessCm = 20
 let wallMaterial: Material = "brick"
 let unit: Unit = "mm"
@@ -247,14 +249,12 @@ function redraw(): void {
   const snapHit = tool === "dimension" && cursor && (!dimDraft.a || !dimDraft.b) ? nearestEdgeIntersection(cursor, walls, radiusCm()) : null
   let previewWall: Wall | null = null
   if (chainStart && p) previewWall = { id: "", a: chainStart, b: p, thicknessCm, type: wallMaterial }
-  let square: { at: Point; dir: Point | null; size: number } | null = null
+  let square: Point[] | null = null
   if (tool === "wall" && cursor) {
-    if (chainStart && p && cursorV) square = { at: { x: p.x - cursorV.x * thicknessCm, y: p.y - cursorV.y * thicknessCm }, dir: cursorV, size: thicknessCm }
-    else if (!chainStart) {
-      // квадрат установки снаружи тела стены: центр на полтолщины от грани по наружной нормали
-      const at = snapNormal ? { x: cursor.x + (snapNormal.x * thicknessCm) / 2, y: cursor.y + (snapNormal.y * thicknessCm) / 2 } : cursor
-      square = { at, dir: null, size: thicknessCm }
-    }
+    // на свободном конце: прилип к стене — квадрат установки у грани, иначе последний блок вдоль сегмента
+    if (chainStart && p && cursorV) square = chainEndSquare(p, cursorV, cursorSnap, thicknessCm)
+    // до первого клика — квадрат, приставленный к грани/торцу снаружи, или по осям без прилипания
+    else if (!chainStart && cursorSnap) square = placementSquare(cursorSnap, thicknessCm)
   }
   render(canvas, walls, previewWall, unit, view, selectedWalls, {
     hover: target.wall,
@@ -355,11 +355,15 @@ function toSnappedPoint(e: MouseEvent): Point {
 }
 
 function updateWallCursor(e: MouseEvent): void {
-  const raw = toWorld(e)
+  snapWallCursor(toWorld(e))
+}
+
+function snapWallCursor(raw: Point): void {
+  wallCursorRaw = raw
   // единый снаппер для обеих вершин цепочки: стены -> орто -> сетка (design D1/D5)
   const r = snapVertex(raw, walls, snapRadiusCm(view.zoom), GRID_STEP_CM, thicknessCm, chainStart && ortho ? chainStart : undefined)
   cursor = r.point
-  snapNormal = r.normal ?? null
+  cursorSnap = r
   if (!chainStart) {
     cursorV = null
     return
@@ -653,13 +657,15 @@ canvas.addEventListener("click", (e) => {
     return
   }
   if (!chainStart) {
-    // клик в зоне торца существующей стены начинает цепочку от стыка —
-    // выделение работает только вне зон торцов (иначе цепочку не продолжить)
-    const snap = snapVertex(raw, walls, radiusCm(), GRID_STEP_CM, thicknessCm)
-    const onJoint = snap.source === "wall" && walls.some((w) => pointsEqual(w.a, snap.point) || pointsEqual(w.b, snap.point))
-    const hit = onJoint ? null : hitWall(raw, walls, radiusCm())
-    if (hit) {
-      selectWall(hit)
+    // в инструменте «Стена» тело выделяет (и у торца, и у стыка), прилипший квадрат рисует;
+    // без инструмента — прежнее попадание с полосным допуском
+    let wall: Wall | null
+    if (tool === "wall") {
+      const action = wallClickAction(raw, snapVertex(raw, walls, radiusCm(), GRID_STEP_CM, thicknessCm), walls, radiusCm())
+      wall = action.kind === "select" ? action.wall : null
+    } else wall = hitWall(raw, walls, radiusCm())
+    if (wall) {
+      selectWall(wall)
       return
     }
     selectedWalls = []
@@ -793,6 +799,8 @@ thicknessInput.addEventListener("input", () => {
     selectedWalls[0].thicknessCm = thicknessCm
     dirty = true
   }
+  // привязка зависит от толщины новой стены (и сцены): пересчитать без движения курсора
+  if (tool === "wall" && wallCursorRaw) snapWallCursor(wallCursorRaw)
   redraw()
 })
 

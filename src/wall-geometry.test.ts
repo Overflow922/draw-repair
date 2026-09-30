@@ -250,12 +250,15 @@ describe("snapVertex: детерминированность", () => {
     expect(snapVertex(p, walls, R, GRID, 20)).toEqual(first)
   })
 
-  it("SNAP-DET-2: равные расстояния — стена раньше в массиве, в обоих порядках", () => {
+  // пересмотрен в change fix-wall-snap-overlap: прежняя сцена с зазором 4 см противоречит
+  // требованию «Квадрат не налагается на тела стен»; тай-брейк проверяется там, где квадрат
+  // помещается (зазор = стороне квадрата, касание по стороне допустимо)
+  it("SNAP-DET-2R: равные расстояния — стена раньше в массиве, в обоих порядках", () => {
     const first = W(0, 0, 100, 0) // грань сверху y=10
-    const second = W(0, 24, 100, 24) // грань снизу y=14
-    const p = { x: 50, y: 12 } // ровно по 2 см до обеих граней
+    const second = W(0, 40, 100, 40) // грань снизу y=30
+    const p = { x: 50, y: 20 } // ровно по 10 см до обеих граней
     expect(snapVertex(p, [first, second], R, GRID, 20)).toEqual({ point: { x: 50, y: 10 }, source: "wall" })
-    expect(snapVertex(p, [second, first], R, GRID, 20)).toEqual({ point: { x: 50, y: 14 }, source: "wall" })
+    expect(snapVertex(p, [second, first], R, GRID, 20)).toEqual({ point: { x: 50, y: 30 }, source: "wall" })
   })
 })
 
