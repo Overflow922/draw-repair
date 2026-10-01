@@ -65,7 +65,15 @@ export interface RenderOptions {
   marquee?: { x1: number; y1: number; x2: number; y2: number } | null
   marqueeHits?: { walls: Wall[]; dims: Dimension[] } | null
   square?: Point[] | null // вершины квадрата установки в мировых координатах
+  // угол к стене примыкания у начала превью: дуга от луча отсчёта from к направлению to
+  angle?: { at: Point; from: Point; to: Point; deg: number } | null
 }
+
+const ANGLE_ARC_PX = 56
+const ANGLE_RAY_PX = ANGLE_ARC_PX + 10 // отрезок луча отсчёта чуть длиннее радиуса дуги
+const ANGLE_LABEL_GAP_PX = 18
+const ANGLE_COLOR = "#2563eb"
+const ANGLE_LINE_PX = 2
 
 export function render(
   canvas: HTMLCanvasElement,
@@ -146,6 +154,7 @@ export function drawScene(
     ctx.stroke()
     ctx.restore()
   }
+  if (opts.angle) drawAngle(ctx, opts.angle, toScreen, m)
   ctx.font = `${m.labelPx}px ${m.font}`
   ctx.textAlign = "center"
   ctx.textBaseline = "bottom"
@@ -198,6 +207,47 @@ function formatLength(cm: number, unit: Unit): string {
   if (unit === "cm") return `${Math.round(cm)}`
   if (unit === "mm") return `${Math.round(cm * 10)}`
   return `${(Math.round(cm) / 100).toString().replace(".", ",")}`
+}
+
+// дуга кратчайшего сектора между лучами и подпись угла в целых градусах (экранные px)
+function drawAngle(
+  ctx: CanvasRenderingContext2D,
+  angle: NonNullable<RenderOptions["angle"]>,
+  toScreen: (p: Point) => Point,
+  m: RenderMetrics,
+): void {
+  const c = toScreen(angle.at)
+  const a1 = Math.atan2(angle.from.y, angle.from.x)
+  let sweep = Math.atan2(angle.to.y, angle.to.x) - a1
+  if (sweep > Math.PI) sweep -= 2 * Math.PI
+  if (sweep <= -Math.PI) sweep += 2 * Math.PI
+  const mid = a1 + sweep / 2
+  const labelR = ANGLE_ARC_PX + ANGLE_LABEL_GAP_PX
+  ctx.save()
+  ctx.strokeStyle = ANGLE_COLOR
+  ctx.lineWidth = ANGLE_LINE_PX
+  ctx.beginPath()
+  ctx.moveTo(c.x, c.y)
+  ctx.lineTo(c.x + Math.cos(a1) * ANGLE_RAY_PX, c.y + Math.sin(a1) * ANGLE_RAY_PX)
+  ctx.moveTo(c.x + Math.cos(a1) * ANGLE_ARC_PX, c.y + Math.sin(a1) * ANGLE_ARC_PX)
+  ctx.arc(c.x, c.y, ANGLE_ARC_PX, a1, a1 + sweep, sweep < 0)
+  ctx.stroke()
+  // подпись на белой подложке — не сливается со штриховкой стен
+  const text = `${Math.round(angle.deg)}°`
+  const lx = c.x + Math.cos(mid) * labelR
+  const ly = c.y + Math.sin(mid) * labelR
+  ctx.font = `bold ${m.labelPx}px ${m.font}`
+  ctx.textAlign = "center"
+  ctx.textBaseline = "middle"
+  const pad = 3
+  const w = ctx.measureText(text).width + 2 * pad
+  const h = m.labelPx + 2 * pad
+  ctx.fillStyle = "rgba(255, 255, 255, 0.9)"
+  ctx.fillRect(lx - w / 2, ly - h / 2, w, h)
+  ctx.strokeRect(lx - w / 2, ly - h / 2, w, h)
+  ctx.fillStyle = ANGLE_COLOR
+  ctx.fillText(text, lx, ly)
+  ctx.restore()
 }
 
 function tracePolygon(ctx: CanvasRenderingContext2D, poly: Point[]): void {

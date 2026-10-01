@@ -225,7 +225,9 @@ describe("Детерминированность", () => {
 
 describe("Вершины цепочки", () => {
   it("SNAP-CHAIN-1: второй конец не уходит в точку оси стыка", () => {
-    const r = snap({ x: -12, y: -12 }, sceneL(), 0.25, 20, { x: -100, y: -12 })
+    // change wall-relative-angle-snap (TCR): без заданного направления — при сработавшем
+    // орто (горизонталь от (−100,−12)) конец определяет луч, а не прилипание к грани
+    const r = snap({ x: -12, y: -12 }, sceneL(), 0.25, 20)
     expectWall(r, 0, -10)
     expect(r.point).not.toEqual({ x: 0, y: 0 })
   })
@@ -295,8 +297,16 @@ describe("Инвариант: квадрат не налагается на те
 })
 
 describe("Инвариант: второй конец прилипает по тем же правилам", () => {
-  // «тот же порядок прилипания ко всем вершинам цепочки» и «стены приоритетнее орто»:
-  // если хоть один из вызовов (с орто и без) прилип к стене — результаты совпадают
+  // «тот же порядок прилипания ко всем вершинам цепочки»: если орто от начала не сработало
+  // и хоть один из вызовов (с орто и без) прилип к стене — результаты совпадают.
+  // change wall-relative-angle-snap (TCR): позиции со сработавшим орто исключены — там
+  // конец на луче (инварианты INV-RAY-1/2 в wall-snap-ray.test.ts)
+  const TAN15 = Math.tan((15 * Math.PI) / 180)
+  const orthoEngaged = (from: Point, p: Point): boolean => {
+    const dx = Math.abs(p.x - from.x)
+    const dy = Math.abs(p.y - from.y)
+    return dy <= TAN15 * dx || dx <= TAN15 * dy
+  }
   const scenes: [string, Wall[], [number, number][]][] = [
     ["L", sceneL(), [[0, 0], [-15, -15], [300, 0]]],
     ["T", sceneT(), [[150, 10], [0, 0]]],
@@ -309,8 +319,10 @@ describe("Инвариант: второй конец прилипает по т
           for (let x = cx - 30; x <= cx + 30; x += 3)
             for (let y = cy - 30; y <= cy + 30; y += 3) {
               const p = { x, y }
+              const from = { x: cx + 137, y: cy + 41 }
+              if (orthoEngaged(from, p)) continue
               const first = snap(p, walls, zoom)
-              const chain = snap(p, walls, zoom, 20, { x: cx + 137, y: cy + 41 })
+              const chain = snap(p, walls, zoom, 20, from)
               if (first.source !== "wall" && chain.source !== "wall") continue
               expect(chain).toEqual(first)
               expect(chain.normal).toEqual(first.normal)

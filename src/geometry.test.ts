@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { dimensionOffsetAt, dimGeometry, lockedDirection, dimHitDistance, dimLevelSnap, dimPointPoint, endpointAt, hitWall, jointedWalls, moveEndpoint, moveWalls, nearestEdgeIntersection, pointsEqual, segmentIntersectsRect, snap, snapOthers, visibleWorld, wallShape, zoomAt } from "./geometry"
+import { dimensionOffsetAt, dimGeometry, dimHitDistance, dimLevelSnap, dimPointPoint, endpointAt, hitWall, jointedWalls, moveEndpoint, moveWalls, nearestEdgeIntersection, pointsEqual, segmentIntersectsRect, snap, snapOthers, visibleWorld, wallShape, zoomAt } from "./geometry"
 import type { Dimension, Point, Wall } from "./types"
 
 const GRID = 10
@@ -373,23 +373,6 @@ describe("segmentIntersectsRect", () => {
     expect(segmentIntersectsRect({ x: 50, y: -8 }, { x: 50, y: -8 }, rect.min, rect.max, 10)).toBe(true)
     expect(segmentIntersectsRect({ x: 50, y: -12 }, { x: 50, y: -12 }, rect.min, rect.max, 10)).toBe(false)
     expect(segmentIntersectsRect({ x: -8, y: 25 }, { x: -8, y: 25 }, rect.min, rect.max, 10)).toBe(true)
-  })
-})
-
-describe("lockedDirection", () => {
-  const w40 = (ax: number, ay: number, bx: number, by: number, id = "w40"): Wall => ({
-    ...wall(ax, ay, bx, by, id),
-    thicknessCm: 40,
-  })
-
-  it("направление от грани фиксируется точно перпендикулярно", () => {
-    const a = w40(200, 200, 350, 200)
-    // жест почти вертикальный (5° наклона) — фиксируется в ровный перпендикуляр
-    const locked = lockedDirection({ x: 340, y: 210 }, { x: 0.085, y: 0.996 }, [a])
-    expect(locked?.x).toBeCloseTo(0)
-    expect(locked?.y).toBe(1)
-    // дальняя от стены точка не фиксирует направление
-    expect(lockedDirection({ x: 340, y: 400 }, { x: 0.085, y: 0.996 }, [a])).toBeNull()
   })
 })
 

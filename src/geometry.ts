@@ -38,25 +38,6 @@ function projectOnSegment(p: Point, w: Wall): Point {
 }
 
 const ORTHO_TAN = Math.tan((15 * Math.PI) / 180)
-const PERP_MAX_DOT = Math.sin((15 * Math.PI) / 180)
-const COLIN_MIN_DOT = Math.cos((15 * Math.PI) / 180)
-
-export function lockedDirection(p: Point, v: Point, walls: Wall[]): Point | null {
-  for (const w of walls) {
-    if (bodyGap(p, w) > 0.01) continue
-    const dx = w.b.x - w.a.x
-    const dy = w.b.y - w.a.y
-    const len2 = dx * dx + dy * dy
-    if (len2 < EPS) continue
-    const len = Math.sqrt(len2)
-    const u = { x: dx / len, y: dy / len }
-    const n = { x: -u.y, y: u.x }
-    const a1 = dot(v, u)
-    if (Math.abs(a1) <= PERP_MAX_DOT) return dot(v, n) >= 0 ? n : { x: -n.x, y: -n.y }
-    if (Math.abs(a1) >= COLIN_MIN_DOT) return a1 >= 0 ? u : { x: -u.x, y: -u.y }
-  }
-  return null
-}
 
 export function snap(cursor: Point, walls: Wall[], gridStepCm: number, radiusCm: number, orthoFrom?: Point): Point {
   let best: Point | null = null
@@ -97,19 +78,6 @@ export function snap(cursor: Point, walls: Wall[], gridStepCm: number, radiusCm:
     x: Math.round(p.x / gridStepCm) * gridStepCm,
     y: Math.round(p.y / gridStepCm) * gridStepCm,
   }
-}
-
-function bodyGap(p: Point, w: Wall): number {
-  const dx = w.b.x - w.a.x
-  const dy = w.b.y - w.a.y
-  const len2 = dx * dx + dy * dy
-  if (len2 < EPS) return distance(p, w.a)
-  const len = Math.sqrt(len2)
-  const s = ((p.x - w.a.x) * dx + (p.y - w.a.y) * dy) / len2
-  const lat = ((p.x - w.a.x) * -dy + (p.y - w.a.y) * dx) / len
-  const ds = s < 0 ? -s * len : s > 1 ? (s - 1) * len : 0
-  const dl = Math.abs(lat) - w.thicknessCm / 2
-  return Math.hypot(ds, Math.max(0, dl))
 }
 
 export function distanceToWall(p: Point, wall: Wall): number {

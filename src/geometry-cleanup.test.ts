@@ -85,14 +85,4 @@ describe("remove-legacy-wall-geometry: мертвый код удалён", () =
     ])
       expect(wg).toContain(name)
   })
-
-  it("CLN-COVER-4: единственный тест живого lockedDirection пережил удаление describe snapVertex", () => {
-    const g = readFileSync(join(SRC_DIR, "geometry.test.ts"), "utf8")
-    // кейс жил внутри удаляемого describe("snapVertex"); реализация обязана
-    // перенести его в собственный describe("lockedDirection"), а не потерять
-    expect(g).toContain('describe("lockedDirection"')
-    expect(g).toContain("направление от грани фиксируется точно перпендикулярно")
-    // импорт живого экспорта остаётся
-    expect(g).toMatch(/\bimport\b[^;]*\blockedDirection\b/)
-  })
 })

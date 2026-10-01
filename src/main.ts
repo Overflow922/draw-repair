@@ -1,10 +1,14 @@
 import "./style.css"
 import { cloneScene, drawingHistory, loadHistory, record, recordSnapshot, redoEntry, saveHistory, undoEntry } from "./history"
 import type { Scene } from "./history"
-import { dimGeometry, dimHitDistance, dimLevelSnap, dimensionOffsetAt, distanceToWall, endpointAt, hitWall, lockedDirection, moveEndpoint, moveWalls, nearestEdgeIntersection, dimPointPoint, pointsEqual, segmentIntersectsRect, snap, snapOthers, zoomAt } from "./geometry"
+import { dimGeometry, dimHitDistance, dimLevelSnap, dimensionOffsetAt, distanceToWall, endpointAt, hitWall, moveEndpoint, moveWalls, nearestEdgeIntersection, dimPointPoint, pointsEqual, segmentIntersectsRect, snap, snapOthers, zoomAt } from "./geometry"
 import type { DimGeometry } from "./geometry"
 import { chainEndSquare, placementSquare, snapRadiusCm, snapVertex, wallClickAction } from "./wall-snap"
 import type { VertexSnap } from "./wall-snap"
+import { parseAngleDeg, startRefOf } from "./wall-angle"
+import type { StartRef } from "./wall-angle"
+import { chainSegment } from "./wall-chain"
+import type { ChainSegment } from "./wall-chain"
 import { drawPatternPreview, render } from "./render"
 import { availableFormats, exportDrawing, PAGE_FORMATS_MM } from "./export/pdf"
 import type { PageFormat } from "./export/pdf"
@@ -17,6 +21,7 @@ const canvasWrap = document.querySelector<HTMLElement>("#canvas-wrap")!
 const thicknessInput = document.querySelector<HTMLInputElement>("#thickness")!
 const thicknessUnitLabel = document.querySelector<HTMLElement>("#thickness-unit")!
 const lengthInput = document.querySelector<HTMLInputElement>("#length")!
+const angleInput = document.querySelector<HTMLInputElement>("#angle")!
 const unitRow = document.querySelector<HTMLElement>("#unit-row")!
 const wallTypesRow = document.querySelector<HTMLElement>("#wall-types")!
 const orthoToggle = document.querySelector<HTMLButtonElement>("#ortho-toggle")!
@@ -47,13 +52,15 @@ let walls: Wall[] = current().walls
 let dimensions: Dimension[] = current().dimensions
 let chainStart: Point | null = null
 let cursor: Point | null = null
-let cursorV: Point | null = null
+let chainRef: StartRef | null = null // стена примыкания начала (из прилипания первого клика)
+let segment: ChainSegment | null = null // сегмент построения: превью и фиксация
 let cursorSnap: VertexSnap | null = null // сам результат привязки: normal в нём неперечислима
 let wallCursorRaw: Point | null = null // сырая позиция курсора последней привязки — для пересчёта
 let thicknessCm = 20
 let wallMaterial: Material = "brick"
 let unit: Unit = "mm"
 let lengthDirty = false
+let angleDirty = false
 let view: View = current().view
 let dirty = false
 let selectedWalls: Wall[] = []
@@ -144,8 +151,7 @@ function syncToolUI(): void {
 function setTool(next: Tool): void {
   if (tool === next) return
   tool = next
-  chainStart = null
-  cursorV = null
+  clearChain()
   dimDraft = emptyDraft()
   lengthDirty = false
   selectedWalls = []
@@ -199,14 +205,16 @@ function previewLengthCm(): number | null {
   return Math.hypot(cursor.x - base.x, cursor.y - base.y)
 }
 
-function previewPoint(): Point | null {
-  if (!chainStart || !cursor) return null
-  const target = lengthDirty ? typedLengthCm() : null
-  const cm = previewLengthCm()
-  if (target === null || cm === null) return cursor
-  const base = chainStart
-  const k = target / cm
-  return { x: base.x + (cursor.x - base.x) * k, y: base.y + (cursor.y - base.y) * k }
+function typedAngleDeg(): number | null {
+  return angleDirty ? parseAngleDeg(angleInput.value) : null
+}
+
+// сброс незавершённой стены: начало, опора, сегмент, введённый угол
+function clearChain(): void {
+  chainStart = null
+  chainRef = null
+  segment = null
+  angleDirty = false
 }
 
 function liveLengthCm(): number | null {
@@ -236,6 +244,20 @@ function updateLengthBox(): void {
   if (document.activeElement === lengthInput) lengthInput.select()
 }
 
+// поле угла активно только при построении от стены примыкания
+function updateAngleBox(): void {
+  const active = tool === "wall" && chainStart !== null && chainRef !== null
+  angleInput.disabled = !active
+  if (!active) {
+    angleInput.value = ""
+    return
+  }
+  if (angleDirty) return
+  const deg = segment?.angleDeg ?? null
+  angleInput.value = deg === null ? "" : String(Math.round(deg))
+  if (document.activeElement === angleInput) angleInput.select()
+}
+
 function syncHistoryButtons(): void {
   const h = drawingHistory(historyStore, store.activeId)
   undoBtn.disabled = h.past.length === 0
@@ -243,7 +265,7 @@ function syncHistoryButtons(): void {
 }
 
 function redraw(): void {
-  const p = previewPoint()
+  const p = chainStart && segment ? segment.end : null
   const target = tool === "eraser" && cursor ? eraserTarget(cursor) : { wall: null, dim: null }
   const draft = dimDraftGeometry()
   const snapHit = tool === "dimension" && cursor && (!dimDraft.a || !dimDraft.b) ? nearestEdgeIntersection(cursor, walls, radiusCm()) : null
@@ -252,7 +274,7 @@ function redraw(): void {
   let square: Point[] | null = null
   if (tool === "wall" && cursor) {
     // на свободном конце: прилип к стене — квадрат установки у грани, иначе последний блок вдоль сегмента
-    if (chainStart && p && cursorV) square = chainEndSquare(p, cursorV, cursorSnap, thicknessCm)
+    if (chainStart && p && segment?.dir) square = chainEndSquare(p, segment.dir, segment.snap, thicknessCm)
     // до первого клика — квадрат, приставленный к грани/торцу снаружи, или по осям без прилипания
     else if (!chainStart && cursorSnap) square = placementSquare(cursorSnap, thicknessCm)
   }
@@ -267,8 +289,13 @@ function redraw(): void {
     marquee,
     marqueeHits,
     square,
+    angle:
+      chainStart && segment?.dir && segment.refRay && segment.angleDeg !== null
+        ? { at: chainStart, from: segment.refRay, to: segment.dir, deg: segment.angleDeg }
+        : null,
   })
   updateLengthBox()
+  updateAngleBox()
   syncDimPanel()
   syncHistoryButtons()
   syncFormats()
@@ -360,51 +387,60 @@ function updateWallCursor(e: MouseEvent): void {
 
 function snapWallCursor(raw: Point): void {
   wallCursorRaw = raw
-  // единый снаппер для обеих вершин цепочки: стены -> орто -> сетка (design D1/D5)
-  const r = snapVertex(raw, walls, snapRadiusCm(view.zoom), GRID_STEP_CM, thicknessCm, chainStart && ortho ? chainStart : undefined)
-  cursor = r.point
-  cursorSnap = r
   if (!chainStart) {
-    cursorV = null
+    // до первого клика — квадрат установки у грани/торца или на сетке
+    const r = snapVertex(raw, walls, snapRadiusCm(view.zoom), GRID_STEP_CM, thicknessCm)
+    cursor = r.point
+    cursorSnap = r
+    segment = null
     return
   }
-  // старт зафиксирован кликом — его координаты больше не меняются;
-  // направление для точной длины: блокировка осью стены, иначе свободное/осевое
-  const dx = r.point.x - chainStart.x
-  const dy = r.point.y - chainStart.y
-  const len = Math.hypot(dx, dy)
-  let v = len > 1e-9 ? { x: dx / len, y: dy / len } : null
-  if (v) {
-    const locked = lockedDirection(chainStart, v, walls)
-    if (locked) v = locked
-  }
-  cursorV = v
+  // старт зафиксирован кликом; один расчёт сегмента для превью и фиксации (design D5)
+  segment = chainSegment({
+    start: chainStart,
+    ref: chainRef,
+    raw,
+    walls,
+    radiusCm: snapRadiusCm(view.zoom),
+    gridStepCm: GRID_STEP_CM,
+    thicknessCm,
+    ortho,
+    typedAngleDeg: typedAngleDeg(),
+    typedLengthCm: lengthDirty ? typedLengthCm() : null,
+  })
+  cursor = segment.snap.point
+  cursorSnap = segment.snap
+}
+
+// пересчёт привязки без движения курсора (изменились ввод, толщина, орто)
+function refreshWallCursor(): void {
+  if (tool === "wall" && wallCursorRaw) snapWallCursor(wallCursorRaw)
 }
 
 function commitPoint(): void {
   if (!chainStart) {
     if (!cursor) return
     chainStart = cursor
-    cursorV = null
+    chainRef = cursorSnap ? startRefOf(cursorSnap) : null
+    segment = null
     lengthDirty = false
+    angleDirty = false
     lengthInput.focus()
     redraw()
     return
   }
   const a = chainStart
-  const target = lengthDirty ? typedLengthCm() : null
-  const end = target !== null && cursorV
-    ? { x: a.x + cursorV.x * target, y: a.y + cursorV.y * target }
-    : cursor ?? chainStart
+  const end = segment?.end ?? cursor ?? chainStart
   if (!pointsEqual(a, end)) {
     pushRecord()
     dirty = true
     walls.push({ id: crypto.randomUUID(), a, b: end, thicknessCm, type: wallMaterial })
   }
   // стена не продолжается автоматически: инструмент ждёт новый старт
-  chainStart = null
-  cursorV = null
+  clearChain()
   lengthDirty = false
+  // квадрат снова — квадрат установки под курсором, а не конец по лучу
+  refreshWallCursor()
   lengthInput.focus()
   redraw()
 }
@@ -713,19 +749,41 @@ lengthInput.addEventListener("focus", () => lengthInput.select())
 lengthInput.addEventListener("input", () => {
   lengthDirty = true
   if (selectedWalls.length === 1) resizeSelected()
+  refreshWallCursor()
   redraw()
 })
 
 lengthInput.addEventListener("keydown", (e) => {
   if (e.key === "Enter" && chainStart) commitPoint()
+  else if (e.key === "Tab" && e.shiftKey && !angleInput.disabled) {
+    e.preventDefault()
+    angleInput.focus()
+  }
+})
+
+angleInput.addEventListener("focus", () => angleInput.select())
+
+angleInput.addEventListener("input", () => {
+  angleDirty = true
+  refreshWallCursor()
+  redraw()
+})
+
+angleInput.addEventListener("keydown", (e) => {
+  if (e.key === "Enter" && chainStart) commitPoint()
+  else if (e.key === "Tab" && !e.shiftKey) {
+    // круговой переход длина <-> угол, без ухода на кнопки блока размеров
+    e.preventDefault()
+    lengthInput.focus()
+  }
 })
 
 function endChain(): void {
   if (!chainStart) return
-  chainStart = null
-  cursorV = null
+  clearChain()
   lengthDirty = false
   lengthInput.blur()
+  refreshWallCursor()
   redraw()
 }
 
@@ -800,7 +858,7 @@ thicknessInput.addEventListener("input", () => {
     dirty = true
   }
   // привязка зависит от толщины новой стены (и сцены): пересчитать без движения курсора
-  if (tool === "wall" && wallCursorRaw) snapWallCursor(wallCursorRaw)
+  refreshWallCursor()
   redraw()
 })
 
@@ -839,6 +897,7 @@ function setWallMaterial(m: Material): void {
 orthoToggle.addEventListener("click", () => {
   ortho = !ortho
   orthoToggle.classList.toggle("active", ortho)
+  refreshWallCursor()
   redraw()
 })
 
@@ -893,8 +952,7 @@ function activate(id: string): void {
   view = current().view
   tool = "wall"
   syncToolUI()
-  chainStart = null
-  cursorV = null
+  clearChain()
   selectedWalls = []
   selectedDimensions = []
   dimDraft = emptyDraft()
@@ -940,8 +998,7 @@ function removeDrawing(id: string, index: number): void {
 }
 
 function resetEditing(): void {
-  chainStart = null
-  cursorV = null
+  clearChain()
   selectedWalls = []
   selectedDimensions = []
   setDimPanel(false)

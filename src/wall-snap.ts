@@ -1,5 +1,6 @@
 import { PX_PER_CM, SNAP_RADIUS_PX } from "./types"
 import type { Point, Wall } from "./types"
+import { orthoDirection } from "./wall-angle"
 import {
   add,
   clipHalfPlane,
@@ -35,16 +36,19 @@ const EDGE_SHIFT = 3 * SLICE
 const LINE_TOL = 1e-6 // допуск коллинеарности рёбер контура и совпадения вершин
 const PROBE = 1e-5 // шаг пробной точки за концом открытого участка
 const OVERLAP_AREA = 1e-6 // касание по стороне допустимо, наложение — нет
-const ORTHO_TAN = Math.tan((15 * Math.PI) / 180)
+const AXIS_TOL = 1e-12 // луч параллелен оси экрана
 
 export function snapRadiusCm(zoom: number): number {
   return SNAP_RADIUS_PX / (PX_PER_CM * zoom)
 }
 
+export type SnapTarget = "face" | "cap"
+
 export interface VertexSnap {
   point: Point
   source: "wall" | "grid"
   normal?: Point // наружная нормаль грани или торца при прилипании (для квадрата установки)
+  target?: SnapTarget // вид прилипания — грань или торец (опора начала цепочки)
 }
 
 export type ClickAction = { kind: "select"; wall: Wall } | { kind: "draw" }
@@ -52,6 +56,7 @@ export type ClickAction = { kind: "select"; wall: Wall } | { kind: "draw" }
 interface Candidate {
   point: Point
   normal: Point
+  target: SnapTarget
 }
 
 // открытый участок ребра контура сцены с наружной нормалью
@@ -176,7 +181,7 @@ function faceCandidate(scene: SceneContour, w: Wall, side: number, p: Point, new
   const hi = nearest[1] - endShrink(scene, line, nearest[1], -1, newHalf)
   if (lo > hi + EPS) return null
   const s = lo > hi ? (lo + hi) / 2 : Math.max(lo, Math.min(hi, sc))
-  return { point: add(add(w.a, mul(u, s)), offset), normal: line.normal }
+  return { point: add(add(w.a, mul(u, s)), offset), normal: line.normal, target: "face" }
 }
 
 // Кандидат на торце: только свободный торец (весь отрезок торца открыт) —
@@ -186,7 +191,7 @@ function capCandidate(scene: SceneContour, w: Wall, end: Point, out: Point): Can
   const shift = mul(out, EDGE_SHIFT)
   const visible = uncovered(hiddenBy(add(add(end, n), shift), add(sub(end, n), shift), scene.pieces))
   const free = visible.length === 1 && visible[0][0] <= LINE_TOL && visible[0][1] >= 1 - LINE_TOL
-  return free ? { point: end, normal: out } : null
+  return free ? { point: end, normal: out, target: "cap" } : null
 }
 
 // квадрат, приставленный стороной с центром в point, вытянутый на sizeCm по normal
@@ -240,6 +245,11 @@ export function snapVertex(
   newWallThicknessCm: number,
   orthoFrom?: Point,
 ): VertexSnap {
+  // орто по осям экрана от свободного начала: сработало — конец на луче (design D4)
+  if (orthoFrom) {
+    const dir = orthoDirection(null, sub(p, orthoFrom))
+    if (dir) return snapOnRay(p, walls, radiusCm, gridStepCm, newWallThicknessCm, orthoFrom, dir)
+  }
   const newHalf = newWallThicknessCm / 2
   const reach = Math.max(radiusCm, newHalf)
   let contour: SceneContour | null = null
@@ -283,21 +293,92 @@ export function snapVertex(
       bestD = d
     }
   }
-  if (best) {
-    const result: VertexSnap = { point: best.point, source: "wall" }
-    // замороженный контракт тестов — {point, source}: normal неперечислима
-    Object.defineProperty(result, "normal", { value: best.normal, enumerable: false })
-    return result
-  }
+  if (best) return wallSnap(best)
   const grid = (v: number): number => Math.round(v / gridStepCm) * gridStepCm
-  if (orthoFrom) {
-    const dx = p.x - orthoFrom.x
-    const dy = p.y - orthoFrom.y
-    // неподвижная координата = координата последней вершины точно; гридится только подвижная
-    if (Math.abs(dy) <= ORTHO_TAN * Math.abs(dx)) return { point: { x: grid(p.x), y: orthoFrom.y }, source: "grid" }
-    if (Math.abs(dx) <= ORTHO_TAN * Math.abs(dy)) return { point: { x: orthoFrom.x, y: grid(p.y) }, source: "grid" }
-  }
   return { point: { x: grid(p.x), y: grid(p.y) }, source: "grid" }
+}
+
+// замороженный контракт тестов — {point, source}: normal и target неперечислимы
+function wallSnap(c: Candidate): VertexSnap {
+  const result: VertexSnap = { point: c.point, source: "wall" }
+  Object.defineProperty(result, "normal", { value: c.normal, enumerable: false })
+  Object.defineProperty(result, "target", { value: c.target, enumerable: false })
+  return result
+}
+
+// Пересечение луча start + s·dir (s > 0) с плоскостью, в которую луч входит снаружи
+// (normal — наружная нормаль плоскости через origin); null — луч не входит или позади.
+function rayEntry(start: Point, dir: Point, origin: Point, normal: Point): Point | null {
+  const approach = dot(dir, normal)
+  if (approach >= -EPS) return null
+  const s = dot(sub(origin, start), normal) / approach
+  return s > EPS ? add(start, mul(dir, s)) : null
+}
+
+// Цели луча у стены w: грань со стороны входа — в открытом участке контура сцены
+// (без сжатия), свободный торец — в пределах его отрезка (design D3).
+function rayCandidates(scene: SceneContour, w: Wall, start: Point, dir: Point): Candidate[] {
+  const u = unit(w.a, w.b)
+  const n = perp(u)
+  const hW = w.thicknessCm / 2
+  const found: Candidate[] = []
+  for (const side of [1, -1]) {
+    const normal = mul(n, side)
+    const origin = add(w.a, mul(normal, hW))
+    const point = rayEntry(start, dir, origin, normal)
+    if (!point) continue
+    const s = dot(sub(point, origin), u)
+    const line: TargetLine = { origin, u, normal }
+    if (openIntervals(scene, line, dist(w.a, w.b)).some(([lo, hi]) => s >= lo - LINE_TOL && s <= hi + LINE_TOL))
+      found.push({ point, normal, target: "face" })
+  }
+  for (const [end, out] of [
+    [w.b, u],
+    [w.a, mul(u, -1)],
+  ] as const) {
+    const point = rayEntry(start, dir, end, out)
+    if (!point || Math.abs(dot(sub(point, end), n)) > hW + LINE_TOL) continue
+    if (capCandidate(scene, w, end, out)) found.push({ point, normal: out, target: "cap" })
+  }
+  return found
+}
+
+// Конец при заданном направлении dir от start (design D3): прилипание к стене меняет
+// только длину — конец в пересечении луча с открытой гранью или свободным торцом;
+// иначе сетка на луче. Конец не бывает позади начала.
+export function snapOnRay(
+  p: Point,
+  walls: Wall[],
+  radiusCm: number,
+  gridStepCm: number,
+  newWallThicknessCm: number,
+  start: Point,
+  dir: Point,
+): VertexSnap {
+  const reach = Math.max(radiusCm, newWallThicknessCm / 2)
+  let contour: SceneContour | null = null
+  const scene = (): SceneContour => (contour ??= sceneContour(walls))
+  let best: Candidate | null = null
+  let bestD = Infinity
+  for (const w of walls) {
+    if (degenerate(w)) continue
+    for (const c of rayCandidates(scene(), w, start, dir)) {
+      const d = dist(p, c.point)
+      // строго меньше: при равенстве — стена раньше в массиве
+      if (d > reach || d >= bestD - EPS) continue
+      if (overlapsBodies(squareOnSide(c.point, c.normal, newWallThicknessCm), scene().pieces)) continue
+      best = c
+      bestD = d
+    }
+  }
+  if (best) return wallSnap(best)
+  const grid = (v: number): number => Math.round(v / gridStepCm) * gridStepCm
+  let end: Point
+  if (Math.abs(Math.abs(dir.x) - 1) <= AXIS_TOL) end = { x: grid(p.x), y: start.y }
+  else if (Math.abs(Math.abs(dir.y) - 1) <= AXIS_TOL) end = { x: start.x, y: grid(p.y) }
+  else end = add(start, mul(dir, grid(dot(sub(p, start), dir))))
+  if (dot(sub(end, start), dir) < 0) end = { x: start.x, y: start.y }
+  return { point: end, source: "grid" }
 }
 
 // Решение по клику без начатой цепочки в инструменте «Стена» (design D7): тело выделяет,
