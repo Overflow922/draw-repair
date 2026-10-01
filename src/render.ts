@@ -1,5 +1,7 @@
 import { dimGeometry, dimPointPoint, visibleWorld } from "./geometry"
 import type { DimGeometry } from "./geometry"
+import { findRooms, formatArea } from "./room-area"
+import type { Room } from "./room-area"
 import { contourSegments, displayPolygons, outlineSegments } from "./wall-geometry"
 import { GRID_STEP_CM, PX_PER_CM, normalizeMaterial } from "./types"
 import type { Dimension, Material, Point, Unit, View, Wall } from "./types"
@@ -112,6 +114,8 @@ export function drawScene(
   const m = opts.metrics ?? SCREEN_METRICS
   const k = PX_PER_CM * view.zoom
   const toScreen = (p: Point): Point => ({ x: (p.x - view.pan.x) * k, y: (p.y - view.pan.y) * k })
+  // помещения — только по зафиксированным стенам, превью не участвует
+  const rooms = findRooms(walls)
   if (opts.grid ?? true) {
     const { min, max } = visibleWorld(view, w, h, PX_PER_CM)
     ctx.save()
@@ -130,6 +134,8 @@ export function drawScene(
     }
     ctx.stroke()
     ctx.restore()
+    // заливка скрывает сетку внутри помещений; без сетки (PDF) она не наблюдаема
+    fillRooms(ctx, rooms, toScreen)
   }
   const sceneWalls = preview ? [...walls, preview] : walls
   const selectedDims = opts.selectedDims ?? []
@@ -155,6 +161,7 @@ export function drawScene(
     ctx.restore()
   }
   if (opts.angle) drawAngle(ctx, opts.angle, toScreen, m)
+  drawRoomLabels(ctx, rooms, toScreen, m)
   ctx.font = `${m.labelPx}px ${m.font}`
   ctx.textAlign = "center"
   ctx.textBaseline = "bottom"
@@ -200,6 +207,25 @@ export function drawScene(
     ctx.lineWidth = 1.5
     ctx.strokeStyle = "#fff"
     ctx.stroke()
+  }
+}
+
+function fillRooms(ctx: CanvasRenderingContext2D, rooms: Room[], toScreen: (p: Point) => Point): void {
+  ctx.fillStyle = "#fff"
+  for (const room of rooms) {
+    tracePolygons(ctx, [room.outline, ...room.holes].map((poly) => poly.map(toScreen)))
+    ctx.fill("evenodd")
+  }
+}
+
+function drawRoomLabels(ctx: CanvasRenderingContext2D, rooms: Room[], toScreen: (p: Point) => Point, m: RenderMetrics): void {
+  ctx.fillStyle = INK
+  ctx.font = `${m.labelPx}px ${m.font}`
+  ctx.textAlign = "center"
+  ctx.textBaseline = "middle"
+  for (const room of rooms) {
+    const s = toScreen(room.labelAt)
+    ctx.fillText(formatArea(room.areaCm2), s.x, s.y)
   }
 }
 
