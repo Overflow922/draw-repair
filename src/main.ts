@@ -3,7 +3,7 @@ import { cloneScene, drawingHistory, loadHistory, record, recordSnapshot, redoEn
 import type { Scene } from "./history"
 import { dimGeometry, dimHitDistance, dimLevelSnap, dimensionOffsetAt, distanceToWall, endpointAt, hitWall, moveEndpoint, moveWalls, nearestEdgeIntersection, dimPointPoint, pointsEqual, segmentIntersectsRect, snap, snapOthers, zoomAt } from "./geometry"
 import type { DimGeometry } from "./geometry"
-import { chainEndSquare, placementSquare, snapRadiusCm, snapVertex, wallClickAction } from "./wall-snap"
+import { chainEndSquare, placementSquare, snapRadiusCm, snapStartVertex, wallClickAction } from "./wall-snap"
 import type { VertexSnap } from "./wall-snap"
 import { parseAngleDeg, startRefOf } from "./wall-angle"
 import type { StartRef } from "./wall-angle"
@@ -392,7 +392,7 @@ function snapWallCursor(raw: Point): void {
   wallCursorRaw = raw
   if (!chainStart) {
     // до первого клика — квадрат установки у грани/торца или на сетке
-    const r = snapVertex(raw, walls, snapRadiusCm(view.zoom), GRID_STEP_CM, thicknessCm)
+    const r = snapStartVertex(raw, walls, snapRadiusCm(view.zoom), GRID_STEP_CM, thicknessCm)
     cursor = r.point
     cursorSnap = r
     segment = null
@@ -700,7 +700,7 @@ canvas.addEventListener("click", (e) => {
     // без инструмента — прежнее попадание с полосным допуском
     let wall: Wall | null
     if (tool === "wall") {
-      const action = wallClickAction(raw, snapVertex(raw, walls, radiusCm(), GRID_STEP_CM, thicknessCm), walls, radiusCm())
+      const action = wallClickAction(raw, snapStartVertex(raw, walls, radiusCm(), GRID_STEP_CM, thicknessCm), walls, radiusCm())
       wall = action.kind === "select" ? action.wall : null
     } else wall = hitWall(raw, walls, radiusCm())
     if (wall) {

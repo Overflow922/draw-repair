@@ -252,38 +252,87 @@ export function snapVertex(
   }
   const newHalf = newWallThicknessCm / 2
   const reach = Math.max(radiusCm, newHalf)
-  let contour: SceneContour | null = null
-  const scene = (): SceneContour => (contour ??= sceneContour(walls))
+  const scene = lazyScene(walls)
   // принятые кандидаты в порядке стен массива; квадрат не налагается на тела (design D5)
   const accepted: Candidate[] = []
-  const accept = (c: Candidate | null): boolean => {
-    if (!c || overlapsBodies(squareOnSide(c.point, c.normal, newWallThicknessCm), scene().pieces)) return false
+  const accept = acceptor(scene, newWallThicknessCm, accepted)
+  for (const w of walls) if (!degenerate(w)) wallCandidates(w, p, scene, newHalf, reach, accept)
+  const best = nearest(p, accepted)
+  if (best) return wallSnap(best)
+  const grid = (v: number): number => Math.round(v / gridStepCm) * gridStepCm
+  return { point: { x: grid(p.x), y: grid(p.y) }, source: "grid" }
+}
+
+// Привязка начальной вершины до первого клика (change fix-grid-square-touching-wall, design D1):
+// квадрат по сетке, касающийся тела стены, заменяется прилипанием к этой стене —
+// кандидаты только касаемых стен, без ограничения зоны; цели нет — сетка.
+export function snapStartVertex(
+  p: Point,
+  walls: Wall[],
+  radiusCm: number,
+  gridStepCm: number,
+  newWallThicknessCm: number,
+): VertexSnap {
+  const base = snapVertex(p, walls, radiusCm, gridStepCm, newWallThicknessCm)
+  if (base.source === "wall") return base
+  const square = placementSquare(base, newWallThicknessCm)
+  const touched = walls.filter((w) => !degenerate(w) && displayPolygons(w, walls).some((pc) => touchesConvex(square, pc)))
+  if (touched.length === 0) return base
+  const scene = lazyScene(walls)
+  const accepted: Candidate[] = []
+  const accept = acceptor(scene, newWallThicknessCm, accepted)
+  for (const w of touched) wallCandidates(w, p, scene, newWallThicknessCm / 2, Infinity, accept)
+  const best = nearest(p, accepted)
+  return best ? wallSnap(best) : base
+}
+
+const lazyScene = (walls: Wall[]): (() => SceneContour) => {
+  let contour: SceneContour | null = null
+  return () => (contour ??= sceneContour(walls))
+}
+
+// принимает кандидата, если его квадрат не налагается на тела (design D5)
+function acceptor(scene: () => SceneContour, sizeCm: number, accepted: Candidate[]): (c: Candidate | null) => boolean {
+  return (c) => {
+    if (!c || overlapsBodies(squareOnSide(c.point, c.normal, sizeCm), scene().pieces)) return false
     accepted.push(c)
     return true
   }
-  for (const w of walls) {
-    if (degenerate(w)) continue
-    const u = unit(w.a, w.b)
-    const len = dist(w.a, w.b)
-    const rel = sub(p, w.a)
-    const s = dot(rel, u)
-    const lat = dot(rel, perp(u))
-    const hW = w.thicknessCm / 2
-    const side = signOf(lat)
-    if (Math.abs(lat) <= hW + SLICE) {
-      // в полосе: за концом — торец (продолжение, только вблизи торца), в пределах длины —
-      // ближняя грань, запасная — дальняя, если ближняя не дала места (design D4)
-      if (s > len) {
-        if (s - len <= reach) accept(capCandidate(scene(), w, w.b, u))
-      } else if (s < 0) {
-        if (-s <= reach) accept(capCandidate(scene(), w, w.a, mul(u, -1)))
-      } else if (!accept(faceCandidate(scene(), w, side, p, newHalf))) accept(faceCandidate(scene(), w, -side, p, newHalf))
-      continue
-    }
-    // вне полосы — только грань: радиус привязки или край приставленного квадрата
-    if (Math.abs(lat) - hW <= reach && s >= -reach && s <= len + reach) accept(faceCandidate(scene(), w, side, p, newHalf))
+}
+
+// Кандидаты стены w для курсора p; reach — зона прилипания к торцу и к грани вне полосы
+// (design D3 change fix-grid-square-touching-wall).
+function wallCandidates(
+  w: Wall,
+  p: Point,
+  scene: () => SceneContour,
+  newHalf: number,
+  reach: number,
+  accept: (c: Candidate | null) => boolean,
+): void {
+  const u = unit(w.a, w.b)
+  const len = dist(w.a, w.b)
+  const rel = sub(p, w.a)
+  const s = dot(rel, u)
+  const lat = dot(rel, perp(u))
+  const hW = w.thicknessCm / 2
+  const side = signOf(lat)
+  if (Math.abs(lat) <= hW + SLICE) {
+    // в полосе: за концом — торец (продолжение, только вблизи торца), в пределах длины —
+    // ближняя грань, запасная — дальняя, если ближняя не дала места (design D4)
+    if (s > len) {
+      if (s - len <= reach) accept(capCandidate(scene(), w, w.b, u))
+    } else if (s < 0) {
+      if (-s <= reach) accept(capCandidate(scene(), w, w.a, mul(u, -1)))
+    } else if (!accept(faceCandidate(scene(), w, side, p, newHalf))) accept(faceCandidate(scene(), w, -side, p, newHalf))
+    return
   }
-  // ближайший; строго меньше — при равенстве побеждает стена раньше в массиве
+  // вне полосы — только грань: радиус привязки или край приставленного квадрата
+  if (Math.abs(lat) - hW <= reach && s >= -reach && s <= len + reach) accept(faceCandidate(scene(), w, side, p, newHalf))
+}
+
+// ближайший; строго меньше — при равенстве побеждает стена раньше в массиве
+function nearest(p: Point, accepted: Candidate[]): Candidate | null {
   let best: Candidate | null = null
   let bestD = Infinity
   for (const c of accepted) {
@@ -293,9 +342,23 @@ export function snapVertex(
       bestD = d
     }
   }
-  if (best) return wallSnap(best)
-  const grid = (v: number): number => Math.round(v / gridStepCm) * gridStepCm
-  return { point: { x: grid(p.x), y: grid(p.y) }, source: "grid" }
+  return best
+}
+
+// общая точка выпуклых многоугольников (касание или наложение), design D2: разделяющая ось
+// по нормалям рёбер обоих — тела не касаются только при зазоре больше LINE_TOL
+function touchesConvex(a: Point[], b: Point[]): boolean {
+  const project = (poly: Point[], n: Point): [number, number] => {
+    const ds = poly.map((q) => dot(q, n))
+    return [Math.min(...ds), Math.max(...ds)]
+  }
+  for (const n of [...edgeNormals(a), ...edgeNormals(b)]) {
+    if (n.x === 0 && n.y === 0) continue
+    const [aLo, aHi] = project(a, n)
+    const [bLo, bHi] = project(b, n)
+    if (bLo - aHi > LINE_TOL || aLo - bHi > LINE_TOL) return false
+  }
+  return true
 }
 
 // замороженный контракт тестов — {point, source}: normal и target неперечислимы
