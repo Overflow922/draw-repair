@@ -49,12 +49,14 @@ export interface VertexSnap {
   source: "wall" | "grid"
   normal?: Point // наружная нормаль грани или торца при прилипании (для квадрата установки)
   target?: SnapTarget // вид прилипания — грань или торец (опора начала цепочки)
+  base?: Point // середина стороны квадрата, приставленной к грани/торцу (у торца — не вершина)
 }
 
 export type ClickAction = { kind: "select"; wall: Wall } | { kind: "draw" }
 
 interface Candidate {
-  point: Point
+  point: Point // вершина
+  base: Point // середина приставленной стороны квадрата установки (design D1)
   normal: Point
   target: SnapTarget
 }
@@ -181,17 +183,22 @@ function faceCandidate(scene: SceneContour, w: Wall, side: number, p: Point, new
   const hi = nearest[1] - endShrink(scene, line, nearest[1], -1, newHalf)
   if (lo > hi + EPS) return null
   const s = lo > hi ? (lo + hi) / 2 : Math.max(lo, Math.min(hi, sc))
-  return { point: add(add(w.a, mul(u, s)), offset), normal: line.normal, target: "face" }
+  const point = add(add(w.a, mul(u, s)), offset)
+  return { point, base: point, normal: line.normal, target: "face" }
 }
 
-// Кандидат на торце: только свободный торец (весь отрезок торца открыт) —
-// вершина в плоскости торца на оси, нормаль наружу.
-function capCandidate(scene: SceneContour, w: Wall, end: Point, out: Point): Candidate | null {
+// свободный торец: плоскость торца не закрыта ни на одном участке телами сцены
+function freeCap(scene: SceneContour, w: Wall, end: Point, out: Point): boolean {
   const n = mul(perp(out), w.thicknessCm / 2)
   const shift = mul(out, EDGE_SHIFT)
   const visible = uncovered(hiddenBy(add(add(end, n), shift), add(sub(end, n), shift), scene.pieces))
-  const free = visible.length === 1 && visible[0][0] <= LINE_TOL && visible[0][1] >= 1 - LINE_TOL
-  return free ? { point: end, normal: out, target: "cap" } : null
+  return visible.length === 1 && visible[0][0] <= LINE_TOL && visible[0][1] >= 1 - LINE_TOL
+}
+
+// Кандидат на свободном торце без заданного направления (change cap-snap-vertex-at-square-center,
+// design D1): квадрат приставлен к плоскости торца, вершина — его центр на оси.
+function capCandidate(scene: SceneContour, w: Wall, end: Point, out: Point, newHalf: number): Candidate | null {
+  return freeCap(scene, w, end, out) ? { point: add(end, mul(out, newHalf)), base: end, normal: out, target: "cap" } : null
 }
 
 // квадрат, приставленный стороной с центром в point, вытянутый на sizeCm по normal
@@ -204,7 +211,7 @@ export function squareOnSide(point: Point, normal: Point, sizeCm: number): Point
 }
 
 export function placementSquare(snap: VertexSnap, sizeCm: number): Point[] {
-  if (snap.normal) return squareOnSide(snap.point, snap.normal, sizeCm)
+  if (snap.normal) return squareOnSide(snap.base ?? snap.point, snap.normal, sizeCm)
   const h = sizeCm / 2
   const { x, y } = snap.point
   return [
@@ -294,7 +301,7 @@ const lazyScene = (walls: Wall[]): (() => SceneContour) => {
 // принимает кандидата, если его квадрат не налагается на тела (design D5)
 function acceptor(scene: () => SceneContour, sizeCm: number, accepted: Candidate[]): (c: Candidate | null) => boolean {
   return (c) => {
-    if (!c || overlapsBodies(squareOnSide(c.point, c.normal, sizeCm), scene().pieces)) return false
+    if (!c || overlapsBodies(squareOnSide(c.base, c.normal, sizeCm), scene().pieces)) return false
     accepted.push(c)
     return true
   }
@@ -321,9 +328,9 @@ function wallCandidates(
     // в полосе: за концом — торец (продолжение, только вблизи торца), в пределах длины —
     // ближняя грань, запасная — дальняя, если ближняя не дала места (design D4)
     if (s > len) {
-      if (s - len <= reach) accept(capCandidate(scene(), w, w.b, u))
+      if (s - len <= reach) accept(capCandidate(scene(), w, w.b, u, newHalf))
     } else if (s < 0) {
-      if (-s <= reach) accept(capCandidate(scene(), w, w.a, mul(u, -1)))
+      if (-s <= reach) accept(capCandidate(scene(), w, w.a, mul(u, -1), newHalf))
     } else if (!accept(faceCandidate(scene(), w, side, p, newHalf))) accept(faceCandidate(scene(), w, -side, p, newHalf))
     return
   }
@@ -331,12 +338,13 @@ function wallCandidates(
   if (Math.abs(lat) - hW <= reach && s >= -reach && s <= len + reach) accept(faceCandidate(scene(), w, side, p, newHalf))
 }
 
-// ближайший; строго меньше — при равенстве побеждает стена раньше в массиве
+// ближайший по точке приставления квадрата (design D3: сдвиг вершины торца не меняет выбор);
+// строго меньше — при равенстве побеждает стена раньше в массиве
 function nearest(p: Point, accepted: Candidate[]): Candidate | null {
   let best: Candidate | null = null
   let bestD = Infinity
   for (const c of accepted) {
-    const d = dist(p, c.point)
+    const d = dist(p, c.base)
     if (d < bestD - EPS) {
       best = c
       bestD = d
@@ -361,11 +369,12 @@ function touchesConvex(a: Point[], b: Point[]): boolean {
   return true
 }
 
-// замороженный контракт тестов — {point, source}: normal и target неперечислимы
+// замороженный контракт тестов — {point, source}: normal, target и base неперечислимы
 function wallSnap(c: Candidate): VertexSnap {
   const result: VertexSnap = { point: c.point, source: "wall" }
   Object.defineProperty(result, "normal", { value: c.normal, enumerable: false })
   Object.defineProperty(result, "target", { value: c.target, enumerable: false })
+  Object.defineProperty(result, "base", { value: c.base, enumerable: false })
   return result
 }
 
@@ -393,7 +402,7 @@ function rayCandidates(scene: SceneContour, w: Wall, start: Point, dir: Point): 
     const s = dot(sub(point, origin), u)
     const line: TargetLine = { origin, u, normal }
     if (openIntervals(scene, line, dist(w.a, w.b)).some(([lo, hi]) => s >= lo - LINE_TOL && s <= hi + LINE_TOL))
-      found.push({ point, normal, target: "face" })
+      found.push({ point, base: point, normal, target: "face" })
   }
   for (const [end, out] of [
     [w.b, u],
@@ -401,7 +410,8 @@ function rayCandidates(scene: SceneContour, w: Wall, start: Point, dir: Point): 
   ] as const) {
     const point = rayEntry(start, dir, end, out)
     if (!point || Math.abs(dot(sub(point, end), n)) > hW + LINE_TOL) continue
-    if (capCandidate(scene, w, end, out)) found.push({ point, normal: out, target: "cap" })
+    // направление задано — конец в плоскости торца, не в центре квадрата
+    if (freeCap(scene, w, end, out)) found.push({ point, base: point, normal: out, target: "cap" })
   }
   return found
 }

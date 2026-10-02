@@ -47,9 +47,9 @@ function constrainedDirection(input: ChainInput, v: Point): Point | null {
 // Трекинг по узлам (design D2): только когда конец не прилип к стене и длина не введена;
 // на заданном направлении — длина по пересечению луча с линией узла, иначе — координаты по осям.
 function tracked(input: ChainInput, snap: VertexSnap, fixed: Point | null): { end: Point; tracks: TrackLine[] } | null {
-  const { start, raw, walls, radiusCm, typedLengthCm } = input
+  const { start, ref, raw, walls, radiusCm, typedLengthCm } = input
   if (snap.source === "wall" || typedLengthCm !== null) return null
-  const nodes = trackingNodes(walls, start)
+  const nodes = trackingNodes(walls, start, ref?.kind === "cap" ? ref.anchor : undefined)
   if (fixed) {
     const hit = trackOnRay(raw, nodes, radiusCm, start, fixed)
     return hit && { end: hit.point, tracks: [hit.line] }

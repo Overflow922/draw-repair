@@ -343,9 +343,9 @@ describe("трекинг: направление задано", () => {
     // направление из введённого угла вычисляется с погрешностью (dir.x ≈ 1e-16), но луч параллелен вертикали
     const walls = [W(0, 0, 300, 0), W(298, 600, 398, 600)]
     const snap = snapVertex({ x: 306, y: 0 }, walls, R, GRID, 20)
-    expectPoint(snap.point, 300, 0)
+    expectPoint(snap.point, 310, 0) // центр квадрата у торца (change cap-snap-vertex-at-square-center)
     const s = seg({ start: snap.point, ref: startRefOf(snap), raw: { x: 300.5, y: 203 }, walls, typedAngleDeg: 90 })
-    expectPoint(s.end, 300, 200)
+    expectPoint(s.end, 310, 200)
     expectTracks(s.tracks, [])
   })
 

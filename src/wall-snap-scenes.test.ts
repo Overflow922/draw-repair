@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest"
 import { snapRadiusCm, snapVertex } from "./wall-geometry"
 import type { VertexSnap } from "./wall-geometry"
+import { placementSquare } from "./wall-snap"
 import type { Point, Wall } from "./types"
 import {
   W,
@@ -13,7 +14,6 @@ import {
   sceneN,
   sceneS,
   sceneT,
-  squareOnNormal,
   strictlyInsideAnyBody,
 } from "./wall-snap.test-utils"
 
@@ -41,7 +41,8 @@ function expectNoOverlap(r: VertexSnap, walls: Wall[], t: number): void {
   expect(r.normal).toBeDefined()
   const n = r.normal ?? { x: 0, y: 0 }
   expect(Math.hypot(n.x, n.y)).toBeCloseTo(1, 9)
-  expect(maxOverlap(squareOnNormal(r.point, n, t), walls)).toBeLessThanOrEqual(1e-6)
+  // отображаемый квадрат установки (у торца вершина — его центр, сторона — на плоскости торца)
+  expect(maxOverlap(placementSquare(r, t), walls)).toBeLessThanOrEqual(1e-6)
   expect(strictlyInsideAnyBody(r.point, walls)).toBe(false)
 }
 
@@ -107,8 +108,9 @@ describe("Стык и торцы", () => {
 
   it("SNAP-CAP-N1: свободный торец — продолжение на оси с наружной нормалью торца", () => {
     const r = snap({ x: 106, y: 3 }, sceneS())
-    expect(r).toEqual({ point: { x: 100, y: 0 }, source: "wall" })
-    expectWall(r, 100, 0, 1, 0)
+    // change cap-snap-vertex-at-square-center: вершина — центр квадрата у плоскости торца
+    expect(r).toEqual({ point: { x: 110, y: 0 }, source: "wall" })
+    expectWall(r, 110, 0, 1, 0)
   })
 
   it("SNAP-SCALE-1: угловое прилипание у торца при отдалённом виде", () => {
@@ -118,12 +120,12 @@ describe("Стык и торцы", () => {
   it("SNAP-SCALE-2: выбор грань/торец одинаков при масштабах 0.25, 0.6, 1, 4", () => {
     for (const z of [0.25, 0.6, 1, 4]) {
       expectWall(snap({ x: 104, y: -14 }, sceneS(), z), 90, -10, 0, -1)
-      expectWall(snap({ x: 104, y: 6 }, sceneS(), z), 100, 0, 1, 0)
+      expectWall(snap({ x: 104, y: 6 }, sceneS(), z), 110, 0, 1, 0)
     }
   })
 
   it("SNAP-SCALE-3: граница полосы при R > h — ровно на полосе торец, за ней грань", () => {
-    expectWall(snap({ x: 104, y: -10 }, sceneS(), 0.25), 100, 0, 1, 0)
+    expectWall(snap({ x: 104, y: -10 }, sceneS(), 0.25), 110, 0, 1, 0)
     expectWall(snap({ x: 104, y: -10.001 }, sceneS(), 0.25), 90, -10, 0, -1)
   })
 

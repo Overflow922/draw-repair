@@ -9,6 +9,7 @@ import { cross, dot, mul, perp } from "./wall-geometry"
 export interface StartRef {
   kind: "face" | "cap"
   normal: Point
+  anchor?: Point // у торца — конец оси стены примыкания (точка приставления квадрата), design D4
 }
 
 const ORTHO_TAN = Math.tan((15 * Math.PI) / 180)
@@ -34,7 +35,9 @@ function normalized(v: Point): Point {
 
 export function startRefOf(snap: VertexSnap): StartRef | null {
   if (snap.source !== "wall" || !snap.normal || !snap.target) return null
-  return { kind: snap.target, normal: { x: snap.normal.x, y: snap.normal.y } }
+  const ref: StartRef = { kind: snap.target, normal: { x: snap.normal.x, y: snap.normal.y } }
+  if (snap.target === "cap" && snap.base) ref.anchor = { x: snap.base.x, y: snap.base.y }
+  return ref
 }
 
 // наименьший угол к стене примыкания: у торца — к лучу внутрь стены (0..180),

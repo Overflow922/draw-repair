@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest"
 import { chainSegment } from "./wall-chain"
-import { snapRadiusCm, snapStartVertex, snapVertex } from "./wall-snap"
+import { placementSquare, snapRadiusCm, snapStartVertex, snapVertex } from "./wall-snap"
 import type { VertexSnap } from "./wall-snap"
 import { displayPolygons } from "./wall-geometry"
 import type { Point, Wall } from "./types"
@@ -69,7 +69,8 @@ function expectStuckWithoutOverlap(snap: VertexSnap, walls: Wall[]): void {
   const normal = snap.normal
   expect(normal).toBeDefined()
   if (!normal) return
-  expect(maxOverlap(squareOnNormal(snap.point, normal, NEW), walls)).toBeLessThanOrEqual(1e-6)
+  // отображаемый квадрат установки (у торца вершина — его центр, сторона — на плоскости торца)
+  expect(maxOverlap(placementSquare(snap, NEW), walls)).toBeLessThanOrEqual(1e-6)
   expect(strictlyInsideAnyBody(snap.point, walls)).toBe(false)
 }
 
@@ -148,7 +149,7 @@ describe("выбор ближайшей цели (GS-14, GS-16, GS-17)", () => {
     expect(walls.map((w) => displayPolygons(w, walls).some((pc) => touches(sq, pc)))).toEqual([false, true, true])
     const snap = start({ x: 115.37, y: 210.61 }, walls)
     expect(snap.source).toBe("wall")
-    expectPoint(snap.point, 125, 200)
+    expectPoint(snap.point, 125, 210) // центр квадрата у торца C (change cap-snap-vertex-at-square-center)
     expectPoint(snap.normal ?? { x: NaN, y: NaN }, 0, 1)
     expect(snap.target).toBe("cap")
     expectStuckWithoutOverlap(snap, walls)
@@ -193,7 +194,7 @@ describe("квадрат по сетке у свободного торца (GS-
     const walls = deepFreeze([W(-100, 0, 0, 0, 20)])
     const snap = start({ x: 12, y: 0 }, walls)
     expect(snap.source).toBe("wall")
-    expectPoint(snap.point, 0, 0)
+    expectPoint(snap.point, 10, 0) // центр квадрата у торца (change cap-snap-vertex-at-square-center)
     expect(snap.target).toBe("cap")
     expectPoint(snap.normal ?? { x: NaN, y: NaN }, 1, 0)
     expectStuckWithoutOverlap(snap, walls)
@@ -302,7 +303,7 @@ describe.each(SCENES)("инварианты развёртки — сцена %s
         failures.push(`нет нормали: курсор (${p.x}, ${p.y})`)
         continue
       }
-      if (maxOverlap(squareOnNormal(snap.point, normal, NEW), walls) > 1e-6 || strictlyInsideAnyBody(snap.point, walls))
+      if (maxOverlap(placementSquare(snap, NEW), walls) > 1e-6 || strictlyInsideAnyBody(snap.point, walls))
         failures.push(`наложение: курсор (${p.x}, ${p.y}) → (${snap.point.x}, ${snap.point.y})`)
     }
     expect(failures.slice(0, 5)).toEqual([])

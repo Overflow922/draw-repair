@@ -126,10 +126,11 @@ describe("snapVertex: привязка к граням и торцам", () => {
     expect(fatNew.point).toEqual({ x: 70, y: -20 }) // 100 - 60/2, проекция 75 клампится к 70
   })
 
-  it("SNAP-END-2: коллинеарное продолжение — вершина в плоскости торца на оси", () => {
+  // change cap-snap-vertex-at-square-center: вершина торца — центр квадрата установки
+  it("SNAP-END-2: коллинеарное продолжение — вершина в центре квадрата на оси", () => {
     const walls = [W(0, 0, 100, 0)]
     const r = snapVertex({ x: 106, y: 3 }, walls, R, GRID, 20)
-    expect(r.point).toEqual({ x: 100, y: 0 })
+    expect(r.point).toEqual({ x: 110, y: 0 })
     expect(r.source).toBe("wall")
   })
 
@@ -138,10 +139,10 @@ describe("snapVertex: привязка к граням и торцам", () => {
     const outsideBand = snapVertex({ x: 104, y: -14 }, walls, R, GRID, 20)
     expect(outsideBand.point).toEqual({ x: 90, y: -10 })
     const insideBand = snapVertex({ x: 104, y: 6 }, walls, R, GRID, 20)
-    expect(insideBand.point).toEqual({ x: 100, y: 0 })
+    expect(insideBand.point).toEqual({ x: 110, y: 0 })
     // |d| = полутолщина ровно: курсор в пределах полосы -> торец (продолжение)
     const onBandEdge = snapVertex({ x: 104, y: -10 }, walls, R, GRID, 20)
-    expect(onBandEdge.point).toEqual({ x: 100, y: 0 })
+    expect(onBandEdge.point).toEqual({ x: 110, y: 0 })
     // на 0.001 за полосой -> уже угол
     const justOutside = snapVertex({ x: 104, y: -10.001 }, walls, R, GRID, 20)
     expect(justOutside.point).toEqual({ x: 90, y: -10 })
@@ -150,7 +151,7 @@ describe("snapVertex: привязка к граням и торцам", () => {
   it("SNAP-CONT-1: продолжение полосы за торцом, торец вне радиуса", () => {
     const walls = [W(0, 0, 100, 0)]
     const r = snapVertex({ x: 110, y: 5 }, walls, R, GRID, 20) // до торца 11.2 > R, lateral 5 <= R
-    expect(r.point).toEqual({ x: 100, y: 0 })
+    expect(r.point).toEqual({ x: 110, y: 0 })
     expect(r.source).toBe("wall")
   })
 })

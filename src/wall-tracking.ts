@@ -31,11 +31,15 @@ export interface RayTrack {
 const same = (p: Point, q: Point): boolean => Math.abs(p.x - q.x) <= EPS && Math.abs(p.y - q.y) <= EPS
 
 // концы осей стен ненулевой длины в порядке массива (a, затем b) — порядок задаёт выбор при равенстве;
-// без точек, где совпадают концы осей двух стен, и без начала текущей стены
-export function trackingNodes(walls: readonly Wall[], start: Point): Point[] {
+// без точек, где совпадают концы осей двух стен, без начала текущей стены и без exclude —
+// конца оси стены примыкания у торца начала (change cap-snap-vertex-at-square-center, design D5)
+export function trackingNodes(walls: readonly Wall[], start: Point, exclude?: Point): Point[] {
   const ends = walls.filter((w) => !degenerate(w)).flatMap((w, i) => [w.a, w.b].map((p) => ({ p, wall: i })))
   return ends
-    .filter(({ p, wall }) => !same(p, start) && !ends.some((o) => o.wall !== wall && same(o.p, p)))
+    .filter(
+      ({ p, wall }) =>
+        !same(p, start) && !(exclude && same(p, exclude)) && !ends.some((o) => o.wall !== wall && same(o.p, p)),
+    )
     .map(({ p }) => p)
 }
 
