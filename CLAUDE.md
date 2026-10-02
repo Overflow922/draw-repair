@@ -39,7 +39,9 @@ Expected workflow:
 8. implement;
 9. run quality gates;
 10. verify implementation against OpenSpec;
-11. archive the completed change.
+11. archive the completed change;
+12. stage all change files and commit them on the current branch
+    (do not create or switch branches).
 
 Do not start implementation before the relevant specification and task artifacts
 are sufficiently clear.

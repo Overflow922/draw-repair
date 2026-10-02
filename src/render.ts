@@ -2,6 +2,7 @@ import { dimGeometry, dimPointPoint, visibleWorld } from "./geometry"
 import type { DimGeometry } from "./geometry"
 import { findRooms, formatArea } from "./room-area"
 import type { Room } from "./room-area"
+import type { RoomAngle, RulerReading } from "./ruler"
 import { contourSegments, displayPolygons, outlineSegments } from "./wall-geometry"
 import { GRID_STEP_CM, PX_PER_CM, normalizeMaterial } from "./types"
 import type { Dimension, Material, Point, Unit, View, Wall } from "./types"
@@ -71,6 +72,7 @@ export interface RenderOptions {
   // угол к стене примыкания у начала превью: дуга от луча отсчёта from к направлению to
   angle?: { at: Point; from: Point; to: Point; deg: number } | null
   tracks?: TrackLine[] | null // линии трекинга по узлам в мировых координатах
+  ruler?: RulerReading | null // замеры инструмента «Линейка» под курсором
 }
 
 const ANGLE_ARC_PX = 56
@@ -78,6 +80,7 @@ const ANGLE_RAY_PX = ANGLE_ARC_PX + 10 // отрезок луча отсчёта
 const ANGLE_LABEL_GAP_PX = 18
 const ANGLE_COLOR = "#2563eb"
 const ANGLE_LINE_PX = 2
+const RULER_COLOR = ANGLE_COLOR // цвет подсказок построения
 const TRACK_COLOR = "#db2777"
 const TRACK_LINE_PX = 1.5
 const TRACK_DASH_PX = [6, 4]
@@ -176,6 +179,7 @@ export function drawScene(
     if (!selectedDims.includes(dim)) drawDimension(ctx, dim, walls, unit, MARQUEE_DIM_COLOR, view, m)
   for (const dim of selectedDims) drawDimension(ctx, dim, walls, unit, SELECTED_DIM_COLOR, view, m, singleDim)
   if (opts.hoverDim) drawDimension(ctx, opts.hoverDim, walls, unit, HOVER_ERASE_COLOR, view, m)
+  if (opts.ruler) drawRuler(ctx, opts.ruler, unit, view, toScreen, m)
   if (opts.marquee) {
     const { x1, y1, x2, y2 } = opts.marquee
     ctx.save()
@@ -270,19 +274,32 @@ function drawAngle(
   let sweep = Math.atan2(angle.to.y, angle.to.x) - a1
   if (sweep > Math.PI) sweep -= 2 * Math.PI
   if (sweep <= -Math.PI) sweep += 2 * Math.PI
+  drawAngleArc(ctx, c, a1, sweep, angle.deg, m, true)
+}
+
+// угол помещения у линейки: знаковый сектор со стороны помещения, без луча отсчёта
+function drawRoomAngle(ctx: CanvasRenderingContext2D, angle: RoomAngle, toScreen: (p: Point) => Point, m: RenderMetrics): void {
+  const a1 = Math.atan2(angle.startDir.y, angle.startDir.x)
+  drawAngleArc(ctx, toScreen(angle.at), a1, (angle.sweepDeg * Math.PI) / 180, angle.deg, m, false)
+}
+
+// дуга сектора от a1 на sweep (рад, экранные координаты) и подпись на биссектрисе
+function drawAngleArc(ctx: CanvasRenderingContext2D, c: Point, a1: number, sweep: number, deg: number, m: RenderMetrics, ray: boolean): void {
   const mid = a1 + sweep / 2
   const labelR = ANGLE_ARC_PX + ANGLE_LABEL_GAP_PX
   ctx.save()
   ctx.strokeStyle = ANGLE_COLOR
   ctx.lineWidth = ANGLE_LINE_PX
   ctx.beginPath()
-  ctx.moveTo(c.x, c.y)
-  ctx.lineTo(c.x + Math.cos(a1) * ANGLE_RAY_PX, c.y + Math.sin(a1) * ANGLE_RAY_PX)
+  if (ray) {
+    ctx.moveTo(c.x, c.y)
+    ctx.lineTo(c.x + Math.cos(a1) * ANGLE_RAY_PX, c.y + Math.sin(a1) * ANGLE_RAY_PX)
+  }
   ctx.moveTo(c.x + Math.cos(a1) * ANGLE_ARC_PX, c.y + Math.sin(a1) * ANGLE_ARC_PX)
   ctx.arc(c.x, c.y, ANGLE_ARC_PX, a1, a1 + sweep, sweep < 0)
   ctx.stroke()
   // подпись на белой подложке — не сливается со штриховкой стен
-  const text = `${Math.round(angle.deg)}°`
+  const text = `${Math.round(deg)}°`
   const lx = c.x + Math.cos(mid) * labelR
   const ly = c.y + Math.sin(mid) * labelR
   ctx.font = `bold ${m.labelPx}px ${m.font}`
@@ -297,6 +314,29 @@ function drawAngle(
   ctx.fillStyle = ANGLE_COLOR
   ctx.fillText(text, lx, ly)
   ctx.restore()
+}
+
+// замеры линейки: длина оси стены или пролёты грань-грань — как размерная линия цветом
+// подсказок построения; углы помещения — дугами
+function drawRuler(
+  ctx: CanvasRenderingContext2D,
+  ruler: RulerReading,
+  unit: Unit,
+  view: View,
+  toScreen: (p: Point) => Point,
+  m: RenderMetrics,
+): void {
+  const measures = ruler.kind === "wall" ? [ruler] : [ruler.horizontal, ruler.vertical].filter((s) => s !== null)
+  ctx.save()
+  ctx.font = `${m.labelPx}px ${m.font}`
+  ctx.textAlign = "center"
+  ctx.textBaseline = "bottom"
+  for (const { from, to, lengthCm } of measures) {
+    const geom = dimGeometry(from, to, 0)
+    if (geom) drawDimensionGeom(ctx, geom, formatLength(lengthCm, unit), RULER_COLOR, view, m)
+  }
+  ctx.restore()
+  if (ruler.kind === "space") for (const angle of ruler.angles) drawRoomAngle(ctx, angle, toScreen, m)
 }
 
 function tracePolygon(ctx: CanvasRenderingContext2D, poly: Point[]): void {

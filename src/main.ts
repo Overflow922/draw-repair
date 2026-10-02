@@ -10,6 +10,7 @@ import type { StartRef } from "./wall-angle"
 import { chainSegment } from "./wall-chain"
 import type { ChainSegment } from "./wall-chain"
 import { drawPatternPreview, render } from "./render"
+import { rulerReading } from "./ruler"
 import { availableFormats, exportDrawing, PAGE_FORMATS_MM } from "./export/pdf"
 import type { PageFormat } from "./export/pdf"
 import { loadStore, saveStore } from "./storage"
@@ -32,6 +33,7 @@ const redoBtn = document.querySelector<HTMLButtonElement>("#redo-btn")!
 const toolWallBtn = document.querySelector<HTMLButtonElement>("#tool-wall")!
 const toolDimensionBtn = document.querySelector<HTMLButtonElement>("#tool-dimension")!
 const toolEraserBtn = document.querySelector<HTMLButtonElement>("#tool-eraser")!
+const toolRulerBtn = document.querySelector<HTMLButtonElement>("#tool-ruler")!
 const wallPanel = document.querySelector<HTMLElement>("#wall-panel")!
 const pdfScale = document.querySelector<HTMLSelectElement>("#pdf-scale")!
 const pdfFormat = document.querySelector<HTMLSelectElement>("#pdf-format")!
@@ -77,7 +79,7 @@ let marqueePending: { x: number; y: number } | null = null
 let marquee: { x1: number; y1: number; x2: number; y2: number } | null = null
 let marqueeHits: { walls: Wall[]; dims: Dimension[] } | null = null
 const MARQUEE_THRESHOLD_PX = 5
-type Tool = "wall" | "dimension" | "eraser" | "none"
+type Tool = "wall" | "dimension" | "eraser" | "ruler" | "none"
 let tool: Tool = "wall"
 
 const emptyDraft = (): { a: DimPoint | null; b: DimPoint | null } => ({ a: null, b: null })
@@ -145,6 +147,7 @@ function syncToolUI(): void {
   toolWallBtn.classList.toggle("active", tool === "wall")
   toolDimensionBtn.classList.toggle("active", tool === "dimension")
   toolEraserBtn.classList.toggle("active", tool === "eraser")
+  toolRulerBtn.classList.toggle("active", tool === "ruler")
   canvas.classList.toggle("tool-eraser", tool === "eraser")
 }
 
@@ -296,6 +299,7 @@ function redraw(): void {
         ? { at: chainStart, from: segment.refRay, to: segment.dir, deg: segment.angleDeg }
         : null,
     tracks: tool === "wall" && chainStart && segment ? segment.tracks : null,
+    ruler: tool === "ruler" && cursor && !gestureActive() ? rulerReading(cursor, walls) : null,
   })
   updateLengthBox()
   updateAngleBox()
@@ -307,6 +311,11 @@ function redraw(): void {
     if (!readOnly) saveStore(store)
     if (!readOnly && !historyReadOnly) saveHistory(historyStore)
   }
+}
+
+// нажатая кнопка мыши: рамка, перетаскивание стен или размера, сдвиг вида
+function gestureActive(): boolean {
+  return !!(marquee || marqueePending || groupMove || endpointDrag || dimDrag || panDrag)
 }
 
 function eraserTarget(p: Point): { wall: Wall | null; dim: Dimension | null } {
@@ -524,8 +533,15 @@ canvas.addEventListener("pointermove", (e) => {
     return
   }
   if (tool === "wall") updateWallCursor(e)
-  else if (tool === "dimension") cursor = toWorld(e)
+  else if (tool === "dimension" || tool === "ruler") cursor = toWorld(e)
   else cursor = toSnappedPoint(e)
+  redraw()
+})
+
+// линейка показывает замеры только пока курсор над холстом
+canvas.addEventListener("pointerleave", () => {
+  if (tool !== "ruler" || !cursor) return
+  cursor = null
   redraw()
 })
 
@@ -583,6 +599,11 @@ canvas.addEventListener("pointerdown", (e) => {
   }
 })
 
+// нажатие начинает жест (рамка, перетаскивание, сдвиг вида) — замеры линейки скрываются сразу
+canvas.addEventListener("pointerdown", () => {
+  if (tool === "ruler" && gestureActive()) redraw()
+})
+
 canvas.addEventListener("pointerup", (e) => {
   if (marquee) {
     if (e.button === 0) {
@@ -627,7 +648,7 @@ canvas.addEventListener("pointerup", (e) => {
   if (!panDrag || e.button !== 1) return
   panDrag = null
   if (tool === "wall") updateWallCursor(e)
-  else if (tool === "dimension") cursor = toWorld(e)
+  else if (tool === "dimension" || tool === "ruler") cursor = toWorld(e)
   else cursor = toSnappedPoint(e)
   redraw()
 })
@@ -913,6 +934,8 @@ toolDimensionBtn.addEventListener("click", () => setTool("dimension"))
 
 toolEraserBtn.addEventListener("click", () => setTool("eraser"))
 
+toolRulerBtn.addEventListener("click", () => setTool("ruler"))
+
 wallTypesRow.addEventListener("click", (e) => {
   const btn = (e.target as HTMLElement).closest<HTMLButtonElement>(".wall-type")
   if (btn) setWallMaterial(btn.dataset.material as Material)
@@ -1139,7 +1162,7 @@ window.addEventListener("keydown", (e) => {
       dimDraft = emptyDraft()
       redraw()
     } else if (selectedDimensions.length || selectedWalls.length) clearSelection()
-    else if (tool === "eraser" || tool === "dimension") setTool("none")
+    else if (tool === "eraser" || tool === "dimension" || tool === "ruler") setTool("none")
   }
   if (e.key !== "ArrowUp" && e.key !== "ArrowDown" && e.key !== "ArrowLeft" && e.key !== "ArrowRight") return
   if (e.target instanceof HTMLInputElement) return
