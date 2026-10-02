@@ -199,10 +199,12 @@ function typedLengthCm(): number | null {
 }
 
 function previewLengthCm(): number | null {
-  if (!chainStart || !cursor) return null
+  // конец превью — с учётом трекинга по узлам, а не точка привязки к сетке
+  const end = segment?.end ?? cursor
+  if (!chainStart || !end) return null
   const base = chainStart
-  if (pointsEqual(base, cursor)) return null
-  return Math.hypot(cursor.x - base.x, cursor.y - base.y)
+  if (pointsEqual(base, end)) return null
+  return Math.hypot(end.x - base.x, end.y - base.y)
 }
 
 function typedAngleDeg(): number | null {
@@ -293,6 +295,7 @@ function redraw(): void {
       chainStart && segment?.dir && segment.refRay && segment.angleDeg !== null
         ? { at: chainStart, from: segment.refRay, to: segment.dir, deg: segment.angleDeg }
         : null,
+    tracks: tool === "wall" && chainStart && segment ? segment.tracks : null,
   })
   updateLengthBox()
   updateAngleBox()

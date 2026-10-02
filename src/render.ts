@@ -5,6 +5,7 @@ import type { Room } from "./room-area"
 import { contourSegments, displayPolygons, outlineSegments } from "./wall-geometry"
 import { GRID_STEP_CM, PX_PER_CM, normalizeMaterial } from "./types"
 import type { Dimension, Material, Point, Unit, View, Wall } from "./types"
+import type { TrackLine } from "./wall-tracking"
 
 const OUTLINE_PX = 4
 const HANDLE_PX = 5
@@ -69,6 +70,7 @@ export interface RenderOptions {
   square?: Point[] | null // вершины квадрата установки в мировых координатах
   // угол к стене примыкания у начала превью: дуга от луча отсчёта from к направлению to
   angle?: { at: Point; from: Point; to: Point; deg: number } | null
+  tracks?: TrackLine[] | null // линии трекинга по узлам в мировых координатах
 }
 
 const ANGLE_ARC_PX = 56
@@ -76,6 +78,9 @@ const ANGLE_RAY_PX = ANGLE_ARC_PX + 10 // отрезок луча отсчёта
 const ANGLE_LABEL_GAP_PX = 18
 const ANGLE_COLOR = "#2563eb"
 const ANGLE_LINE_PX = 2
+const TRACK_COLOR = "#db2777"
+const TRACK_LINE_PX = 1.5
+const TRACK_DASH_PX = [6, 4]
 
 export function render(
   canvas: HTMLCanvasElement,
@@ -160,6 +165,7 @@ export function drawScene(
     ctx.stroke()
     ctx.restore()
   }
+  if (opts.tracks?.length) drawTracks(ctx, opts.tracks, toScreen)
   if (opts.angle) drawAngle(ctx, opts.angle, toScreen, m)
   drawRoomLabels(ctx, rooms, toScreen, m)
   ctx.font = `${m.labelPx}px ${m.font}`
@@ -233,6 +239,23 @@ function formatLength(cm: number, unit: Unit): string {
   if (unit === "cm") return `${Math.round(cm)}`
   if (unit === "mm") return `${Math.round(cm * 10)}`
   return `${(Math.round(cm) / 100).toString().replace(".", ",")}`
+}
+
+// линии трекинга от узла до конца превью: пунктир постоянной экранной толщины
+function drawTracks(ctx: CanvasRenderingContext2D, tracks: TrackLine[], toScreen: (p: Point) => Point): void {
+  ctx.save()
+  ctx.strokeStyle = TRACK_COLOR
+  ctx.lineWidth = TRACK_LINE_PX
+  ctx.setLineDash(TRACK_DASH_PX)
+  ctx.beginPath()
+  for (const t of tracks) {
+    const a = toScreen(t.from)
+    const b = toScreen(t.to)
+    ctx.moveTo(a.x, a.y)
+    ctx.lineTo(b.x, b.y)
+  }
+  ctx.stroke()
+  ctx.restore()
 }
 
 // дуга кратчайшего сектора между лучами и подпись угла в целых градусах (экранные px)
