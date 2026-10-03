@@ -14,6 +14,8 @@ import { rulerReading } from "./ruler"
 import { availableFormats, exportDrawing, PAGE_FORMATS_MM } from "./export/pdf"
 import type { PageFormat } from "./export/pdf"
 import { loadStore, saveStore } from "./storage"
+import { loadThemeChoice, paletteOf, resolveTheme, saveThemeChoice, themeToggleTitle, toggledTheme } from "./theme"
+import type { Theme } from "./theme"
 import { GRID_STEP_CM, MATERIALS, PX_PER_CM } from "./types"
 import type { Dimension, DimPoint, Drawing, Material, Point, Unit, View, Wall } from "./types"
 
@@ -26,6 +28,7 @@ const angleInput = document.querySelector<HTMLInputElement>("#angle")!
 const unitRow = document.querySelector<HTMLElement>("#unit-row")!
 const wallTypesRow = document.querySelector<HTMLElement>("#wall-types")!
 const orthoToggle = document.querySelector<HTMLButtonElement>("#ortho-toggle")!
+const themeToggle = document.querySelector<HTMLButtonElement>("#theme-toggle")!
 const tabsEl = document.querySelector<HTMLElement>("#tabs")!
 const tabAdd = document.querySelector<HTMLButtonElement>("#tab-add")!
 const undoBtn = document.querySelector<HTMLButtonElement>("#undo-btn")!
@@ -81,6 +84,9 @@ let marqueeHits: { walls: Wall[]; dims: Dimension[] } | null = null
 const MARQUEE_THRESHOLD_PX = 5
 type Tool = "wall" | "dimension" | "eraser" | "ruler" | "none"
 let tool: Tool = "wall"
+const systemDark = window.matchMedia("(prefers-color-scheme: dark)")
+let themeChoice: Theme | null = loadThemeChoice(localStorage) // null — следовать системной настройке
+let theme: Theme = resolveTheme(themeChoice, systemDark.matches)
 
 const emptyDraft = (): { a: DimPoint | null; b: DimPoint | null } => ({ a: null, b: null })
 
@@ -269,6 +275,11 @@ function syncHistoryButtons(): void {
   redoBtn.disabled = h.future.length === 0
 }
 
+function drawPatternPreviews(): void {
+  for (const btn of wallTypesRow.querySelectorAll<HTMLButtonElement>(".wall-type"))
+    drawPatternPreview(btn.querySelector("canvas")!, btn.dataset.material as Material, paletteOf(theme))
+}
+
 function redraw(): void {
   const p = chainStart && segment ? segment.end : null
   const target = tool === "eraser" && cursor ? eraserTarget(cursor) : { wall: null, dim: null }
@@ -300,6 +311,7 @@ function redraw(): void {
         : null,
     tracks: tool === "wall" && chainStart && segment ? segment.tracks : null,
     ruler: tool === "ruler" && cursor && !gestureActive() ? rulerReading(cursor, walls) : null,
+    palette: paletteOf(theme),
   })
   updateLengthBox()
   updateAngleBox()
@@ -925,6 +937,25 @@ orthoToggle.addEventListener("click", () => {
   redraw()
 })
 
+function applyTheme(): void {
+  theme = resolveTheme(themeChoice, systemDark.matches)
+  document.documentElement.dataset.theme = theme
+  themeToggle.title = themeToggleTitle(theme)
+  drawPatternPreviews()
+  redraw()
+}
+
+themeToggle.addEventListener("click", () => {
+  themeChoice = toggledTheme(theme)
+  saveThemeChoice(localStorage, themeChoice)
+  applyTheme()
+})
+
+// без выбора кнопкой схема следует системной настройке на лету
+systemDark.addEventListener("change", () => {
+  if (themeChoice === null) applyTheme()
+})
+
 toolWallBtn.addEventListener("click", () => {
   if (tool !== "wall") setTool("wall")
   else setWallPanel(!wallPanelOpen)
@@ -1191,7 +1222,5 @@ window.addEventListener("keydown", (e) => {
 window.addEventListener("resize", redraw)
 syncThicknessBox()
 syncToolUI()
-for (const btn of wallTypesRow.querySelectorAll<HTMLButtonElement>(".wall-type"))
-  drawPatternPreview(btn.querySelector("canvas")!, btn.dataset.material as Material)
 renderTabs()
-redraw()
+applyTheme()

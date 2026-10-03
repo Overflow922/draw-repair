@@ -1,7 +1,60 @@
+:root {
+  --paper: #fff; /* фон холста = paper в LIGHT_PALETTE (src/theme.ts) */
+  --panel-bg: #fff;
+  --border: #ccc;
+  --shadow: rgba(0, 0, 0, 0.15);
+  --text: #444;
+  --text-strong: #333;
+  --text-muted: #555;
+  --hover: #f3f4f6;
+  --pressed: #e5e7eb;
+  --active-bg: #dbeafe;
+  --active-border: #2563eb;
+  --active-text: #1d4ed8;
+  --active-hover: #bfdbfe;
+  --focus-ring: #93c5fd;
+  --readonly-text: #777;
+  --readonly-bg: #f9fafb;
+  --swatch-frame: #999;
+  --swatch-border: #bbb;
+  --popup-text: #7f1d1d;
+  --popup-bg: #fef2f2;
+  --popup-border: #fca5a5;
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --paper: #1e1f22; /* фон холста = paper в DARK_PALETTE (src/theme.ts) */
+  --panel-bg: #2b2d31;
+  --border: #45474d;
+  --shadow: rgba(0, 0, 0, 0.5);
+  --text: #d4d4d8;
+  --text-strong: #e4e4e7;
+  --text-muted: #a1a1aa;
+  --hover: #36383d;
+  --pressed: #404248;
+  --active-bg: #1e3a5f;
+  --active-border: #60a5fa;
+  --active-text: #93c5fd;
+  --active-hover: #24476f;
+  --focus-ring: #3b82f6;
+  --readonly-text: #a1a1aa;
+  --readonly-bg: #232428;
+  --swatch-frame: #5c5f66;
+  --swatch-border: #5c5f66;
+  --popup-text: #fecaca;
+  --popup-bg: #3f1d1d;
+  --popup-border: #7f1d1d;
+}
+
 html,
 body {
   height: 100%;
   margin: 0;
+}
+
+body {
+  background: var(--paper);
 }
 
 #app {
@@ -10,10 +63,10 @@ body {
 }
 
 .panel {
-  background: #fff;
-  border: 1px solid #ccc;
+  background: var(--panel-bg);
+  border: 1px solid var(--border);
   border-radius: 10px;
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.15);
+  box-shadow: 0 1px 4px var(--shadow);
 }
 
 #tabbar {
@@ -39,19 +92,19 @@ body {
   align-items: center;
   gap: 6px;
   padding: 4px 8px;
-  border: 1px solid #ccc;
+  border: 1px solid var(--border);
   border-radius: 6px;
-  background: #fff;
-  color: #444;
+  background: var(--panel-bg);
+  color: var(--text);
   font-size: 13px;
   cursor: pointer;
   user-select: none;
 }
 
 .tab.active {
-  background: #dbeafe;
-  border-color: #2563eb;
-  color: #1d4ed8;
+  background: var(--active-bg);
+  border-color: var(--active-border);
+  color: var(--active-text);
 }
 
 .tab-close {
@@ -67,7 +120,7 @@ body {
 .tab-rename {
   width: 90px;
   font-size: 13px;
-  border: 1px solid #2563eb;
+  border: 1px solid var(--active-border);
   border-radius: 3px;
   padding: 0 2px;
 }
@@ -75,10 +128,10 @@ body {
 #tab-add {
   width: 28px;
   height: 28px;
-  border: 1px solid #ccc;
+  border: 1px solid var(--border);
   border-radius: 6px;
-  background: #fff;
-  color: #444;
+  background: var(--panel-bg);
+  color: var(--text);
   font-size: 16px;
   line-height: 1;
   cursor: pointer;
@@ -92,6 +145,7 @@ body {
 #canvas-wrap {
   position: absolute;
   inset: 0;
+  background: var(--paper);
 }
 
 #canvas {
@@ -126,10 +180,10 @@ body {
 .tool {
   width: 40px;
   height: 40px;
-  border: 1px solid #ccc;
+  border: 1px solid var(--border);
   border-radius: 6px;
-  background: #fff;
-  color: #444;
+  background: var(--panel-bg);
+  color: var(--text);
   cursor: pointer;
   display: flex;
   align-items: center;
@@ -137,26 +191,26 @@ body {
 }
 
 .tool.active {
-  background: #dbeafe;
-  border-color: #2563eb;
-  color: #1d4ed8;
+  background: var(--active-bg);
+  border-color: var(--active-border);
+  color: var(--active-text);
 }
 
 .tool:hover {
-  background: #f3f4f6;
+  background: var(--hover);
 }
 
 .tool:active {
-  background: #e5e7eb;
+  background: var(--pressed);
 }
 
 .tool.active:hover,
 .tool.active:active {
-  background: #bfdbfe;
+  background: var(--active-hover);
 }
 
 .tool-anchor:has(.tool-panel.open) .tool {
-  box-shadow: 0 0 0 2px #93c5fd;
+  box-shadow: 0 0 0 2px var(--focus-ring);
 }
 
 .tool-panel {
@@ -180,10 +234,10 @@ body {
 #pdf-format {
   height: 28px;
   padding: 0 4px;
-  border: 1px solid #ccc;
+  border: 1px solid var(--border);
   border-radius: 4px;
-  background: #fff;
-  color: #444;
+  background: var(--panel-bg);
+  color: var(--text);
   font-size: 12px;
   cursor: pointer;
 }
@@ -203,9 +257,9 @@ body {
   max-width: calc(100% - 24px);
   padding: 8px 14px;
   font-size: 13px;
-  color: #7f1d1d;
-  background: #fef2f2;
-  border-color: #fca5a5;
+  color: var(--popup-text);
+  background: var(--popup-bg);
+  border-color: var(--popup-border);
   cursor: pointer;
   user-select: none;
 }
@@ -214,10 +268,10 @@ body {
   width: 28px;
   height: 28px;
   padding: 0;
-  border: 1px solid #ccc;
+  border: 1px solid var(--border);
   border-radius: 4px;
-  background: #fff;
-  color: #444;
+  background: var(--panel-bg);
+  color: var(--text);
   cursor: pointer;
   display: flex;
   align-items: center;
@@ -231,14 +285,15 @@ body {
 
 #undo-btn,
 #redo-btn,
-#ortho-toggle {
+#ortho-toggle,
+#theme-toggle {
   width: 28px;
   height: 28px;
   padding: 0;
-  border: 1px solid #ccc;
+  border: 1px solid var(--border);
   border-radius: 4px;
-  background: #fff;
-  color: #444;
+  background: var(--panel-bg);
+  color: var(--text);
   cursor: pointer;
   display: flex;
   align-items: center;
@@ -253,7 +308,7 @@ body {
 
 #thickness-label {
   font-size: 10px;
-  color: #555;
+  color: var(--text-muted);
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -267,7 +322,7 @@ body {
 #dim-offset-label,
 #dim-value-label {
   font-size: 10px;
-  color: #555;
+  color: var(--text-muted);
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -280,13 +335,13 @@ body {
   width: 56px;
   font-size: 12px;
   padding: 2px 4px;
-  border: 1px solid #ccc;
+  border: 1px solid var(--border);
   border-radius: 3px;
 }
 
 #dim-value[readonly] {
-  color: #777;
-  background: #f9fafb;
+  color: var(--readonly-text);
+  background: var(--readonly-bg);
 }
 
 #wall-types {
@@ -300,23 +355,23 @@ body {
   align-items: center;
   gap: 6px;
   padding: 3px 8px 3px 3px;
-  border: 1px solid #999;
+  border: 1px solid var(--swatch-frame);
   border-radius: 4px;
-  background: #fff;
+  background: var(--panel-bg);
   cursor: pointer;
   font-size: 11px;
-  color: #333;
+  color: var(--text-strong);
   white-space: nowrap;
 }
 
 .wall-type canvas {
   display: block;
-  border: 1px solid #bbb;
+  border: 1px solid var(--swatch-border);
 }
 
 .wall-type.active {
-  border-color: #2563eb;
-  box-shadow: 0 0 0 2px #93c5fd;
+  border-color: var(--active-border);
+  box-shadow: 0 0 0 2px var(--focus-ring);
 }
 
 #size-box {
@@ -333,7 +388,7 @@ body {
 #length-label,
 #angle-label {
   font-size: 13px;
-  color: #333;
+  color: var(--text-strong);
   display: flex;
   align-items: center;
   gap: 6px;
@@ -352,9 +407,19 @@ body {
 }
 
 #ortho-toggle.active {
-  background: #dbeafe;
-  border-color: #2563eb;
-  color: #1d4ed8;
+  background: var(--active-bg);
+  border-color: var(--active-border);
+  color: var(--active-text);
+}
+
+/* иконка — схема, на которую переключит кнопка */
+#theme-toggle .icon-sun,
+:root[data-theme="dark"] #theme-toggle .icon-moon {
+  display: none;
+}
+
+:root[data-theme="dark"] #theme-toggle .icon-sun {
+  display: block;
 }
 
 #unit-row {
@@ -367,15 +432,15 @@ body {
   height: 28px;
   padding: 0;
   font-size: 12px;
-  border: 1px solid #ccc;
+  border: 1px solid var(--border);
   border-radius: 4px;
-  background: #fff;
-  color: #444;
+  background: var(--panel-bg);
+  color: var(--text);
   cursor: pointer;
 }
 
 .unit.active {
-  background: #dbeafe;
-  border-color: #2563eb;
-  color: #1d4ed8;
+  background: var(--active-bg);
+  border-color: var(--active-border);
+  color: var(--active-text);
 }
