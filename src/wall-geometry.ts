@@ -14,7 +14,7 @@ const EPS = 1e-9
 const SLICE = 1e-7
 // допуск прямого угла 0.5°: классификация через скалярное произведение направлений
 const RIGHT_COS = Math.cos((0.5 * Math.PI) / 180)
-const RIGHT_SIN = Math.sin((0.5 * Math.PI) / 180)
+export const RIGHT_SIN = Math.sin((0.5 * Math.PI) / 180)
 
 export const dist = (a: Point, b: Point): number => Math.hypot(b.x - a.x, b.y - a.y)
 export const cross = (a: Point, b: Point): number => a.x * b.y - a.y * b.x

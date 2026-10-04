@@ -39,7 +39,48 @@ function projectOnSegment(p: Point, w: Wall): Point {
 
 const ORTHO_TAN = Math.tan((15 * Math.PI) / 180)
 
+// ось орто через опорную точку: координата вдоль оси свободна, поперёк — фиксирована
+interface OrthoAxis {
+  along: "x" | "y"
+  across: "x" | "y"
+  fixed: number
+}
+
+function orthoLockAxis(cursor: Point, from: Point): OrthoAxis | null {
+  const dx = cursor.x - from.x
+  const dy = cursor.y - from.y
+  if (Math.abs(dy) <= ORTHO_TAN * Math.abs(dx)) return { along: "x", across: "y", fixed: from.y }
+  if (Math.abs(dx) <= ORTHO_TAN * Math.abs(dy)) return { along: "y", across: "x", fixed: from.x }
+  return null
+}
+
+const onAxis = (axis: OrthoAxis, along: number): Point =>
+  axis.along === "x" ? { x: along, y: axis.fixed } : { x: axis.fixed, y: along }
+
+// привязка вдоль оси орто (design D1): пересечение оси с линией стены или проекция конца стены
+// в радиусе — ближайшая к курсору; иначе сетка только по координате вдоль оси
+function snapOnOrthoAxis(cursor: Point, walls: Wall[], gridStepCm: number, radiusCm: number, axis: OrthoAxis): Point {
+  const { along, across, fixed } = axis
+  let best: Point | null = null
+  let bestDist = radiusCm
+  const consider = (p: Point) => {
+    const d = distance(cursor, p)
+    if (d <= bestDist) {
+      best = p
+      bestDist = d
+    }
+  }
+  for (const w of walls) {
+    const span = w.b[across] - w.a[across]
+    if (Math.abs(span) > EPS) consider(onAxis(axis, w.a[along] + ((fixed - w.a[across]) / span) * (w.b[along] - w.a[along])))
+    for (const end of [w.a, w.b]) if (distance(cursor, end) <= radiusCm) consider(onAxis(axis, end[along]))
+  }
+  return best ?? onAxis(axis, Math.round(cursor[along] / gridStepCm) * gridStepCm)
+}
+
 export function snap(cursor: Point, walls: Wall[], gridStepCm: number, radiusCm: number, orthoFrom?: Point): Point {
+  const axis = orthoFrom ? orthoLockAxis(cursor, orthoFrom) : null
+  if (axis) return snapOnOrthoAxis(cursor, walls, gridStepCm, radiusCm, axis)
   let best: Point | null = null
   let bestDist = radiusCm
   const consider = (p: Point, d: number) => {
@@ -67,16 +108,9 @@ export function snap(cursor: Point, walls: Wall[], gridStepCm: number, radiusCm:
     }
   }
   if (best) return best
-  let p = cursor
-  if (orthoFrom) {
-    const dx = cursor.x - orthoFrom.x
-    const dy = cursor.y - orthoFrom.y
-    if (Math.abs(dy) <= ORTHO_TAN * Math.abs(dx)) p = { x: cursor.x, y: orthoFrom.y }
-    else if (Math.abs(dx) <= ORTHO_TAN * Math.abs(dy)) p = { x: orthoFrom.x, y: cursor.y }
-  }
   return {
-    x: Math.round(p.x / gridStepCm) * gridStepCm,
-    y: Math.round(p.y / gridStepCm) * gridStepCm,
+    x: Math.round(cursor.x / gridStepCm) * gridStepCm,
+    y: Math.round(cursor.y / gridStepCm) * gridStepCm,
   }
 }
 
@@ -133,8 +167,8 @@ function attachedEnds(walls: Wall[], at: Point, self: Wall): { wall: Wall; end: 
   return out
 }
 
-// T-примыкание торцом стены w к стене wall: конец на оси (вне зон концов) или на грани
-function teeAttached(w: Wall, wall: Wall): boolean {
+// конец end стены w примкнут торцом к стене wall: на оси (вне зон концов) или на грани
+export function teeEndAttached(end: Point, w: Wall, wall: Wall): boolean {
   const dx = wall.b.x - wall.a.x
   const dy = wall.b.y - wall.a.y
   const len2 = dx * dx + dy * dy
@@ -143,14 +177,16 @@ function teeAttached(w: Wall, wall: Wall): boolean {
   const tol = jointTol(wall, w)
   const h = wall.thicknessCm / 2
   const d = { x: dx / len, y: dy / len }
-  for (const end of [w.a, w.b] as const) {
-    const rel = { x: end.x - wall.a.x, y: end.y - wall.a.y }
-    const along = dot(d, rel)
-    const lat = Math.abs(cross(d, rel))
-    if (along > tol && along < len - tol && lat <= EPS) return true
-    if (along > 0 && along < len && Math.abs(lat - h) <= EPS) return true
-  }
-  return false
+  const rel = { x: end.x - wall.a.x, y: end.y - wall.a.y }
+  const along = dot(d, rel)
+  const lat = Math.abs(cross(d, rel))
+  if (along > tol && along < len - tol && lat <= EPS) return true
+  return along > 0 && along < len && Math.abs(lat - h) <= EPS
+}
+
+// T-примыкание торцом стены w к стене wall
+function teeAttached(w: Wall, wall: Wall): boolean {
+  return teeEndAttached(w.a, w, wall) || teeEndAttached(w.b, w, wall)
 }
 
 export function moveEndpoint(walls: Wall[], wall: Wall, end: "a" | "b", pos: Point): void {

@@ -5,7 +5,9 @@ import { dimGeometry, dimHitDistance, dimLevelSnap, dimensionOffsetAt, distanceT
 import type { DimGeometry } from "./geometry"
 import { chainEndSquare, placementSquare, snapRadiusCm, snapStartVertex, wallClickAction } from "./wall-snap"
 import type { VertexSnap } from "./wall-snap"
-import { parseAngleDeg, startRefOf } from "./wall-angle"
+import { orthoDirection, parseAngleDeg, startRefOf } from "./wall-angle"
+import { applyStretch, planOrthoStretch } from "./ortho-stretch"
+import type { StretchSeed } from "./ortho-stretch"
 import type { StartRef } from "./wall-angle"
 import { chainSegment } from "./wall-chain"
 import type { ChainSegment } from "./wall-chain"
@@ -245,7 +247,8 @@ function resizeSelected(): void {
   if (pointsEqual(end, b)) return
   pushRecord()
   dirty = true
-  moveEndpoint(walls, selectedWalls[0], "b", end)
+  if (ortho) orthoStretch({ kind: "end", wall: selectedWalls[0], end: "b" }, { x: end.x - b.x, y: end.y - b.y })
+  else moveEndpoint(walls, selectedWalls[0], "b", end)
 }
 
 function updateLengthBox(): void {
@@ -471,18 +474,43 @@ function commitPoint(): void {
 
 let panDrag: { start: Point; pan: Point } | null = null
 
+// орто-растяжение (change ortho-stretch-move, design D3–D4): жест применяется от снимка его
+// начала полным вектором, план строится по исходной геометрии — итог не зависит от пути указателя
+function restoreWalls(scene: Scene): void {
+  walls.forEach((w, i) => {
+    const s = scene.walls[i]
+    if (!s) return
+    w.a = { x: s.a.x, y: s.a.y }
+    w.b = { x: s.b.x, y: s.b.y }
+  })
+}
+
+function orthoStretch(seed: StretchSeed, v: Point): void {
+  applyStretch(planOrthoStretch(walls, seed, v), v)
+}
+
+// стены, увлекаемые правкой вдоль оси орто, не участвуют в привязке (design D4)
+function stretchSnapWalls(seed: StretchSeed, from: Point, raw: Point, fallback: Wall[]): Wall[] {
+  const dir = orthoDirection(null, { x: raw.x - from.x, y: raw.y - from.y })
+  if (!dir) return fallback
+  const dragged = planOrthoStretch(walls, seed, dir).moved
+  return walls.filter((w) => !dragged.has(w) && !pointsEqual(w.a, w.b))
+}
+
 canvas.addEventListener("pointermove", (e) => {
   if (groupMove) {
-    const { group, pressed, baseA, grab, others } = groupMove
+    const { group, pressed, baseA, grab, others, snapshot } = groupMove
     const p = toWorld(e)
-    const target = snap(
-      { x: baseA.x + p.x - grab.x, y: baseA.y + p.y - grab.y },
-      others,
-      GRID_STEP_CM,
-      radiusCm(),
-      ortho ? baseA : undefined,
-    )
-    moveWalls(walls, group, { x: target.x - pressed.a.x, y: target.y - pressed.a.y })
+    const raw = { x: baseA.x + p.x - grab.x, y: baseA.y + p.y - grab.y }
+    if (ortho) {
+      restoreWalls(snapshot)
+      const seed: StretchSeed = { kind: "walls", walls: group }
+      const target = snap(raw, stretchSnapWalls(seed, baseA, raw, others), GRID_STEP_CM, radiusCm(), baseA)
+      orthoStretch(seed, { x: target.x - baseA.x, y: target.y - baseA.y })
+    } else {
+      const target = snap(raw, others, GRID_STEP_CM, radiusCm())
+      moveWalls(walls, group, { x: target.x - pressed.a.x, y: target.y - pressed.a.y })
+    }
     dirty = true
     redraw()
     return
@@ -505,18 +533,22 @@ canvas.addEventListener("pointermove", (e) => {
     return
   }
   if (endpointDrag) {
-    const { wall, end } = endpointDrag
+    const { wall, end, base, snapshot } = endpointDrag
+    const p = toWorld(e)
     const other = end === "a" ? wall.b : wall.a
-    const next = snap(
-      toWorld(e),
-      walls.filter((w) => w !== wall),
-      GRID_STEP_CM,
-      radiusCm(),
-      ortho ? other : undefined,
-    )
-    if (!pointsEqual(next, other)) {
+    if (ortho) {
+      restoreWalls(snapshot)
+      const seed: StretchSeed = { kind: "end", wall, end }
+      const snapWalls = stretchSnapWalls(seed, base, p, walls).filter((w) => w !== wall)
+      const next = snap(p, snapWalls, GRID_STEP_CM, radiusCm(), other)
+      if (!pointsEqual(next, other)) orthoStretch(seed, { x: next.x - base.x, y: next.y - base.y })
       dirty = true
-      moveEndpoint(walls, wall, end, next)
+    } else {
+      const next = snap(p, walls.filter((w) => w !== wall), GRID_STEP_CM, radiusCm())
+      if (!pointsEqual(next, other)) {
+        dirty = true
+        moveEndpoint(walls, wall, end, next)
+      }
     }
     redraw()
     return
@@ -1208,7 +1240,8 @@ window.addEventListener("keydown", (e) => {
       : { x: step, y: 0 }
     if (!nudgeBurst) pushRecord()
     nudgeBurst = true
-    moveWalls(walls, selectedWalls, delta)
+    if (ortho) orthoStretch({ kind: "walls", walls: selectedWalls }, delta)
+    else moveWalls(walls, selectedWalls, delta)
     dirty = true
     redraw()
     return
