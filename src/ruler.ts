@@ -1,7 +1,7 @@
 import { distanceToWall } from "./geometry"
 import { findRooms } from "./room-area"
 import type { Point, Wall } from "./types"
-import { cross, dist, dot, displayPolygons, pointInPolygon, sub } from "./wall-geometry"
+import { cross, dist, dot, displayPolygons, faceCornerTol, pointInPolygon, sub } from "./wall-geometry"
 
 // Замеры инструмента «Линейка» (change ruler-tool, design D1–D4). Все функции чистые:
 // пересчёт по текущим стенам при каждом вызове, ничего не хранится.
@@ -46,11 +46,19 @@ export function rulerReading(p: Point, walls: Wall[]): RulerReading {
   return { kind: "space", horizontal: span(p, polys, "x"), vertical: span(p, polys, "y"), angles: roomAngles(p, walls, freeCapCorners(forms)) }
 }
 
-// углы плоских торцов свободных концов: конец оси, не лежащий в форме ни одной другой стены
+// углы плоских торцов свободных концов: конец оси, не состыкованный ни с одной стеной (в допуске
+// углового стыка с её концом) и не лежащий в форме другой стены. Стык проверяется по допуску, а не
+// по форме: при повороте соседа на сотые доли градуса конец оси выходит из его формы на доли мм
 function freeCapCorners(forms: WallForm[]): Point[] {
   return forms.flatMap(({ wall, polys }) => {
     if (!polys.length) return []
-    const attached = (e: Point): boolean => forms.some((o) => o.wall !== wall && o.polys.some((poly) => pointInPolygon(e, poly)))
+    const attached = (e: Point): boolean =>
+      forms.some(
+        (o) =>
+          o.wall !== wall &&
+          (o.polys.some((poly) => pointInPolygon(e, poly)) ||
+            [o.wall.a, o.wall.b].some((q) => dist(q, e) <= faceCornerTol(wall, o.wall))),
+      )
     const u = unitVec(wall.a, wall.b)
     const h = wall.thicknessCm / 2
     const n = { x: -u.y * h, y: u.x * h }
