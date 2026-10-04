@@ -462,35 +462,6 @@ export function mergeIntervals(hidden: [number, number][], tol = 0): [number, nu
   return merged
 }
 
-// рёбра на гранях однотипных соседей не рисуются: контур непрерывен, как у одной стены.
-// Возвращает true, если ребро преимущественно лежит на грани однотипного соседа.
-function onSameTypeFace(wall: Wall, p1: Point, p2: Point, walls: Wall[]): boolean {
-  const du = sub(p2, p1)
-  const len2 = dot(du, du)
-  if (len2 < EPS) return false
-  const hidden: [number, number][] = []
-  for (const w of walls) {
-    if (w === wall || degenerate(w)) continue
-    if (w.type !== wall.type || w.thicknessCm !== wall.thicknessCm) continue
-    const u = unit(w.a, w.b)
-    const n = perp(u)
-    const h = w.thicknessCm / 2
-    for (const sd of [1, -1] as const) {
-      const q1 = add(w.a, mul(n, sd * h))
-      const q2 = add(w.b, mul(n, sd * h))
-      const qu = sub(q2, q1)
-      if (Math.abs(cross(du, qu)) > 1e-6) continue
-      if (Math.abs(cross(qu, sub(p1, q1))) > 1e-4) continue
-      const lenQ2 = dot(qu, qu)
-      const e1 = dot(sub(p1, q1), qu) / lenQ2
-      const e2 = dot(sub(p2, q1), qu) / lenQ2
-      hidden.push([Math.max(0, Math.min(e1, e2)), Math.min(1, Math.max(e1, e2))])
-    }
-  }
-  const covered = mergeIntervals(hidden).reduce((acc, [t0, t1]) => acc + (t1 - t0), 0)
-  return covered > 0.5
-}
-
 // участки [0, 1], не накрытые скрытыми интервалами
 export function uncovered(hidden: [number, number][]): [number, number][] {
   const visible: [number, number][] = []
@@ -513,56 +484,7 @@ function visibleEdge(p1: Point, p2: Point, pieces: Point[][], self: number): [nu
   return uncovered(hidden)
 }
 
-// шов однотипной пары углового стыка на грани (design D5): линия сырого торца одной из стен
-// пары вместе с кусками партнёра, чьи рёбра на ней лежат
-interface SeamLine {
-  o: Point
-  dir: Point
-  partnerPieces: Point[][]
-}
-
-function seamLines(wall: Wall, walls: Wall[]): SeamLine[] {
-  const out: SeamLine[] = []
-  for (const E of [wall.a, wall.b]) {
-    const fc = faceCornerAt(wall, E, walls)
-    if (!fc || fc.right) continue
-    if (fc.partner.type !== wall.type || fc.partner.thicknessCm !== wall.thicknessCm) continue
-    const partnerPieces = displayPolygons(fc.partner, walls)
-    out.push({ o: E, dir: perp(unit(wall.a, wall.b)), partnerPieces })
-    out.push({ o: fc.partnerEnd, dir: perp(unit(fc.partner.a, fc.partner.b)), partnerPieces })
-  }
-  return out
-}
-
-const onLine = (q: Point, line: SeamLine): boolean => Math.abs(cross(line.dir, sub(q, line.o))) <= 1e-6
-
-// участки отрезка, не совпадающие с рёбрами партнёра на линиях шва
-function seamVisible(p1: Point, p2: Point, lines: SeamLine[]): [number, number][] {
-  const d = sub(p2, p1)
-  const len2 = dot(d, d)
-  if (len2 < EPS) return [[0, 1]]
-  const hidden: [number, number][] = []
-  for (const line of lines) {
-    if (!onLine(p1, line) || !onLine(p2, line)) continue
-    for (const piece of line.partnerPieces)
-      for (let k = 0; k < piece.length; k++) {
-        const q1 = piece[k]
-        const q2 = piece[(k + 1) % piece.length]
-        if (!onLine(q1, line) || !onLine(q2, line)) continue
-        const e1 = dot(sub(q1, p1), d) / len2
-        const e2 = dot(sub(q2, p1), d) / len2
-        const t0 = Math.max(0, Math.min(e1, e2))
-        const t1 = Math.min(1, Math.max(e1, e2))
-        if (t1 > t0) hidden.push([t0, t1])
-      }
-  }
-  return uncovered(hidden)
-}
-
-// внешняя граница отображаемой формы стены: рёбра кусков без участков, накрытых
-// другими кусками той же стены (границы между телом и заливками стены не входят)
-export function outlineSegments(wall: Wall, walls: Wall[]): Seg[] {
-  const pieces = displayPolygons(wall, walls)
+function outlineOf(pieces: Point[][]): Seg[] {
   const out: Seg[] = []
   pieces.forEach((piece, i) => {
     for (let k = 0; k < piece.length; k++) {
@@ -574,12 +496,122 @@ export function outlineSegments(wall: Wall, walls: Wall[]): Seg[] {
   return out
 }
 
-// канонический контур стены: внешняя граница формы без швов однотипных стыков
+// внешняя граница отображаемой формы стены: рёбра кусков без участков, накрытых
+// другими кусками той же стены (границы между телом и заливками стены не входят)
+export function outlineSegments(wall: Wall, walls: Wall[]): Seg[] {
+  return outlineOf(displayPolygons(wall, walls))
+}
+
+// допуски почти совпадающих рёбер соседних форм (design D2): угол — допуск прямого угла;
+// касание покрывает h·(1 − cos 0.5°) до h = 25 см; расхождение — до 0.5 см
+const TOUCH_CM = 1e-3
+const MAX_GAP_CM = 0.5
+const SIDE_PROBE_CM = 1e-3
+
+interface Neighbour {
+  pieces: Point[][]
+  outline: Seg[]
+}
+
+// габарит сырого прямоугольника стены, расширенный на pad: продолжения торцов в угловых
+// стыках выходят за сырой прямоугольник не дальше толщины соседа (design D1, п. 2)
+function overlapsBox(a: Wall, b: Wall, pad: number): boolean {
+  const box = (w: Wall): [number, number, number, number] => {
+    const r = w.thicknessCm / 2 + pad
+    return [Math.min(w.a.x, w.b.x) - r, Math.min(w.a.y, w.b.y) - r, Math.max(w.a.x, w.b.x) + r, Math.max(w.a.y, w.b.y) + r]
+  }
+  const [ax0, ay0, ax1, ay1] = box(a)
+  const [bx0, by0, bx1, by1] = box(b)
+  return ax0 <= bx1 && bx0 <= ax1 && ay0 <= by1 && by0 <= ay1
+}
+
+// соседи того же материала (толщина не важна), чьи формы могут касаться формы стены
+function sameMaterialNeighbours(wall: Wall, walls: Wall[]): Neighbour[] {
+  return walls
+    .filter((w) => w !== wall && !degenerate(w) && w.type === wall.type)
+    .filter((w) => overlapsBox(wall, w, Math.max(wall.thicknessCm, w.thicknessCm)))
+    .map((w) => {
+      const pieces = displayPolygons(w, walls)
+      return { pieces, outline: outlineOf(pieces) }
+    })
+}
+
+const insideAny = (p: Point, pieces: Point[][]): boolean => pieces.some((pc) => pointInPolygon(p, pc))
+
+function pointSegDistance(p: Point, s: Seg): number {
+  const d = sub(s.p2, s.p1)
+  const len2 = dot(d, d)
+  const t = len2 < EPS ? 0 : clampRange(dot(sub(p, s.p1), d) / len2, 0, 1)
+  return dist(p, lerp(s.p1, s.p2, t))
+}
+
+// отрезки касаются или пересекаются (в пределах TOUCH_CM)
+function segmentsTouch(a: Seg, b: Seg): boolean {
+  const da = sub(a.p2, a.p1)
+  const db = sub(b.p2, b.p1)
+  const side = (s: Seg, d: Point, p: Point): number => cross(d, sub(p, s.p1))
+  if (side(a, da, b.p1) * side(a, da, b.p2) < 0 && side(b, db, a.p1) * side(b, db, a.p2) < 0) return true
+  return Math.min(pointSegDistance(a.p1, b), pointSegDistance(a.p2, b), pointSegDistance(b.p1, a), pointSegDistance(b.p2, a)) <= TOUCH_CM
+}
+
+// почти совпадающий участок (design D2): интервал [t0, t1] отрезка p1p2 в его параметризации
+// и соответствующая часть отрезка q
+interface Coincidence {
+  iv: [number, number]
+  part: Seg
+}
+
+function coincidence(p1: Point, p2: Point, q: Seg): Coincidence | null {
+  const d = sub(p2, p1)
+  const len = Math.hypot(d.x, d.y)
+  const e = sub(q.p2, q.p1)
+  const lenQ = Math.hypot(e.x, e.y)
+  if (len < EPS || lenQ < EPS) return null
+  if (Math.abs(cross(d, e)) / (len * lenQ) > RIGHT_SIN) return null
+  if (!segmentsTouch({ p1, p2 }, q)) return null
+  const len2 = len * len
+  const e1 = dot(sub(q.p1, p1), d) / len2
+  const e2 = dot(sub(q.p2, p1), d) / len2
+  const t0 = Math.max(0, Math.min(e1, e2))
+  const t1 = Math.min(1, Math.max(e1, e2))
+  if (t1 - t0 <= EPS) return null
+  // часть q, проецирующаяся в [t0, t1]
+  const at = (t: number): Point => lerp(q.p1, q.p2, (t - e1) / (e2 - e1))
+  const part = { p1: at(t0), p2: at(t1) }
+  const gap = Math.max(Math.abs(cross(d, sub(part.p1, p1))), Math.abs(cross(d, sub(part.p2, p1)))) / len
+  return gap <= MAX_GAP_CM ? { iv: [t0, t1], part } : null
+}
+
+// нормаль отрезка внутрь формы: ±n, если проба в середине с этой стороны внутри; иначе null
+function inwardNormal(s: Seg, pieces: Point[][]): Point | null {
+  const n = perp(unit(s.p1, s.p2))
+  const mid = lerp(s.p1, s.p2, 0.5)
+  if (insideAny(add(mid, mul(n, SIDE_PROBE_CM)), pieces)) return n
+  if (insideAny(add(mid, mul(n, -SIDE_PROBE_CM)), pieces)) return neg(n)
+  return null
+}
+
+// формы стены и соседа обращены от общего участка в противоположные стороны (design D2)
+function facesOpposite(own: Seg, ownPieces: Point[][], other: Seg, otherPieces: Point[][]): boolean {
+  const nOwn = inwardNormal(own, ownPieces)
+  const nOther = inwardNormal(other, otherPieces)
+  return nOwn !== null && nOther !== null && dot(nOwn, nOther) < 0
+}
+
+// канонический контур стены: внешняя граница формы без участков, совпадающих (или почти
+// совпадающих) с внешней границей соседей того же материала — шов не рисуется (design D1, D2)
 export function contourSegments(wall: Wall, walls: Wall[]): Seg[] {
-  const seams = seamLines(wall, walls)
-  return outlineSegments(wall, walls).flatMap(({ p1, p2 }) =>
-    onSameTypeFace(wall, p1, p2, walls)
-      ? []
-      : seamVisible(p1, p2, seams).map(([u0, u1]) => ({ p1: lerp(p1, p2, u0), p2: lerp(p1, p2, u1) })),
-  )
+  const own = displayPolygons(wall, walls)
+  const neighbours = sameMaterialNeighbours(wall, walls)
+  return outlineOf(own).flatMap(({ p1, p2 }) => {
+    const hidden: [number, number][] = []
+    for (const nb of neighbours)
+      for (const q of nb.outline) {
+        const c = coincidence(p1, p2, q)
+        if (!c) continue
+        const mine = { p1: lerp(p1, p2, c.iv[0]), p2: lerp(p1, p2, c.iv[1]) }
+        if (facesOpposite(mine, own, c.part, nb.pieces)) hidden.push(c.iv)
+      }
+    return uncovered(hidden).map(([t0, t1]) => ({ p1: lerp(p1, p2, t0), p2: lerp(p1, p2, t1) }))
+  })
 }

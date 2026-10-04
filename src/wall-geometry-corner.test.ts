@@ -901,14 +901,25 @@ describe("Шов у доращивания", () => {
   })
 
   // зона наложения: тело упёртой заходит в продолжение сквозной (x от 0 до ≈1.47 при R−);
-  // при ранней U граница между ними — сырой торец U (y = 10), это шов пары по линии торца (D5)
-  it("CJ-13t: один материал, разная толщина — это разные типы, шов по торцу U в зоне наложения отображается", () => {
+  // при ранней U граница между ними — сырой торец U (y = 10).
+  // SM-9 (change seamless-same-material-joints) заменяет CJ-13t: по изменённой спеке
+  // «Слияние стен одного материала» толщина не влияет — шов одного материала не отображается
+  it("SM-9: один материал, разная толщина — шов по торцу U в зоне наложения не отображается, в обоих порядках", () => {
     const S = W(0, 0, 200, -60, 20, "brick")
     const U = W(5, 10, 5, 200, 10, "brick") // концы в 11.18: дальше jointTol 10, в пределах faceCornerTol 12.5
     const fU = frame(U)
-    const segs = [...contourSegments(S, [U, S]), ...contourSegments(U, [U, S])]
     // параметр на линии торца U: t = 5 − x; зона наложения x ∈ [0.1, 1.4]
-    expect(coveredOnLine(segs, U.a, fU.n, 3.6, 4.9)).toBeGreaterThan(1.25)
+    const early = [...contourSegments(S, [U, S]), ...contourSegments(U, [U, S])]
+    expect(coveredOnLine(early, U.a, fU.n, 3.6, 4.9)).toBeLessThan(1e-6)
+    // наружная грань U (x = 0) — ступенька толщин относительно S — по-прежнему отображается выше S
+    for (const scene of [[S, U], [U, S]]) {
+      const segs = [...contourSegments(S, scene), ...contourSegments(U, scene)]
+      expect(coveredOnLine(segs, ORIGIN, { x: 0, y: 1 }, 20, 199.9)).toBeCloseTo(179.9, 6)
+      // при другом материале тот же шов отображается
+      const Uc = { ...U, type: "concrete" as const }
+      const segsC = [...contourSegments(S, [Uc, S]), ...contourSegments(Uc, [Uc, S])]
+      expect(coveredOnLine(segsC, Uc.a, fU.n, 3.6, 4.9)).toBeGreaterThan(1.25)
+    }
   })
 
   it("CJ-13d: стены разных типов — швы между стенами в зоне стыка отображаются", () => {
