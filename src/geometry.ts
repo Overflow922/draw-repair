@@ -197,35 +197,43 @@ export function moveEndpoint(walls: Wall[], wall: Wall, end: "a" | "b", pos: Poi
   }
 }
 
+type EndLink = "joint" | "tee" | "none"
+
+// связь конца p стены w со сдвигаемыми стенами: стык с концом (в т.ч. угловой на грани) или примыкание
+function endLink(p: Point, w: Wall, group: readonly Wall[]): EndLink {
+  if (group.some((g) => distance(p, g.a) <= faceCornerTol(g, w) || distance(p, g.b) <= faceCornerTol(g, w))) return "joint"
+  return group.some((g) => teeEndAttached(p, w, g)) ? "tee" : "none"
+}
+
+// конец p стены w занят: стык с концом другой стены или примыкание к её оси или грани
+function endOccupied(p: Point, w: Wall, walls: readonly Wall[]): boolean {
+  return walls.some((c) => c !== w && !pointsEqual(c.a, c.b) &&
+    (distance(p, c.a) <= faceCornerTol(w, c) || distance(p, c.b) <= faceCornerTol(w, c) || teeEndAttached(p, w, c)))
+}
+
+// какие концы несдвигаемой стены следуют за группой (change fix-wall-move-joints, design D2):
+// связанные концы смещаются; примкнутая стена со свободным вторым концом — целиком
+function followingEnds(w: Wall, walls: readonly Wall[], group: readonly Wall[]): { a: boolean; b: boolean } {
+  const la = endLink(w.a, w, group)
+  const lb = endLink(w.b, w, group)
+  const a = la !== "none"
+  const b = lb !== "none"
+  const freeTee = (la === "tee" && !b && !endOccupied(w.b, w, walls)) || (lb === "tee" && !a && !endOccupied(w.a, w, walls))
+  return freeTee ? { a: true, b: true } : { a, b }
+}
+
 export function moveWalls(walls: Wall[], group: Wall[], delta: Point): void {
-  const pre = group.map((g) => ({ a: { ...g.a }, b: { ...g.b } }))
+  // связи и занятость — по положению до перемещения
+  const plan = walls
+    .filter((w) => !group.includes(w) && !pointsEqual(w.a, w.b))
+    .map((w) => ({ w, ends: followingEnds(w, walls, group) }))
   for (const g of group) {
     g.a = { x: g.a.x + delta.x, y: g.a.y + delta.y }
     g.b = { x: g.b.x + delta.x, y: g.b.y + delta.y }
   }
-  for (const w of walls) {
-    if (group.includes(w) || pointsEqual(w.a, w.b)) continue
-    let followA = false
-    let followB = false
-    let tee = false
-    group.forEach((g, i) => {
-      const tol = faceCornerTol(g, w)
-      if (!followA) {
-        if (distance(w.a, pre[i].a) <= tol) followA = true
-        else if (distance(w.a, pre[i].b) <= tol) followA = true
-      }
-      if (!followB) {
-        if (distance(w.b, pre[i].a) <= tol) followB = true
-        else if (distance(w.b, pre[i].b) <= tol) followB = true
-      }
-      if (!followA && !followB && !tee && teeAttached(w, { ...g, a: pre[i].a, b: pre[i].b })) tee = true
-    })
-    if (followA) w.a = { x: w.a.x + delta.x, y: w.a.y + delta.y }
-    if (followB) w.b = { x: w.b.x + delta.x, y: w.b.y + delta.y }
-    if (tee && !followA && !followB) {
-      w.a = { x: w.a.x + delta.x, y: w.a.y + delta.y }
-      w.b = { x: w.b.x + delta.x, y: w.b.y + delta.y }
-    }
+  for (const { w, ends } of plan) {
+    if (ends.a) w.a = { x: w.a.x + delta.x, y: w.a.y + delta.y }
+    if (ends.b) w.b = { x: w.b.x + delta.x, y: w.b.y + delta.y }
   }
 }
 

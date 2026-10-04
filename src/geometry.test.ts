@@ -247,12 +247,18 @@ describe("moveWalls", () => {
   })
 
   it("MV-B2: конец соседа чуть за границей допуска не смещается", () => {
-    // граница допуска — диагональ угла 10√2 ≈ 14.14 (change wall-move-face-joints)
+    // граница допуска — диагональ угла 10√2 + 1 ≈ 15.14 (change fix-wall-move-joints)
     const g1 = wall(0, 0, 100, 0, "g1")
-    const n = wall(114.5, 0, 114.5, 80, "n")
+    const n = wall(115.5, 0, 115.5, 80, "n")
     moveWalls([g1, n], [g1], { x: 10, y: 0 })
-    expect(n.a).toEqual({ x: 114.5, y: 0 })
-    expect(n.b).toEqual({ x: 114.5, y: 80 })
+    expect(n.a).toEqual({ x: 115.5, y: 0 })
+    expect(n.b).toEqual({ x: 115.5, y: 80 })
+    // 14.5 — за диагональю, но в пределах запаса: конец следует
+    const g2 = wall(0, 0, 100, 0, "g2")
+    const m = wall(114.5, 0, 114.5, 80, "m")
+    moveWalls([g2, m], [g2], { x: 10, y: 0 })
+    expect(m.a).toEqual({ x: 124.5, y: 0 })
+    expect(m.b).toEqual({ x: 114.5, y: 80 })
   })
 
   it("MV-B3: при точном совпадении осей стык остаётся точным совпадением", () => {

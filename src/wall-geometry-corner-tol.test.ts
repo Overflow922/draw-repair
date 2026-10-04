@@ -15,21 +15,22 @@ const W = (ax: number, ay: number, bx: number, by: number, thicknessCm: number):
 })
 
 describe("faceCornerTol: единый допуск углового стыка", () => {
-  it("CJ-16: равные толщины — диагональ угла √(h₁²+h₂²)", () => {
-    expect(faceCornerTol(W(0, 0, 100, 0, 20), W(0, 0, 0, 100, 20))).toBeCloseTo(Math.hypot(10, 10), 5)
-    expect(faceCornerTol(W(0, 0, 100, 0, 20), W(0, 0, 0, 100, 20))).toBeGreaterThanOrEqual(Math.hypot(10, 10))
+  // change fix-wall-move-joints: к диагонали добавлен запас 1 см
+  it("CJ-16: равные толщины — диагональ угла √(h₁²+h₂²) с запасом 1 см", () => {
+    expect(faceCornerTol(W(0, 0, 100, 0, 20), W(0, 0, 0, 100, 20))).toBeCloseTo(Math.hypot(10, 10) + 1, 5)
+    expect(faceCornerTol(W(0, 0, 100, 0, 20), W(0, 0, 0, 100, 20))).toBeGreaterThanOrEqual(Math.hypot(10, 10) + 1)
   })
 
-  it("CJ-16: разные толщины — бо́льшее из 1.25·max(h) и диагонали, симметрично", () => {
+  it("CJ-16: разные толщины — бо́льшее из 1.25·max(h) и диагонали с запасом 1 см, симметрично", () => {
     const thick = W(0, 0, 100, 0, 40) // h = 20
     const thin = W(0, 0, 0, 100, 10) // h = 5
-    expect(faceCornerTol(thick, thin)).toBeCloseTo(25, 5) // 1.25·20 > √(400+25) ≈ 20.6
+    expect(faceCornerTol(thick, thin)).toBeCloseTo(25, 5) // 1.25·20 > √(400+25) + 1 ≈ 21.6
     expect(faceCornerTol(thin, thick)).toBeCloseTo(25, 5)
-    const mid = W(0, 0, 0, 100, 30) // h = 15: √(400+225) = 25 = 1.25·20
-    expect(faceCornerTol(thick, mid)).toBeCloseTo(25, 5)
+    const mid = W(0, 0, 0, 100, 30) // h = 15: √(400+225) + 1 = 26 > 1.25·20
+    expect(faceCornerTol(thick, mid)).toBeCloseTo(26, 5)
     const a = W(0, 0, 100, 0, 20) // h = 10
-    const b = W(0, 0, 0, 100, 16) // h = 8: √(164) ≈ 12.806 > 12.5
-    expect(faceCornerTol(a, b)).toBeCloseTo(Math.hypot(10, 8), 5)
+    const b = W(0, 0, 0, 100, 16) // h = 8: √(164) + 1 ≈ 13.806 > 12.5
+    expect(faceCornerTol(a, b)).toBeCloseTo(Math.hypot(10, 8) + 1, 5)
   })
 
   it("CJ-16: перемещение использует ту же границу — внутри допуска конец следует, за ним нет", () => {

@@ -40,12 +40,15 @@ export const degenerate = (w: Wall): boolean => dist(w.a, w.b) < EPS
 
 const jointTol = (a: Wall, b: Wall): number => Math.max(a.thicknessCm, b.thicknessCm) / 2
 
+// запас к диагонали угла: дрейф концов от накопленных правок не превращает угол в T-примыкание
+const FACE_CORNER_MARGIN_CM = 1
+
 // допуск углового стыка на грани (перенос и отрисовка): допуск вершины стыка с запасом или
-// диагональ угла √(h₁²+h₂²) — точка, в которую рисование ставит вершину, прилипшую к грани у торца
+// диагональ угла √(h₁²+h₂²) — точка, в которую рисование ставит вершину, прилипшую к грани у торца, — с запасом
 export function faceCornerTol(a: Wall, b: Wall): number {
   const ha = a.thicknessCm / 2
   const hb = b.thicknessCm / 2
-  return Math.max(Math.max(ha, hb) * 1.25, Math.hypot(ha, hb)) + EPS
+  return Math.max(Math.max(ha, hb) * 1.25, Math.hypot(ha, hb) + FACE_CORNER_MARGIN_CM) + EPS
 }
 
 export function clipHalfPlane(poly: Point[], origin: Point, normal: Point, lo: number): Point[] {
@@ -164,6 +167,7 @@ interface FaceCorner {
 }
 
 const SIN15 = Math.sin((15 * Math.PI) / 180)
+const COS15 = Math.cos((15 * Math.PI) / 180)
 
 const inward = (w: Wall, end: Point): Point => (end === w.a ? unit(w.a, w.b) : unit(w.b, w.a))
 
@@ -266,6 +270,16 @@ function endShape(wall: Wall, E: Point, uIn: Point, nAB: Point, walls: Wall[], i
   }
   if (endNeighbors.length === 1) {
     const { c, v } = endNeighbors[0]
+    // почти коллинеарный стык (отклонение от продолжения в (0.5°, 15°)): торцы обеих стен —
+    // по биссектрисе угла через конец ранней стены; ранняя тоже срезается, поэтому сосед не вычитается
+    const uInC = inward(c, v)
+    const cosT = dot(uIn, uInC)
+    if (cosT > -RIGHT_COS && cosT < -COS15 - EPS) {
+      const V = !isLatest && iWall < walls.indexOf(c) ? E : v
+      const nCut = unit(uInC, uIn)
+      const onCut = (q: Point): Point => add(q, mul(uIn, dot(sub(V, q), nCut) / dot(uIn, nCut)))
+      return { E, cap: [onCut(add(E, mul(nAB, hW))), onCut(add(E, mul(nAB, -hW)))], exempt: new Set([c]), wedge: null }
+    }
     if (isEarlier) return flat
     const uC = unit(c.a, c.b)
     const nC = perp(uC)

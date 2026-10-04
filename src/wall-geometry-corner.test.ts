@@ -516,9 +516,10 @@ describe("Замыкание углового стыка на грани: рас
     expect(probes.filter((p) => owners(p, polys).length > 0)).toEqual([])
   })
 
-  it("CJ-B2b: равные толщины, конец U чуть дальше диагонали — просвет и выемка не залиты", () => {
+  it("CJ-B2b: равные толщины, конец U чуть дальше диагонали с запасом 1 см — просвет и выемка не залиты", () => {
+    // change fix-wall-move-joints: порог 10√2 + 1 ≈ 15.14
     const S = W(0, 0, 200, -60)
-    const U = W(10, 10.6, 10, 200) // √(100 + 112.36) ≈ 14.57 > 10√2
+    const U = W(10, 11.6, 10, 200) // √(100 + 134.56) ≈ 15.32 > 10√2 + 1
     const polys = polysOf([S, U])
     expect(owners({ x: 15, y: 8 }, polys)).toEqual([])
     expect(owners({ x: 0.8, y: 6 }, polys)).toEqual([])
