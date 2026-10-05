@@ -253,55 +253,84 @@ interface EndShape {
   wedge: { c: Wall; s: number } | null
 }
 
+interface EndNeighbor {
+  c: Wall
+  v: Point
+}
+
+// концы соседей попарно в пороге вершины стыка своей пары
+function isOneVertex(ns: readonly EndNeighbor[]): boolean {
+  return ns.every((p, i) => ns.slice(i + 1).every((q) => dist(p.v, q.v) <= jointTol(p.c, q.c) + SLICE))
+}
+
+// торец у стыка двух стен; crowded — в пороге есть и другие концы, не образующие с ними вершину
+function pairEnd(
+  wall: Wall,
+  E: Point,
+  uIn: Point,
+  nAB: Point,
+  flat: EndShape,
+  walls: Wall[],
+  iWall: number,
+  isLatest: boolean,
+  { c, v }: EndNeighbor,
+  crowded: boolean,
+): EndShape {
+  const [plus, minus] = flat.cap
+  // почти коллинеарный стык (отклонение от продолжения в (0.5°, 15°)): торцы обеих стен —
+  // по биссектрисе угла через конец ранней стены; ранняя тоже срезается, поэтому сосед не вычитается.
+  // При других концах в пороге — плоский торец (design D3)
+  const uInC = inward(c, v)
+  const cosT = dot(uIn, uInC)
+  if (cosT > -RIGHT_COS && cosT < -COS15 - EPS) {
+    if (crowded) return flat
+    const V = !isLatest && iWall < walls.indexOf(c) ? E : v
+    const nCut = unit(uInC, uIn)
+    const onCut = (q: Point): Point => add(q, mul(uIn, dot(sub(V, q), nCut) / dot(uIn, nCut)))
+    return { E, cap: [onCut(plus), onCut(minus)], exempt: new Set([c]), wedge: null }
+  }
+  // стена «ранняя» для стыка, если сосед стоит в массиве позже неё
+  if (!isLatest && walls.indexOf(c) > iWall) return flat
+  const uC = unit(c.a, c.b)
+  const nC = perp(uC)
+  const hC = c.thicknessCm / 2
+  const latE = dot(sub(E, c.a), nC)
+  if (Math.abs(latE) < hC - SLICE) {
+    // вершина внутри полосы соседа
+    if (Math.abs(dot(uIn, uC)) >= RIGHT_COS) {
+      // коллинеарно: зазор сводится к концу ранней стены
+      const hW = wall.thicknessCm / 2
+      return { E, cap: [add(v, mul(nAB, hW)), add(v, mul(nAB, -hW))], exempt: new Set(), wedge: null }
+    }
+    // перпендикулярно/косо: каждый угол торца — вдоль своей грани до линии дальней грани
+    // ранней (дальняя — против направления тела поздней); выступающий угол срезается
+    const alongN = dot(uIn, nC)
+    const sFar = -signOf(alongN || latE)
+    const onFarFace = (q: Point): Point => add(q, mul(uIn, (sFar * hC - dot(sub(q, c.a), nC)) / alongN))
+    return { E, cap: [onFarFace(plus), onFarFace(minus)], exempt: new Set(), wedge: null }
+  }
+  // вершина на грани или снаружи: плоский торец; на грани — клин принадлежит поздней
+  const wedge = Math.abs(Math.abs(latE) - hC) <= SLICE ? { c, s: signOf(latE) } : null
+  return { E, cap: flat.cap, exempt: new Set(), wedge }
+}
+
 function endShape(wall: Wall, E: Point, uIn: Point, nAB: Point, walls: Wall[], iWall: number, isLatest: boolean): EndShape {
   const hW = wall.thicknessCm / 2
   const flat: EndShape = { E, cap: [add(E, mul(nAB, hW)), add(E, mul(nAB, -hW))], exempt: new Set(), wedge: null }
   // соседи по концу
-  const endNeighbors: { c: Wall; v: Point }[] = []
+  const endNeighbors: EndNeighbor[] = []
   for (const c of walls) {
     if (c === wall || degenerate(c)) continue
     for (const v of [c.a, c.b]) if (dist(v, E) <= jointTol(wall, c) + SLICE) endNeighbors.push({ c, v })
   }
-  // стена «ранняя» для стыка, если сосед стоит в массиве позже неё
-  const isEarlier = !isLatest && endNeighbors.every(({ c }) => walls.indexOf(c) > iWall)
   if (endNeighbors.length >= 2) {
-    // 3+ конца в пороге: плоские торцы, взаимной обрезки нет
-    return { E, cap: flat.cap, exempt: new Set(endNeighbors.map(({ c }) => c)), wedge: null }
+    // одна вершина 3+ стен (концы попарно в пороге своей пары): плоские торцы, взаимной обрезки нет
+    if (isOneVertex(endNeighbors)) return { E, cap: flat.cap, exempt: new Set(endNeighbors.map(({ c }) => c)), wedge: null }
+    // не одна вершина (change fix-tee-at-chain-corner, design D2): стык с ранней из соседних
+    const earliest = endNeighbors.reduce((m, n) => (walls.indexOf(n.c) < walls.indexOf(m.c) ? n : m))
+    return pairEnd(wall, E, uIn, nAB, flat, walls, iWall, isLatest, earliest, true)
   }
-  if (endNeighbors.length === 1) {
-    const { c, v } = endNeighbors[0]
-    // почти коллинеарный стык (отклонение от продолжения в (0.5°, 15°)): торцы обеих стен —
-    // по биссектрисе угла через конец ранней стены; ранняя тоже срезается, поэтому сосед не вычитается
-    const uInC = inward(c, v)
-    const cosT = dot(uIn, uInC)
-    if (cosT > -RIGHT_COS && cosT < -COS15 - EPS) {
-      const V = !isLatest && iWall < walls.indexOf(c) ? E : v
-      const nCut = unit(uInC, uIn)
-      const onCut = (q: Point): Point => add(q, mul(uIn, dot(sub(V, q), nCut) / dot(uIn, nCut)))
-      return { E, cap: [onCut(add(E, mul(nAB, hW))), onCut(add(E, mul(nAB, -hW)))], exempt: new Set([c]), wedge: null }
-    }
-    if (isEarlier) return flat
-    const uC = unit(c.a, c.b)
-    const nC = perp(uC)
-    const hC = c.thicknessCm / 2
-    const latE = dot(sub(E, c.a), nC)
-    if (Math.abs(latE) < hC - SLICE) {
-      // вершина внутри полосы соседа
-      if (Math.abs(dot(uIn, uC)) >= RIGHT_COS) {
-        // коллинеарно: зазор сводится к концу ранней стены
-        return { E, cap: [add(v, mul(nAB, hW)), add(v, mul(nAB, -hW))], exempt: new Set(), wedge: null }
-      }
-      // перпендикулярно/косо: каждый угол торца — вдоль своей грани до линии дальней грани
-      // ранней (дальняя — против направления тела поздней); выступающий угол срезается
-      const alongN = dot(uIn, nC)
-      const sFar = -signOf(alongN || latE)
-      const onFarFace = (q: Point): Point => add(q, mul(uIn, (sFar * hC - dot(sub(q, c.a), nC)) / alongN))
-      return { E, cap: [onFarFace(add(E, mul(nAB, hW))), onFarFace(add(E, mul(nAB, -hW)))], exempt: new Set(), wedge: null }
-    }
-    // вершина на грани или снаружи: плоский торец; на грани — клин принадлежит поздней
-    const wedge = Math.abs(Math.abs(latE) - hC) <= SLICE ? { c, s: signOf(latE) } : null
-    return { E, cap: flat.cap, exempt: new Set(), wedge }
-  }
+  if (endNeighbors.length === 1) return pairEnd(wall, E, uIn, nAB, flat, walls, iWall, isLatest, endNeighbors[0], false)
   // угловой стык на грани: сырой торец, замыкание угла строит displayPolygons
   if (faceCornerAt(wall, E, walls)) return flat
   // свободный конец: T-примыкание к оси либо прилипание к полосе соседа
