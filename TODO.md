@@ -31,3 +31,33 @@ Follow-ups from `fix-wall-move-joints` (archived 2026-10-04, commit `83e9b78`).
 
 - Coordinate drift itself is not corrected; the 1 cm margin only makes joint classification tolerant to it.
 - Hairpin joints (walls folding back at a shared end) have no special rendering rule.
+
+---
+
+Follow-ups from exploring ortho wall moves (2026-10-05, planned change `ortho-axis-lock`).
+
+## Bugs
+
+- [ ] **A slightly tilted wall makes an ortho move drag the whole drawing.** `planOrthoStretch`
+  (`src/ortho-stretch.ts`) treats a wall as parallel to the move vector only within `RIGHT_SIN` (0.5°).
+  A wall tilted more (e.g. 3 cm over 300 cm, 0.57°) counts as "not parallel" and moves whole, and the
+  spread then reaches every connected wall. The fix should not swap one magic tolerance for another.
+- [ ] **Typing a length for a tilted wall with ortho on can drag the whole drawing.** `resizeWallBounded`
+  (`src/wall-edit.ts`) moves the end along the wall's own direction; for a tilted wall that vector is
+  diagonal, and `planOrthoStretch` moves every connected wall whole (same cascade as the diagonal drag
+  fixed by `ortho-axis-lock`). Length input is not covered by that change's axis lock.
+
+## Tests
+
+- [ ] `orthoGestureStep` (`src/ortho-gesture.ts`): no test tells an endpoint-drag seed `{ kind: "end" }`
+  apart from a whole-wall seed (mutant G29 in `test-validation.md`). With the wrong seed, walls T-attached
+  to the edited wall's face are wrongly excluded from snapping, so the end misses a snap and falls back to
+  the grid. Validator probe: end should snap to `(303, 300)` on wall S, mutant gives `(310, 300)`.
+- [ ] Zero-length walls are not filtered from ortho-gesture snapping in tests (mutant G16, no spec scenario).
+
+## Out of scope (decided, revisit if needed)
+
+- With ortho on, moving a wall along its own axis moves the neighbouring perpendicular walls whole,
+  which in a plan of connected rooms can move everything. The spec requires this
+  (`wall-selection` "Орто-растяжение связанных стен", scenario "Поперечный сосед смещается целиком
+  и передаёт дальше").

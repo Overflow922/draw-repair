@@ -1,5 +1,6 @@
 import type { Segment } from "./edit-plan"
 import { teeEndAttached } from "./geometry"
+import { dominantAxis } from "./ortho-axis"
 import type { WallEnd } from "./ortho-stretch"
 import type { Point, Wall } from "./types"
 import { RIGHT_SIN, add, cross, degenerate, dist, displayPolygons, dot, faceCornerTol, mul, pointInPolygon, sub, unit } from "./wall-geometry"
@@ -17,7 +18,6 @@ export interface Attachment {
 }
 
 const COLLINEAR_SIN = Math.sin((15 * Math.PI) / 180)
-const ORTHO_TAN = Math.tan((15 * Math.PI) / 180)
 const FACE_INSET_CM = 0.05
 const WALK_STEP_CM = 0.5
 const TOL = 1e-6
@@ -36,11 +36,12 @@ const pointOf = (f: Frame, along: number, lat: number): Point => add(f.a, add(mu
 
 export const otherEnd = (end: WallEnd): WallEnd => (end === "a" ? "b" : "a")
 
-// ось орто для вектора (отклонение ≤ 15°), как в snap
+// ось орто для вектора — по большей составляющей (change ortho-axis-lock, design D5); null только
+// для нулевого вектора
 export function orthoAxisOf(v: Point): Point | null {
-  if (Math.abs(v.y) <= ORTHO_TAN * Math.abs(v.x) && v.x !== 0) return { x: 1, y: 0 }
-  if (Math.abs(v.x) <= ORTHO_TAN * Math.abs(v.y) && v.y !== 0) return { x: 0, y: 1 }
-  return null
+  const axis = dominantAxis(v)
+  if (!axis) return null
+  return axis === "x" ? { x: 1, y: 0 } : { x: 0, y: 1 }
 }
 
 // T-примыкания без углового стыка (определения «Перемещение стены за средний маркер»)

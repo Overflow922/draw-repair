@@ -1,3 +1,4 @@
+import type { Axis } from "./ortho-axis"
 import { ZOOM_MAX, ZOOM_MIN } from "./types"
 import type { Dimension, DimPoint, EdgeRef, Point, View, Wall } from "./types"
 import { faceCornerTol } from "./wall-geometry"
@@ -83,6 +84,13 @@ function snapOnOrthoAxis(cursor: Point, walls: Wall[], gridStepCm: number, radiu
     for (const end of [w.a, w.b]) if (distance(cursor, end) <= radiusCm) consider(onAxis(axis, end[along]), null)
   }
   return best ?? { point: onAxis(axis, Math.round(cursor[along] / gridStepCm) * gridStepCm), axisWall: null }
+}
+
+// привязка вдоль оси жеста через опорную точку (change ortho-axis-lock, design D3): ось задана
+// явно и не зависит от положения курсора
+export function snapAlongAxis(cursor: Point, walls: Wall[], gridStepCm: number, radiusCm: number, through: Point, axis: Axis): SnapResult {
+  const lock: OrthoAxis = axis === "x" ? { along: "x", across: "y", fixed: through.y } : { along: "y", across: "x", fixed: through.x }
+  return snapOnOrthoAxis(cursor, walls, gridStepCm, radiusCm, lock)
 }
 
 export function snapWithSource(cursor: Point, walls: Wall[], gridStepCm: number, radiusCm: number, orthoFrom?: Point): SnapResult {

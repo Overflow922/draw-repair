@@ -7,9 +7,9 @@ import { moveEndpointBounded, moveWallsBounded, resizeWallBounded } from "./wall
 import type { EditMode } from "./wall-edit"
 import { chainEndSquare, placementSquare, snapRadiusCm, snapStartVertex, wallClickAction } from "./wall-snap"
 import type { VertexSnap } from "./wall-snap"
-import { orthoDirection, parseAngleDeg, startRefOf } from "./wall-angle"
-import { planOrthoStretch } from "./ortho-stretch"
-import type { StretchSeed } from "./ortho-stretch"
+import { parseAngleDeg, startRefOf } from "./wall-angle"
+import { orthoGestureStep, startOrthoGesture } from "./ortho-gesture"
+import type { OrthoGesture } from "./ortho-gesture"
 import type { StartRef } from "./wall-angle"
 import { chainSegment } from "./wall-chain"
 import type { ChainSegment } from "./wall-chain"
@@ -74,8 +74,8 @@ let view: View = current().view
 let dirty = false
 let selectedWalls: Wall[] = []
 let selectedDimensions: Dimension[] = []
-let endpointDrag: { wall: Wall; end: "a" | "b"; base: Point; snapshot: Scene } | null = null
-let groupMove: { group: Wall[]; pressed: Wall; baseA: Point; grab: Point; others: Wall[]; snapshot: Scene } | null = null
+let endpointDrag: { wall: Wall; end: "a" | "b"; base: Point; snapshot: Scene; gesture: OrthoGesture } | null = null
+let groupMove: { group: Wall[]; pressed: Wall; baseA: Point; grab: Point; others: Wall[]; snapshot: Scene; gesture: OrthoGesture } | null = null
 let dimDraft: { a: DimPoint | null; b: DimPoint | null } = { a: null, b: null }
 let dimDrag: { dim: Dimension; baseOffset: number; snapshot: Scene } | null = null
 let suppressClick = false
@@ -491,26 +491,21 @@ function editMode(snapped: SnapResult): EditMode {
   return snapped.axisWall ? { ortho, snappedAxis: snapped.axisWall } : { ortho }
 }
 
-// стены, увлекаемые правкой вдоль оси орто, не участвуют в привязке (design D4)
-function stretchSnapWalls(seed: StretchSeed, from: Point, raw: Point, fallback: Wall[]): Wall[] {
-  const dir = orthoDirection(null, { x: raw.x - from.x, y: raw.y - from.y })
-  if (!dir) return fallback
-  const dragged = planOrthoStretch(walls, seed, dir).moved
-  return walls.filter((w) => !dragged.has(w) && !pointsEqual(w.a, w.b))
-}
-
 canvas.addEventListener("pointermove", (e) => {
   if (groupMove) {
     const { group, baseA, grab, others, snapshot } = groupMove
     const p = toWorld(e)
-    const raw = { x: baseA.x + p.x - grab.x, y: baseA.y + p.y - grab.y }
     // правка от снимка жеста полным вектором в обоих режимах (design D6)
     restoreWalls(snapshot)
-    const seed: StretchSeed = { kind: "walls", walls: group }
-    const target = ortho
-      ? snapWithSource(raw, stretchSnapWalls(seed, baseA, raw, others), GRID_STEP_CM, radiusCm(), baseA)
-      : snapWithSource(raw, others, GRID_STEP_CM, radiusCm())
-    moveWallsBounded(walls, group, { x: target.point.x - baseA.x, y: target.point.y - baseA.y }, editMode(target))
+    if (ortho) {
+      // ось жеста защёлкивается при первом смещении до отпускания (change ortho-axis-lock, design D2)
+      const step = orthoGestureStep(groupMove.gesture, p, walls, { kind: "walls", walls: group }, GRID_STEP_CM, radiusCm())
+      groupMove.gesture = step.gesture
+      if (step.target) moveWallsBounded(walls, group, { x: step.target.point.x - baseA.x, y: step.target.point.y - baseA.y }, editMode(step.target))
+    } else {
+      const target = snapWithSource({ x: baseA.x + p.x - grab.x, y: baseA.y + p.y - grab.y }, others, GRID_STEP_CM, radiusCm())
+      moveWallsBounded(walls, group, { x: target.point.x - baseA.x, y: target.point.y - baseA.y }, editMode(target))
+    }
     dirty = true
     redraw()
     return
@@ -533,15 +528,18 @@ canvas.addEventListener("pointermove", (e) => {
     return
   }
   if (endpointDrag) {
-    const { wall, end, base, snapshot } = endpointDrag
+    const { wall, end, snapshot } = endpointDrag
     const p = toWorld(e)
     restoreWalls(snapshot)
     const other = end === "a" ? wall.b : wall.a
-    const seed: StretchSeed = { kind: "end", wall, end }
-    const target = ortho
-      ? snapWithSource(p, stretchSnapWalls(seed, base, p, walls).filter((w) => w !== wall), GRID_STEP_CM, radiusCm(), other)
-      : snapWithSource(p, walls.filter((w) => w !== wall), GRID_STEP_CM, radiusCm())
-    if (!pointsEqual(target.point, other)) moveEndpointBounded(walls, wall, end, target.point, editMode(target))
+    let target: SnapResult | null
+    if (ortho) {
+      // ось через противоположный конец, защёлкнута до отпускания (change ortho-axis-lock, design D2)
+      const step = orthoGestureStep(endpointDrag.gesture, p, walls, { kind: "end", wall, end }, GRID_STEP_CM, radiusCm())
+      endpointDrag.gesture = step.gesture
+      target = step.target
+    } else target = snapWithSource(p, walls.filter((w) => w !== wall), GRID_STEP_CM, radiusCm())
+    if (target && !pointsEqual(target.point, other)) moveEndpointBounded(walls, wall, end, target.point, editMode(target))
     dirty = true
     redraw()
     return
@@ -594,10 +592,18 @@ canvas.addEventListener("pointerdown", (e) => {
   if (e.button !== 0) return
   if (selectedWalls.length === 1) {
     const sel = selectedWalls[0]
-    const handle = endpointAt(toWorld(e), sel, radiusCm())
+    const press = toWorld(e)
+    const handle = endpointAt(press, sel, radiusCm())
     if (handle) {
       suppressClick = true
-      endpointDrag = { wall: sel, end: handle, base: sel[handle], snapshot: cloneScene({ walls, dimensions }) }
+      const other = sel[handle === "a" ? "b" : "a"]
+      endpointDrag = {
+        wall: sel,
+        end: handle,
+        base: sel[handle],
+        snapshot: cloneScene({ walls, dimensions }),
+        gesture: startOrthoGesture("end", press, { ...other }),
+      }
       canvas.setPointerCapture(e.pointerId)
       return
     }
@@ -623,6 +629,7 @@ canvas.addEventListener("pointerdown", (e) => {
         grab: p,
         others: snapOthers(walls, group),
         snapshot: cloneScene({ walls, dimensions }),
+        gesture: startOrthoGesture("move", p, { ...wallHit.a }),
       }
       suppressClick = true
       canvas.setPointerCapture(e.pointerId)

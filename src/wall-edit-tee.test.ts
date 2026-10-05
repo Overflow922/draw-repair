@@ -211,13 +211,6 @@ describe("границы примкнутой стены: перетаскива
       expectWall(S, 10, 200, 110, 200)
     }
   })
-
-  it("TB-19a: орто не сработало (> 15°) — проекция как без орто", () => {
-    const { walls, S } = sceneTS()
-    const p = moveEndpointBounded(walls, S, "a", { x: 60, y: 100 }, ORTHO)
-    expectPoint(p, 10, 100)
-    expectPoint(S.b, 110, 200)
-  })
 })
 
 describe("ввод длины: подвижный конец", () => {
