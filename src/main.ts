@@ -79,7 +79,7 @@ let groupMove: { group: Wall[]; pressed: Wall; baseA: Point; grab: Point; others
 let dimDraft: { a: DimPoint | null; b: DimPoint | null } = { a: null, b: null }
 let dimDrag: { dim: Dimension; baseOffset: number; snapshot: Scene } | null = null
 let suppressClick = false
-let ortho = false
+let ortho = true
 let wallPanelOpen = false
 let nudgeBurst = false
 let marqueePending: { x: number; y: number } | null = null
