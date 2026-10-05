@@ -1,12 +1,14 @@
 import "./style.css"
 import { cloneScene, drawingHistory, loadHistory, record, recordSnapshot, redoEntry, saveHistory, undoEntry } from "./history"
 import type { Scene } from "./history"
-import { dimGeometry, dimHitDistance, dimLevelSnap, dimensionOffsetAt, distanceToWall, endpointAt, hitWall, moveEndpoint, moveWalls, nearestEdgeIntersection, dimPointPoint, pointsEqual, segmentIntersectsRect, snap, snapOthers, zoomAt } from "./geometry"
-import type { DimGeometry } from "./geometry"
+import { dimGeometry, dimHitDistance, dimLevelSnap, dimensionOffsetAt, distanceToWall, endpointAt, hitWall, nearestEdgeIntersection, dimPointPoint, pointsEqual, segmentIntersectsRect, snap, snapOthers, snapWithSource, zoomAt } from "./geometry"
+import type { DimGeometry, SnapResult } from "./geometry"
+import { moveEndpointBounded, moveWallsBounded, resizeWallBounded } from "./wall-edit"
+import type { EditMode } from "./wall-edit"
 import { chainEndSquare, placementSquare, snapRadiusCm, snapStartVertex, wallClickAction } from "./wall-snap"
 import type { VertexSnap } from "./wall-snap"
 import { orthoDirection, parseAngleDeg, startRefOf } from "./wall-angle"
-import { applyStretch, planOrthoStretch } from "./ortho-stretch"
+import { planOrthoStretch } from "./ortho-stretch"
 import type { StretchSeed } from "./ortho-stretch"
 import type { StartRef } from "./wall-angle"
 import { chainSegment } from "./wall-chain"
@@ -237,18 +239,16 @@ function liveLengthCm(): number | null {
   return Math.hypot(sel.b.x - sel.a.x, sel.b.y - sel.a.y)
 }
 
+// ввод длины с ограничениями (change wall-move-bounds, design D7): подвижный — непримкнутый конец,
+// длина ограничивается касанием; поле приводится к фактической длине при фиксации ввода
 function resizeSelected(): void {
   const len = typedLengthCm()
   if (!len || selectedWalls.length !== 1) return
-  const { a, b } = selectedWalls[0]
-  const cm = Math.hypot(b.x - a.x, b.y - a.y)
-  if (!cm) return
-  const end = { x: a.x + ((b.x - a.x) / cm) * len, y: a.y + ((b.y - a.y) / cm) * len }
-  if (pointsEqual(end, b)) return
-  pushRecord()
+  const before = cloneScene({ walls, dimensions })
+  const result = resizeWallBounded(walls, selectedWalls[0], len, { ortho })
+  if (result.kind === "rejected") return
+  pushSnapshot(before)
   dirty = true
-  if (ortho) orthoStretch({ kind: "end", wall: selectedWalls[0], end: "b" }, { x: end.x - b.x, y: end.y - b.y })
-  else moveEndpoint(walls, selectedWalls[0], "b", end)
 }
 
 function updateLengthBox(): void {
@@ -485,8 +485,10 @@ function restoreWalls(scene: Scene): void {
   })
 }
 
-function orthoStretch(seed: StretchSeed, v: Point): void {
-  applyStretch(planOrthoStretch(walls, seed, v), v)
+// режим правки с ограничениями (change wall-move-bounds, design D8): привязка к линии оси стены
+// передаётся как snappedAxis
+function editMode(snapped: SnapResult): EditMode {
+  return snapped.axisWall ? { ortho, snappedAxis: snapped.axisWall } : { ortho }
 }
 
 // стены, увлекаемые правкой вдоль оси орто, не участвуют в привязке (design D4)
@@ -499,18 +501,16 @@ function stretchSnapWalls(seed: StretchSeed, from: Point, raw: Point, fallback: 
 
 canvas.addEventListener("pointermove", (e) => {
   if (groupMove) {
-    const { group, pressed, baseA, grab, others, snapshot } = groupMove
+    const { group, baseA, grab, others, snapshot } = groupMove
     const p = toWorld(e)
     const raw = { x: baseA.x + p.x - grab.x, y: baseA.y + p.y - grab.y }
-    if (ortho) {
-      restoreWalls(snapshot)
-      const seed: StretchSeed = { kind: "walls", walls: group }
-      const target = snap(raw, stretchSnapWalls(seed, baseA, raw, others), GRID_STEP_CM, radiusCm(), baseA)
-      orthoStretch(seed, { x: target.x - baseA.x, y: target.y - baseA.y })
-    } else {
-      const target = snap(raw, others, GRID_STEP_CM, radiusCm())
-      moveWalls(walls, group, { x: target.x - pressed.a.x, y: target.y - pressed.a.y })
-    }
+    // правка от снимка жеста полным вектором в обоих режимах (design D6)
+    restoreWalls(snapshot)
+    const seed: StretchSeed = { kind: "walls", walls: group }
+    const target = ortho
+      ? snapWithSource(raw, stretchSnapWalls(seed, baseA, raw, others), GRID_STEP_CM, radiusCm(), baseA)
+      : snapWithSource(raw, others, GRID_STEP_CM, radiusCm())
+    moveWallsBounded(walls, group, { x: target.point.x - baseA.x, y: target.point.y - baseA.y }, editMode(target))
     dirty = true
     redraw()
     return
@@ -535,21 +535,14 @@ canvas.addEventListener("pointermove", (e) => {
   if (endpointDrag) {
     const { wall, end, base, snapshot } = endpointDrag
     const p = toWorld(e)
+    restoreWalls(snapshot)
     const other = end === "a" ? wall.b : wall.a
-    if (ortho) {
-      restoreWalls(snapshot)
-      const seed: StretchSeed = { kind: "end", wall, end }
-      const snapWalls = stretchSnapWalls(seed, base, p, walls).filter((w) => w !== wall)
-      const next = snap(p, snapWalls, GRID_STEP_CM, radiusCm(), other)
-      if (!pointsEqual(next, other)) orthoStretch(seed, { x: next.x - base.x, y: next.y - base.y })
-      dirty = true
-    } else {
-      const next = snap(p, walls.filter((w) => w !== wall), GRID_STEP_CM, radiusCm())
-      if (!pointsEqual(next, other)) {
-        dirty = true
-        moveEndpoint(walls, wall, end, next)
-      }
-    }
+    const seed: StretchSeed = { kind: "end", wall, end }
+    const target = ortho
+      ? snapWithSource(p, stretchSnapWalls(seed, base, p, walls).filter((w) => w !== wall), GRID_STEP_CM, radiusCm(), other)
+      : snapWithSource(p, walls.filter((w) => w !== wall), GRID_STEP_CM, radiusCm())
+    if (!pointsEqual(target.point, other)) moveEndpointBounded(walls, wall, end, target.point, editMode(target))
+    dirty = true
     redraw()
     return
   }
@@ -819,6 +812,14 @@ lengthInput.addEventListener("input", () => {
   if (selectedWalls.length === 1) resizeSelected()
   refreshWallCursor()
   redraw()
+})
+
+// фиксация ввода (Enter, уход фокуса): поле показывает фактическую длину выделенной стены —
+// отвергнутый ввод возвращается к текущей длине, укороченный до касания — к фактической
+lengthInput.addEventListener("change", () => {
+  if (chainStart || selectedWalls.length !== 1) return
+  lengthDirty = false
+  updateLengthBox()
 })
 
 lengthInput.addEventListener("keydown", (e) => {
@@ -1238,10 +1239,12 @@ window.addEventListener("keydown", (e) => {
       : e.key === "ArrowDown" ? { x: 0, y: step }
       : e.key === "ArrowLeft" ? { x: -step, y: 0 }
       : { x: step, y: 0 }
-    if (!nudgeBurst) pushRecord()
+    // запись истории открывает только нажатие, давшее сдвиг (design D8)
+    const before = cloneScene({ walls, dimensions })
+    const applied = moveWallsBounded(walls, selectedWalls, delta, { ortho })
+    if (applied.x === 0 && applied.y === 0) return
+    if (!nudgeBurst) pushSnapshot(before)
     nudgeBurst = true
-    if (ortho) orthoStretch({ kind: "walls", walls: selectedWalls }, delta)
-    else moveWalls(walls, selectedWalls, delta)
     dirty = true
     redraw()
     return

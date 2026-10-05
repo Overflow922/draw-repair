@@ -57,35 +57,42 @@ function orthoLockAxis(cursor: Point, from: Point): OrthoAxis | null {
 const onAxis = (axis: OrthoAxis, along: number): Point =>
   axis.along === "x" ? { x: along, y: axis.fixed } : { x: axis.fixed, y: along }
 
+// результат привязки и стена, к линии оси которой она выполнена (change wall-move-bounds, design D4):
+// null — привязка к концу стены или к сетке
+export interface SnapResult {
+  point: Point
+  axisWall: Wall | null
+}
+
 // привязка вдоль оси орто (design D1): пересечение оси с линией стены или проекция конца стены
 // в радиусе — ближайшая к курсору; иначе сетка только по координате вдоль оси
-function snapOnOrthoAxis(cursor: Point, walls: Wall[], gridStepCm: number, radiusCm: number, axis: OrthoAxis): Point {
+function snapOnOrthoAxis(cursor: Point, walls: Wall[], gridStepCm: number, radiusCm: number, axis: OrthoAxis): SnapResult {
   const { along, across, fixed } = axis
-  let best: Point | null = null
+  let best: SnapResult | null = null
   let bestDist = radiusCm
-  const consider = (p: Point) => {
+  const consider = (p: Point, axisWall: Wall | null) => {
     const d = distance(cursor, p)
     if (d <= bestDist) {
-      best = p
+      best = { point: p, axisWall }
       bestDist = d
     }
   }
   for (const w of walls) {
     const span = w.b[across] - w.a[across]
-    if (Math.abs(span) > EPS) consider(onAxis(axis, w.a[along] + ((fixed - w.a[across]) / span) * (w.b[along] - w.a[along])))
-    for (const end of [w.a, w.b]) if (distance(cursor, end) <= radiusCm) consider(onAxis(axis, end[along]))
+    if (Math.abs(span) > EPS) consider(onAxis(axis, w.a[along] + ((fixed - w.a[across]) / span) * (w.b[along] - w.a[along])), w)
+    for (const end of [w.a, w.b]) if (distance(cursor, end) <= radiusCm) consider(onAxis(axis, end[along]), null)
   }
-  return best ?? onAxis(axis, Math.round(cursor[along] / gridStepCm) * gridStepCm)
+  return best ?? { point: onAxis(axis, Math.round(cursor[along] / gridStepCm) * gridStepCm), axisWall: null }
 }
 
-export function snap(cursor: Point, walls: Wall[], gridStepCm: number, radiusCm: number, orthoFrom?: Point): Point {
+export function snapWithSource(cursor: Point, walls: Wall[], gridStepCm: number, radiusCm: number, orthoFrom?: Point): SnapResult {
   const axis = orthoFrom ? orthoLockAxis(cursor, orthoFrom) : null
   if (axis) return snapOnOrthoAxis(cursor, walls, gridStepCm, radiusCm, axis)
-  let best: Point | null = null
+  let best: SnapResult | null = null
   let bestDist = radiusCm
-  const consider = (p: Point, d: number) => {
+  const consider = (p: Point, d: number, axisWall: Wall | null) => {
     if (d <= bestDist) {
-      best = p
+      best = { point: p, axisWall }
       bestDist = d
     }
   }
@@ -94,7 +101,7 @@ export function snap(cursor: Point, walls: Wall[], gridStepCm: number, radiusCm:
     const dy = w.b.y - w.a.y
     const len2 = dx * dx + dy * dy
     if (len2 < EPS) {
-      consider(w.a, distance(cursor, w.a))
+      consider(w.a, distance(cursor, w.a), null)
       continue
     }
     const raw = ((cursor.x - w.a.x) * dx + (cursor.y - w.a.y) * dy) / len2
@@ -102,16 +109,24 @@ export function snap(cursor: Point, walls: Wall[], gridStepCm: number, radiusCm:
     if (raw < 0 || raw > 1) {
       const end = raw < 0 ? w.a : w.b
       const dEnd = distance(cursor, end)
-      consider(dEnd <= radiusCm ? end : foot, dEnd <= radiusCm ? dEnd : distance(cursor, foot))
+      if (dEnd <= radiusCm) consider(end, dEnd, null)
+      else consider(foot, distance(cursor, foot), w)
     } else {
-      consider(foot, distance(cursor, foot))
+      consider(foot, distance(cursor, foot), w)
     }
   }
   if (best) return best
   return {
-    x: Math.round(cursor.x / gridStepCm) * gridStepCm,
-    y: Math.round(cursor.y / gridStepCm) * gridStepCm,
+    point: {
+      x: Math.round(cursor.x / gridStepCm) * gridStepCm,
+      y: Math.round(cursor.y / gridStepCm) * gridStepCm,
+    },
+    axisWall: null,
   }
+}
+
+export function snap(cursor: Point, walls: Wall[], gridStepCm: number, radiusCm: number, orthoFrom?: Point): Point {
+  return snapWithSource(cursor, walls, gridStepCm, radiusCm, orthoFrom).point
 }
 
 export function distanceToWall(p: Point, wall: Wall): number {
@@ -154,7 +169,7 @@ export function jointedWalls(a: Wall, b: Wall): boolean {
   return distance(a.a, b.a) <= tol || distance(a.a, b.b) <= tol || distance(a.b, b.a) <= tol || distance(a.b, b.b) <= tol
 }
 
-function attachedEnds(walls: Wall[], at: Point, self: Wall): { wall: Wall; end: "a" | "b" }[] {
+export function attachedEnds(walls: Wall[], at: Point, self: Wall): { wall: Wall; end: "a" | "b" }[] {
   const out: { wall: Wall; end: "a" | "b" }[] = []
   for (const w of walls) {
     if (w === self || pointsEqual(w.a, w.b)) continue
@@ -213,7 +228,7 @@ function endOccupied(p: Point, w: Wall, walls: readonly Wall[]): boolean {
 
 // какие концы несдвигаемой стены следуют за группой (change fix-wall-move-joints, design D2):
 // связанные концы смещаются; примкнутая стена со свободным вторым концом — целиком
-function followingEnds(w: Wall, walls: readonly Wall[], group: readonly Wall[]): { a: boolean; b: boolean } {
+export function followingEnds(w: Wall, walls: readonly Wall[], group: readonly Wall[]): { a: boolean; b: boolean } {
   const la = endLink(w.a, w, group)
   const lb = endLink(w.b, w, group)
   const a = la !== "none"
