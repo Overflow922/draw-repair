@@ -339,6 +339,35 @@ body {
   border-radius: 3px;
 }
 
+/* инструмент «Проём» (change add-doorway) */
+.doorway-field {
+  font-size: 10px;
+  color: var(--text-muted);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  white-space: nowrap;
+}
+
+#doorway-width,
+#doorway-height,
+.doorway-number-input {
+  width: 56px;
+  font-size: 12px;
+  padding: 2px 4px;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+}
+
+/* поле ввода на месте числа размера проёма */
+.doorway-number-input {
+  position: absolute;
+  transform: translate(-50%, -100%);
+  text-align: center;
+  z-index: 5;
+}
+
 #dim-value[readonly] {
   color: var(--readonly-text);
   background: var(--readonly-bg);

@@ -1,4 +1,4 @@
-import type { Point, Wall } from "./types"
+import type { Doorway, Point, Wall } from "./types"
 import { angleReferenceRay, orthoDirection, typedDirection, wallAngleDeg } from "./wall-angle"
 import type { StartRef } from "./wall-angle"
 import { add, mul, sub } from "./wall-geometry"
@@ -21,6 +21,7 @@ export interface ChainInput {
   ortho: boolean
   typedAngleDeg: number | null
   typedLengthCm: number | null
+  doorways?: readonly Doorway[] // проёмы: привязка к стене не нарушает их (change add-doorway, design D6)
 }
 
 export interface ChainSegment {
@@ -62,12 +63,12 @@ function tracked(input: ChainInput, snap: VertexSnap, fixed: Point | null): { en
 }
 
 export function chainSegment(input: ChainInput): ChainSegment {
-  const { start, ref, raw, walls, radiusCm, gridStepCm, thicknessCm, typedLengthCm } = input
+  const { start, ref, raw, walls, radiusCm, gridStepCm, thicknessCm, typedLengthCm, doorways = [] } = input
   const v = unitOrNull(sub(raw, start))
   const fixed = v ? constrainedDirection(input, v) : null
   const snap = fixed
-    ? snapOnRay(raw, walls, radiusCm, gridStepCm, thicknessCm, start, fixed)
-    : snapVertex(raw, walls, radiusCm, gridStepCm, thicknessCm)
+    ? snapOnRay(raw, walls, radiusCm, gridStepCm, thicknessCm, start, fixed, doorways)
+    : snapVertex(raw, walls, radiusCm, gridStepCm, thicknessCm, undefined, doorways)
   const track = tracked(input, snap, fixed)
   const target = track?.end ?? snap.point
   const dir = fixed ?? unitOrNull(sub(target, start))

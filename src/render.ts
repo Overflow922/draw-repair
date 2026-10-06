@@ -1,3 +1,4 @@
+import { cutContour, cutPieces, dimensionChains, heightLabelAt, heightLabelSide, openingLines } from "./doorway/doorway-layout"
 import { dimGeometry, dimPointPoint, visibleWorld } from "./geometry"
 import type { DimGeometry } from "./geometry"
 import { findRooms, formatArea } from "./room-area"
@@ -6,8 +7,9 @@ import type { RoomAngle, RulerReading } from "./ruler"
 import { LIGHT_PALETTE } from "./theme"
 import type { Palette } from "./theme"
 import { contourSegments, displayPolygons, outlineSegments } from "./wall-geometry"
+import type { Seg } from "./wall-geometry"
 import { GRID_STEP_CM, PX_PER_CM, normalizeMaterial } from "./types"
-import type { Dimension, Material, Point, Unit, View, Wall } from "./types"
+import type { Dimension, Doorway, Material, Point, Unit, View, Wall } from "./types"
 import type { TrackLine } from "./wall-tracking"
 
 const OUTLINE_PX = 4
@@ -64,7 +66,12 @@ export interface RenderOptions {
   dimSnap?: Point | null
   selectedDims?: Dimension[]
   marquee?: { x1: number; y1: number; x2: number; y2: number } | null
-  marqueeHits?: { walls: Wall[]; dims: Dimension[] } | null
+  marqueeHits?: { walls: Wall[]; dims: Dimension[]; doorways?: Doorway[] } | null
+  // проёмы (change add-doorway): вырез и подписи всех, размеры — у одиночного выделения и призрака
+  doorways?: Doorway[]
+  selectedDoorways?: Doorway[]
+  doorwayGhost?: Doorway | null
+  hoverDoorway?: Doorway | null // подсветка ластика
   square?: Point[] | null // вершины квадрата установки в мировых координатах
   // угол к стене примыкания у начала превью: дуга от луча отсчёта from к направлению to
   angle?: { at: Point; from: Point; to: Point; deg: number } | null
@@ -151,8 +158,9 @@ export function drawScene(
   if (opts.hover && !selectedWalls.includes(opts.hover)) drawOutline(ctx, opts.hover, sceneWalls, toScreen, p.erase)
   const o = toScreen({ x: 0, y: 0 })
   const anchorC = o.x + o.y
-  for (const wall of walls) drawWall(ctx, wall, sceneWalls, 1, toScreen, k, anchorC, m, p.ink)
-  if (preview) drawWall(ctx, preview, sceneWalls, 0.4, toScreen, k, anchorC, m, p.ink)
+  const doorways = opts.doorways ?? []
+  for (const wall of walls) drawWall(ctx, wall, sceneWalls, 1, toScreen, k, anchorC, m, p.ink, doorways)
+  if (preview) drawWall(ctx, preview, sceneWalls, 0.4, toScreen, k, anchorC, m, p.ink, [])
   if (singleWalls) drawHandles(ctx, selectedWalls[0], toScreen, p)
   if (opts.square) {
     const corners = opts.square.map(toScreen)
@@ -170,6 +178,7 @@ export function drawScene(
   ctx.font = `${m.labelPx}px ${m.font}`
   ctx.textAlign = "center"
   ctx.textBaseline = "bottom"
+  drawDoorways(ctx, walls, rooms, unit, view, m, p, opts, selectedWalls.length > 0 || selectedDims.length > 0)
   for (const dim of opts.dimensions ?? []) drawDimension(ctx, dim, walls, unit, p.ink, view, m, p)
   for (const dim of opts.marqueeHits?.dims ?? [])
     if (!selectedDims.includes(dim)) drawDimension(ctx, dim, walls, unit, p.marqueeDim, view, m, p)
@@ -214,6 +223,95 @@ export function drawScene(
     ctx.lineWidth = 1.5
     ctx.strokeStyle = p.paper
     ctx.stroke()
+  }
+}
+
+// слой проёмов (change add-doorway, design D2, D7, D10): откосы, продолжения граней, подсветка,
+// подписи высоты; цепочки размеров — у одиночного выделенного проёма и у призрака установки
+function drawDoorways(
+  ctx: CanvasRenderingContext2D,
+  walls: Wall[],
+  rooms: Room[],
+  unit: Unit,
+  view: View,
+  m: RenderMetrics,
+  p: Palette,
+  opts: RenderOptions,
+  othersSelected: boolean,
+): void {
+  const k = PX_PER_CM * view.zoom
+  const toScreen = (q: Point): Point => ({ x: (q.x - view.pan.x) * k, y: (q.y - view.pan.y) * k })
+  const strokeSegs = (segs: Seg[], color: string, width: number): void => {
+    if (!segs.length) return
+    ctx.strokeStyle = color
+    ctx.lineWidth = width
+    ctx.beginPath()
+    for (const { p1, p2 } of segs) {
+      const s1 = toScreen(p1)
+      const s2 = toScreen(p2)
+      ctx.moveTo(s1.x, s1.y)
+      ctx.lineTo(s2.x, s2.y)
+    }
+    ctx.stroke()
+  }
+  const outline = (d: Doorway, color: string): void => {
+    const poly = openingLines(d, walls)?.outline
+    if (!poly) return
+    ctx.save()
+    ctx.strokeStyle = color
+    ctx.lineWidth = OUTLINE_PX
+    // явное замыкание: обводятся все четыре стороны участка, включая оба откоса
+    tracePolygon(ctx, [...poly, poly[0]].map(toScreen))
+    ctx.stroke()
+    ctx.restore()
+  }
+  const selected = opts.selectedDoorways ?? []
+  const marqueeHits = opts.marqueeHits?.doorways ?? []
+  for (const d of marqueeHits) if (!selected.includes(d)) outline(d, p.marqueeWall)
+  for (const d of selected) outline(d, p.selection)
+  if (opts.hoverDoorway) outline(opts.hoverDoorway, p.erase)
+  for (const d of opts.doorways ?? []) {
+    const lines = openingLines(d, walls)
+    if (!lines) continue
+    strokeSegs(lines.faces, p.muted, m.hatchPx)
+    strokeSegs(lines.jambs, p.ink, m.contourPx)
+    const side = heightLabelSide(d, walls, rooms)
+    const face = side === null ? null : heightLabelAt(d, walls, side, 0)
+    const out = side === null ? null : heightLabelAt(d, walls, side, 1)
+    if (!face || !out) continue
+    const text = `H=${formatLength(d.heightCm, unit)}`
+    ctx.save()
+    ctx.font = `${m.labelPx}px ${m.font}`
+    ctx.textAlign = "center"
+    ctx.textBaseline = "middle"
+    ctx.fillStyle = p.ink
+    // за полосой цепочки размеров; горизонтальный текст отодвигается на свою полуширину или полувысоту
+    // вдоль нормали грани — у вертикальной стены не налезает на числа цепочки
+    // ширина текста — оценка по кеглю: measureText контекста jsPDF возвращает не единицы листа
+    const width = text.length * m.labelPx * 0.6
+    const half = Math.abs(out.x - face.x) * (width / 2) + Math.abs(out.y - face.y) * (m.labelPx / 2)
+    // на экране — за полосой цепочки размеров; в PDF цепочек нет, подпись у грани
+    const band = m === PDF_METRICS ? m.labelPx * 0.5 : m.labelPx * 2.2
+    const gapCm = (band + half) / k
+    const s = toScreen({ x: face.x + (out.x - face.x) * gapCm, y: face.y + (out.y - face.y) * gapCm })
+    ctx.fillText(text, s.x, s.y)
+    ctx.restore()
+  }
+  const ghost = opts.doorwayGhost ?? null
+  if (ghost) outline(ghost, p.muted)
+  const chained = ghost ?? (selected.length === 1 && !othersSelected ? selected[0] : null)
+  if (!chained) return
+  const offsetCm = (m.labelPx * 1.2) / k
+  for (const item of dimensionChains(chained, walls)) {
+    if (item.lengthCm > 1e-6) {
+      const geom = dimGeometry(item.a, item.b, offsetCm * Math.sign(item.normal.x * -(item.b.y - item.a.y) + item.normal.y * (item.b.x - item.a.x)))
+      if (geom) drawDimensionGeom(ctx, geom, formatLength(item.lengthCm, unit), p.ink, view, m, p)
+      continue
+    }
+    // нулевое расстояние — только число у откоса
+    const s = toScreen({ x: item.a.x + item.normal.x * offsetCm, y: item.a.y + item.normal.y * offsetCm })
+    ctx.fillStyle = p.ink
+    ctx.fillText("0", s.x, s.y)
   }
 }
 
@@ -453,10 +551,10 @@ function drawMaterial(
   ctx.restore()
 }
 
-function strokeContour(ctx: CanvasRenderingContext2D, wall: Wall, walls: Wall[], toScreen: (p: Point) => Point): void {
+function strokeContour(ctx: CanvasRenderingContext2D, segs: Seg[], toScreen: (p: Point) => Point): void {
   ctx.lineCap = "square"
   ctx.beginPath()
-  for (const { p1, p2 } of contourSegments(wall, walls)) {
+  for (const { p1, p2 } of segs) {
     const s1 = toScreen(p1)
     const s2 = toScreen(p2)
     ctx.moveTo(s1.x, s1.y)
@@ -476,15 +574,16 @@ function drawWall(
   anchorC: number,
   m: RenderMetrics,
   ink: string,
+  doorways: readonly Doorway[],
 ): void {
   const mat = normalizeMaterial(wall.type)
-  const polys = displayPolygons(wall, walls).map((poly) => poly.map(toScreen))
+  const polys = cutPieces(wall, displayPolygons(wall, walls), walls, doorways).map((poly) => poly.map(toScreen))
   ctx.globalAlpha = alpha
   ctx.strokeStyle = ink
   ctx.lineWidth = 1
   drawMaterial(ctx, mat, polys, toScreen(wall.a), toScreen(wall.b), wall.thicknessCm * k, anchorC, m)
   ctx.lineWidth = m.contourPx
-  strokeContour(ctx, wall, walls, toScreen)
+  strokeContour(ctx, cutContour(wall, contourSegments(wall, walls), walls, doorways), toScreen)
   ctx.globalAlpha = 1
 }
 

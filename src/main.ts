@@ -1,7 +1,7 @@
 import "./style.css"
 import { cloneScene, drawingHistory, loadHistory, record, recordSnapshot, redoEntry, saveHistory, undoEntry } from "./history"
 import type { Scene } from "./history"
-import { dimGeometry, dimHitDistance, dimLevelSnap, dimensionOffsetAt, distanceToWall, endpointAt, hitWall, nearestEdgeIntersection, dimPointPoint, pointsEqual, segmentIntersectsRect, snap, snapOthers, snapWithSource, zoomAt } from "./geometry"
+import { dimGeometry, dimHitDistance, dimLevelSnap, dimensionOffsetAt, endpointAt, hitWall, nearestEdgeIntersection, dimPointPoint, pointsEqual, segmentIntersectsRect, snap, snapOthers, snapWithSource, zoomAt } from "./geometry"
 import type { DimGeometry, SnapResult } from "./geometry"
 import { moveEndpointBounded, moveWallsBounded, resizeWallBounded } from "./wall-edit"
 import type { EditMode } from "./wall-edit"
@@ -18,10 +18,13 @@ import { rulerReading } from "./ruler"
 import { availableFormats, exportDrawing, PAGE_FORMATS_MM } from "./export/pdf"
 import type { PageFormat } from "./export/pdf"
 import { loadStore, saveStore } from "./storage"
+import { thicknessAllowed, violatesDoorways } from "./doorway/doorway-guard"
+import { deleteObjects, doorwaysInRect, erasePick, wallsInRect } from "./doorway/doorway-scene"
+import { createDoorwayTool } from "./doorway/doorway-tool"
 import { loadThemeChoice, paletteOf, resolveTheme, saveThemeChoice, themeToggleTitle, toggledTheme } from "./theme"
 import type { Theme } from "./theme"
 import { GRID_STEP_CM, MATERIALS, PX_PER_CM } from "./types"
-import type { Dimension, DimPoint, Drawing, Material, Point, Unit, View, Wall } from "./types"
+import type { Dimension, DimPoint, Doorway, Drawing, Material, Point, Unit, View, Wall } from "./types"
 
 const canvas = document.querySelector<HTMLCanvasElement>("#canvas")!
 const canvasWrap = document.querySelector<HTMLElement>("#canvas-wrap")!
@@ -49,6 +52,10 @@ const dimPanel = document.querySelector<HTMLElement>("#dim-panel")!
 const dimOffsetInput = document.querySelector<HTMLInputElement>("#dim-offset")!
 const dimOffsetUnitLabel = document.querySelector<HTMLElement>("#dim-offset-unit")!
 const dimValueInput = document.querySelector<HTMLInputElement>("#dim-value")!
+const toolDoorwayBtn = document.querySelector<HTMLButtonElement>("#tool-doorway")!
+const doorwayPanel = document.querySelector<HTMLElement>("#doorway-panel")!
+const doorwayWidthInput = document.querySelector<HTMLInputElement>("#doorway-width")!
+const doorwayHeightInput = document.querySelector<HTMLInputElement>("#doorway-height")!
 
 const loaded = loadStore()
 const readOnly = loaded.readOnly
@@ -59,6 +66,9 @@ const historyStore = loadedHistory.history
 const current = () => store.drawings.find((d) => d.id === store.activeId)!
 let walls: Wall[] = current().walls
 let dimensions: Dimension[] = current().dimensions
+// проёмы активного чертежа (change add-doorway); в чертёж пишутся при первом изменении
+let doorways: Doorway[] = current().doorways ?? []
+let selectedDoorways: Doorway[] = []
 let chainStart: Point | null = null
 let cursor: Point | null = null
 let chainRef: StartRef | null = null // стена примыкания начала (из прилипания первого клика)
@@ -84,9 +94,9 @@ let wallPanelOpen = false
 let nudgeBurst = false
 let marqueePending: { x: number; y: number } | null = null
 let marquee: { x1: number; y1: number; x2: number; y2: number } | null = null
-let marqueeHits: { walls: Wall[]; dims: Dimension[] } | null = null
+let marqueeHits: { walls: Wall[]; dims: Dimension[]; doorways: Doorway[] } | null = null
 const MARQUEE_THRESHOLD_PX = 5
-type Tool = "wall" | "dimension" | "eraser" | "ruler" | "none"
+type Tool = "wall" | "dimension" | "doorway" | "eraser" | "ruler" | "none"
 let tool: Tool = "wall"
 const systemDark = window.matchMedia("(prefers-color-scheme: dark)")
 let themeChoice: Theme | null = loadThemeChoice(localStorage) // null — следовать системной настройке
@@ -98,9 +108,71 @@ const endPoint = (end: DimPoint): Point | null => dimPointPoint(end, walls)
 
 const radiusCm = (): number => snapRadiusCm(view.zoom)
 
+// текущая сцена чертежа: стены, размеры, проёмы (снимок истории — change add-doorway)
+const scene = (): Scene => ({ walls, dimensions, doorways })
+
 const pushRecord = (): void => {
   nudgeBurst = false
-  record(drawingHistory(historyStore, store.activeId), { walls, dimensions })
+  record(drawingHistory(historyStore, store.activeId), scene())
+}
+
+// список проёмов заменяется целиком: правки проёма возвращают новый объект
+function setDoorways(next: Doorway[]): void {
+  doorways = next
+  current().doorways = next
+  selectedDoorways = selectedDoorways.filter((d) => next.includes(d))
+}
+
+function replaceDoorway(prev: Doorway, next: Doorway): void {
+  selectedDoorways = selectedDoorways.map((d) => (d === prev ? next : d))
+  setDoorways(doorways.map((d) => (d === prev ? next : d)))
+}
+
+// инструмент «Проём» (change add-doorway, design D8): состояние чертежа и выделения — здесь
+const doorwayTool = createDoorwayTool(
+  {
+    walls: () => walls,
+    doorways: () => doorways,
+    selectedDoorways: () => selectedDoorways,
+    othersSelected: () => selectedWalls.length > 0 || selectedDimensions.length > 0,
+    view: () => view,
+    radiusCm: () => radiusCm(),
+    formatCm: (cm) => formatCm(cm, unit),
+    parseCm: (text) => parseFloat(text.replace(",", ".")) * UNIT_TO_CM[unit],
+    unitLabel: () => UNIT_LABEL[unit],
+    editorParent: canvasWrap,
+    snapshot: () => cloneScene(scene()),
+    record: () => pushRecord(),
+    recordSnapshot: (s) => pushSnapshot(s),
+    recordNudge: (before) => {
+      if (!nudgeBurst) pushSnapshot(before)
+      nudgeBurst = true
+    },
+    add: (d) => setDoorways([...doorways, d]),
+    replace: (prev, next) => replaceDoorway(prev, next),
+    select: (d) => selectDoorway(d),
+    clearSelection: () => clearSelection(),
+    changed: () => {
+      dirty = true
+    },
+    redraw: () => redraw(),
+  },
+  { root: doorwayPanel, width: doorwayWidthInput, height: doorwayHeightInput },
+)
+
+const setDoorwayPanel = (open: boolean): void => doorwayTool.setPanel(open)
+const closeDoorwayEditor = (): void => doorwayTool.closeEditor()
+
+function selectDoorway(d: Doorway): void {
+  closeDoorwayEditor()
+  selectedDoorways = [d]
+  selectedWalls = []
+  selectedDimensions = []
+  lengthDirty = false
+  setWallPanel(false)
+  setDimPanel(false)
+  setDoorwayPanel(true)
+  redraw()
 }
 
 const pushSnapshot = (snapshot: Scene): void => {
@@ -118,10 +190,13 @@ function setDimPanel(open: boolean): void {
 }
 
 function selectDimension(dim: Dimension): void {
+  closeDoorwayEditor()
   selectedDimensions = [dim]
   selectedWalls = []
+  selectedDoorways = []
   lengthDirty = false
   setWallPanel(false)
+  setDoorwayPanel(false)
   setDimPanel(true)
   redraw()
 }
@@ -134,18 +209,23 @@ function clearDimSelection(): void {
 }
 
 function selectWall(wall: Wall): void {
+  closeDoorwayEditor()
   selectedWalls = [wall]
   selectedDimensions = []
+  selectedDoorways = []
   lengthDirty = false
   setDimPanel(false)
+  setDoorwayPanel(false)
   syncThicknessBox()
   setWallMaterial(wall.type)
   setWallPanel(true)
 }
 
 function clearSelection(): void {
+  closeDoorwayEditor()
   selectedWalls = []
   selectedDimensions = []
+  selectedDoorways = []
   lengthDirty = false
   nudgeBurst = false
   setWallPanel(false)
@@ -158,6 +238,7 @@ function syncToolUI(): void {
   toolDimensionBtn.classList.toggle("active", tool === "dimension")
   toolEraserBtn.classList.toggle("active", tool === "eraser")
   toolRulerBtn.classList.toggle("active", tool === "ruler")
+  toolDoorwayBtn.classList.toggle("active", tool === "doorway")
   canvas.classList.toggle("tool-eraser", tool === "eraser")
 }
 
@@ -165,10 +246,13 @@ function setTool(next: Tool): void {
   if (tool === next) return
   tool = next
   clearChain()
+  closeDoorwayEditor()
   dimDraft = emptyDraft()
   lengthDirty = false
   selectedWalls = []
   selectedDimensions = []
+  selectedDoorways = []
+  doorwayTool.reset()
   suppressClick = false
   nudgeBurst = false
   groupMove = null
@@ -177,6 +261,7 @@ function setTool(next: Tool): void {
   marqueePending = null
   setWallPanel(false)
   setDimPanel(false)
+  setDoorwayPanel(false)
   syncToolUI()
   syncThicknessBox()
   redraw()
@@ -244,8 +329,8 @@ function liveLengthCm(): number | null {
 function resizeSelected(): void {
   const len = typedLengthCm()
   if (!len || selectedWalls.length !== 1) return
-  const before = cloneScene({ walls, dimensions })
-  const result = resizeWallBounded(walls, selectedWalls[0], len, { ortho })
+  const before = cloneScene(scene())
+  const result = resizeWallBounded(walls, selectedWalls[0], len, { ortho, doorways })
   if (result.kind === "rejected") return
   pushSnapshot(before)
   dirty = true
@@ -285,7 +370,7 @@ function drawPatternPreviews(): void {
 
 function redraw(): void {
   const p = chainStart && segment ? segment.end : null
-  const target = tool === "eraser" && cursor ? eraserTarget(cursor) : { wall: null, dim: null }
+  const target = tool === "eraser" && cursor ? eraserTarget(cursor) : { wall: null, dim: null, doorway: null }
   const draft = dimDraftGeometry()
   const snapHit = tool === "dimension" && cursor && (!dimDraft.a || !dimDraft.b) ? nearestEdgeIntersection(cursor, walls, radiusCm()) : null
   let previewWall: Wall | null = null
@@ -305,6 +390,10 @@ function redraw(): void {
     dimRubber: !dimDraft.a || dimDraft.b || !cursor ? null : draftRubber(snapHit?.point ?? cursor),
     dimSnap: snapHit?.point ?? null,
     selectedDims: selectedDimensions,
+    doorways,
+    selectedDoorways,
+    doorwayGhost: doorwayTool.ghost(),
+    hoverDoorway: target.doorway,
     marquee,
     marqueeHits,
     square,
@@ -319,6 +408,7 @@ function redraw(): void {
   updateLengthBox()
   updateAngleBox()
   syncDimPanel()
+  doorwayTool.syncPanel()
   syncHistoryButtons()
   syncFormats()
   if (dirty) {
@@ -330,25 +420,17 @@ function redraw(): void {
 
 // нажатая кнопка мыши: рамка, перетаскивание стен или размера, сдвиг вида
 function gestureActive(): boolean {
-  return !!(marquee || marqueePending || groupMove || endpointDrag || dimDrag || panDrag)
+  return !!(marquee || marqueePending || groupMove || endpointDrag || dimDrag || doorwayTool.dragging() || panDrag)
 }
 
-function eraserTarget(p: Point): { wall: Wall | null; dim: Dimension | null } {
-  const tol = radiusCm()
-  let wall: Wall | null = hitWall(p, walls, tol)
-  let wallDist = wall ? distanceToWall(p, wall) : Infinity
-  let dim: Dimension | null = null
-  let dimDist = Infinity
-  for (const d of dimensions) {
-    const dd = dimHitDistance(p, d, walls, 2)
-    if (dd !== null && dd <= tol && dd < dimDist) {
-      dim = d
-      dimDist = dd
-    }
+// ластик: размер → проём → стена (wall-deletion «Инструмент «Ластик»»)
+function eraserTarget(p: Point): { wall: Wall | null; dim: Dimension | null; doorway: Doorway | null } {
+  const pick = erasePick(p, { walls, dimensions, doorways }, radiusCm(), 2)
+  return {
+    wall: pick?.kind === "wall" ? pick.wall : null,
+    dim: pick?.kind === "dimension" ? pick.dimension : null,
+    doorway: pick?.kind === "doorway" ? pick.doorway : null,
   }
-  if (dim && dimDist < wallDist) wall = null
-  else dim = null
-  return { wall, dim }
 }
 
 function dimDraftGeometry(): DimGeometry | null {
@@ -382,7 +464,7 @@ function showFitPopup(unavailable: PageFormat[]): void {
 }
 
 function syncFormats(): void {
-  const available = availableFormats(walls, dimensions, current().scale)
+  const available = availableFormats(walls, dimensions, current().scale, doorways)
   const all = Object.keys(PAGE_FORMATS_MM) as PageFormat[]
   const unavailable = all.filter((f) => !available.includes(f))
   pdfFormat.replaceChildren(...available.map((f) => new Option(f, f)))
@@ -416,7 +498,7 @@ function snapWallCursor(raw: Point): void {
   wallCursorRaw = raw
   if (!chainStart) {
     // до первого клика — квадрат установки у грани/торца или на сетке
-    const r = snapStartVertex(raw, walls, snapRadiusCm(view.zoom), GRID_STEP_CM, thicknessCm)
+    const r = snapStartVertex(raw, walls, snapRadiusCm(view.zoom), GRID_STEP_CM, thicknessCm, doorways)
     cursor = r.point
     cursorSnap = r
     segment = null
@@ -434,6 +516,7 @@ function snapWallCursor(raw: Point): void {
     ortho,
     typedAngleDeg: typedAngleDeg(),
     typedLengthCm: lengthDirty ? typedLengthCm() : null,
+    doorways,
   })
   cursor = segment.snap.point
   cursorSnap = segment.snap
@@ -459,9 +542,12 @@ function commitPoint(): void {
   const a = chainStart
   const end = segment?.end ?? cursor ?? chainStart
   if (!pointsEqual(a, end)) {
+    const wall: Wall = { id: crypto.randomUUID(), a, b: end, thicknessCm, type: wallMaterial }
+    // стена, нарушающая проём, не фиксируется: цепочка продолжается (spec wall-drawing)
+    if (violatesDoorways(walls, [...walls, wall], doorways)) return
     pushRecord()
     dirty = true
-    walls.push({ id: crypto.randomUUID(), a, b: end, thicknessCm, type: wallMaterial })
+    walls.push(wall)
   }
   // стена не продолжается автоматически: инструмент ждёт новый старт
   clearChain()
@@ -488,10 +574,15 @@ function restoreWalls(scene: Scene): void {
 // режим правки с ограничениями (change wall-move-bounds, design D8): привязка к линии оси стены
 // передаётся как snappedAxis
 function editMode(snapped: SnapResult): EditMode {
-  return snapped.axisWall ? { ortho, snappedAxis: snapped.axisWall } : { ortho }
+  return snapped.axisWall ? { ortho, snappedAxis: snapped.axisWall, doorways } : { ortho, doorways }
 }
 
 canvas.addEventListener("pointermove", (e) => {
+  if (doorwayTool.dragging()) {
+    doorwayTool.dragTo(toWorld(e))
+    redraw()
+    return
+  }
   if (groupMove) {
     const { group, baseA, grab, others, snapshot } = groupMove
     const p = toWorld(e)
@@ -569,6 +660,10 @@ canvas.addEventListener("pointermove", (e) => {
   }
   if (tool === "wall") updateWallCursor(e)
   else if (tool === "dimension" || tool === "ruler") cursor = toWorld(e)
+  else if (tool === "doorway") {
+    cursor = toWorld(e)
+    doorwayTool.hover(cursor)
+  }
   else cursor = toSnappedPoint(e)
   redraw()
 })
@@ -590,6 +685,12 @@ canvas.addEventListener("pointerdown", (e) => {
     return
   }
   if (e.button !== 0) return
+  if (tool !== "eraser") {
+    if (doorwayTool.pressNumber(toWorld(e))) {
+      suppressClick = true
+      return
+    }
+  }
   if (selectedWalls.length === 1) {
     const sel = selectedWalls[0]
     const press = toWorld(e)
@@ -601,7 +702,7 @@ canvas.addEventListener("pointerdown", (e) => {
         wall: sel,
         end: handle,
         base: sel[handle],
-        snapshot: cloneScene({ walls, dimensions }),
+        snapshot: cloneScene(scene()),
         gesture: startOrthoGesture("end", press, { ...other }),
       }
       canvas.setPointerCapture(e.pointerId)
@@ -612,13 +713,20 @@ canvas.addEventListener("pointerdown", (e) => {
     const p = toWorld(e)
     const dim = dimensions.find((d) => (dimHitDistance(p, d, walls, 2) ?? Infinity) <= radiusCm())
     if (dim) {
-      dimDrag = { dim, baseOffset: dim.offset, snapshot: cloneScene({ walls, dimensions }) }
+      dimDrag = { dim, baseOffset: dim.offset, snapshot: cloneScene(scene()) }
       suppressClick = true
       if (!dimDraft.a && !dimDraft.b) selectDimension(dim)
       canvas.setPointerCapture(e.pointerId)
       return
     }
+    // проём выше стены: выделение и перетаскивание вдоль опорной стены (вне цепочки и «Размера»)
+    if (!chainStart && tool !== "dimension" && doorwayTool.pressDoorway(p)) {
+      suppressClick = true
+      canvas.setPointerCapture(e.pointerId)
+      return
+    }
     const wallHit = hitWall(p, walls, radiusCm())
+    if (tool === "doorway" && wallHit) return
     if (wallHit && selectedWalls.length > 0) {
       if (!selectedWalls.includes(wallHit)) selectWall(wallHit)
       const group = [...selectedWalls]
@@ -628,7 +736,7 @@ canvas.addEventListener("pointerdown", (e) => {
         baseA: { ...wallHit.a },
         grab: p,
         others: snapOthers(walls, group),
-        snapshot: cloneScene({ walls, dimensions }),
+        snapshot: cloneScene(scene()),
         gesture: startOrthoGesture("move", p, { ...wallHit.a }),
       }
       suppressClick = true
@@ -659,6 +767,13 @@ canvas.addEventListener("pointerup", (e) => {
     return
   }
   marqueePending = null
+  if (doorwayTool.dragging()) {
+    if (e.button === 0) {
+      doorwayTool.endDrag()
+      redraw()
+    }
+    return
+  }
   if (endpointDrag) {
     if (e.button === 0) {
       if (!pointsEqual(endpointDrag.wall[endpointDrag.end], endpointDrag.base)) {
@@ -697,18 +812,19 @@ canvas.addEventListener("pointerup", (e) => {
   redraw()
 })
 
-function marqueePicks(rect: { x1: number; y1: number; x2: number; y2: number }): { walls: Wall[]; dims: Dimension[] } {
+function marqueePicks(rect: { x1: number; y1: number; x2: number; y2: number }): { walls: Wall[]; dims: Dimension[]; doorways: Doorway[] } {
   const k = PX_PER_CM * view.zoom
   const min = { x: Math.min(rect.x1, rect.x2) / k + view.pan.x, y: Math.min(rect.y1, rect.y2) / k + view.pan.y }
   const max = { x: Math.max(rect.x1, rect.x2) / k + view.pan.x, y: Math.max(rect.y1, rect.y2) / k + view.pan.y }
-  const wallsPicked = walls.filter((w) => segmentIntersectsRect(w.a, w.b, min, max))
+  // ось стены на участке её проёма стену не выделяет (multi-selection «Рамка выделения»)
+  const wallsPicked = wallsInRect(min, max, walls, doorways)
   const dimsPicked = dimensions.filter((d) => {
     const a = dimPointPoint(d.from, walls)
     const b = dimPointPoint(d.to, walls)
     const geom = a && b ? dimGeometry(a, b, d.offset) : null
     return !!geom && segmentIntersectsRect(geom.p1, geom.p2, min, max)
   })
-  return { walls: wallsPicked, dims: dimsPicked }
+  return { walls: wallsPicked, dims: dimsPicked, doorways: doorwaysInRect(min, max, walls, doorways) }
 }
 
 function finishMarquee(rect: { x1: number; y1: number; x2: number; y2: number }, additive: boolean): void {
@@ -716,8 +832,14 @@ function finishMarquee(rect: { x1: number; y1: number; x2: number; y2: number },
   marqueeHits = null
   selectedWalls = additive ? [...selectedWalls, ...picks.walls.filter((w) => !selectedWalls.includes(w))] : picks.walls
   selectedDimensions = additive ? [...selectedDimensions, ...picks.dims.filter((d) => !selectedDimensions.includes(d))] : picks.dims
+  selectedDoorways = additive ? [...selectedDoorways, ...picks.doorways.filter((d) => !selectedDoorways.includes(d))] : picks.doorways
   lengthDirty = false
-  if (selectedWalls.length === 1 && !selectedDimensions.length) {
+  closeDoorwayEditor()
+  setDoorwayPanel(selectedDoorways.length === 1 && !selectedWalls.length && !selectedDimensions.length)
+  if (selectedDoorways.length) {
+    setWallPanel(false)
+    setDimPanel(false)
+  } else if (selectedWalls.length === 1 && !selectedDimensions.length) {
     setDimPanel(false)
     syncThicknessBox()
     setWallMaterial(selectedWalls[0].type)
@@ -751,9 +873,14 @@ canvas.addEventListener("click", (e) => {
   const p = toSnappedPoint(e)
   const raw = toWorld(e)
   if (tool === "eraser") {
-    const { wall, dim } = eraserTarget(p)
-    if (wall) deleteWall(wall)
-    else if (dim) deleteDimension(dim)
+    const { wall, dim, doorway } = eraserTarget(p)
+    if (dim) deleteDimension(dim)
+    else if (doorway) deleteDoorway(doorway)
+    else if (wall) deleteWall(wall)
+    return
+  }
+  if (tool === "doorway") {
+    doorwayTool.place(raw)
     return
   }
   if (tool === "dimension") {
@@ -765,7 +892,7 @@ canvas.addEventListener("click", (e) => {
     // без инструмента — прежнее попадание с полосным допуском
     let wall: Wall | null
     if (tool === "wall") {
-      const action = wallClickAction(raw, snapStartVertex(raw, walls, radiusCm(), GRID_STEP_CM, thicknessCm), walls, radiusCm())
+      const action = wallClickAction(raw, snapStartVertex(raw, walls, radiusCm(), GRID_STEP_CM, thicknessCm, doorways), walls, radiusCm())
       wall = action.kind === "select" ? action.wall : null
     } else wall = hitWall(raw, walls, radiusCm())
     if (wall) {
@@ -863,13 +990,27 @@ function endChain(): void {
   redraw()
 }
 
+// удаление выбранного с каскадом размеров и проёмов удаляемых стен (wall-deletion)
+function removeObjects(picked: { walls: Wall[]; dimensions: Dimension[]; doorways: Doorway[] }): void {
+  const next = deleteObjects(scene(), picked)
+  for (const w of picked.walls) walls.splice(walls.indexOf(w), 1)
+  dimensions = next.dimensions
+  current().dimensions = dimensions
+  setDoorways(next.doorways ?? [])
+}
+
+function deleteDoorway(d: Doorway): void {
+  pushRecord()
+  closeDoorwayEditor()
+  removeObjects({ walls: [], dimensions: [], doorways: [d] })
+  if (!selectedDoorways.length) setDoorwayPanel(false)
+  dirty = true
+  redraw()
+}
+
 function deleteWall(wall: Wall): void {
   pushRecord()
-  walls.splice(walls.indexOf(wall), 1)
-  dimensions = dimensions.filter((d) =>
-    d.from.a.wallId !== wall.id && d.from.b.wallId !== wall.id &&
-    d.to.a.wallId !== wall.id && d.to.b.wallId !== wall.id)
-  current().dimensions = dimensions
+  removeObjects({ walls: [wall], dimensions: [], doorways: [] })
   if (selectedDimensions.some((d) => !dimensions.includes(d))) {
     selectedDimensions = selectedDimensions.filter((d) => dimensions.includes(d))
     if (!selectedDimensions.length) setDimPanel(false)
@@ -895,18 +1036,14 @@ function deleteDimension(dim: Dimension): void {
 }
 
 function deleteSelection(): void {
-  if (!selectedWalls.length && !selectedDimensions.length) return
+  if (!selectedWalls.length && !selectedDimensions.length && !selectedDoorways.length) return
   pushRecord()
-  const ids = new Set(selectedWalls.map((w) => w.id))
-  for (const w of selectedWalls) walls.splice(walls.indexOf(w), 1)
-  const pickedDims = selectedDimensions
-  dimensions = dimensions.filter((d) =>
-    !pickedDims.includes(d) &&
-    !ids.has(d.from.a.wallId) && !ids.has(d.from.b.wallId) &&
-    !ids.has(d.to.a.wallId) && !ids.has(d.to.b.wallId))
-  current().dimensions = dimensions
+  closeDoorwayEditor()
+  removeObjects({ walls: selectedWalls, dimensions: selectedDimensions, doorways: selectedDoorways })
   selectedWalls = []
   selectedDimensions = []
+  selectedDoorways = []
+  setDoorwayPanel(false)
   lengthDirty = false
   nudgeBurst = false
   setWallPanel(false)
@@ -928,7 +1065,12 @@ thicknessInput.addEventListener("input", () => {
   const v = parseFloat(thicknessInput.value.replace(",", "."))
   if (!Number.isFinite(v) || v <= 0) return
   thicknessCm = v * UNIT_TO_CM[unit]
-  if (selectedWalls.length === 1 && selectedWalls[0].thicknessCm !== thicknessCm) {
+  // толщина, нарушающая проём, не применяется (spec wall-collision «Правки стен не нарушают проёмы»)
+  if (
+    selectedWalls.length === 1 &&
+    selectedWalls[0].thicknessCm !== thicknessCm &&
+    thicknessAllowed(walls, selectedWalls[0], thicknessCm, doorways)
+  ) {
     pushRecord()
     selectedWalls[0].thicknessCm = thicknessCm
     dirty = true
@@ -937,6 +1079,9 @@ thicknessInput.addEventListener("input", () => {
   refreshWallCursor()
   redraw()
 })
+
+// фиксация ввода: поле показывает фактическую толщину выделенной стены
+thicknessInput.addEventListener("change", syncThicknessBox)
 
 dimOffsetInput.addEventListener("input", () => {
   if (selectedDimensions.length !== 1) return
@@ -1005,6 +1150,13 @@ toolDimensionBtn.addEventListener("click", () => setTool("dimension"))
 
 toolEraserBtn.addEventListener("click", () => setTool("eraser"))
 
+toolDoorwayBtn.addEventListener("click", () => {
+  if (tool !== "doorway") {
+    setTool("doorway")
+    setDoorwayPanel(true)
+  } else doorwayTool.togglePanel()
+})
+
 toolRulerBtn.addEventListener("click", () => setTool("ruler"))
 
 wallTypesRow.addEventListener("click", (e) => {
@@ -1046,12 +1198,17 @@ function activate(id: string): void {
   store.activeId = id
   walls = current().walls
   dimensions = current().dimensions
+  doorways = current().doorways ?? []
   view = current().view
   tool = "wall"
   syncToolUI()
   clearChain()
+  closeDoorwayEditor()
   selectedWalls = []
   selectedDimensions = []
+  selectedDoorways = []
+  doorwayTool.reset()
+  setDoorwayPanel(false)
   dimDraft = emptyDraft()
   dimDrag = null
   lengthDirty = false
@@ -1096,8 +1253,11 @@ function removeDrawing(id: string, index: number): void {
 
 function resetEditing(): void {
   clearChain()
+  closeDoorwayEditor()
   selectedWalls = []
   selectedDimensions = []
+  selectedDoorways = []
+  doorwayTool.reset()
   setDimPanel(false)
   dimDraft = emptyDraft()
   lengthDirty = false
@@ -1108,15 +1268,16 @@ function resetEditing(): void {
 }
 
 function undo(): void {
-  if (groupMove || endpointDrag || panDrag || dimDrag) return
+  if (groupMove || endpointDrag || panDrag || dimDrag || doorwayTool.dragging()) return
   const h = drawingHistory(historyStore, store.activeId)
-  const e = undoEntry(h, { walls, dimensions })
+  const e = undoEntry(h, scene())
   if (!e) return
   if (e.kind === "walls") {
     current().walls = e.walls
     current().dimensions = e.dimensions
     walls = e.walls
     dimensions = e.dimensions
+    setDoorways(e.doorways ?? [])
   } else {
     const i = historyStore.trash.findIndex((t) => t.drawing.id === e.drawingId)
     if (i < 0) return
@@ -1130,15 +1291,16 @@ function undo(): void {
 }
 
 function redo(): void {
-  if (groupMove || endpointDrag || panDrag || dimDrag) return
+  if (groupMove || endpointDrag || panDrag || dimDrag || doorwayTool.dragging()) return
   const h = drawingHistory(historyStore, store.activeId)
-  const e = redoEntry(h, { walls, dimensions })
+  const e = redoEntry(h, scene())
   if (!e) return
   if (e.kind === "walls") {
     current().walls = e.walls
     current().dimensions = e.dimensions
     walls = e.walls
     dimensions = e.dimensions
+    setDoorways(e.doorways ?? [])
   } else {
     const idx = store.drawings.findIndex((d) => d.id === e.drawingId)
     if (idx < 0) return
@@ -1154,7 +1316,7 @@ redoBtn.addEventListener("click", redo)
 
 pdfExportBtn.addEventListener("click", () => {
   const drawing = current()
-  exportDrawing(drawing.walls, drawing.dimensions, unit, drawing.scale, pdfFormat.value as PageFormat, drawing.name)
+  exportDrawing(drawing.walls, drawing.dimensions, unit, drawing.scale, pdfFormat.value as PageFormat, drawing.name, drawing.doorways ?? [])
 })
 
 pdfScale.addEventListener("change", () => {
@@ -1223,7 +1385,7 @@ window.addEventListener("keydown", (e) => {
   }
   if (e.key === "Delete") {
     if (e.target instanceof HTMLInputElement) return
-    if (groupMove || endpointDrag || panDrag || dimDrag) return
+    if (groupMove || endpointDrag || panDrag || dimDrag || doorwayTool.dragging()) return
     deleteSelection()
     return
   }
@@ -1232,14 +1394,21 @@ window.addEventListener("keydown", (e) => {
     else if (dimDraft.a || dimDraft.b) {
       dimDraft = emptyDraft()
       redraw()
-    } else if (selectedDimensions.length || selectedWalls.length) clearSelection()
-    else if (tool === "eraser" || tool === "dimension" || tool === "ruler") setTool("none")
+    } else if (selectedDimensions.length || selectedWalls.length || selectedDoorways.length) clearSelection()
+    else if (tool === "eraser" || tool === "dimension" || tool === "ruler" || tool === "doorway") setTool("none")
   }
   if (e.key !== "ArrowUp" && e.key !== "ArrowDown" && e.key !== "ArrowLeft" && e.key !== "ArrowRight") return
   if (e.target instanceof HTMLInputElement) return
-  if (groupMove || endpointDrag || panDrag || dimDrag) return
-  if (selectedWalls.length || selectedDimensions.length) {
-    if (!selectedWalls.length) return
+  if (groupMove || endpointDrag || panDrag || dimDrag || doorwayTool.dragging()) return
+  if (selectedWalls.length || selectedDimensions.length || selectedDoorways.length) {
+    if (!selectedWalls.length) {
+      if (!selectedDoorways.length) return
+      e.preventDefault()
+      const step = e.shiftKey ? 1 : GRID_STEP_CM
+      const arrow = e.key === "ArrowUp" ? { x: 0, y: -1 } : e.key === "ArrowDown" ? { x: 0, y: 1 } : e.key === "ArrowLeft" ? { x: -1, y: 0 } : { x: 1, y: 0 }
+      if (doorwayTool.nudge(arrow, step)) redraw()
+      return
+    }
     e.preventDefault()
     const step = e.shiftKey ? 1 : GRID_STEP_CM
     const delta = e.key === "ArrowUp" ? { x: 0, y: -step }
@@ -1247,8 +1416,8 @@ window.addEventListener("keydown", (e) => {
       : e.key === "ArrowLeft" ? { x: -step, y: 0 }
       : { x: step, y: 0 }
     // запись истории открывает только нажатие, давшее сдвиг (design D8)
-    const before = cloneScene({ walls, dimensions })
-    const applied = moveWallsBounded(walls, selectedWalls, delta, { ortho })
+    const before = cloneScene(scene())
+    const applied = moveWallsBounded(walls, selectedWalls, delta, { ortho, doorways })
     if (applied.x === 0 && applied.y === 0) return
     if (!nudgeBurst) pushSnapshot(before)
     nudgeBurst = true

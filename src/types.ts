@@ -40,6 +40,17 @@ export interface Dimension {
   offset: number
 }
 
+// Проём в стене (change add-doorway, design D1): положение — расстояние вдоль оси опорной стены
+// от конца привязки до ближнего откоса; данные относительны к стене и следуют за ней сами
+export interface Doorway {
+  id: string
+  wallId: string
+  anchor: "a" | "b"
+  offsetCm: number
+  widthCm: number
+  heightCm: number
+}
+
 export interface View {
   zoom: number
   pan: Point
@@ -65,6 +76,8 @@ export interface Drawing {
   name: string
   walls: Wall[]
   dimensions: Dimension[]
+  // отсутствие — пустой список; при загрузке не дописывается (design D9)
+  doorways?: Doorway[]
   view: View
   scale: ScaleDenominator
 }

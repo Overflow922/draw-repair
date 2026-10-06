@@ -1,5 +1,6 @@
 import { PX_PER_CM, SNAP_RADIUS_PX } from "./types"
-import type { Point, Wall } from "./types"
+import type { Doorway, Point, Wall } from "./types"
+import { violatesDoorways } from "./doorway/doorway-guard"
 import { orthoDirection } from "./wall-angle"
 import {
   add,
@@ -251,18 +252,19 @@ export function snapVertex(
   gridStepCm: number,
   newWallThicknessCm: number,
   orthoFrom?: Point,
+  doorways: readonly Doorway[] = [],
 ): VertexSnap {
   // орто по осям экрана от свободного начала: сработало — конец на луче (design D4)
   if (orthoFrom) {
     const dir = orthoDirection(null, sub(p, orthoFrom))
-    if (dir) return snapOnRay(p, walls, radiusCm, gridStepCm, newWallThicknessCm, orthoFrom, dir)
+    if (dir) return snapOnRay(p, walls, radiusCm, gridStepCm, newWallThicknessCm, orthoFrom, dir, doorways)
   }
   const newHalf = newWallThicknessCm / 2
   const reach = Math.max(radiusCm, newHalf)
   const scene = lazyScene(walls)
   // принятые кандидаты в порядке стен массива; квадрат не налагается на тела (design D5)
   const accepted: Candidate[] = []
-  const accept = acceptor(scene, newWallThicknessCm, accepted)
+  const accept = acceptor(scene, newWallThicknessCm, accepted, doorwayBlock(walls, doorways, newWallThicknessCm))
   for (const w of walls) if (!degenerate(w)) wallCandidates(w, p, scene, newHalf, reach, accept)
   const best = nearest(p, accepted)
   if (best) return wallSnap(best)
@@ -279,15 +281,16 @@ export function snapStartVertex(
   radiusCm: number,
   gridStepCm: number,
   newWallThicknessCm: number,
+  doorways: readonly Doorway[] = [],
 ): VertexSnap {
-  const base = snapVertex(p, walls, radiusCm, gridStepCm, newWallThicknessCm)
+  const base = snapVertex(p, walls, radiusCm, gridStepCm, newWallThicknessCm, undefined, doorways)
   if (base.source === "wall") return base
   const square = placementSquare(base, newWallThicknessCm)
   const touched = walls.filter((w) => !degenerate(w) && displayPolygons(w, walls).some((pc) => touchesConvex(square, pc)))
   if (touched.length === 0) return base
   const scene = lazyScene(walls)
   const accepted: Candidate[] = []
-  const accept = acceptor(scene, newWallThicknessCm, accepted)
+  const accept = acceptor(scene, newWallThicknessCm, accepted, doorwayBlock(walls, doorways, newWallThicknessCm))
   for (const w of touched) wallCandidates(w, p, scene, newWallThicknessCm / 2, Infinity, accept)
   const best = nearest(p, accepted)
   return best ? wallSnap(best) : base
@@ -298,10 +301,26 @@ const lazyScene = (walls: Wall[]): (() => SceneContour) => {
   return () => (contour ??= sceneContour(walls))
 }
 
-// принимает кандидата, если его квадрат не налагается на тела (design D5)
-function acceptor(scene: () => SceneContour, sizeCm: number, accepted: Candidate[]): (c: Candidate | null) => boolean {
+// кандидат, чей квадрат установки (блок новой стены у грани или торца) нарушил бы проём
+// (change add-doorway, design D6); null — проёмов рядом нет
+function doorwayBlock(walls: Wall[], doorways: readonly Doorway[], sizeCm: number): ((c: Candidate) => boolean) | null {
+  if (!doorways.length) return null
+  return (c) => {
+    const probe: Wall = { id: "", a: c.base, b: add(c.base, mul(c.normal, sizeCm)), thicknessCm: sizeCm, type: "brick" }
+    return violatesDoorways(walls, [...walls, probe], doorways)
+  }
+}
+
+// принимает кандидата, если его квадрат не налагается на тела (design D5) и не нарушает проём
+function acceptor(
+  scene: () => SceneContour,
+  sizeCm: number,
+  accepted: Candidate[],
+  blocked: ((c: Candidate) => boolean) | null = null,
+): (c: Candidate | null) => boolean {
   return (c) => {
     if (!c || overlapsBodies(squareOnSide(c.base, c.normal, sizeCm), scene().pieces)) return false
+    if (blocked && blocked(c)) return false
     accepted.push(c)
     return true
   }
@@ -427,8 +446,10 @@ export function snapOnRay(
   newWallThicknessCm: number,
   start: Point,
   dir: Point,
+  doorways: readonly Doorway[] = [],
 ): VertexSnap {
   const reach = Math.max(radiusCm, newWallThicknessCm / 2)
+  const blocked = doorwayBlock(walls, doorways, newWallThicknessCm)
   let contour: SceneContour | null = null
   const scene = (): SceneContour => (contour ??= sceneContour(walls))
   let best: Candidate | null = null
@@ -440,6 +461,7 @@ export function snapOnRay(
       // строго меньше: при равенстве — стена раньше в массиве
       if (d > reach || d >= bestD - EPS) continue
       if (overlapsBodies(squareOnSide(c.point, c.normal, newWallThicknessCm), scene().pieces)) continue
+      if (blocked && blocked(c)) continue
       best = c
       bestD = d
     }

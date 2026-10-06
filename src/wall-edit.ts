@@ -1,9 +1,11 @@
 import { planEdit } from "./edit-plan"
 import type { EditPlan, Segment } from "./edit-plan"
+import { doorwayGuard } from "./doorway/doorway-guard"
+import type { DoorwayGuard } from "./doorway/doorway-guard"
 import type { WallEnd } from "./ortho-stretch"
 import { orthoAxisOf, otherEnd, projectEnd, projectMove, teeContext } from "./tee-bounds"
 import type { TeeContext } from "./tee-bounds"
-import type { Point, Wall } from "./types"
+import type { Doorway, Point, Wall } from "./types"
 import { collisionContext } from "./wall-collision"
 import type { AxisSnap, CheckMode, CollisionContext, Verdict } from "./wall-collision"
 import { add, cross, dist, dot, mul, sub, unit } from "./wall-geometry"
@@ -13,10 +15,12 @@ import { add, cross, dist, dot, mul, sub, unit } from "./wall-geometry"
 // функции мутируют стены и возвращают фактический результат.
 
 // snappedAxis — стена, к линии оси которой привязан перетаскиваемый конец или опорный конец
-// перемещаемой стены (snapWithSource)
+// перемещаемой стены (snapWithSource); doorways — проёмы чертежа, которые правка не должна
+// нарушать (change add-doorway, design D5)
 export interface EditMode {
   ortho: boolean
   snappedAxis?: Wall
+  doorways?: readonly Doorway[]
 }
 
 export type ResizeResult =
@@ -36,6 +40,7 @@ interface Problem {
   plan: EditPlan
   tee: TeeContext
   collision: CollisionContext
+  doorways: DoorwayGuard | null
   project: (v: Point) => Point
   slide: boolean
 }
@@ -43,6 +48,8 @@ interface Problem {
 function verdictAt(p: Problem, v: Point, mode: CheckMode): Verdict {
   const positions = p.plan.positions(v)
   if (!p.tee.holds(positions)) return { ok: false, normal: null }
+  // нарушение проёма — недопустимость без нормали: остановка в касании без скольжения
+  if (p.doorways && !p.doorways.holds(positions)) return { ok: false, normal: null }
   return p.collision.check(positions, mode)
 }
 
@@ -137,7 +144,7 @@ export function moveWallsBounded(walls: Wall[], group: readonly Wall[], v: Point
   const project = (u: Point): Point => onOrthoAxis(projectMove(u, group, tee, mode.ortho), axis)
   const plan = planEdit(walls, { kind: "move", group }, mode.ortho)
   const collision = collisionContext(walls, moveSnaps(group, project(v), mode.snappedAxis))
-  const result = limit({ plan, tee, collision, project, slide: true }, v)
+  const result = limit({ plan, tee, collision, doorways: doorwayGuard(walls, mode.doorways ?? []), project, slide: true }, v)
   if (len(result) === 0) return ZERO
   apply(plan.positions(result))
   return result
@@ -154,7 +161,8 @@ export function moveEndpointBounded(walls: Wall[], wall: Wall, end: WallEnd, tar
   const project = att ? (u: Point): Point => sub(projectEnd(add(base, u), att, tee, mode.ortho), base) : onAxis
   const plan = planEdit(walls, { kind: "end", wall, end }, mode.ortho)
   const snaps: AxisSnap[] = mode.snappedAxis ? [{ wall, end, axis: mode.snappedAxis }] : []
-  const result = limit({ plan, tee, collision: collisionContext(walls, snaps), project, slide: true }, sub(target, base))
+  const doorways = doorwayGuard(walls, mode.doorways ?? [])
+  const result = limit({ plan, tee, collision: collisionContext(walls, snaps), doorways, project, slide: true }, sub(target, base))
   const next = add(base, result)
   // нулевая длина не применяется
   if (len(result) === 0 || dist(next, other) < 1e-6) return base
@@ -176,7 +184,8 @@ export function resizeWallBounded(walls: Wall[], wall: Wall, lengthCm: number, m
   const request = sub(target, base)
   if (len(request) < 1e-9) return { kind: "rejected", reason: "no-change" }
   const plan = planEdit(walls, { kind: "end", wall, end: movable }, mode.ortho)
-  const result = limit({ plan, tee, collision: collisionContext(walls, []), project: (u) => u, slide: false }, request)
+  const doorways = doorwayGuard(walls, mode.doorways ?? [])
+  const result = limit({ plan, tee, collision: collisionContext(walls, []), doorways, project: (u) => u, slide: false }, request)
   if (len(result) === 0) return { kind: "rejected", reason: "no-change" }
   apply(plan.positions(result))
   const full = result.x === request.x && result.y === request.y

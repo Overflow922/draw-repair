@@ -1,16 +1,18 @@
-import { isDimension, isDrawing, isWall } from "./storage"
-import type { Dimension, Drawing, Wall } from "./types"
+import { isDimension, isDoorway, isDrawing, isWall } from "./storage"
+import type { Dimension, Doorway, Drawing, Wall } from "./types"
 
 const KEY = "draw-repair:history"
 export const HISTORY_LIMIT = 50
 
+// doorways: отсутствие — пустой список (change add-doorway, design D9)
 export interface Scene {
   walls: Wall[]
   dimensions: Dimension[]
+  doorways?: Doorway[]
 }
 
 export type HistoryEntry =
-  | { kind: "walls"; walls: Wall[]; dimensions: Dimension[] }
+  | { kind: "walls"; walls: Wall[]; dimensions: Dimension[]; doorways?: Doorway[] }
   | { kind: "close"; index: number; drawingId: string }
 
 export interface DrawingHistory {
@@ -46,6 +48,7 @@ export function cloneScene(scene: Scene): Scene {
       to: { a: { ...d.to.a }, b: { ...d.to.b } },
       offset: d.offset,
     })),
+    ...(scene.doorways ? { doorways: scene.doorways.map((d) => ({ ...d })) } : null),
   }
 }
 
@@ -86,7 +89,8 @@ const isHistoryEntry = (e: unknown): e is HistoryEntry => {
   const x = e as Record<string, unknown>
   if (x.kind === "walls")
     return Array.isArray(x.walls) && x.walls.every(isWall) &&
-      Array.isArray(x.dimensions) && x.dimensions.every(isDimension)
+      Array.isArray(x.dimensions) && x.dimensions.every(isDimension) &&
+      (x.doorways === undefined || (Array.isArray(x.doorways) && x.doorways.every(isDoorway)))
   return x.kind === "close" && typeof x.drawingId === "string" &&
     typeof x.index === "number" && Number.isInteger(x.index) && x.index >= 0
 }

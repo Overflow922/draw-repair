@@ -1,8 +1,10 @@
 import { jsPDF } from "jspdf"
+import { heightLabelAt, heightLabelSide } from "../doorway/doorway-layout"
 import { dimGeometry, dimPointPoint } from "../geometry"
 import { drawScene, PDF_METRICS } from "../render"
+import { findRooms } from "../room-area"
 import { PX_PER_CM } from "../types"
-import type { Dimension, Unit, Wall } from "../types"
+import type { Dimension, Doorway, Unit, Wall } from "../types"
 import { FONT_B64 } from "./font"
 
 export type PageFormat = "A4" | "A3" | "A2" | "A1" | "A0"
@@ -31,7 +33,8 @@ export interface Placement {
   offsetY: number
 }
 
-export function wallsBBox(walls: Wall[], dimensions: Dimension[] = [], padCm = 0): BBox {
+// doorways: подписи высоты выходят за стену со своей стороны (change add-doorway, design D10)
+export function wallsBBox(walls: Wall[], dimensions: Dimension[] = [], padCm = 0, doorways: Doorway[] = []): BBox {
   let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity
   const add = (x: number, y: number): void => {
     minX = Math.min(minX, x)
@@ -54,6 +57,14 @@ export function wallsBBox(walls: Wall[], dimensions: Dimension[] = [], padCm = 0
     add(g.p1.x, g.p1.y)
     add(g.p2.x, g.p2.y)
   }
+  const rooms = doorways.length ? findRooms(walls) : []
+  for (const d of doorways) {
+    const side = heightLabelSide(d, walls, rooms)
+    // подпись на листе — до 2·pad от грани с учётом полуширины текста (отступ подписи в render);
+    // итоговое поле pad сверху
+    const at = side === null ? null : heightLabelAt(d, walls, side, padCm * 2 + 1)
+    if (at) add(at.x, at.y)
+  }
   if (!Number.isFinite(minX)) return { minX: 0, minY: 0, maxX: 0, maxY: 0 }
   return { minX: minX - padCm, minY: minY - padCm, maxX: maxX + padCm, maxY: maxY + padCm }
 }
@@ -71,10 +82,10 @@ export function fitsFormat(b: BBox, scale: number, format: PageFormat): boolean 
   return dw <= w - 2 * PDF_MARGIN_MM && dh <= h - 2 * PDF_MARGIN_MM
 }
 
-export function availableFormats(walls: Wall[], dimensions: Dimension[] = [], scale: number = 100): PageFormat[] {
+export function availableFormats(walls: Wall[], dimensions: Dimension[] = [], scale: number = 100, doorways: Doorway[] = []): PageFormat[] {
   const all = Object.keys(PAGE_FORMATS_MM) as PageFormat[]
   if (walls.length === 0) return all
-  const b = wallsBBox(walls, dimensions, 0.5 * scale)
+  const b = wallsBBox(walls, dimensions, 0.5 * scale, doorways)
   return all.filter((f) => fitsFormat(b, scale, f))
 }
 
@@ -98,8 +109,16 @@ export function pdfFileName(name: string, now: Date): string {
   return `${clean}_${now.getFullYear()}-${p(now.getMonth() + 1)}-${p(now.getDate())}_${p(now.getHours())}-${p(now.getMinutes())}-${p(now.getSeconds())}.pdf`
 }
 
-export function buildPdf(walls: Wall[], dimensions: Dimension[], unit: Unit, scale: number, format: PageFormat, fontB64: string): jsPDF {
-  const placement = placeOnPage(wallsBBox(walls, dimensions, 0.5 * scale), scale, format)
+export function buildPdf(
+  walls: Wall[],
+  dimensions: Dimension[],
+  unit: Unit,
+  scale: number,
+  format: PageFormat,
+  fontB64: string,
+  doorways: Doorway[] = [],
+): jsPDF {
+  const placement = placeOnPage(wallsBBox(walls, dimensions, 0.5 * scale, doorways), scale, format)
   const [pw, ph] = PAGE_FORMATS_MM[format]
   const doc = new jsPDF({ unit: "mm", format: [pw, ph], orientation: placement.landscape ? "landscape" : "portrait" })
   doc.addFileToVFS("PTSans.ttf", fontB64)
@@ -117,13 +136,21 @@ export function buildPdf(walls: Wall[], dimensions: Dimension[], unit: Unit, sca
       pan: { x: -placement.offsetX / placement.mmPerCm, y: -placement.offsetY / placement.mmPerCm },
     },
     [],
-    { grid: false, metrics: PDF_METRICS, dimensions },
+    { grid: false, metrics: PDF_METRICS, dimensions, doorways },
   )
   return doc
 }
 
-export function exportDrawing(walls: Wall[], dimensions: Dimension[], unit: Unit, scale: number, format: PageFormat, name: string): void {
-  const doc = buildPdf(walls, dimensions, unit, scale, format, FONT_B64)
+export function exportDrawing(
+  walls: Wall[],
+  dimensions: Dimension[],
+  unit: Unit,
+  scale: number,
+  format: PageFormat,
+  name: string,
+  doorways: Doorway[] = [],
+): void {
+  const doc = buildPdf(walls, dimensions, unit, scale, format, FONT_B64, doorways)
   const url = URL.createObjectURL(new Blob([doc.output("arraybuffer")], { type: "application/pdf" }))
   const a = document.createElement("a")
   a.href = url

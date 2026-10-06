@@ -61,3 +61,48 @@ Follow-ups from exploring ortho wall moves (2026-10-05, planned change `ortho-ax
   which in a plan of connected rooms can move everything. The spec requires this
   (`wall-selection` "Орто-растяжение связанных стен", scenario "Поперечный сосед смещается целиком
   и передаёт дальше").
+
+---
+
+Follow-ups from `add-doorway` (test validation revision 3, PASS, 2026-10-06). Non-blocking surviving mutations and gaps.
+
+## Tests
+
+- [ ] Per-doorway "do not deepen" baseline: no test combines one already-broken doorway with a valid one, so comparing one worst violation across all doorways would let a valid doorway break while a broken one exists. Add DD-06c / DG-12b in `src/doorway/doorway-guard.test.ts`.
+- [ ] Broken doorway at a corner: DL-13 uses a free wall, so clamping the cut, grey lines or jamb to the axis instead of the face run isn't caught. Add DL-13b on `sceneR` asserting nothing is drawn beyond x = 490 on the inner face.
+- [ ] Wall snap with an already-broken doorway: the "do not deepen" rule in the snap filter is not tested directly (DD-06d).
+- [ ] DL-12: assert the host wall is not highlighted when its doorway is selected.
+- [ ] Cut and jambs on a 10 cm host (all render tests use 20 cm).
+- [ ] `hitDoorway` tolerance along the axis, just outside a jamb.
+- [ ] PDF page bbox through `buildPdf` / `availableFormats` with the H label (DP-03 tests only `wallsBBox`).
+- [ ] Undo of a closed tab keeps its doorways (`drawing-history` «Отмена закрытия вкладки»).
+- [ ] DL-07: no dimension line is drawn for a 0 distance (only the number).
+- [ ] DL-03c: also check the label's x position (between the jambs).
+- [ ] DP-01: assert the PDF output has no wall hatching in the middle of the opening and has the grey continuation lines.
+
+## Docs
+
+- [ ] Test-plan item DL-11 (canonical wall shape unaffected by doorways) has no dedicated test; covered indirectly by DR-01/DR-02 and DL-01 (see `openspec/changes/add-doorway/test-suite.md` Notes).
+
+## Out of scope (decided, revisit if needed)
+
+- [ ] Two doorways overlapping on the same wall: the spec says nothing; no test, no rule.
+
+Follow-ups from `add-doorway` implementation (2026-10-06).
+
+## Docs
+
+- [ ] Design open questions settled in code, not yet in `design.md`: dimension chains sit at 1.2·labelPx from the face; the H label sits 2.2·labelPx (screen, past the chain band) or 0.5·labelPx (PDF, no chains) plus half of its estimated extent along the face normal, text width estimated as 0.6·labelPx per character because jsPDF `measureText` does not return sheet units (`src/render.ts` `drawDoorways`); the PDF bbox reserves 2·pad + 1 cm for the label (`src/export/pdf.ts` `wallsBBox`).
+
+## Bugs
+
+- [ ] Inline number editor (`src/doorway/doorway-tool.ts`) stays at its screen position if the user zooms or pans while typing; it closes only on Enter/Esc/blur. Decide: close on view change or reposition.
+- [ ] Very short chain dimensions (e.g. 5 cm at 1:1 zoom) draw their number over the arrows ("50", "150" next to a corner) — same behaviour as ordinary dimensions, but more frequent with doorways near corners.
+
+## Tests
+
+- [ ] H label of an opening flush in a corner is wider than the opening and runs into the corner wall (seen in PDF: 90 cm opening, "H=2000"). Label is centred on the opening (`heightLabelAt`); consider shifting it along the face away from the corner.
+
+## Out of scope (decided, revisit if needed)
+
+- [ ] Performance: moving a host wall with doorways on a 61-wall drawing costs ~14 ms per step (vs ~2 ms without doorways) because the limiter re-runs face probes on every path step (`src/doorway/doorway-guard.ts`). Acceptable now; cache `displayPolygons` per step if drawings grow.

@@ -1,5 +1,5 @@
 import { isScale, DEFAULT_SCALE, normalizeMaterial } from "./types"
-import type { Dimension, Drawing, DrawingStore, DimPoint, EdgeRef, Point, View, Wall } from "./types"
+import type { Dimension, DimPoint, Doorway, Drawing, DrawingStore, EdgeRef, Point, View, Wall } from "./types"
 
 const KEY = "draw-repair:drawing"
 
@@ -34,6 +34,32 @@ const isDimPoint = (p: unknown): p is DimPoint =>
 export const isDimension = (dim: unknown): dim is Dimension =>
   typeof dim === "object" && dim !== null && isDimPoint((dim as Dimension).from) && isDimPoint((dim as Dimension).to) &&
   typeof (dim as Dimension).offset === "number" && Number.isFinite((dim as Dimension).offset)
+
+export const isDoorway = (d: unknown): d is Doorway => {
+  if (typeof d !== "object" || d === null) return false
+  const x = d as Record<string, unknown>
+  const num = (v: unknown): v is number => typeof v === "number" && Number.isFinite(v)
+  return typeof x.id === "string" && x.id !== "" && typeof x.wallId === "string" && x.wallId !== "" &&
+    (x.anchor === "a" || x.anchor === "b") && num(x.offsetCm) && x.offsetCm >= 0 &&
+    num(x.widthCm) && x.widthCm > 0 && num(x.heightCm) && x.heightCm > 0
+}
+
+// проёмы чертежа при загрузке: корректные и со своей стеной; отсутствие поля сохраняется (design D9)
+function loadDoorways(raw: unknown, walls: Wall[]): { doorways?: Doorway[] } {
+  if (raw === undefined) return {}
+  const ids = new Set(walls.map((w) => w.id))
+  const list = Array.isArray(raw) ? raw : []
+  return {
+    doorways: list.filter(isDoorway).filter((d) => ids.has(d.wallId)).map((d) => ({
+      id: d.id,
+      wallId: d.wallId,
+      anchor: d.anchor,
+      offsetCm: d.offsetCm,
+      widthCm: d.widthCm,
+      heightCm: d.heightCm,
+    })),
+  }
+}
 
 export const isDrawing = (d: unknown, version: number = 3): d is Drawing =>
   typeof d === "object" && d !== null && typeof (d as Drawing).id === "string" &&
@@ -83,6 +109,7 @@ export function parseStore(raw: string): LoadedStore | null {
       const drawings = (d.drawings as Drawing[]).map((dr) => ({
         ...dr,
         walls: assignIds(dr.walls),
+        ...loadDoorways(dr.doorways, dr.walls),
         dimensions: (Array.isArray(dr.dimensions) ? dr.dimensions : []).filter(isDimension)
           .map((dim) => ({ from: { ...dim.from }, to: { ...dim.to }, offset: dim.offset })),
         ...(version === 1 ? { scale: DEFAULT_SCALE } : null),
