@@ -177,6 +177,13 @@ body {
   position: relative;
 }
 
+.tool-separator {
+  width: 28px;
+  margin: 0 auto;
+  border: none;
+  border-top: 1px solid var(--border);
+}
+
 .tool {
   width: 40px;
   height: 40px;
