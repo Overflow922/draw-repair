@@ -130,3 +130,13 @@ Follow-ups from `add-window` test validation (revision 2, 2026-10-06). Non-block
 - [ ] Doc drift: the comment in WP-03 (`src/doorway/window-pdf.test.ts`) still says the label is horizontal; the assertion remains valid.
 - [ ] Doorway label frame in PDF (validation revision 9, G1): LF-PDF-01 checks only that an ink frame surrounds «H=210»; a PDF-only frame without padding, drawn with `contourPx`, or reaching into the wall body would pass. Add padding and outside-the-body checks to `src/doorway/doorway-label-frame-pdf.test.ts`. Dashed frames are not recordable by the test context (window and doorway alike).
 - [ ] Test name drift: WL-07b in `src/doorway/window-render.test.ts` is titled «у проёма рамки и синей части нет», but doorway labels are now framed; its assertions (no «H под.», one «H=210») are still valid.
+
+---
+
+Follow-ups from fixing the middle-marker move over a doorway (2026-10-07).
+
+## Tests
+
+- [ ] Pointer-press priority in `src/main.ts` (`pointerdown`) has no automated test: middle marker of the selected
+  wall over a doorway/window must start a wall move, a press on the element elsewhere must drag the element.
+  Checked only manually in the browser; needs an e2e/DOM harness for canvas gestures.

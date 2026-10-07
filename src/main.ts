@@ -1,7 +1,7 @@
 import "./style.css"
 import { cloneScene, drawingHistory, loadHistory, record, recordSnapshot, redoEntry, saveHistory, undoEntry } from "./history"
 import type { Scene } from "./history"
-import { dimGeometry, dimHitDistance, dimLevelSnap, dimensionOffsetAt, endpointAt, hitWall, nearestEdgeIntersection, dimPointPoint, pointsEqual, segmentIntersectsRect, snap, snapOthers, snapWithSource, zoomAt } from "./geometry"
+import { dimGeometry, dimHitDistance, dimLevelSnap, dimensionOffsetAt, endpointAt, hitWall, midpointAt, nearestEdgeIntersection, dimPointPoint, pointsEqual, segmentIntersectsRect, snap, snapOthers, snapWithSource, zoomAt } from "./geometry"
 import type { DimGeometry, SnapResult } from "./geometry"
 import { moveEndpointBounded, moveWallsBounded, resizeWallBounded } from "./wall-edit"
 import type { EditMode } from "./wall-edit"
@@ -705,6 +705,22 @@ canvas.addEventListener("pointerleave", () => {
   redraw()
 })
 
+// перетаскивание выделенных стен за стену pressed
+function startGroupMove(pressed: Wall, p: Point, e: PointerEvent): void {
+  const group = [...selectedWalls]
+  groupMove = {
+    group,
+    pressed,
+    baseA: { ...pressed.a },
+    grab: p,
+    others: snapOthers(walls, group),
+    snapshot: cloneScene(scene()),
+    gesture: startOrthoGesture("move", p, { ...pressed.a }),
+  }
+  suppressClick = true
+  canvas.setPointerCapture(e.pointerId)
+}
+
 canvas.addEventListener("pointerdown", (e) => {
   suppressClick = false
   if (e.button === 1) {
@@ -738,6 +754,11 @@ canvas.addEventListener("pointerdown", (e) => {
       canvas.setPointerCapture(e.pointerId)
       return
     }
+    // средний маркер перемещает стену, даже если под ним проём (wall-selection)
+    if (tool !== "eraser" && !placingTool() && midpointAt(press, sel, radiusCm())) {
+      startGroupMove(sel, press, e)
+      return
+    }
   }
   if (tool !== "eraser") {
     const p = toWorld(e)
@@ -759,18 +780,7 @@ canvas.addEventListener("pointerdown", (e) => {
     if ((tool === "doorway" || tool === "window") && wallHit) return
     if (wallHit && selectedWalls.length > 0) {
       if (!selectedWalls.includes(wallHit)) selectWall(wallHit)
-      const group = [...selectedWalls]
-      groupMove = {
-        group,
-        pressed: wallHit,
-        baseA: { ...wallHit.a },
-        grab: p,
-        others: snapOthers(walls, group),
-        snapshot: cloneScene(scene()),
-        gesture: startOrthoGesture("move", p, { ...wallHit.a }),
-      }
-      suppressClick = true
-      canvas.setPointerCapture(e.pointerId)
+      startGroupMove(wallHit, p, e)
       return
     }
     if (!wallHit) {

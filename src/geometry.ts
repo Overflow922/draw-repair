@@ -147,6 +147,11 @@ export function endpointAt(p: Point, wall: Wall, radiusCm: number): "a" | "b" | 
   return null
 }
 
+// попадание в средний маркер выделенной стены (wall-selection «Перемещение стены за средний маркер»)
+export function midpointAt(p: Point, wall: Wall, radiusCm: number): boolean {
+  return distance(p, { x: (wall.a.x + wall.b.x) / 2, y: (wall.a.y + wall.b.y) / 2 }) <= radiusCm
+}
+
 export function segmentIntersectsRect(p1: Point, p2: Point, min: Point, max: Point, pad = 0): boolean {
   let t0 = 0
   let t1 = 1

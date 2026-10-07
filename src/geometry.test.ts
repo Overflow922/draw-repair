@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { dimensionOffsetAt, dimGeometry, dimHitDistance, dimLevelSnap, dimPointPoint, endpointAt, hitWall, jointedWalls, moveEndpoint, moveWalls, nearestEdgeIntersection, pointsEqual, segmentIntersectsRect, snap, snapOthers, visibleWorld, wallShape, zoomAt } from "./geometry"
+import { dimensionOffsetAt, dimGeometry, dimHitDistance, dimLevelSnap, dimPointPoint, endpointAt, hitWall, jointedWalls, midpointAt, moveEndpoint, moveWalls, nearestEdgeIntersection, pointsEqual, segmentIntersectsRect, snap, snapOthers, visibleWorld, wallShape, zoomAt } from "./geometry"
 import type { Dimension, Point, Wall } from "./types"
 
 const GRID = 10
@@ -149,6 +149,20 @@ describe("endpointAt", () => {
 
   it("не попадает в середину стены", () => {
     expect(endpointAt({ x: 50, y: 0 }, wall(0, 0, 100, 0), 6)).toBeNull()
+  })
+})
+
+describe("midpointAt", () => {
+  it("попадает в середину стены в пределах радиуса", () => {
+    const w = wall(0, 0, 100, 40)
+    expect(midpointAt({ x: 50, y: 20 }, w, 6)).toBe(true)
+    expect(midpointAt({ x: 53, y: 24 }, w, 5)).toBe(true)
+  })
+
+  it("не попадает вне радиуса и в концы", () => {
+    const w = wall(0, 0, 100, 0)
+    expect(midpointAt({ x: 57, y: 0 }, w, 6)).toBe(false)
+    expect(midpointAt({ x: 0, y: 0 }, w, 6)).toBe(false)
   })
 })
 
