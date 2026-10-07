@@ -1,12 +1,12 @@
 import type { Scene } from "../history"
 import type { Point, View, Wall, WallElement } from "../types"
-import { PX_PER_CM, isWindow } from "../types"
-import { nudgeElements, placeDoorway, placeWindow, setDistance, setHeight, setSill, setWidth, slideDoorway } from "./doorway-edit"
+import { PX_PER_CM, isDoor, isWindow } from "../types"
+import { nudgeElements, placeDoor, placeDoorway, placeWindow, rotateDoor, setDistance, setHeight, setSill, setWidth, slideDoorway } from "./doorway-edit"
 import type { ElementEdit } from "./doorway-edit"
 import { chainLabels } from "./doorway-layout"
 import type { ChainLabel } from "./doorway-layout"
 import { hitDoorway, wallNearBody } from "./doorway-scene"
-import { acceptField, elementDefaults } from "./element-kind"
+import { acceptField, elementDefaults, nextDirection } from "./element-kind"
 import type { ElementField, ElementKind } from "./element-kind"
 
 // Инструменты «Проём» и «Окно» (change add-doorway design D7, D8; add-window design D4): адаптер DOM —
@@ -79,12 +79,13 @@ export interface ElementToolHost {
   redraw(): void
 }
 
-// поле sill — только у окна
+// поле sill — только у окна, кнопка rotate — только у двери
 export interface ElementPanel {
   root: HTMLElement
   width: HTMLInputElement
   height: HTMLInputElement
   sill?: HTMLInputElement
+  rotate?: HTMLButtonElement
 }
 
 export interface ElementTool {
@@ -108,7 +109,7 @@ export interface ElementTool {
 const CHAIN_OFFSET_PX = 14 * 1.2
 const NUMBER_HIT_PX = 20
 
-const kindOf = (e: WallElement): ElementKind => (isWindow(e) ? "window" : "doorway")
+const kindOf = (e: WallElement): ElementKind => (isWindow(e) ? "window" : isDoor(e) ? "door" : "doorway")
 
 export function createElementTool(kind: ElementKind, host: ElementToolHost, panel: ElementPanel): ElementTool {
   let ghost: WallElement | null = null
@@ -146,11 +147,17 @@ export function createElementTool(kind: ElementKind, host: ElementToolHost, pane
     const id = crypto.randomUUID()
     if (kind === "window")
       return placeWindow(wall, walls, raw, params.widthCm, params.heightCm, params.sillCm ?? 0, id, elements)
+    if (kind === "door")
+      return placeDoor(wall, walls, raw, params.widthCm, params.heightCm, params.hinge ?? "a", params.swing ?? "left", id, elements)
     return placeDoorway(wall, walls, raw, params.widthCm, params.heightCm, id, elements)
   }
 
+  // последняя позиция курсора над холстом — чтобы перестроить призрак после смены параметров
+  let lastRaw: Point | null = null
+
   // призрак над стеной (spec doorway «Установка проёма»); над существующим элементом — нет
   const hover = (raw: Point): void => {
+    lastRaw = raw
     const walls = host.walls()
     if (hitDoorway(raw, walls, host.elements(), host.radiusCm())) {
       ghost = null
@@ -232,6 +239,22 @@ export function createElementTool(kind: ElementKind, host: ElementToolHost, pane
       if (e.key === "Enter") input.blur()
     })
   }
+
+  // «Повернуть»: одна выделенная дверь — поворот её одной записью истории, иначе — направление новых дверей
+  // (spec door «Поворот двери»)
+  panel.rotate?.addEventListener("click", () => {
+    const sel = host.selectedElements()
+    const d = sel.length === 1 ? sel[0] : null
+    if (d && isDoor(d)) apply(d, rotateDoor(d))
+    else {
+      const next = nextDirection({ hinge: params.hinge ?? "a", swing: params.swing ?? "left" })
+      params.hinge = next.hinge
+      params.swing = next.swing
+      // призрак сразу показывает новое направление (spec door «Поворот без выделения задаёт новые двери»)
+      if (ghost && lastRaw) hover(lastRaw)
+    }
+    host.redraw()
+  })
 
   const show = (input: HTMLInputElement | undefined, cm: number | undefined): void => {
     if (input && cm !== undefined && document.activeElement !== input) input.value = host.formatCm(cm)

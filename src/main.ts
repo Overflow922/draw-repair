@@ -22,9 +22,11 @@ import { thicknessAllowed, violatesDoorways } from "./doorway/doorway-guard"
 import { deleteObjects, doorwaysInRect, erasePick, pressPick, wallsInRect } from "./doorway/doorway-scene"
 import { createElementTool } from "./doorway/doorway-tool"
 import type { ElementToolHost } from "./doorway/doorway-tool"
+import { groupButtonActive, groupButtonClick, groupPick, groupSelect } from "./doorway/openings-group"
+import type { GroupState, GroupTool } from "./doorway/openings-group"
 import { loadThemeChoice, paletteOf, resolveTheme, saveThemeChoice, themeToggleTitle, toggledTheme } from "./theme"
 import type { Theme } from "./theme"
-import { GRID_STEP_CM, MATERIALS, PX_PER_CM, isWindow } from "./types"
+import { GRID_STEP_CM, MATERIALS, PX_PER_CM, isDoor, isWindow } from "./types"
 import type { Dimension, DimPoint, Drawing, Material, Point, Unit, View, Wall, WallElement } from "./types"
 
 const canvas = document.querySelector<HTMLCanvasElement>("#canvas")!
@@ -53,10 +55,17 @@ const dimPanel = document.querySelector<HTMLElement>("#dim-panel")!
 const dimOffsetInput = document.querySelector<HTMLInputElement>("#dim-offset")!
 const dimOffsetUnitLabel = document.querySelector<HTMLElement>("#dim-offset-unit")!
 const dimValueInput = document.querySelector<HTMLInputElement>("#dim-value")!
+const toolOpeningsBtn = document.querySelector<HTMLButtonElement>("#tool-openings")!
+const openingsPanel = document.querySelector<HTMLElement>("#openings-panel")!
 const toolDoorwayBtn = document.querySelector<HTMLButtonElement>("#tool-doorway")!
-const doorwayPanel = document.querySelector<HTMLElement>("#doorway-panel")!
+const toolDoorBtn = document.querySelector<HTMLButtonElement>("#tool-door")!
+const doorwayFields = document.querySelector<HTMLElement>("#doorway-fields")!
+const doorFields = document.querySelector<HTMLElement>("#door-fields")!
 const doorwayWidthInput = document.querySelector<HTMLInputElement>("#doorway-width")!
 const doorwayHeightInput = document.querySelector<HTMLInputElement>("#doorway-height")!
+const doorWidthInput = document.querySelector<HTMLInputElement>("#door-width")!
+const doorHeightInput = document.querySelector<HTMLInputElement>("#door-height")!
+const doorRotateBtn = document.querySelector<HTMLButtonElement>("#door-rotate")!
 const toolWindowBtn = document.querySelector<HTMLButtonElement>("#tool-window")!
 const windowPanel = document.querySelector<HTMLElement>("#window-panel")!
 const windowWidthInput = document.querySelector<HTMLInputElement>("#window-width")!
@@ -103,8 +112,12 @@ let marqueePending: { x: number; y: number } | null = null
 let marquee: { x1: number; y1: number; x2: number; y2: number } | null = null
 let marqueeHits: { walls: Wall[]; dims: Dimension[]; doorways: WallElement[] } | null = null
 const MARQUEE_THRESHOLD_PX = 5
-type Tool = "wall" | "dimension" | "doorway" | "window" | "eraser" | "ruler" | "none"
+type Tool = "wall" | "dimension" | "doorway" | "door" | "window" | "eraser" | "ruler" | "none"
 let tool: Tool = "wall"
+// группа «Проёмы» (change add-door, design D6): текущий инструмент группы и видимость её панели;
+// активный инструмент группы выводится из tool
+let openingsCurrent: GroupTool = "doorway"
+let openingsPanelOpen = false
 const systemDark = window.matchMedia("(prefers-color-scheme: dark)")
 let themeChoice: Theme | null = loadThemeChoice(localStorage) // null — следовать системной настройке
 let theme: Theme = resolveTheme(themeChoice, systemDark.matches)
@@ -164,24 +177,60 @@ const elementHost: ElementToolHost = {
     },
     redraw: () => redraw(),
 }
-const doorwayTool = createElementTool("doorway", elementHost, { root: doorwayPanel, width: doorwayWidthInput, height: doorwayHeightInput })
+// «Проём» и «Дверь» делят панель группы «Проёмы»: её видимость ведёт main.ts, у инструментов — свои блоки полей
+const doorwayTool = createElementTool("doorway", elementHost, { root: openingsPanel, width: doorwayWidthInput, height: doorwayHeightInput })
+const doorTool = createElementTool("door", elementHost, {
+  root: openingsPanel,
+  width: doorWidthInput,
+  height: doorHeightInput,
+  rotate: doorRotateBtn,
+})
 const windowTool = createElementTool("window", elementHost, {
   root: windowPanel,
   width: windowWidthInput,
   height: windowHeightInput,
   sill: windowSillInput,
 })
-const elementTools = [doorwayTool, windowTool]
+const elementTools = [doorwayTool, doorTool, windowTool]
 
-// инструмент установки активного вида; null — вне инструментов «Проём» и «Окно»
-const placingTool = () => (tool === "window" ? windowTool : tool === "doorway" ? doorwayTool : null)
+// инструмент установки активного вида; null — вне инструментов «Проём», «Дверь» и «Окно»
+const placingTool = () => (tool === "window" ? windowTool : tool === "door" ? doorTool : tool === "doorway" ? doorwayTool : null)
 
-// открыта панель вида одиночного выделенного элемента, иначе — активного инструмента
-function setDoorwayPanel(open: boolean): void {
+const groupState = (): GroupState => ({
+  current: openingsCurrent,
+  active: tool === "doorway" || tool === "door" ? tool : "other",
+  panelOpen: openingsPanelOpen,
+})
+
+// переход группы: активный инструмент — через setTool (он закрывает панели), затем панель и вид кнопок
+function applyGroup(next: GroupState): void {
+  if (next.active !== "other" && next.active !== tool) setTool(next.active)
+  openingsCurrent = next.current
+  openingsPanelOpen = next.panelOpen
+  syncOpeningsUI()
+}
+
+function syncOpeningsUI(): void {
+  const s = groupState()
+  openingsPanel.classList.toggle("open", s.panelOpen)
+  toolOpeningsBtn.classList.toggle("active", groupButtonActive(s))
+  toolDoorwayBtn.classList.toggle("active", s.current === "doorway")
+  toolDoorBtn.classList.toggle("active", s.current === "door")
+  doorwayFields.hidden = s.current !== "doorway"
+  doorFields.hidden = s.current !== "door"
+}
+
+// открыта панель вида одиночного выделенного элемента, иначе — активного инструмента: окно — своя панель,
+// проём и дверь — панель группы «Проёмы» с кнопкой своего вида
+function setElementPanel(open: boolean): void {
   const sel = selectedDoorways.length === 1 ? selectedDoorways[0] : null
-  const windowKind = sel ? isWindow(sel) : tool === "window"
-  doorwayTool.setPanel(open && !windowKind)
-  windowTool.setPanel(open && windowKind)
+  const kind = sel ? (isWindow(sel) ? "window" : isDoor(sel) ? "door" : "doorway") : tool === "window" ? "window" : null
+  windowTool.setPanel(open && kind === "window")
+  if (!open || kind === "window") {
+    openingsPanelOpen = false
+    syncOpeningsUI()
+  } else if (kind) applyGroup(groupSelect(groupState(), kind))
+  else applyGroup({ ...groupState(), panelOpen: true })
 }
 
 const closeDoorwayEditor = (): void => {
@@ -200,7 +249,7 @@ function selectDoorway(d: WallElement): void {
   lengthDirty = false
   setWallPanel(false)
   setDimPanel(false)
-  setDoorwayPanel(true)
+  setElementPanel(true)
   redraw()
 }
 
@@ -225,7 +274,7 @@ function selectDimension(dim: Dimension): void {
   selectedDoorways = []
   lengthDirty = false
   setWallPanel(false)
-  setDoorwayPanel(false)
+  setElementPanel(false)
   setDimPanel(true)
   redraw()
 }
@@ -244,7 +293,7 @@ function selectWall(wall: Wall): void {
   selectedDoorways = []
   lengthDirty = false
   setDimPanel(false)
-  setDoorwayPanel(false)
+  setElementPanel(false)
   syncThicknessBox()
   setWallMaterial(wall.type)
   setWallPanel(true)
@@ -267,8 +316,8 @@ function syncToolUI(): void {
   toolDimensionBtn.classList.toggle("active", tool === "dimension")
   toolEraserBtn.classList.toggle("active", tool === "eraser")
   toolRulerBtn.classList.toggle("active", tool === "ruler")
-  toolDoorwayBtn.classList.toggle("active", tool === "doorway")
   toolWindowBtn.classList.toggle("active", tool === "window")
+  syncOpeningsUI()
   canvas.classList.toggle("tool-eraser", tool === "eraser")
 }
 
@@ -291,7 +340,7 @@ function setTool(next: Tool): void {
   marqueePending = null
   setWallPanel(false)
   setDimPanel(false)
-  setDoorwayPanel(false)
+  setElementPanel(false)
   syncToolUI()
   syncThicknessBox()
   redraw()
@@ -690,7 +739,7 @@ canvas.addEventListener("pointermove", (e) => {
   }
   if (tool === "wall") updateWallCursor(e)
   else if (tool === "dimension" || tool === "ruler") cursor = toWorld(e)
-  else if (tool === "doorway" || tool === "window") {
+  else if (placingTool()) {
     cursor = toWorld(e)
     placingTool()?.hover(cursor)
   }
@@ -875,7 +924,7 @@ function finishMarquee(rect: { x1: number; y1: number; x2: number; y2: number },
   selectedDoorways = additive ? [...selectedDoorways, ...picks.doorways.filter((d) => !selectedDoorways.includes(d))] : picks.doorways
   lengthDirty = false
   closeDoorwayEditor()
-  setDoorwayPanel(selectedDoorways.length === 1 && !selectedWalls.length && !selectedDimensions.length)
+  setElementPanel(selectedDoorways.length === 1 && !selectedWalls.length && !selectedDimensions.length)
   if (selectedDoorways.length) {
     setWallPanel(false)
     setDimPanel(false)
@@ -1044,7 +1093,7 @@ function deleteDoorway(d: WallElement): void {
   pushRecord()
   closeDoorwayEditor()
   removeObjects({ walls: [], dimensions: [], doorways: [d] })
-  if (!selectedDoorways.length) setDoorwayPanel(false)
+  if (!selectedDoorways.length) setElementPanel(false)
   dirty = true
   redraw()
 }
@@ -1084,7 +1133,7 @@ function deleteSelection(): void {
   selectedWalls = []
   selectedDimensions = []
   selectedDoorways = []
-  setDoorwayPanel(false)
+  setElementPanel(false)
   lengthDirty = false
   nudgeBurst = false
   setWallPanel(false)
@@ -1193,17 +1242,15 @@ toolDimensionBtn.addEventListener("click", () => setTool("dimension"))
 
 toolEraserBtn.addEventListener("click", () => setTool("eraser"))
 
-toolDoorwayBtn.addEventListener("click", () => {
-  if (tool !== "doorway") {
-    setTool("doorway")
-    setDoorwayPanel(true)
-  } else doorwayTool.togglePanel()
-})
+// кнопка группы «Проёмы» и кнопки её инструментов (spec canvas-app «Группа «Проёмы»»)
+toolOpeningsBtn.addEventListener("click", () => applyGroup(groupButtonClick(groupState())))
+toolDoorwayBtn.addEventListener("click", () => applyGroup(groupPick(groupState(), "doorway")))
+toolDoorBtn.addEventListener("click", () => applyGroup(groupPick(groupState(), "door")))
 
 toolWindowBtn.addEventListener("click", () => {
   if (tool !== "window") {
     setTool("window")
-    setDoorwayPanel(true)
+    setElementPanel(true)
   } else windowTool.togglePanel()
 })
 
@@ -1258,7 +1305,7 @@ function activate(id: string): void {
   selectedDimensions = []
   selectedDoorways = []
   resetElementTools()
-  setDoorwayPanel(false)
+  setElementPanel(false)
   dimDraft = emptyDraft()
   dimDrag = null
   lengthDirty = false
@@ -1445,7 +1492,7 @@ window.addEventListener("keydown", (e) => {
       dimDraft = emptyDraft()
       redraw()
     } else if (selectedDimensions.length || selectedWalls.length || selectedDoorways.length) clearSelection()
-    else if (tool === "eraser" || tool === "dimension" || tool === "ruler" || tool === "doorway" || tool === "window") setTool("none")
+    else if (tool === "eraser" || tool === "dimension" || tool === "ruler" || placingTool()) setTool("none")
   }
   if (e.key !== "ArrowUp" && e.key !== "ArrowDown" && e.key !== "ArrowLeft" && e.key !== "ArrowRight") return
   if (e.target instanceof HTMLInputElement) return

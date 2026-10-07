@@ -1,5 +1,5 @@
-import { isScale, isWindow, DEFAULT_SCALE, normalizeMaterial } from "./types"
-import type { Dimension, DimPoint, Doorway, Drawing, DrawingStore, EdgeRef, Point, View, Wall, WallElement, WallWindow } from "./types"
+import { isDoor, isScale, isWindow, DEFAULT_SCALE, normalizeMaterial } from "./types"
+import type { Dimension, DimPoint, Doorway, Drawing, DrawingStore, EdgeRef, Point, View, Wall, WallDoor, WallElement, WallWindow } from "./types"
 
 const KEY = "draw-repair:drawing"
 
@@ -56,12 +56,21 @@ export const isWallWindow = (d: unknown): d is WallWindow => {
   return x.kind === "window" && hasElementFields(x) && num(x.sillCm) && x.sillCm >= 0
 }
 
-export const isWallElement = (d: unknown): d is WallElement => isDoorway(d) || isWallWindow(d)
+// дверь: конец петель a/b и сторона открывания left/right (change add-door, design D7)
+export const isWallDoor = (d: unknown): d is WallDoor => {
+  if (typeof d !== "object" || d === null) return false
+  const x = d as Record<string, unknown>
+  return x.kind === "door" && hasElementFields(x) && (x.hinge === "a" || x.hinge === "b") && (x.swing === "left" || x.swing === "right")
+}
+
+export const isWallElement = (d: unknown): d is WallElement => isDoorway(d) || isWallWindow(d) || isWallDoor(d)
 
 // копия элемента только с полями его вида: проём — без kind и sillCm
 export function normalizeElement(e: WallElement): WallElement {
   const base = { id: e.id, wallId: e.wallId, anchor: e.anchor, offsetCm: e.offsetCm, widthCm: e.widthCm, heightCm: e.heightCm }
-  return isWindow(e) ? { kind: "window", ...base, sillCm: e.sillCm } : base
+  if (isWindow(e)) return { kind: "window", ...base, sillCm: e.sillCm }
+  if (isDoor(e)) return { kind: "door", ...base, hinge: e.hinge, swing: e.swing }
+  return base
 }
 
 // элементы чертежа при загрузке: корректные и со своей стеной; отсутствие поля сохраняется (add-doorway design D9)

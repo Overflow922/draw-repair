@@ -1,9 +1,10 @@
 import { jsPDF } from "jspdf"
-import { heightLabelAt, heightLabelSide, labelDirection } from "../doorway/doorway-layout"
+import { doorLeaf, heightLabelAt, heightLabelSide, labelDirection } from "../doorway/doorway-layout"
 import { dimGeometry, dimPointPoint } from "../geometry"
 import { drawScene, elementLabel, LABEL_FRAME_PAD, labelWidth, PDF_METRICS } from "../render"
 import { findRooms } from "../room-area"
-import { DEFAULT_SCALE, PX_PER_CM, isWindow } from "../types"
+import { cross, dot, sub } from "../wall-geometry"
+import { DEFAULT_SCALE, PX_PER_CM, isDoor, isWindow } from "../types"
 import type { Dimension, Unit, Wall, WallElement } from "../types"
 import { FONT_B64 } from "./font"
 
@@ -58,6 +59,22 @@ export function wallsBBox(walls: Wall[], dimensions: Dimension[] = [], padCm = 0
     add(g.p2.x, g.p2.y)
   }
   const rooms = doorways.length ? findRooms(walls) : []
+  // полотно и дуга двери (add-door design D8): углы полотна, концы дуги и её крайние точки по осям в пределах пролёта
+  for (const d of doorways) {
+    if (!isDoor(d)) continue
+    const l = doorLeaf(d, walls)
+    if (!l) continue
+    for (const c of [...l.leaf, l.arcFrom, l.arcTo]) add(c.x, c.y)
+    const from = sub(l.arcFrom, l.hinge)
+    const to = sub(l.arcTo, l.hinge)
+    const start = Math.atan2(from.y, from.x)
+    const span = Math.atan2(cross(from, to), dot(from, to))
+    for (let q = 0; q < 4; q++) {
+      const a = (q * Math.PI) / 2
+      const off = (((a - start) * Math.sign(span)) % (2 * Math.PI) + 2 * Math.PI) % (2 * Math.PI)
+      if (off <= Math.abs(span)) add(l.hinge.x + Math.cos(a) * l.radius, l.hinge.y + Math.sin(a) * l.radius)
+    }
+  }
   for (const d of doorways) {
     const side = heightLabelSide(d, walls, rooms)
     // подпись на листе — до 2·pad от грани с учётом полуширины текста (отступ подписи в render);

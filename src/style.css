@@ -391,7 +391,26 @@ body {
   gap: 4px;
 }
 
-.wall-type {
+/* группа «Проёмы» (change add-door): кнопки инструментов и «Повернуть» — в стиле образцов материала */
+.group-tools,
+.group-fields {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+
+.group-tools {
+  gap: 4px;
+  align-items: stretch;
+}
+
+.group-fields[hidden] {
+  display: none;
+}
+
+.wall-type,
+.group-tool {
   display: flex;
   align-items: center;
   gap: 6px;
@@ -410,7 +429,13 @@ body {
   border: 1px solid var(--swatch-border);
 }
 
-.wall-type.active {
+.group-tool svg {
+  display: block;
+  flex: none;
+}
+
+.wall-type.active,
+.group-tool.active {
   border-color: var(--active-border);
   box-shadow: 0 0 0 2px var(--focus-ring);
 }

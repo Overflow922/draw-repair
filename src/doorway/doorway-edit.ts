@@ -1,7 +1,8 @@
-import type { Doorway, Point, Wall, WallElement, WallWindow } from "../types"
+import type { DoorHinge, DoorSwing, Doorway, Point, Wall, WallDoor, WallElement, WallWindow } from "../types"
 import { RIGHT_SIN, dist, dot, sub, unit } from "../wall-geometry"
 import { elementRuns, hostOf, hostPoint, jambsT } from "./doorway-faces"
 import type { Side } from "./doorway-faces"
+import { nextDirection } from "./element-kind"
 
 // Установка и правка элемента стены (change add-doorway design D4; add-window design D3): запрос →
 // ближайшее допустимое значение по свободным участкам обеих граней, откосы соседних элементов —
@@ -58,6 +59,7 @@ function withStart<E extends WallElement>(d: E, host: Wall, j1: number, width: n
 }
 
 const sillOf = (e: WallElement): number | null => (e.kind === "window" ? e.sillCm : null)
+const directionOf = (e: WallElement): string | null => (e.kind === "door" ? `${e.hinge}/${e.swing}` : null)
 
 function result<E extends WallElement>(before: E, after: E): ElementEdit<E> {
   const same =
@@ -65,7 +67,8 @@ function result<E extends WallElement>(before: E, after: E): ElementEdit<E> {
     Math.abs(after.offsetCm - before.offsetCm) <= TOL &&
     Math.abs(after.widthCm - before.widthCm) <= TOL &&
     after.heightCm === before.heightCm &&
-    sillOf(after) === sillOf(before)
+    sillOf(after) === sillOf(before) &&
+    directionOf(after) === directionOf(before)
   return same ? NO_CHANGE : { kind: "applied", doorway: after }
 }
 
@@ -115,6 +118,28 @@ export function placeWindow(
   if (!(widthCm > 0) || !(heightCm > 0) || !isLength(sillCm) || sillCm < 0) return null
   const proto: WallWindow = { kind: "window", id, wallId: host.id, anchor: "a", offsetCm: 0, widthCm, heightCm, sillCm }
   return place(host, walls, cursor, proto, elements)
+}
+
+// дверь с направлением открывания относительно опорной стены (spec door «Дверь — элемент стены»)
+export function placeDoor(
+  host: Wall,
+  walls: readonly Wall[],
+  cursor: Point,
+  widthCm: number,
+  heightCm: number,
+  hinge: DoorHinge,
+  swing: DoorSwing,
+  id: string,
+  elements: readonly WallElement[],
+): WallDoor | null {
+  if (!(widthCm > 0) || !(heightCm > 0)) return null
+  const proto: WallDoor = { kind: "door", id, wallId: host.id, anchor: "a", offsetCm: 0, widthCm, heightCm, hinge, swing }
+  return place(host, walls, cursor, proto, elements)
+}
+
+// следующее направление по кругу поворота; положение и размеры не меняются (spec door «Поворот двери»)
+export function rotateDoor(d: WallDoor): ElementEdit<WallDoor> {
+  return { kind: "applied", doorway: { ...d, ...nextDirection(d) } }
 }
 
 interface Frame {

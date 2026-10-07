@@ -33,18 +33,44 @@
               </div>
             </div>
             <div class="tool-anchor">
-              <button id="tool-doorway" class="tool" title="Проём" type="button">
-                <svg width="32" height="32" viewBox="0 0 24 24"><path fill="currentColor" fill-rule="evenodd" d="M3 4h18v16H3z M7.5 7.5h9V20h-9z"/><path d="M2 20.5h20" stroke="currentColor" stroke-width="1.5"/></svg>
+              <button id="tool-openings" class="tool" title="Проёмы" type="button">
+                <svg width="32" height="32" viewBox="0 0 24 24"><path fill="currentColor" fill-rule="evenodd" d="M3 4h18v16H3z M7.5 7.5h9V20h-9z"/><path d="M7.5 7.5l5 2V20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M2 20.5h20" stroke="currentColor" stroke-width="1.5"/></svg>
               </button>
-              <div id="doorway-panel" class="panel tool-panel">
-                <label class="doorway-field" title="Ширина проёма">
-                  <span>Ширина, <span class="doorway-unit">мм</span></span>
-                  <input id="doorway-width" type="text" inputmode="decimal" />
-                </label>
-                <label class="doorway-field" title="Высота проёма">
-                  <span>H, <span class="doorway-unit">мм</span></span>
-                  <input id="doorway-height" type="text" inputmode="decimal" />
-                </label>
+              <div id="openings-panel" class="panel tool-panel">
+                <div class="group-tools" aria-label="Инструменты группы «Проёмы»">
+                  <button id="tool-doorway" class="group-tool active" title="Проём" type="button">
+                    <svg width="20" height="20" viewBox="0 0 24 24"><path fill="currentColor" fill-rule="evenodd" d="M3 4h18v16H3z M7.5 7.5h9V20h-9z"/><path d="M2 20.5h20" stroke="currentColor" stroke-width="1.5"/></svg>
+                    <span>Проём</span>
+                  </button>
+                  <button id="tool-door" class="group-tool" title="Дверь" type="button">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><rect x="6" y="3" width="12" height="17"/><circle cx="15" cy="12" r="1" fill="currentColor" stroke="none"/><path d="M3 20.5h18" stroke-width="2.2"/></svg>
+                    <span>Дверь</span>
+                  </button>
+                </div>
+                <div id="doorway-fields" class="group-fields">
+                  <label class="doorway-field" title="Ширина проёма">
+                    <span>Ширина, <span class="doorway-unit">мм</span></span>
+                    <input id="doorway-width" type="text" inputmode="decimal" />
+                  </label>
+                  <label class="doorway-field" title="Высота проёма">
+                    <span>H, <span class="doorway-unit">мм</span></span>
+                    <input id="doorway-height" type="text" inputmode="decimal" />
+                  </label>
+                </div>
+                <div id="door-fields" class="group-fields" hidden>
+                  <label class="doorway-field" title="Ширина двери">
+                    <span>Ширина, <span class="doorway-unit">мм</span></span>
+                    <input id="door-width" type="text" inputmode="decimal" />
+                  </label>
+                  <label class="doorway-field" title="Высота двери">
+                    <span>H, <span class="doorway-unit">мм</span></span>
+                    <input id="door-height" type="text" inputmode="decimal" />
+                  </label>
+                  <button id="door-rotate" class="group-tool" title="Повернуть направление открывания" type="button">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12a7 7 0 1 1-2.05-4.95"/><path d="M19 4v4h-4"/></svg>
+                    <span>Повернуть</span>
+                  </button>
+                </div>
               </div>
             </div>
             <div class="tool-anchor">

@@ -1,6 +1,6 @@
 import type { Room } from "../room-area"
-import type { Point, Wall, WallElement, WallWindow } from "../types"
-import { RIGHT_SIN, clipHalfPlane, dot, lerp, mul, perp, pointInPolygon, polygonArea, sub, unit } from "../wall-geometry"
+import type { Point, Wall, WallDoor, WallElement, WallWindow } from "../types"
+import { RIGHT_SIN, add, clipHalfPlane, dot, lerp, mul, perp, pointInPolygon, polygonArea, sub, unit } from "../wall-geometry"
 import type { Seg } from "../wall-geometry"
 import { elementRuns, hostOf, hostPoint, jambsT } from "./doorway-faces"
 import type { Side } from "./doorway-faces"
@@ -142,6 +142,47 @@ export function windowLines(w: WallWindow, walls: readonly Wall[], elements: rea
     squares: [...square(j1, j1 + s), ...square(j2 - s, j2)],
     glass,
     outline: opening.outline,
+  }
+}
+
+const DOOR_OPEN_RAD = (95 * Math.PI) / 180
+const LEAF_CM = 4
+
+export interface DoorLeaf {
+  leaf: Point[] // 4 угла прямоугольника полотна
+  hinge: Point // петля — центр дуги
+  radius: number
+  arcFrom: Point // конец закрытого положения полотна
+  arcTo: Point // открытый конец полотна
+  side: Side // грань открывания по нормали perp(d)
+}
+
+// обозначение двери (change add-door, design D3): петля на грани стороны открывания у откоса петель, полотно
+// длиной в ширину под 95° от грани в сторону открывания, толщиной 4 см вне сектора, дуга от закрытого положения
+export function doorLeaf(d: WallDoor, walls: readonly Wall[]): DoorLeaf | null {
+  const host = hostOf(d, walls)
+  if (!host) return null
+  const axis = unit(host.a, host.b)
+  // left — нормаль (d.y, −d.x), то есть −perp(d)
+  const side: Side = d.swing === "left" ? -1 : 1
+  const [j1, j2] = jambsT(d, host)
+  const hinge = hostPoint(host, d.hinge === "a" ? j1 : j2, (side * host.thicknessCm) / 2)
+  const u = d.hinge === "a" ? axis : mul(axis, -1)
+  const n = mul(perp(axis), side)
+  const v = add(mul(u, Math.cos(DOOR_OPEN_RAD)), mul(n, Math.sin(DOOR_OPEN_RAD)))
+  const w = d.widthCm
+  const arcTo = add(hinge, mul(v, w))
+  // толщина полотна — по нормали к нему в сторону, где нет закрытого положения
+  const across = perp(v)
+  const away = dot(across, u) < 0 ? across : mul(across, -1)
+  const thick = mul(away, LEAF_CM)
+  return {
+    leaf: [hinge, arcTo, add(arcTo, thick), add(hinge, thick)],
+    hinge,
+    radius: w,
+    arcFrom: add(hinge, mul(u, w)),
+    arcTo,
+    side,
   }
 }
 

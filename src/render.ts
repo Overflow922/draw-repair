@@ -1,4 +1,4 @@
-import { cutContour, cutPieces, dimensionChains, heightLabelAt, heightLabelSide, labelDirection, openingLines, windowLines } from "./doorway/doorway-layout"
+import { cutContour, cutPieces, dimensionChains, doorLeaf, heightLabelAt, heightLabelSide, labelDirection, openingLines, windowLines } from "./doorway/doorway-layout"
 import { dimGeometry, dimPointPoint, visibleWorld } from "./geometry"
 import type { DimGeometry } from "./geometry"
 import { findRooms, formatArea } from "./room-area"
@@ -6,10 +6,10 @@ import type { Room } from "./room-area"
 import type { RoomAngle, RulerReading } from "./ruler"
 import { LIGHT_PALETTE } from "./theme"
 import type { Palette } from "./theme"
-import { contourSegments, displayPolygons, outlineSegments } from "./wall-geometry"
+import { contourSegments, cross, displayPolygons, dot, outlineSegments, sub } from "./wall-geometry"
 import type { Seg } from "./wall-geometry"
-import { GRID_STEP_CM, PX_PER_CM, isWindow, normalizeMaterial } from "./types"
-import type { Dimension, Material, Point, Unit, View, Wall, WallElement } from "./types"
+import { GRID_STEP_CM, PX_PER_CM, isDoor, isWindow, normalizeMaterial } from "./types"
+import type { Dimension, Material, Point, Unit, View, Wall, WallDoor, WallElement } from "./types"
 import type { TrackLine } from "./wall-tracking"
 
 const OUTLINE_PX = 4
@@ -325,6 +325,26 @@ function drawDoorways(
   for (const d of marqueeHits) if (!selected.includes(d)) outline(d, p.marqueeWall)
   for (const d of selected) outline(d, p.selection)
   if (opts.hoverDoorway) outline(opts.hoverDoorway, p.erase)
+  // полотно двери линиями контура и тонкая дуга открывания с центром в петле (change add-door, design D3)
+  const drawLeaf = (d: WallDoor, color: string): void => {
+    const l = doorLeaf(d, walls)
+    if (!l) return
+    ctx.save()
+    ctx.strokeStyle = color
+    ctx.lineWidth = m.contourPx
+    tracePolygon(ctx, [...l.leaf, l.leaf[0]].map(toScreen))
+    ctx.stroke()
+    const from = sub(l.arcFrom, l.hinge)
+    const to = sub(l.arcTo, l.hinge)
+    const start = Math.atan2(from.y, from.x)
+    const span = Math.atan2(cross(from, to), dot(from, to))
+    const c = toScreen(l.hinge)
+    ctx.lineWidth = m.hatchPx
+    ctx.beginPath()
+    ctx.arc(c.x, c.y, l.radius * k, start, start + span, span < 0)
+    ctx.stroke()
+    ctx.restore()
+  }
   for (const d of elements) {
     if (isWindow(d)) {
       const lines = windowLines(d, walls, elements)
@@ -336,6 +356,7 @@ function drawDoorways(
       if (!lines) continue
       strokeSegs(lines.faces, p.muted, m.hatchPx)
       strokeSegs(lines.jambs, p.ink, m.contourPx)
+      if (isDoor(d)) drawLeaf(d, p.ink)
     }
     const side = heightLabelSide(d, walls, rooms)
     const face = side === null ? null : heightLabelAt(d, walls, side, 0)
@@ -359,6 +380,7 @@ function drawDoorways(
   }
   const ghost = opts.doorwayGhost ?? null
   if (ghost) outline(ghost, p.muted)
+  if (ghost && isDoor(ghost)) drawLeaf(ghost, p.muted)
   const chained = ghost ?? (selected.length === 1 && !othersSelected ? selected[0] : null)
   if (!chained) return
   const offsetCm = (m.labelPx * 1.2) / k

@@ -65,10 +65,28 @@ export interface WallWindow {
   sillCm: number
 }
 
-// Элемент стены: проём или окно (spec doorway «Элементы стены»)
-export type WallElement = Doorway | WallWindow
+// Дверь — элемент стены с направлением открывания относительно опорной стены (change add-door, design D1):
+// петли у откоса со стороны конца hinge, полотно открывается на грань swing (left — нормаль (d.y, −d.x))
+export type DoorHinge = "a" | "b"
+export type DoorSwing = "left" | "right"
+
+export interface WallDoor {
+  kind: "door"
+  id: string
+  wallId: string
+  anchor: "a" | "b"
+  offsetCm: number
+  widthCm: number
+  heightCm: number
+  hinge: DoorHinge
+  swing: DoorSwing
+}
+
+// Элемент стены: проём, окно или дверь (spec doorway «Элементы стены»)
+export type WallElement = Doorway | WallWindow | WallDoor
 
 export const isWindow = (e: WallElement): e is WallWindow => e.kind === "window"
+export const isDoor = (e: WallElement): e is WallDoor => e.kind === "door"
 
 export interface View {
   zoom: number
