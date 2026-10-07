@@ -339,7 +339,7 @@ body {
   border-radius: 3px;
 }
 
-/* инструмент «Проём» (change add-doorway) */
+/* инструменты «Проём» и «Окно» (change add-doorway, add-window) */
 .doorway-field {
   font-size: 10px;
   color: var(--text-muted);
@@ -352,6 +352,9 @@ body {
 
 #doorway-width,
 #doorway-height,
+#window-width,
+#window-height,
+#window-sill,
 .doorway-number-input {
   width: 56px;
   font-size: 12px;

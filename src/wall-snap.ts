@@ -1,5 +1,5 @@
 import { PX_PER_CM, SNAP_RADIUS_PX } from "./types"
-import type { Doorway, Point, Wall } from "./types"
+import type { Point, Wall, WallElement } from "./types"
 import { violatesDoorways } from "./doorway/doorway-guard"
 import { orthoDirection } from "./wall-angle"
 import {
@@ -252,7 +252,7 @@ export function snapVertex(
   gridStepCm: number,
   newWallThicknessCm: number,
   orthoFrom?: Point,
-  doorways: readonly Doorway[] = [],
+  doorways: readonly WallElement[] = [],
 ): VertexSnap {
   // орто по осям экрана от свободного начала: сработало — конец на луче (design D4)
   if (orthoFrom) {
@@ -281,7 +281,7 @@ export function snapStartVertex(
   radiusCm: number,
   gridStepCm: number,
   newWallThicknessCm: number,
-  doorways: readonly Doorway[] = [],
+  doorways: readonly WallElement[] = [],
 ): VertexSnap {
   const base = snapVertex(p, walls, radiusCm, gridStepCm, newWallThicknessCm, undefined, doorways)
   if (base.source === "wall") return base
@@ -303,7 +303,7 @@ const lazyScene = (walls: Wall[]): (() => SceneContour) => {
 
 // кандидат, чей квадрат установки (блок новой стены у грани или торца) нарушил бы проём
 // (change add-doorway, design D6); null — проёмов рядом нет
-function doorwayBlock(walls: Wall[], doorways: readonly Doorway[], sizeCm: number): ((c: Candidate) => boolean) | null {
+function doorwayBlock(walls: Wall[], doorways: readonly WallElement[], sizeCm: number): ((c: Candidate) => boolean) | null {
   if (!doorways.length) return null
   return (c) => {
     const probe: Wall = { id: "", a: c.base, b: add(c.base, mul(c.normal, sizeCm)), thicknessCm: sizeCm, type: "brick" }
@@ -446,7 +446,7 @@ export function snapOnRay(
   newWallThicknessCm: number,
   start: Point,
   dir: Point,
-  doorways: readonly Doorway[] = [],
+  doorways: readonly WallElement[] = [],
 ): VertexSnap {
   const reach = Math.max(radiusCm, newWallThicknessCm / 2)
   const blocked = doorwayBlock(walls, doorways, newWallThicknessCm)

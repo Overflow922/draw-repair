@@ -1,8 +1,9 @@
 import type { Segment } from "../edit-plan"
-import type { Doorway, Wall } from "../types"
+import type { Wall, WallElement } from "../types"
 import { doorwayViolation, hostOf } from "./doorway-faces"
 
-// Правки и рисование стен не нарушают проёмы (change add-doorway, design D5, D6).
+// Правки и рисование стен не нарушают элементы стен (change add-doorway, design D5, D6;
+// add-window design D8: нарушение считается со стыками-соседями — элементы не сводятся до наложения).
 // Нарушение каждого проёма после правки не должно превышать его нарушение до правки:
 // допустимый проём остаётся допустимым, уже нарушенный не углубляется.
 
@@ -26,20 +27,20 @@ const overlap = (p: Box, q: Box): boolean => p[0] <= q[2] && q[0] <= p[2] && p[1
 // нарушение растёт сверх исходного
 const worse = (before: number, after: number): boolean => after > Math.max(before, TOL)
 
-export function violatesDoorways(before: readonly Wall[], after: readonly Wall[], doorways: readonly Doorway[]): boolean {
-  return doorways.some((d) => hostOf(d, after) !== null && worse(doorwayViolation(d, before), doorwayViolation(d, after)))
+export function violatesDoorways(before: readonly Wall[], after: readonly Wall[], doorways: readonly WallElement[]): boolean {
+  return doorways.some((d) => hostOf(d, after) !== null && worse(doorwayViolation(d, before, doorways), doorwayViolation(d, after, doorways)))
 }
 
-export function thicknessAllowed(walls: readonly Wall[], wall: Wall, thicknessCm: number, doorways: readonly Doorway[]): boolean {
+export function thicknessAllowed(walls: readonly Wall[], wall: Wall, thicknessCm: number, doorways: readonly WallElement[]): boolean {
   const after = walls.map((w) => (w === wall ? { ...w, thicknessCm } : w))
   return !violatesDoorways(walls, after, doorways)
 }
 
 // проверка позиций плана правки (design D5): только проёмы рядом с изменяемыми стенами
-export function doorwayGuard(walls: readonly Wall[], doorways: readonly Doorway[]): DoorwayGuard | null {
+export function doorwayGuard(walls: readonly Wall[], doorways: readonly WallElement[]): DoorwayGuard | null {
   const hosted = doorways.flatMap((d) => {
     const host = hostOf(d, walls)
-    return host ? [{ d, host, before: doorwayViolation(d, walls) }] : []
+    return host ? [{ d, host, before: doorwayViolation(d, walls, doorways) }] : []
   })
   if (!hosted.length) return null
   const reach = Math.max(...walls.map((w) => w.thicknessCm)) * 2 + 1
@@ -53,7 +54,7 @@ export function doorwayGuard(walls: readonly Wall[], doorways: readonly Doorway[
         const s = positions.get(w)
         return s ? { ...w, a: s.a, b: s.b } : w
       })
-      return relevant.every(({ d, before }) => !worse(before, doorwayViolation(d, after)))
+      return relevant.every(({ d, before }) => !worse(before, doorwayViolation(d, after, doorways)))
     },
   }
 }

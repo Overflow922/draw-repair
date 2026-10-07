@@ -1,5 +1,5 @@
-import { isDimension, isDoorway, isDrawing, isWall } from "./storage"
-import type { Dimension, Doorway, Drawing, Wall } from "./types"
+import { isDimension, isDrawing, isWall, isWallElement } from "./storage"
+import type { Dimension, Drawing, Wall, WallElement } from "./types"
 
 const KEY = "draw-repair:history"
 export const HISTORY_LIMIT = 50
@@ -8,11 +8,11 @@ export const HISTORY_LIMIT = 50
 export interface Scene {
   walls: Wall[]
   dimensions: Dimension[]
-  doorways?: Doorway[]
+  doorways?: WallElement[]
 }
 
 export type HistoryEntry =
-  | { kind: "walls"; walls: Wall[]; dimensions: Dimension[]; doorways?: Doorway[] }
+  | { kind: "walls"; walls: Wall[]; dimensions: Dimension[]; doorways?: WallElement[] }
   | { kind: "close"; index: number; drawingId: string }
 
 export interface DrawingHistory {
@@ -90,7 +90,7 @@ const isHistoryEntry = (e: unknown): e is HistoryEntry => {
   if (x.kind === "walls")
     return Array.isArray(x.walls) && x.walls.every(isWall) &&
       Array.isArray(x.dimensions) && x.dimensions.every(isDimension) &&
-      (x.doorways === undefined || (Array.isArray(x.doorways) && x.doorways.every(isDoorway)))
+      (x.doorways === undefined || (Array.isArray(x.doorways) && x.doorways.every(isWallElement)))
   return x.kind === "close" && typeof x.drawingId === "string" &&
     typeof x.index === "number" && Number.isInteger(x.index) && x.index >= 0
 }

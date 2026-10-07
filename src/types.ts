@@ -42,7 +42,9 @@ export interface Dimension {
 
 // Проём в стене (change add-doorway, design D1): положение — расстояние вдоль оси опорной стены
 // от конца привязки до ближнего откоса; данные относительны к стене и следуют за ней сами
+// Вид проёма — отсутствующее поле kind (формат add-doorway) или "doorway" (change add-window, design D1)
 export interface Doorway {
+  kind?: "doorway"
   id: string
   wallId: string
   anchor: "a" | "b"
@@ -50,6 +52,23 @@ export interface Doorway {
   widthCm: number
   heightCm: number
 }
+
+// Окно — элемент стены с высотой подоконника (change add-window, design D1)
+export interface WallWindow {
+  kind: "window"
+  id: string
+  wallId: string
+  anchor: "a" | "b"
+  offsetCm: number
+  widthCm: number
+  heightCm: number
+  sillCm: number
+}
+
+// Элемент стены: проём или окно (spec doorway «Элементы стены»)
+export type WallElement = Doorway | WallWindow
+
+export const isWindow = (e: WallElement): e is WallWindow => e.kind === "window"
 
 export interface View {
   zoom: number
@@ -76,8 +95,9 @@ export interface Drawing {
   name: string
   walls: Wall[]
   dimensions: Dimension[]
-  // отсутствие — пустой список; при загрузке не дописывается (design D9)
-  doorways?: Doorway[]
+  // элементы стены (проёмы и окна); отсутствие — пустой список, при загрузке не дописывается
+  // (add-doorway design D9); JSON-ключ прежний (add-window design D1)
+  doorways?: WallElement[]
   view: View
   scale: ScaleDenominator
 }

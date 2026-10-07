@@ -1,22 +1,22 @@
 import { dimHitDistance, distanceToWall, hitWall, segmentIntersectsRect } from "../geometry"
 import type { Scene } from "../history"
-import type { Dimension, Doorway, Point, Wall } from "../types"
+import type { Dimension, Point, Wall, WallElement } from "../types"
 import { cross, degenerate, dot, sub, unit } from "../wall-geometry"
 import { hostOf, hostPoint, jambsT } from "./doorway-faces"
 
 // Решения выбора и удаления с проёмами (change add-doorway, design D2, D8): попадание, рамка,
 // приоритет ластика, каскад удаления. Чистые функции; main.ts только маршрутизирует события.
 
-export type ErasePick = { kind: "dimension"; dimension: Dimension } | { kind: "doorway"; doorway: Doorway } | { kind: "wall"; wall: Wall }
+export type ErasePick = { kind: "dimension"; dimension: Dimension } | { kind: "doorway"; doorway: WallElement } | { kind: "wall"; wall: Wall }
 
 export interface Selection {
   walls: Wall[]
   dimensions: Dimension[]
-  doorways: Doorway[]
+  doorways: WallElement[]
 }
 
 // участок проёма — прямоугольник откосов через всю толщину; tolCm — радиус привязки
-export function hitDoorway(p: Point, walls: readonly Wall[], doorways: readonly Doorway[], tolCm: number): Doorway | null {
+export function hitDoorway(p: Point, walls: readonly Wall[], doorways: readonly WallElement[], tolCm: number): WallElement | null {
   for (let i = doorways.length - 1; i >= 0; i--) {
     const d = doorways[i]
     const host = hostOf(d, walls)
@@ -49,12 +49,12 @@ export function wallNearBody(p: Point, walls: readonly Wall[], tolCm: number): W
   return best
 }
 
-const axisSegment = (d: Doorway, host: Wall): [Point, Point] => {
+const axisSegment = (d: WallElement, host: Wall): [Point, Point] => {
   const [j1, j2] = jambsT(d, host)
   return [hostPoint(host, j1, 0), hostPoint(host, j2, 0)]
 }
 
-export function doorwaysInRect(min: Point, max: Point, walls: readonly Wall[], doorways: readonly Doorway[]): Doorway[] {
+export function doorwaysInRect(min: Point, max: Point, walls: readonly Wall[], doorways: readonly WallElement[]): WallElement[] {
   return doorways.filter((d) => {
     const host = hostOf(d, walls)
     if (!host) return false
@@ -64,7 +64,7 @@ export function doorwaysInRect(min: Point, max: Point, walls: readonly Wall[], d
 }
 
 // участки оси стены вне её проёмов (по t от конца a)
-function axisOutsideDoorways(wall: Wall, walls: readonly Wall[], doorways: readonly Doorway[]): [number, number][] {
+function axisOutsideDoorways(wall: Wall, walls: readonly Wall[], doorways: readonly WallElement[]): [number, number][] {
   const len = Math.hypot(wall.b.x - wall.a.x, wall.b.y - wall.a.y)
   const cuts = doorways
     .filter((d) => d.wallId === wall.id && hostOf(d, walls))
@@ -83,7 +83,7 @@ function axisOutsideDoorways(wall: Wall, walls: readonly Wall[], doorways: reado
 const inside = (p: Point, min: Point, max: Point): boolean => p.x >= min.x && p.x <= max.x && p.y >= min.y && p.y <= max.y
 
 // стены рамки: ось вне участков проёмов пересекает рамку или стена целиком внутри (multi-selection)
-export function wallsInRect(min: Point, max: Point, walls: readonly Wall[], doorways: readonly Doorway[]): Wall[] {
+export function wallsInRect(min: Point, max: Point, walls: readonly Wall[], doorways: readonly WallElement[]): Wall[] {
   return walls.filter((w) => {
     if (inside(w.a, min, max) && inside(w.b, min, max)) return true
     return axisOutsideDoorways(w, walls, doorways).some(([t0, t1]) =>

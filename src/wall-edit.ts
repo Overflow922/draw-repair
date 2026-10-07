@@ -5,7 +5,7 @@ import type { DoorwayGuard } from "./doorway/doorway-guard"
 import type { WallEnd } from "./ortho-stretch"
 import { orthoAxisOf, otherEnd, projectEnd, projectMove, teeContext } from "./tee-bounds"
 import type { TeeContext } from "./tee-bounds"
-import type { Doorway, Point, Wall } from "./types"
+import type { Point, Wall, WallElement } from "./types"
 import { collisionContext } from "./wall-collision"
 import type { AxisSnap, CheckMode, CollisionContext, Verdict } from "./wall-collision"
 import { add, cross, dist, dot, mul, sub, unit } from "./wall-geometry"
@@ -20,7 +20,7 @@ import { add, cross, dist, dot, mul, sub, unit } from "./wall-geometry"
 export interface EditMode {
   ortho: boolean
   snappedAxis?: Wall
-  doorways?: readonly Doorway[]
+  doorways?: readonly WallElement[]
 }
 
 export type ResizeResult =

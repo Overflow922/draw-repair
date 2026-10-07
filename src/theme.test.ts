@@ -33,6 +33,7 @@ const KEYS: (keyof Palette)[] = [
   "marqueeDim",
   "erase",
   "snap",
+  "sill",
 ]
 
 describe("parseTheme", () => {
@@ -153,6 +154,7 @@ describe("палитры", () => {
       marqueeDim: "rgba(8, 145, 178, 0.4)",
       erase: "rgba(220, 38, 38, 0.5)",
       snap: "#dc2626",
+      sill: "#2b7fd4",
     })
   })
 

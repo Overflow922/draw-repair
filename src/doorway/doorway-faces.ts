@@ -1,4 +1,4 @@
-import type { Doorway, Point, Wall } from "../types"
+import type { Point, Wall, WallElement } from "../types"
 import { add, coveredInterval, degenerate, dist, displayPolygons, mergeIntervals, mul, perp, unit } from "../wall-geometry"
 
 // Грани опорной стены, стыки и расстояния проёма (change add-doorway, design D1, D3).
@@ -21,13 +21,13 @@ const PROBE_CM = 0.05
 const HOLD_TOL = 1e-6
 const MIN_RUN = 1e-6
 
-export const hostOf = (d: Doorway, walls: readonly Wall[]): Wall | null => {
+export const hostOf = (d: WallElement, walls: readonly Wall[]): Wall | null => {
   const host = walls.find((w) => w.id === d.wallId)
   return host && !degenerate(host) ? host : null
 }
 
 // откосы по координате t вдоль оси от конца a
-export function jambsT(d: Doorway, host: Wall): [number, number] {
+export function jambsT(d: WallElement, host: Wall): [number, number] {
   const len = dist(host.a, host.b)
   return d.anchor === "a" ? [d.offsetCm, d.offsetCm + d.widthCm] : [len - d.offsetCm - d.widthCm, len - d.offsetCm]
 }
@@ -116,23 +116,39 @@ function faceDistances(runs: [number, number][], j1: number, j2: number): FaceDi
   return { a: j1 - run[0], b: run[1] - j2 }
 }
 
-export function doorwayDistances(d: Doorway, walls: readonly Wall[]): DoorwayDistances | null {
+// свободные участки грани для элемента self: участки других элементов этой стены — стыки обеих граней
+// (change add-window, design D2)
+export function elementRuns(
+  host: Wall,
+  walls: readonly Wall[],
+  elements: readonly WallElement[],
+  side: Side,
+  self: WallElement,
+): [number, number][] {
+  const others = elements
+    .filter((e) => e.wallId === host.id && e.id !== self.id)
+    .map((e) => jambsT(e, host))
+    .sort((p, q) => p[0] - q[0])
+  return subtract(faceRuns(host, walls, side), others)
+}
+
+export function doorwayDistances(d: WallElement, walls: readonly Wall[], elements: readonly WallElement[] = []): DoorwayDistances | null {
   const host = hostOf(d, walls)
   if (!host) return null
   const [j1, j2] = jambsT(d, host)
   return {
-    plus: faceDistances(faceRuns(host, walls, 1), j1, j2),
-    minus: faceDistances(faceRuns(host, walls, -1), j1, j2),
+    plus: faceDistances(elementRuns(host, walls, elements, 1, d), j1, j2),
+    minus: faceDistances(elementRuns(host, walls, elements, -1, d), j1, j2),
   }
 }
 
-// наибольшее нарушение (отрицательное расстояние) проёма; 0 — инвариант выполнен
-export function doorwayViolation(d: Doorway, walls: readonly Wall[]): number {
-  const ds = doorwayDistances(d, walls)
+// наибольшее нарушение (отрицательное расстояние) элемента; 0 — инвариант выполнен
+export function doorwayViolation(d: WallElement, walls: readonly Wall[], elements: readonly WallElement[] = []): number {
+  const ds = doorwayDistances(d, walls, elements)
   if (!ds) return Infinity
   return Math.max(0, -Math.min(ds.plus.a, ds.plus.b, ds.minus.a, ds.minus.b))
 }
 
-export function doorwayHolds(d: Doorway, walls: readonly Wall[]): boolean {
-  return doorwayViolation(d, walls) <= HOLD_TOL
+export function doorwayHolds(d: WallElement, walls: readonly Wall[], elements: readonly WallElement[] = []): boolean {
+  return doorwayViolation(d, walls, elements) <= HOLD_TOL
 }

@@ -1,4 +1,4 @@
-import type { Doorway, Point, Wall } from "./types"
+import type { Point, Wall, WallElement } from "./types"
 import { angleReferenceRay, orthoDirection, typedDirection, wallAngleDeg } from "./wall-angle"
 import type { StartRef } from "./wall-angle"
 import { add, mul, sub } from "./wall-geometry"
@@ -21,7 +21,7 @@ export interface ChainInput {
   ortho: boolean
   typedAngleDeg: number | null
   typedLengthCm: number | null
-  doorways?: readonly Doorway[] // проёмы: привязка к стене не нарушает их (change add-doorway, design D6)
+  doorways?: readonly WallElement[] // проёмы: привязка к стене не нарушает их (change add-doorway, design D6)
 }
 
 export interface ChainSegment {

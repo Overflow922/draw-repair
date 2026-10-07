@@ -106,3 +106,27 @@ Follow-ups from `add-doorway` implementation (2026-10-06).
 ## Out of scope (decided, revisit if needed)
 
 - [ ] Performance: moving a host wall with doorways on a 61-wall drawing costs ~14 ms per step (vs ~2 ms without doorways) because the limiter re-runs face probes on every path step (`src/doorway/doorway-guard.ts`). Acceptable now; cache `displayPolygons` per step if drawings grow.
+
+---
+
+Follow-ups from `add-window` test validation (revision 2, 2026-10-06). Non-blocking.
+
+## Tests
+
+- [ ] WL-07 (`src/doorway/window-render.test.ts`): the label frame is checked to enclose the anchor points of both text parts, not their edges. Add an edge check once text width can be measured in the recording context (currently estimated at 0.6·labelPx per character).
+- [ ] WP-01 (`src/doorway/window-pdf.test.ts`): "more strokes than without a window" is weak; assert the window squares and the label frame in sheet coordinates.
+- [ ] Tool adapter (`src/doorway/window-tool.test.ts`): editing a panel field of one kind while an element of the other kind is selected; the doorway tool's `pressDoorway` on a window (now manual check M-03); the width field for new windows (validation revision 3).
+- [ ] Dark palette: no test checks that `DARK_PALETTE.sill` (window «H под.» label) contrasts with the dark background (color-theme «Две цветовые схемы»); a mutant `#1e3a8a` (~1.6:1) passes. Add `"sill"` to `DARK-ACCENT-1` in `src/theme.test.ts` (≥ 3:1) via a test change request (validation revision 5).
+
+## Docs / UI (add-window implementation, 2026-10-06)
+
+- [ ] Window label spacing: part widths are estimated at 0.6·labelPx per character (`src/render.ts` `labelWidth` / `drawElementLabel`), which over-estimates for the UI font — the gap between «H=1500» and «H под.=850» looks wider than in the reference image. Frame padding is `LABEL_FRAME_PAD = 0.3·labelPx`, square corners (design open question: corner radius not decided). Consider `measureText` on screen and keeping the estimate only for PDF.
+
+## Tests (add-window label orientation, validation revision 7, 2026-10-06)
+
+- [ ] `src/doorway/label-orientation.test.ts`: the direction wrapper is built on `recorder()`, so a label frame drawn with `strokeRect` (no-op there) or `arcTo` (missing) would falsely fail LO-06/LO-08; switch to `colorRecorder()` semantics if the frame drawing changes.
+- [ ] LO tests don't check the text "up" vector — a mirrored transform (`rotate(θ+π)` + `scale(-1, 1)`) would pass.
+- [ ] No automated check that PDF labels are rotated (verified manually: jsPDF text matrix 11.3° on a tilted wall, 90° on a vertical one); LO-09 covers only a vertical wall's bbox.
+- [ ] Doc drift: the comment in WP-03 (`src/doorway/window-pdf.test.ts`) still says the label is horizontal; the assertion remains valid.
+- [ ] Doorway label frame in PDF (validation revision 9, G1): LF-PDF-01 checks only that an ink frame surrounds «H=210»; a PDF-only frame without padding, drawn with `contourPx`, or reaching into the wall body would pass. Add padding and outside-the-body checks to `src/doorway/doorway-label-frame-pdf.test.ts`. Dashed frames are not recordable by the test context (window and doorway alike).
+- [ ] Test name drift: WL-07b in `src/doorway/window-render.test.ts` is titled «у проёма рамки и синей части нет», but doorway labels are now framed; its assertions (no «H под.», one «H=210») are still valid.

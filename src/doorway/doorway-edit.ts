@@ -1,26 +1,30 @@
-import type { Doorway, Point, Wall } from "../types"
+import type { Doorway, Point, Wall, WallElement, WallWindow } from "../types"
 import { RIGHT_SIN, dist, dot, sub, unit } from "../wall-geometry"
-import { faceRuns, hostOf, jambsT } from "./doorway-faces"
+import { elementRuns, hostOf, hostPoint, jambsT } from "./doorway-faces"
 import type { Side } from "./doorway-faces"
 
-// Установка и правка проёма (change add-doorway, design D4): запрос → ближайшее допустимое
-// значение по свободным участкам обеих граней. Чистые функции, исходный проём не мутируется.
+// Установка и правка элемента стены (change add-doorway design D4; add-window design D3): запрос →
+// ближайшее допустимое значение по свободным участкам обеих граней, откосы соседних элементов —
+// стыки. Вид и данные вида сохраняются. Чистые функции, исходный элемент не мутируется.
 
-export type DoorwayEdit = { kind: "applied"; doorway: Doorway } | { kind: "rejected"; reason: "invalid" | "no-change" }
+export type ElementEdit<E extends WallElement = WallElement> =
+  | { kind: "applied"; doorway: E }
+  | { kind: "rejected"; reason: "invalid" | "no-change" }
+export type DoorwayEdit = ElementEdit<Doorway>
 
 const TOL = 1e-6
-const NO_CHANGE: DoorwayEdit = { kind: "rejected", reason: "no-change" }
-const INVALID: DoorwayEdit = { kind: "rejected", reason: "invalid" }
+const NO_CHANGE = { kind: "rejected", reason: "no-change" } as const
+const INVALID = { kind: "rejected", reason: "invalid" } as const
 
 type Interval = [number, number]
 
 const isLength = (v: number): boolean => Number.isFinite(v)
 
-// свободные промежутки стены: пересечения участков граней plus и minus
-function freeIntervals(host: Wall, walls: readonly Wall[]): Interval[] {
+// свободные промежутки стены для элемента self: пересечения участков граней plus и minus
+function freeIntervals(host: Wall, walls: readonly Wall[], elements: readonly WallElement[], self: WallElement): Interval[] {
   const out: Interval[] = []
-  for (const p of faceRuns(host, walls, 1))
-    for (const m of faceRuns(host, walls, -1)) {
+  for (const p of elementRuns(host, walls, elements, 1, self))
+    for (const m of elementRuns(host, walls, elements, -1, self)) {
       const lo = Math.max(p[0], m[0])
       const hi = Math.min(p[1], m[1])
       if (hi - lo > TOL) out.push([lo, hi])
@@ -28,7 +32,7 @@ function freeIntervals(host: Wall, walls: readonly Wall[]): Interval[] {
   return out.sort((x, y) => x[0] - y[0])
 }
 
-// промежуток текущего положения: наибольшее перекрытие с проёмом, иначе ближайший
+// промежуток текущего положения: наибольшее перекрытие с элементом, иначе ближайший
 function currentInterval(intervals: Interval[], j1: number, j2: number): Interval | null {
   let best: Interval | null = null
   let bestScore = -Infinity
@@ -48,28 +52,32 @@ const startRange = (iv: Interval, width: number): Interval | null =>
 
 const clamp = (v: number, [lo, hi]: Interval): number => Math.max(lo, Math.min(hi, v))
 
-function withStart(d: Doorway, host: Wall, j1: number, width: number, anchor: "a" | "b"): Doorway {
+function withStart<E extends WallElement>(d: E, host: Wall, j1: number, width: number, anchor: "a" | "b"): E {
   const len = dist(host.a, host.b)
   return { ...d, anchor, widthCm: width, offsetCm: anchor === "a" ? j1 : len - j1 - width }
 }
 
-function result(before: Doorway, after: Doorway): DoorwayEdit {
+const sillOf = (e: WallElement): number | null => (e.kind === "window" ? e.sillCm : null)
+
+function result<E extends WallElement>(before: E, after: E): ElementEdit<E> {
   const same =
     after.anchor === before.anchor &&
     Math.abs(after.offsetCm - before.offsetCm) <= TOL &&
     Math.abs(after.widthCm - before.widthCm) <= TOL &&
-    after.heightCm === before.heightCm
+    after.heightCm === before.heightCm &&
+    sillOf(after) === sillOf(before)
   return same ? NO_CHANGE : { kind: "applied", doorway: after }
 }
 
 // проекция точки на ось стены: t от конца a
 const alongAxis = (host: Wall, p: Point): number => dot(sub(p, host.a), unit(host.a, host.b))
 
-export function placeDoorway(host: Wall, walls: readonly Wall[], cursor: Point, widthCm: number, heightCm: number, id: string): Doorway | null {
-  if (!(widthCm > 0) || !(heightCm > 0)) return null
+// положение призрака: центр в проекции курсора, округлённой до 1 см, иначе ближайшее допустимое
+function place<E extends WallElement>(host: Wall, walls: readonly Wall[], cursor: Point, proto: E, elements: readonly WallElement[]): E | null {
+  const widthCm = proto.widthCm
   const want = Math.round(alongAxis(host, cursor)) - widthCm / 2
   let best: number | null = null
-  for (const iv of freeIntervals(host, walls)) {
+  for (const iv of freeIntervals(host, walls, elements, proto)) {
     const range = startRange(iv, widthCm)
     if (!range) continue
     const j1 = clamp(want, range)
@@ -78,7 +86,35 @@ export function placeDoorway(host: Wall, walls: readonly Wall[], cursor: Point, 
   if (best === null) return null
   const len = dist(host.a, host.b)
   const anchor = best <= len - best - widthCm ? "a" : "b"
-  return withStart({ id, wallId: host.id, anchor, offsetCm: 0, widthCm, heightCm }, host, best, widthCm, anchor)
+  return withStart(proto, host, best, widthCm, anchor)
+}
+
+export function placeDoorway(
+  host: Wall,
+  walls: readonly Wall[],
+  cursor: Point,
+  widthCm: number,
+  heightCm: number,
+  id: string,
+  elements: readonly WallElement[] = [],
+): Doorway | null {
+  if (!(widthCm > 0) || !(heightCm > 0)) return null
+  return place(host, walls, cursor, { id, wallId: host.id, anchor: "a", offsetCm: 0, widthCm, heightCm }, elements)
+}
+
+export function placeWindow(
+  host: Wall,
+  walls: readonly Wall[],
+  cursor: Point,
+  widthCm: number,
+  heightCm: number,
+  sillCm: number,
+  id: string,
+  elements: readonly WallElement[],
+): WallWindow | null {
+  if (!(widthCm > 0) || !(heightCm > 0) || !isLength(sillCm) || sillCm < 0) return null
+  const proto: WallWindow = { kind: "window", id, wallId: host.id, anchor: "a", offsetCm: 0, widthCm, heightCm, sillCm }
+  return place(host, walls, cursor, proto, elements)
 }
 
 interface Frame {
@@ -88,19 +124,26 @@ interface Frame {
   free: Interval
 }
 
-function frameOf(d: Doorway, walls: readonly Wall[]): Frame | null {
+function frameOf(d: WallElement, walls: readonly Wall[], elements: readonly WallElement[]): Frame | null {
   const host = hostOf(d, walls)
   if (!host) return null
   const [j1, j2] = jambsT(d, host)
-  const free = currentInterval(freeIntervals(host, walls), j1, j2)
+  const free = currentInterval(freeIntervals(host, walls, elements, d), j1, j2)
   return free ? { host, j1, j2, free } : null
 }
 
-export function setDistance(d: Doorway, walls: readonly Wall[], side: Side, toward: "a" | "b", valueCm: number): DoorwayEdit {
+export function setDistance<E extends WallElement>(
+  d: E,
+  walls: readonly Wall[],
+  side: Side,
+  toward: "a" | "b",
+  valueCm: number,
+  elements: readonly WallElement[] = [],
+): ElementEdit<E> {
   if (!isLength(valueCm) || valueCm < 0) return INVALID
-  const f = frameOf(d, walls)
+  const f = frameOf(d, walls, elements)
   if (!f) return NO_CHANGE
-  const run = currentInterval(faceRuns(f.host, walls, side), f.j1, f.j2)
+  const run = currentInterval(elementRuns(f.host, walls, elements, side, d), f.j1, f.j2)
   const range = startRange(f.free, d.widthCm)
   if (!run || !range) return NO_CHANGE
   const want = toward === "a" ? run[0] + valueCm : run[1] - valueCm - d.widthCm
@@ -108,9 +151,9 @@ export function setDistance(d: Doorway, walls: readonly Wall[], side: Side, towa
   return result(d, withStart(d, f.host, j1, d.widthCm, toward))
 }
 
-export function setWidth(d: Doorway, walls: readonly Wall[], valueCm: number): DoorwayEdit {
+export function setWidth<E extends WallElement>(d: E, walls: readonly Wall[], valueCm: number, elements: readonly WallElement[] = []): ElementEdit<E> {
   if (!isLength(valueCm) || valueCm <= 0) return INVALID
-  const f = frameOf(d, walls)
+  const f = frameOf(d, walls, elements)
   if (!f) return NO_CHANGE
   // неподвижен откос со стороны привязки
   const max = d.anchor === "a" ? f.free[1] - f.j1 : f.j2 - f.free[0]
@@ -120,33 +163,47 @@ export function setWidth(d: Doorway, walls: readonly Wall[], valueCm: number): D
   return result(d, withStart(d, f.host, j1, width, d.anchor))
 }
 
-export function setHeight(d: Doorway, valueCm: number): DoorwayEdit {
+export function setHeight<E extends WallElement>(d: E, valueCm: number): ElementEdit<E> {
   if (!isLength(valueCm) || valueCm <= 0) return INVALID
   return valueCm === d.heightCm ? NO_CHANGE : { kind: "applied", doorway: { ...d, heightCm: valueCm } }
 }
 
-// сдвиг вдоль оси в пределах текущего промежутка: проём не переходит через стыки
-function shift(d: Doorway, walls: readonly Wall[], deltaT: number, round: boolean): DoorwayEdit {
-  const f = frameOf(d, walls)
+// высота подоконника окна: конечное число ≥ 0 (spec window «Окно — элемент стены»)
+export function setSill(w: WallWindow, valueCm: number): ElementEdit<WallWindow> {
+  if (!isLength(valueCm) || valueCm < 0) return INVALID
+  return valueCm === w.sillCm ? NO_CHANGE : { kind: "applied", doorway: { ...w, sillCm: valueCm } }
+}
+
+// сдвиг вдоль оси в пределах текущего промежутка: элемент не переходит через стыки и соседей;
+// уже нарушенный элемент может остаться на месте — диапазон расширяется до текущего положения
+function shift<E extends WallElement>(d: E, walls: readonly Wall[], deltaT: number, round: boolean, elements: readonly WallElement[]): ElementEdit<E> {
+  const f = frameOf(d, walls, elements)
   if (!f) return NO_CHANGE
   const range = startRange(f.free, d.widthCm)
   if (!range) return NO_CHANGE
+  const allowed: Interval = [Math.min(range[0], f.j1), Math.max(range[1], f.j1)]
   const sign = d.anchor === "a" ? 1 : -1
   const offset = d.offsetCm + sign * deltaT
   const wanted = { ...d, offsetCm: round ? Math.round(offset) : offset }
-  const j1 = clamp(jambsT(wanted, f.host)[0], range)
+  const j1 = clamp(jambsT(wanted, f.host)[0], allowed)
   return result(d, withStart(d, f.host, j1, d.widthCm, d.anchor))
 }
 
-export function slideDoorway(d: Doorway, walls: readonly Wall[], deltaWorld: Point): DoorwayEdit {
+export function slideDoorway<E extends WallElement>(d: E, walls: readonly Wall[], deltaWorld: Point, elements: readonly WallElement[] = []): ElementEdit<E> {
   const host = hostOf(d, walls)
   if (!host) return NO_CHANGE
   const deltaT = dot(deltaWorld, unit(host.a, host.b))
   if (Math.abs(deltaT) < TOL) return NO_CHANGE
-  return shift(d, walls, deltaT, true)
+  return shift(d, walls, deltaT, true, elements)
 }
 
-export function arrowSlide(d: Doorway, walls: readonly Wall[], arrow: Point, stepCm: number): DoorwayEdit {
+export function arrowSlide<E extends WallElement>(
+  d: E,
+  walls: readonly Wall[],
+  arrow: Point,
+  stepCm: number,
+  elements: readonly WallElement[] = [],
+): ElementEdit<E> {
   const host = hostOf(d, walls)
   if (!host) return NO_CHANGE
   const len = Math.hypot(arrow.x, arrow.y)
@@ -154,5 +211,34 @@ export function arrowSlide(d: Doorway, walls: readonly Wall[], arrow: Point, ste
   const c = dot(arrow, unit(host.a, host.b)) / len
   // ось перпендикулярна стрелке в пределах допуска прямого угла
   if (Math.abs(c) <= RIGHT_SIN) return NO_CHANGE
-  return shift(d, walls, Math.sign(c) * stepCm, false)
+  return shift(d, walls, Math.sign(c) * stepCm, false, elements)
+}
+
+// стрелки по нескольким элементам: ведущий по направлению сдвига — первым, каждый — с уже
+// обновлённым списком, чтобы пара в касании сдвигалась вместе (add-window design D3)
+export function nudgeElements(
+  selected: readonly WallElement[],
+  walls: readonly Wall[],
+  elements: readonly WallElement[],
+  arrow: Point,
+  stepCm: number,
+): WallElement[] {
+  // проекция середины элемента на направление стрелки
+  const lead = (e: WallElement): number => {
+    const host = hostOf(e, walls)
+    if (!host) return -Infinity
+    const [j1, j2] = jambsT(e, host)
+    return dot(hostPoint(host, (j1 + j2) / 2, 0), arrow)
+  }
+  const ids = new Set(selected.map((e) => e.id))
+  const order = [...elements].filter((e) => ids.has(e.id)).sort((p, q) => lead(q) - lead(p))
+  let list = [...elements]
+  for (const e of order) {
+    const current = list.find((x) => x.id === e.id)
+    if (!current) continue
+    const r = arrowSlide(current, walls, arrow, stepCm, list)
+    if (r.kind !== "applied") continue
+    list = list.map((x) => (x === current ? r.doorway : x))
+  }
+  return list
 }

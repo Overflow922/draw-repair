@@ -16,6 +16,7 @@ export interface Palette {
   marqueeDim: string
   erase: string // подсветка ластика
   snap: string // точка привязки размера
+  sill: string // «H под.» в подписи окна
 }
 
 export const LIGHT_PALETTE: Palette = {
@@ -34,6 +35,7 @@ export const LIGHT_PALETTE: Palette = {
   marqueeDim: "rgba(8, 145, 178, 0.4)",
   erase: "rgba(220, 38, 38, 0.5)",
   snap: "#dc2626",
+  sill: "#2b7fd4",
 }
 
 export const DARK_PALETTE: Palette = {
@@ -52,6 +54,7 @@ export const DARK_PALETTE: Palette = {
   marqueeDim: "rgba(34, 211, 238, 0.4)",
   erase: "rgba(248, 113, 113, 0.6)",
   snap: "#f87171",
+  sill: "#60a5fa",
 }
 
 export const paletteOf = (theme: Theme): Palette => (theme === "dark" ? DARK_PALETTE : LIGHT_PALETTE)

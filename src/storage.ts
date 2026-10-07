@@ -1,5 +1,5 @@
-import { isScale, DEFAULT_SCALE, normalizeMaterial } from "./types"
-import type { Dimension, DimPoint, Doorway, Drawing, DrawingStore, EdgeRef, Point, View, Wall } from "./types"
+import { isScale, isWindow, DEFAULT_SCALE, normalizeMaterial } from "./types"
+import type { Dimension, DimPoint, Doorway, Drawing, DrawingStore, EdgeRef, Point, View, Wall, WallElement, WallWindow } from "./types"
 
 const KEY = "draw-repair:drawing"
 
@@ -35,30 +35,41 @@ export const isDimension = (dim: unknown): dim is Dimension =>
   typeof dim === "object" && dim !== null && isDimPoint((dim as Dimension).from) && isDimPoint((dim as Dimension).to) &&
   typeof (dim as Dimension).offset === "number" && Number.isFinite((dim as Dimension).offset)
 
+const num = (v: unknown): v is number => typeof v === "number" && Number.isFinite(v)
+
+// общие поля элемента стены (spec drawing-storage «Формат документа»)
+const hasElementFields = (x: Record<string, unknown>): boolean =>
+  typeof x.id === "string" && x.id !== "" && typeof x.wallId === "string" && x.wallId !== "" &&
+  (x.anchor === "a" || x.anchor === "b") && num(x.offsetCm) && x.offsetCm >= 0 &&
+  num(x.widthCm) && x.widthCm > 0 && num(x.heightCm) && x.heightCm > 0
+
+// проём: без вида или с видом "doorway" (change add-window, design D7)
 export const isDoorway = (d: unknown): d is Doorway => {
   if (typeof d !== "object" || d === null) return false
   const x = d as Record<string, unknown>
-  const num = (v: unknown): v is number => typeof v === "number" && Number.isFinite(v)
-  return typeof x.id === "string" && x.id !== "" && typeof x.wallId === "string" && x.wallId !== "" &&
-    (x.anchor === "a" || x.anchor === "b") && num(x.offsetCm) && x.offsetCm >= 0 &&
-    num(x.widthCm) && x.widthCm > 0 && num(x.heightCm) && x.heightCm > 0
+  return (x.kind === undefined || x.kind === "doorway") && hasElementFields(x)
 }
 
-// проёмы чертежа при загрузке: корректные и со своей стеной; отсутствие поля сохраняется (design D9)
-function loadDoorways(raw: unknown, walls: Wall[]): { doorways?: Doorway[] } {
+export const isWallWindow = (d: unknown): d is WallWindow => {
+  if (typeof d !== "object" || d === null) return false
+  const x = d as Record<string, unknown>
+  return x.kind === "window" && hasElementFields(x) && num(x.sillCm) && x.sillCm >= 0
+}
+
+export const isWallElement = (d: unknown): d is WallElement => isDoorway(d) || isWallWindow(d)
+
+// копия элемента только с полями его вида: проём — без kind и sillCm
+export function normalizeElement(e: WallElement): WallElement {
+  const base = { id: e.id, wallId: e.wallId, anchor: e.anchor, offsetCm: e.offsetCm, widthCm: e.widthCm, heightCm: e.heightCm }
+  return isWindow(e) ? { kind: "window", ...base, sillCm: e.sillCm } : base
+}
+
+// элементы чертежа при загрузке: корректные и со своей стеной; отсутствие поля сохраняется (add-doorway design D9)
+function loadDoorways(raw: unknown, walls: Wall[]): { doorways?: WallElement[] } {
   if (raw === undefined) return {}
   const ids = new Set(walls.map((w) => w.id))
   const list = Array.isArray(raw) ? raw : []
-  return {
-    doorways: list.filter(isDoorway).filter((d) => ids.has(d.wallId)).map((d) => ({
-      id: d.id,
-      wallId: d.wallId,
-      anchor: d.anchor,
-      offsetCm: d.offsetCm,
-      widthCm: d.widthCm,
-      heightCm: d.heightCm,
-    })),
-  }
+  return { doorways: list.filter(isWallElement).filter((d) => ids.has(d.wallId)).map(normalizeElement) }
 }
 
 export const isDrawing = (d: unknown, version: number = 3): d is Drawing =>

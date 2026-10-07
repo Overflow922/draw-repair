@@ -1,8 +1,8 @@
 import type { Room } from "../room-area"
-import type { Doorway, Point, Wall } from "../types"
-import { clipHalfPlane, dot, lerp, mul, perp, pointInPolygon, polygonArea, sub, unit } from "../wall-geometry"
+import type { Point, Wall, WallElement, WallWindow } from "../types"
+import { RIGHT_SIN, clipHalfPlane, dot, lerp, mul, perp, pointInPolygon, polygonArea, sub, unit } from "../wall-geometry"
 import type { Seg } from "../wall-geometry"
-import { faceRuns, hostOf, hostPoint, jambsT } from "./doorway-faces"
+import { elementRuns, hostOf, hostPoint, jambsT } from "./doorway-faces"
 import type { Side } from "./doorway-faces"
 
 // Геометрия отображения проёмов в мировых координатах (change add-doorway, design D2, D7, D10):
@@ -13,11 +13,11 @@ const TOL = 1e-6
 const MIN_AREA = 1e-6
 const SIDES: Side[] = [1, -1]
 
-const doorwaysOf = (host: Wall, walls: readonly Wall[], doorways: readonly Doorway[]): Doorway[] =>
+const doorwaysOf = (host: Wall, walls: readonly Wall[], doorways: readonly WallElement[]): WallElement[] =>
   doorways.filter((d) => d.wallId === host.id && hostOf(d, walls) === host)
 
 // куски формы стены без участков её проёмов: каждый кусок режется полуплоскостями t ≤ j1 и t ≥ j2
-export function cutPieces(host: Wall, pieces: Point[][], walls: readonly Wall[], doorways: readonly Doorway[]): Point[][] {
+export function cutPieces(host: Wall, pieces: Point[][], walls: readonly Wall[], doorways: readonly WallElement[]): Point[][] {
   const u = unit(host.a, host.b)
   let out = pieces
   for (const d of doorwaysOf(host, walls, doorways)) {
@@ -34,7 +34,7 @@ export function cutPieces(host: Wall, pieces: Point[][], walls: readonly Wall[],
 const tOf = (host: Wall, p: Point): number => dot(sub(p, host.a), unit(host.a, host.b))
 
 // контур стены без участков, лежащих внутри проёмов (по t)
-export function cutContour(host: Wall, segs: Seg[], walls: readonly Wall[], doorways: readonly Doorway[]): Seg[] {
+export function cutContour(host: Wall, segs: Seg[], walls: readonly Wall[], doorways: readonly WallElement[]): Seg[] {
   let out = segs
   for (const d of doorwaysOf(host, walls, doorways)) {
     const [j1, j2] = jambsT(d, host)
@@ -57,10 +57,11 @@ export function cutContour(host: Wall, segs: Seg[], walls: readonly Wall[], door
 }
 
 // участок грани, к которому относится проём
-function runFor(host: Wall, walls: readonly Wall[], side: Side, j1: number, j2: number): [number, number] | null {
+function runFor(host: Wall, walls: readonly Wall[], elements: readonly WallElement[], side: Side, d: WallElement): [number, number] | null {
+  const [j1, j2] = jambsT(d, host)
   let best: [number, number] | null = null
   let score = -Infinity
-  for (const r of faceRuns(host, walls, side)) {
+  for (const r of elementRuns(host, walls, elements, side, d)) {
     const s = Math.min(r[1], j2) - Math.max(r[0], j1)
     if (s > score) {
       best = r
@@ -77,12 +78,12 @@ export interface OpeningLines {
 }
 
 // откосы и продолжения граней только в пределах видимых граней: нарушенный проём не рисуется за гранью
-export function openingLines(d: Doorway, walls: readonly Wall[]): OpeningLines | null {
+export function openingLines(d: WallElement, walls: readonly Wall[], elements: readonly WallElement[] = []): OpeningLines | null {
   const host = hostOf(d, walls)
   if (!host) return null
   const h = host.thicknessCm / 2
   const [j1, j2] = jambsT(d, host)
-  const runs = SIDES.map((s) => runFor(host, walls, s, j1, j2))
+  const runs = SIDES.map((s) => runFor(host, walls, elements, s, d))
   const within = (t: number): boolean => runs.every((r) => r !== null && t >= r[0] - TOL && t <= r[1] + TOL)
   const jambs = [j1, j2].filter(within).map((t) => ({ p1: hostPoint(host, t, -h), p2: hostPoint(host, t, h) }))
   const faces: Seg[] = []
@@ -100,6 +101,50 @@ export function openingLines(d: Doorway, walls: readonly Wall[]): OpeningLines |
   return { jambs, faces, outline }
 }
 
+export interface WindowLines {
+  jambs: Seg[] // откосы — линии контура
+  faces: Seg[] // грани через окно — линии контура
+  squares: Seg[] // квадраты оконного блока у откосов — линии контура
+  glass: Seg[] // стёкла — тонкие линии
+  outline: Point[] | null
+}
+
+// обозначение окна в рамке оси опорной стены (change add-window, design D5): квадраты 0.6·T у откосов
+// по центру толщины, стёкла на ±T/6 от квадрата до квадрата; всё отсекается по видимым граням
+export function windowLines(w: WallWindow, walls: readonly Wall[], elements: readonly WallElement[] = []): WindowLines | null {
+  const opening = openingLines(w, walls, elements)
+  const host = hostOf(w, walls)
+  if (!opening || !host) return null
+  const t = host.thicknessCm
+  const s = 0.6 * t
+  const [j1, j2] = jambsT(w, host)
+  const runs = SIDES.map((side) => runFor(host, walls, elements, side, w))
+  // участок оси, видимый на обеих гранях
+  const lo = Math.max(j1, ...runs.map((r) => (r ? r[0] : Infinity)))
+  const hi = Math.min(j2, ...runs.map((r) => (r ? r[1] : -Infinity)))
+  const along = (t0: number, t1: number, lat: number): Seg[] => {
+    const a = Math.max(t0, lo)
+    const b = Math.min(t1, hi)
+    return b - a > TOL ? [{ p1: hostPoint(host, a, lat), p2: hostPoint(host, b, lat) }] : []
+  }
+  const across = (at: number, lat0: number, lat1: number): Seg[] =>
+    at >= lo - TOL && at <= hi + TOL ? [{ p1: hostPoint(host, at, lat0), p2: hostPoint(host, at, lat1) }] : []
+  const square = (t0: number, t1: number): Seg[] => [
+    ...along(t0, t1, -s / 2),
+    ...along(t0, t1, s / 2),
+    ...across(t0, -s / 2, s / 2),
+    ...across(t1, -s / 2, s / 2),
+  ]
+  const glass = j2 - j1 > 2 * s ? [...along(j1 + s, j2 - s, -t / 6), ...along(j1 + s, j2 - s, t / 6)] : []
+  return {
+    jambs: opening.jambs,
+    faces: opening.faces,
+    squares: [...square(j1, j1 + s), ...square(j2 - s, j2)],
+    glass,
+    outline: opening.outline,
+  }
+}
+
 export interface ChainItem {
   side: Side
   a: Point // начало на грани (по t)
@@ -110,14 +155,14 @@ export interface ChainItem {
 }
 
 // цепочки размеров по граням: расстояние в сторону a | ширина | расстояние в сторону b
-export function dimensionChains(d: Doorway, walls: readonly Wall[]): ChainItem[] {
+export function dimensionChains(d: WallElement, walls: readonly Wall[], elements: readonly WallElement[] = []): ChainItem[] {
   const host = hostOf(d, walls)
   if (!host) return []
   const h = host.thicknessCm / 2
   const [j1, j2] = jambsT(d, host)
   const out: ChainItem[] = []
   for (const side of SIDES) {
-    const r = runFor(host, walls, side, j1, j2)
+    const r = runFor(host, walls, elements, side, d)
     if (!r) continue
     const normal = mul(perp(unit(host.a, host.b)), side)
     for (const [t0, t1, part] of [
@@ -135,7 +180,7 @@ const inRoom = (p: Point, rooms: readonly Room[]): boolean =>
 
 // сторона подписи высоты: помещение только с одной стороны — там; иначе слева на экране от a → b,
 // т.е. сторона нормали (d.y, −d.x) — minus
-export function heightLabelSide(d: Doorway, walls: readonly Wall[], rooms: readonly Room[]): Side | null {
+export function heightLabelSide(d: WallElement, walls: readonly Wall[], rooms: readonly Room[]): Side | null {
   const host = hostOf(d, walls)
   if (!host) return null
   const [j1, j2] = jambsT(d, host)
@@ -146,8 +191,18 @@ export function heightLabelSide(d: Doorway, walls: readonly Wall[], rooms: reado
   return plus !== minus ? (plus ? 1 : -1) : -1
 }
 
+// направление текста подписи вдоль оси опорной стены, не вверх ногами (add-window design D6):
+// у вертикальной стены (допуск прямого угла) — вверх на экране, иначе — слева направо
+export function labelDirection(d: WallElement, walls: readonly Wall[]): Point | null {
+  const host = hostOf(d, walls)
+  if (!host) return null
+  const u = unit(host.a, host.b)
+  const flip = Math.abs(u.x) <= RIGHT_SIN ? u.y > 0 : u.x < 0
+  return flip ? mul(u, -1) : u
+}
+
 // точка подписи: середина проёма на грани стороны подписи, отодвинутая наружу на gapCm
-export function heightLabelAt(d: Doorway, walls: readonly Wall[], side: Side, gapCm: number): Point | null {
+export function heightLabelAt(d: WallElement, walls: readonly Wall[], side: Side, gapCm: number): Point | null {
   const host = hostOf(d, walls)
   if (!host) return null
   const [j1, j2] = jambsT(d, host)
@@ -164,8 +219,8 @@ export interface ChainLabel {
 }
 
 // положения чисел цепочек (те же, что у отрисовки) — для попадания кликом по числу
-export function chainLabels(d: Doorway, walls: readonly Wall[], offsetCm: number): ChainLabel[] {
-  return dimensionChains(d, walls).map((item) => ({
+export function chainLabels(d: WallElement, walls: readonly Wall[], offsetCm: number, elements: readonly WallElement[] = []): ChainLabel[] {
+  return dimensionChains(d, walls, elements).map((item) => ({
     side: item.side,
     part: item.part,
     at: {

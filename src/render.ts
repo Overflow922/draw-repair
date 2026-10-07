@@ -1,4 +1,4 @@
-import { cutContour, cutPieces, dimensionChains, heightLabelAt, heightLabelSide, openingLines } from "./doorway/doorway-layout"
+import { cutContour, cutPieces, dimensionChains, heightLabelAt, heightLabelSide, labelDirection, openingLines, windowLines } from "./doorway/doorway-layout"
 import { dimGeometry, dimPointPoint, visibleWorld } from "./geometry"
 import type { DimGeometry } from "./geometry"
 import { findRooms, formatArea } from "./room-area"
@@ -8,8 +8,8 @@ import { LIGHT_PALETTE } from "./theme"
 import type { Palette } from "./theme"
 import { contourSegments, displayPolygons, outlineSegments } from "./wall-geometry"
 import type { Seg } from "./wall-geometry"
-import { GRID_STEP_CM, PX_PER_CM, normalizeMaterial } from "./types"
-import type { Dimension, Doorway, Material, Point, Unit, View, Wall } from "./types"
+import { GRID_STEP_CM, PX_PER_CM, isWindow, normalizeMaterial } from "./types"
+import type { Dimension, Material, Point, Unit, View, Wall, WallElement } from "./types"
 import type { TrackLine } from "./wall-tracking"
 
 const OUTLINE_PX = 4
@@ -66,12 +66,12 @@ export interface RenderOptions {
   dimSnap?: Point | null
   selectedDims?: Dimension[]
   marquee?: { x1: number; y1: number; x2: number; y2: number } | null
-  marqueeHits?: { walls: Wall[]; dims: Dimension[]; doorways?: Doorway[] } | null
+  marqueeHits?: { walls: Wall[]; dims: Dimension[]; doorways?: WallElement[] } | null
   // проёмы (change add-doorway): вырез и подписи всех, размеры — у одиночного выделения и призрака
-  doorways?: Doorway[]
-  selectedDoorways?: Doorway[]
-  doorwayGhost?: Doorway | null
-  hoverDoorway?: Doorway | null // подсветка ластика
+  doorways?: WallElement[]
+  selectedDoorways?: WallElement[]
+  doorwayGhost?: WallElement | null
+  hoverDoorway?: WallElement | null // подсветка ластика
   square?: Point[] | null // вершины квадрата установки в мировых координатах
   // угол к стене примыкания у начала превью: дуга от луча отсчёта from к направлению to
   angle?: { at: Point; from: Point; to: Point; deg: number } | null
@@ -226,7 +226,61 @@ export function drawScene(
   }
 }
 
-// слой проёмов (change add-doorway, design D2, D7, D10): откосы, продолжения граней, подсветка,
+// подпись элемента стены в рамке: «H=…» у проёма; у окна — «H=…» и синее «H под.=…» (add-window design D6)
+interface ElementLabel {
+  parts: { text: string; color: "ink" | "sill" }[]
+}
+
+const LABEL_GAP = "  "
+export const LABEL_FRAME_PAD = 0.3 // поле рамки подписи, доля кегля
+
+export function elementLabel(d: WallElement, unit: Unit): ElementLabel {
+  const h = { text: `H=${formatLength(d.heightCm, unit)}`, color: "ink" as const }
+  if (!isWindow(d)) return { parts: [h] }
+  return { parts: [h, { text: `H под.=${formatLength(d.sillCm, unit)}`, color: "sill" as const }] }
+}
+
+// ширина подписи — оценка по кеглю: measureText контекста jsPDF возвращает не единицы листа
+export const labelWidth = (label: ElementLabel, labelPx: number): number =>
+  label.parts.map((x) => x.text).join(LABEL_GAP).length * labelPx * 0.6
+
+// подпись в системе текста: начало — центр подписи, ось x — направление текста вдоль стены (design D6)
+function drawElementLabel(
+  ctx: CanvasRenderingContext2D,
+  label: ElementLabel,
+  center: Point,
+  angle: number,
+  width: number,
+  pad: number,
+  m: RenderMetrics,
+  p: Palette,
+): void {
+  ctx.translate(center.x, center.y)
+  ctx.rotate(angle)
+  const [only] = label.parts
+  if (label.parts.length === 1) {
+    // подпись проёма — одна строка по центру рамки, как в add-doorway
+    ctx.textAlign = "center"
+    ctx.fillStyle = only.color === "sill" ? p.sill : p.ink
+    ctx.fillText(only.text, 0, 0)
+  } else {
+    // части подписи окна разного цвета — отдельными вызовами по направлению текста
+    let x = -width / 2
+    ctx.textAlign = "left"
+    for (const part of label.parts) {
+      ctx.fillStyle = part.color === "sill" ? p.sill : p.ink
+      ctx.fillText(part.text, x, 0)
+      x += (part.text + LABEL_GAP).length * m.labelPx * 0.6
+    }
+  }
+  ctx.strokeStyle = p.ink
+  ctx.lineWidth = m.hatchPx
+  ctx.beginPath()
+  ctx.rect(-width / 2 - pad, -m.labelPx / 2 - pad, width + 2 * pad, m.labelPx + 2 * pad)
+  ctx.stroke()
+}
+
+// слой элементов стен (change add-doorway, design D2, D7, D10; add-window D5, D6): откосы, грани, окна, подсветка,
 // подписи высоты; цепочки размеров — у одиночного выделенного проёма и у призрака установки
 function drawDoorways(
   ctx: CanvasRenderingContext2D,
@@ -254,8 +308,9 @@ function drawDoorways(
     }
     ctx.stroke()
   }
-  const outline = (d: Doorway, color: string): void => {
-    const poly = openingLines(d, walls)?.outline
+  const elements = opts.doorways ?? []
+  const outline = (d: WallElement, color: string): void => {
+    const poly = openingLines(d, walls, elements)?.outline
     if (!poly) return
     ctx.save()
     ctx.strokeStyle = color
@@ -270,31 +325,36 @@ function drawDoorways(
   for (const d of marqueeHits) if (!selected.includes(d)) outline(d, p.marqueeWall)
   for (const d of selected) outline(d, p.selection)
   if (opts.hoverDoorway) outline(opts.hoverDoorway, p.erase)
-  for (const d of opts.doorways ?? []) {
-    const lines = openingLines(d, walls)
-    if (!lines) continue
-    strokeSegs(lines.faces, p.muted, m.hatchPx)
-    strokeSegs(lines.jambs, p.ink, m.contourPx)
+  for (const d of elements) {
+    if (isWindow(d)) {
+      const lines = windowLines(d, walls, elements)
+      if (!lines) continue
+      strokeSegs([...lines.faces, ...lines.jambs, ...lines.squares], p.ink, m.contourPx)
+      strokeSegs(lines.glass, p.ink, m.hatchPx)
+    } else {
+      const lines = openingLines(d, walls, elements)
+      if (!lines) continue
+      strokeSegs(lines.faces, p.muted, m.hatchPx)
+      strokeSegs(lines.jambs, p.ink, m.contourPx)
+    }
     const side = heightLabelSide(d, walls, rooms)
     const face = side === null ? null : heightLabelAt(d, walls, side, 0)
     const out = side === null ? null : heightLabelAt(d, walls, side, 1)
-    if (!face || !out) continue
-    const text = `H=${formatLength(d.heightCm, unit)}`
+    const dir = labelDirection(d, walls)
+    if (!face || !out || !dir) continue
+    const label = elementLabel(d, unit)
     ctx.save()
     ctx.font = `${m.labelPx}px ${m.font}`
-    ctx.textAlign = "center"
     ctx.textBaseline = "middle"
-    ctx.fillStyle = p.ink
-    // за полосой цепочки размеров; горизонтальный текст отодвигается на свою полуширину или полувысоту
-    // вдоль нормали грани — у вертикальной стены не налезает на числа цепочки
-    // ширина текста — оценка по кеглю: measureText контекста jsPDF возвращает не единицы листа
-    const width = text.length * m.labelPx * 0.6
-    const half = Math.abs(out.x - face.x) * (width / 2) + Math.abs(out.y - face.y) * (m.labelPx / 2)
+    // текст параллелен стене: вдоль нормали грани подпись занимает только свою полувысоту (с полем рамки)
+    const width = labelWidth(label, m.labelPx)
+    const pad = LABEL_FRAME_PAD * m.labelPx
+    const half = m.labelPx / 2 + pad
     // на экране — за полосой цепочки размеров; в PDF цепочек нет, подпись у грани
     const band = m === PDF_METRICS ? m.labelPx * 0.5 : m.labelPx * 2.2
     const gapCm = (band + half) / k
     const s = toScreen({ x: face.x + (out.x - face.x) * gapCm, y: face.y + (out.y - face.y) * gapCm })
-    ctx.fillText(text, s.x, s.y)
+    drawElementLabel(ctx, label, s, Math.atan2(dir.y, dir.x), width, pad, m, p)
     ctx.restore()
   }
   const ghost = opts.doorwayGhost ?? null
@@ -302,7 +362,7 @@ function drawDoorways(
   const chained = ghost ?? (selected.length === 1 && !othersSelected ? selected[0] : null)
   if (!chained) return
   const offsetCm = (m.labelPx * 1.2) / k
-  for (const item of dimensionChains(chained, walls)) {
+  for (const item of dimensionChains(chained, walls, elements)) {
     if (item.lengthCm > 1e-6) {
       const geom = dimGeometry(item.a, item.b, offsetCm * Math.sign(item.normal.x * -(item.b.y - item.a.y) + item.normal.y * (item.b.x - item.a.x)))
       if (geom) drawDimensionGeom(ctx, geom, formatLength(item.lengthCm, unit), p.ink, view, m, p)
@@ -574,7 +634,7 @@ function drawWall(
   anchorC: number,
   m: RenderMetrics,
   ink: string,
-  doorways: readonly Doorway[],
+  doorways: readonly WallElement[],
 ): void {
   const mat = normalizeMaterial(wall.type)
   const polys = cutPieces(wall, displayPolygons(wall, walls), walls, doorways).map((poly) => poly.map(toScreen))

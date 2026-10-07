@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest"
 import { cloneScene, parseHistory, record, redoEntry, serializeHistory, undoEntry } from "../history"
 import type { DrawingHistory, HistoryEntry, HistoryStore, Scene } from "../history"
 import { parseStore, serializeStore } from "../storage"
-import type { Doorway, Drawing, DrawingStore, Wall } from "../types"
+import type { Doorway, Drawing, DrawingStore, Wall, WallElement } from "../types"
 
 // change add-doorway: хранение и история проёмов
 // (spec drawing-storage «Формат документа», «Автосохранение при изменениях»; drawing-history
@@ -74,7 +74,7 @@ describe("документ хранилища", () => {
 describe("история", () => {
   const history = (): DrawingHistory => ({ past: [], future: [] })
   const sceneOf = (doorways: Doorway[]): Scene => ({ walls: [W], dimensions: [], doorways })
-  const doorwaysOf = (e: HistoryEntry | null): Doorway[] => {
+  const doorwaysOf = (e: HistoryEntry | null): WallElement[] => {
     expect(e?.kind).toBe("walls")
     return e && e.kind === "walls" ? (e.doorways ?? []) : []
   }

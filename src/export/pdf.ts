@@ -1,10 +1,10 @@
 import { jsPDF } from "jspdf"
-import { heightLabelAt, heightLabelSide } from "../doorway/doorway-layout"
+import { heightLabelAt, heightLabelSide, labelDirection } from "../doorway/doorway-layout"
 import { dimGeometry, dimPointPoint } from "../geometry"
-import { drawScene, PDF_METRICS } from "../render"
+import { drawScene, elementLabel, LABEL_FRAME_PAD, labelWidth, PDF_METRICS } from "../render"
 import { findRooms } from "../room-area"
-import { PX_PER_CM } from "../types"
-import type { Dimension, Doorway, Unit, Wall } from "../types"
+import { DEFAULT_SCALE, PX_PER_CM, isWindow } from "../types"
+import type { Dimension, Unit, Wall, WallElement } from "../types"
 import { FONT_B64 } from "./font"
 
 export type PageFormat = "A4" | "A3" | "A2" | "A1" | "A0"
@@ -34,7 +34,7 @@ export interface Placement {
 }
 
 // doorways: подписи высоты выходят за стену со своей стороны (change add-doorway, design D10)
-export function wallsBBox(walls: Wall[], dimensions: Dimension[] = [], padCm = 0, doorways: Doorway[] = []): BBox {
+export function wallsBBox(walls: Wall[], dimensions: Dimension[] = [], padCm = 0, doorways: WallElement[] = [], scale: number = DEFAULT_SCALE): BBox {
   let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity
   const add = (x: number, y: number): void => {
     minX = Math.min(minX, x)
@@ -63,7 +63,25 @@ export function wallsBBox(walls: Wall[], dimensions: Dimension[] = [], padCm = 0
     // подпись на листе — до 2·pad от грани с учётом полуширины текста (отступ подписи в render);
     // итоговое поле pad сверху
     const at = side === null ? null : heightLabelAt(d, walls, side, padCm * 2 + 1)
-    if (at) add(at.x, at.y)
+    if (!at) continue
+    if (!isWindow(d) || side === null) {
+      add(at.x, at.y)
+      continue
+    }
+    // подпись окна длиннее и в рамке (add-window design D6): повёрнутый вдоль стены прямоугольник подписи
+    // в см чертежа; ширина — оценка по кеглю, как в render
+    const face = heightLabelAt(d, walls, side, 0)
+    const dir = labelDirection(d, walls)
+    if (!face || !dir) continue
+    const cmPerMm = scale / 10
+    const m = PDF_METRICS
+    const hw = (labelWidth(elementLabel(d, "mm"), m.labelPx) / 2 + LABEL_FRAME_PAD * m.labelPx) * cmPerMm
+    const hh = (m.labelPx / 2 + LABEL_FRAME_PAD * m.labelPx) * cmPerMm
+    const len = Math.hypot(at.x - face.x, at.y - face.y)
+    const n = { x: (at.x - face.x) / len, y: (at.y - face.y) / len }
+    const c = { x: at.x + n.x * hh, y: at.y + n.y * hh }
+    for (const sa of [-1, 1])
+      for (const sb of [-1, 1]) add(c.x + sa * dir.x * hw + sb * n.x * hh, c.y + sa * dir.y * hw + sb * n.y * hh)
   }
   if (!Number.isFinite(minX)) return { minX: 0, minY: 0, maxX: 0, maxY: 0 }
   return { minX: minX - padCm, minY: minY - padCm, maxX: maxX + padCm, maxY: maxY + padCm }
@@ -82,10 +100,10 @@ export function fitsFormat(b: BBox, scale: number, format: PageFormat): boolean 
   return dw <= w - 2 * PDF_MARGIN_MM && dh <= h - 2 * PDF_MARGIN_MM
 }
 
-export function availableFormats(walls: Wall[], dimensions: Dimension[] = [], scale: number = 100, doorways: Doorway[] = []): PageFormat[] {
+export function availableFormats(walls: Wall[], dimensions: Dimension[] = [], scale: number = 100, doorways: WallElement[] = []): PageFormat[] {
   const all = Object.keys(PAGE_FORMATS_MM) as PageFormat[]
   if (walls.length === 0) return all
-  const b = wallsBBox(walls, dimensions, 0.5 * scale, doorways)
+  const b = wallsBBox(walls, dimensions, 0.5 * scale, doorways, scale)
   return all.filter((f) => fitsFormat(b, scale, f))
 }
 
@@ -116,9 +134,9 @@ export function buildPdf(
   scale: number,
   format: PageFormat,
   fontB64: string,
-  doorways: Doorway[] = [],
+  doorways: WallElement[] = [],
 ): jsPDF {
-  const placement = placeOnPage(wallsBBox(walls, dimensions, 0.5 * scale, doorways), scale, format)
+  const placement = placeOnPage(wallsBBox(walls, dimensions, 0.5 * scale, doorways, scale), scale, format)
   const [pw, ph] = PAGE_FORMATS_MM[format]
   const doc = new jsPDF({ unit: "mm", format: [pw, ph], orientation: placement.landscape ? "landscape" : "portrait" })
   doc.addFileToVFS("PTSans.ttf", fontB64)
@@ -148,7 +166,7 @@ export function exportDrawing(
   scale: number,
   format: PageFormat,
   name: string,
-  doorways: Doorway[] = [],
+  doorways: WallElement[] = [],
 ): void {
   const doc = buildPdf(walls, dimensions, unit, scale, format, FONT_B64, doorways)
   const url = URL.createObjectURL(new Blob([doc.output("arraybuffer")], { type: "application/pdf" }))
