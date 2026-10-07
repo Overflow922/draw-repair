@@ -1,18 +1,21 @@
 import type { Scene } from "../history"
-import type { Point, View, Wall, WallElement } from "../types"
-import { PX_PER_CM, isDoor, isWindow } from "../types"
-import { nudgeElements, placeDoor, placeDoorway, placeWindow, rotateDoor, setDistance, setHeight, setSill, setWidth, slideDoorway } from "./doorway-edit"
+import { SCREEN_METRICS } from "../render"
+import type { Room } from "../room-area"
+import type { DoorSwing, Point, Unit, View, Wall, WallElement } from "../types"
+import { PX_PER_CM, isDoor } from "../types"
+import { ghostSwing, nudgeElements, placeDoor, placeDoorway, placeWindow, setDirection, setDistance, setHeight, setSill, setWidth, slideDoorway } from "./doorway-edit"
 import type { ElementEdit } from "./doorway-edit"
-import { chainLabels } from "./doorway-layout"
-import type { ChainLabel } from "./doorway-layout"
+import { doorZoneAt } from "./doorway-layout"
 import { hitDoorway, wallNearBody } from "./doorway-scene"
-import { acceptField, elementDefaults, nextDirection } from "./element-kind"
-import type { ElementField, ElementKind } from "./element-kind"
+import { editableNumbers, numberAt } from "./editable-numbers"
+import type { EditableNumber } from "./editable-numbers"
+import type { ElementKind, NewElementParams } from "./element-kind"
 
-// Инструменты «Проём» и «Окно» (change add-doorway design D7, D8; add-window design D4): адаптер DOM —
-// призрак установки, установка кликом, перетаскивание, стрелки, поле ввода на месте числа, панель
-// «Ширина» / «H» (/ «H под.»). Состояние чертежа и выделения остаётся в main.ts и доступно через явный
-// ElementToolHost; все операции получают полный список элементов (соседи — стыки граней).
+// Адаптеры DOM элементов стены (change add-doorway design D7, D8; add-window design D4; popups-buttons-only design
+// D3–D6): инструменты установки «Проём», «Дверь», «Окно» — призрак, установка кликом, перетаскивание, стрелки;
+// правка выделенного элемента на месте — числа цепочек и подписи, зоны направления двери. Состояние чертежа,
+// выделения и параметров новых элементов остаётся в main.ts и доступно через явный ElementToolHost; все операции
+// получают полный список элементов (соседи — стыки граней).
 
 export interface NumberEditor {
   close(): void
@@ -50,8 +53,12 @@ export function openNumberEditor(
   })
   input.addEventListener("blur", close)
   parent.append(input)
-  input.focus()
-  input.select()
+  // фокус — после нажатия мыши: по умолчанию mousedown на холсте сразу снимает фокус с поля и закрывает его по blur
+  setTimeout(() => {
+    if (closed) return
+    input.focus()
+    input.select()
+  })
   return { close }
 }
 
@@ -59,13 +66,15 @@ export interface ElementToolHost {
   walls(): Wall[]
   elements(): readonly WallElement[] // все элементы чертежа любого вида
   selectedElements(): readonly WallElement[]
-  // выделены объекты других типов: размеры элемента не показываются
+  // выделены объекты других типов: размеры и числа элемента не показываются и не правятся
   othersSelected(): boolean
   view(): View
   radiusCm(): number
   formatCm(cm: number): string // число в текущей единице
   parseCm(text: string): number // NaN — не число
   unitLabel(): string
+  unit(): Unit
+  rooms(): Room[]
   editorParent: HTMLElement
   snapshot(): Scene
   record(): void // одна запись истории перед правкой
@@ -77,15 +86,8 @@ export interface ElementToolHost {
   clearSelection(): void
   changed(): void // чертёж изменён — сохранить
   redraw(): void
-}
-
-// поле sill — только у окна, кнопка rotate — только у двери
-export interface ElementPanel {
-  root: HTMLElement
-  width: HTMLInputElement
-  height: HTMLInputElement
-  sill?: HTMLInputElement
-  rotate?: HTMLButtonElement
+  params(): NewElementParams // параметры новых элементов
+  inherit(e: WallElement): void // правка на месте изменила элемент — его значения становятся параметрами новых
 }
 
 export interface ElementTool {
@@ -93,71 +95,48 @@ export interface ElementTool {
   dragging(): boolean
   hover(raw: Point): void
   place(raw: Point): void
-  pressNumber(p: Point): boolean
   pressDoorway(p: Point): boolean
   dragTo(p: Point): void
   endDrag(): void
   nudge(arrow: Point, stepCm: number): boolean
-  setPanel(open: boolean): void
-  togglePanel(): void
-  syncPanel(): void
-  closeEditor(): void
   reset(): void
 }
 
-// вынос чисел цепочки — как в отрисовке (render.ts: 1.2 · labelPx экрана)
-const CHAIN_OFFSET_PX = 14 * 1.2
-const NUMBER_HIT_PX = 20
+const DEAD_ZONE_PX = 4 // мёртвая зона у оси стены для стороны открывания призрака двери
+const HIT_TOLERANCE_PX = 4 // допуск попадания в правимое число
 
-const kindOf = (e: WallElement): ElementKind => (isWindow(e) ? "window" : isDoor(e) ? "door" : "doorway")
+// сторона открывания призрака двери до первого показа призрака — left (spec door)
+const FIRST_SWING: DoorSwing = "left"
 
-export function createElementTool(kind: ElementKind, host: ElementToolHost, panel: ElementPanel): ElementTool {
+export function createElementTool(kind: ElementKind, host: ElementToolHost): ElementTool {
   let ghost: WallElement | null = null
   let drag: { start: WallElement; live: WallElement; grab: Point; snapshot: Scene } | null = null
-  let editor: NumberEditor | null = null
-  const params = { ...elementDefaults(kind) }
+  let lastSwing: DoorSwing = FIRST_SWING
 
   const k = (): number => PX_PER_CM * host.view().zoom
-  const single = (): WallElement | null => {
-    const sel = host.selectedElements()
-    return sel.length === 1 && !host.othersSelected() ? sel[0] : null
-  }
-  // выделенный элемент своего вида — его меняют поля панели
-  const own = (): WallElement | null => {
-    const sel = host.selectedElements()
-    return sel.length === 1 && kindOf(sel[0]) === kind ? sel[0] : null
-  }
-
-  // применённая правка — одна запись истории
-  const apply = (prev: WallElement, edit: ElementEdit): void => {
-    if (edit.kind !== "applied") return
-    host.record()
-    host.replace(prev, edit.doorway)
-    host.changed()
-  }
-
-  const closeEditor = (): void => {
-    editor?.close()
-    editor = null
-  }
 
   const makeGhost = (wall: Wall, raw: Point): WallElement | null => {
     const walls = host.walls()
     const elements = host.elements()
+    const params = host.params()
     const id = crypto.randomUUID()
-    if (kind === "window")
-      return placeWindow(wall, walls, raw, params.widthCm, params.heightCm, params.sillCm ?? 0, id, elements)
-    if (kind === "door")
-      return placeDoor(wall, walls, raw, params.widthCm, params.heightCm, params.hinge ?? "a", params.swing ?? "left", id, elements)
-    return placeDoorway(wall, walls, raw, params.widthCm, params.heightCm, id, elements)
+    if (kind === "window") {
+      const w = params.window
+      return placeWindow(wall, walls, raw, w.widthCm, w.heightCm, w.sillCm, id, elements)
+    }
+    if (kind === "door") {
+      const dr = params.door
+      const swing = ghostSwing(raw, wall, lastSwing, DEAD_ZONE_PX / k())
+      const door = placeDoor(wall, walls, raw, dr.widthCm, dr.heightCm, dr.hinge, swing, id, elements)
+      if (door) lastSwing = swing
+      return door
+    }
+    const dw = params.doorway
+    return placeDoorway(wall, walls, raw, dw.widthCm, dw.heightCm, id, elements)
   }
-
-  // последняя позиция курсора над холстом — чтобы перестроить призрак после смены параметров
-  let lastRaw: Point | null = null
 
   // призрак над стеной (spec doorway «Установка проёма»); над существующим элементом — нет
   const hover = (raw: Point): void => {
-    lastRaw = raw
     const walls = host.walls()
     if (hitDoorway(raw, walls, host.elements(), host.radiusCm())) {
       ghost = null
@@ -165,99 +144,6 @@ export function createElementTool(kind: ElementKind, host: ElementToolHost, pane
     }
     const wall = wallNearBody(raw, walls, host.radiusCm())
     ghost = wall ? makeGhost(wall, raw) : null
-  }
-
-  const labelAt = (p: Point): ChainLabel | null => {
-    const d = single()
-    if (!d) return null
-    let best: ChainLabel | null = null
-    let bestD = NUMBER_HIT_PX / k()
-    for (const l of chainLabels(d, host.walls(), CHAIN_OFFSET_PX / k(), host.elements())) {
-      const dist = Math.hypot(l.at.x - p.x, l.at.y - p.y)
-      if (dist <= bestD) {
-        best = l
-        bestD = dist
-      }
-    }
-    return best
-  }
-
-  // поле ввода на месте числа: расстояние или ширина с ограничением по инварианту
-  const openEditor = (d: WallElement, label: ChainLabel): void => {
-    closeEditor()
-    const view = host.view()
-    const at = { x: (label.at.x - view.pan.x) * k(), y: (label.at.y - view.pan.y) * k() }
-    editor = openNumberEditor(
-      host.editorParent,
-      at,
-      host.formatCm(label.lengthCm),
-      (text) => {
-        const cm = host.parseCm(text)
-        const walls = host.walls()
-        const elements = host.elements()
-        apply(d, label.part === "width" ? setWidth(d, walls, cm, elements) : setDistance(d, walls, label.side, label.part, cm, elements))
-        host.redraw()
-      },
-      () => {
-        editor = null
-      },
-    )
-  }
-
-  const editField = (d: WallElement, field: ElementField, cm: number): ElementEdit => {
-    if (field === "width") return setWidth(d, host.walls(), cm, host.elements())
-    if (field === "height") return setHeight(d, cm)
-    return isWindow(d) ? setSill(d, cm) : { kind: "rejected", reason: "invalid" }
-  }
-
-  const setParam = (field: ElementField, cm: number): void => {
-    if (!acceptField(kind, field, cm)) return
-    if (field === "width") params.widthCm = cm
-    else if (field === "height") params.heightCm = cm
-    else params.sillCm = cm
-  }
-
-  // поля панели: правка выделенного элемента своего вида или параметры новых
-  const commitField = (field: ElementField, input: HTMLInputElement): void => {
-    const cm = host.parseCm(input.value)
-    const d = own()
-    if (d) apply(d, editField(d, field, cm))
-    else setParam(field, cm)
-    input.blur()
-    host.redraw()
-  }
-
-  const fields: [HTMLInputElement | undefined, ElementField][] = [
-    [panel.width, "width"],
-    [panel.height, "height"],
-    [panel.sill, "sill"],
-  ]
-  for (const [input, field] of fields) {
-    if (!input) continue
-    input.addEventListener("change", () => commitField(field, input))
-    input.addEventListener("keydown", (e) => {
-      if (e.key === "Enter") input.blur()
-    })
-  }
-
-  // «Повернуть»: одна выделенная дверь — поворот её одной записью истории, иначе — направление новых дверей
-  // (spec door «Поворот двери»)
-  panel.rotate?.addEventListener("click", () => {
-    const sel = host.selectedElements()
-    const d = sel.length === 1 ? sel[0] : null
-    if (d && isDoor(d)) apply(d, rotateDoor(d))
-    else {
-      const next = nextDirection({ hinge: params.hinge ?? "a", swing: params.swing ?? "left" })
-      params.hinge = next.hinge
-      params.swing = next.swing
-      // призрак сразу показывает новое направление (spec door «Поворот без выделения задаёт новые двери»)
-      if (ghost && lastRaw) hover(lastRaw)
-    }
-    host.redraw()
-  })
-
-  const show = (input: HTMLInputElement | undefined, cm: number | undefined): void => {
-    if (input && cm !== undefined && document.activeElement !== input) input.value = host.formatCm(cm)
   }
 
   return {
@@ -277,13 +163,6 @@ export function createElementTool(kind: ElementKind, host: ElementToolHost, pane
       ghost = null
       host.changed()
       host.select(placed)
-    },
-    pressNumber(p) {
-      const d = single()
-      const label = d ? labelAt(p) : null
-      if (!d || !label) return false
-      openEditor(d, label)
-      return true
     },
     // нажатие на элемент любого вида: выделение и начало перетаскивания вдоль опорной стены
     pressDoorway(p) {
@@ -328,24 +207,91 @@ export function createElementTool(kind: ElementKind, host: ElementToolHost, pane
       host.changed()
       return true
     },
-    setPanel(open) {
-      panel.root.classList.toggle("open", open)
-    },
-    togglePanel() {
-      panel.root.classList.toggle("open")
-    },
-    syncPanel() {
-      for (const el of panel.root.querySelectorAll(".doorway-unit")) el.textContent = host.unitLabel()
-      const d = own()
-      show(panel.width, d ? d.widthCm : params.widthCm)
-      show(panel.height, d ? d.heightCm : params.heightCm)
-      show(panel.sill, d && isWindow(d) ? d.sillCm : params.sillCm)
-    },
-    closeEditor,
     reset() {
-      closeEditor()
       ghost = null
       drag = null
     },
+  }
+}
+
+export interface SelectionEditing {
+  pressNumber(p: Point): boolean // клик по правимому числу выделенного элемента — открывает поле ввода
+  pressZone(p: Point): boolean // клик в зону направления выделенной двери — поглощает нажатие
+  closeEditor(): void
+}
+
+// правка выделенного элемента на месте (design D3, D6): не зависит от активного инструмента
+export function createSelectionEditing(host: ElementToolHost): SelectionEditing {
+  let editor: NumberEditor | null = null
+
+  const k = (): number => PX_PER_CM * host.view().zoom
+  const single = (): WallElement | null => {
+    const sel = host.selectedElements()
+    return sel.length === 1 && !host.othersSelected() ? sel[0] : null
+  }
+
+  const closeEditor = (): void => {
+    editor?.close()
+    editor = null
+  }
+
+  // применённая правка — одна запись истории до правки; фактический элемент становится параметрами новых
+  const apply = (prev: WallElement, edit: ElementEdit): void => {
+    if (edit.kind !== "applied") return
+    host.record()
+    host.replace(prev, edit.doorway)
+    host.changed()
+    host.inherit(edit.doorway)
+  }
+
+  // значение числа с ограничением по инварианту; вид и данные вида сохраняются
+  const edit = (d: WallElement, n: EditableNumber, cm: number): ElementEdit => {
+    const walls = host.walls()
+    const elements = host.elements()
+    const t = n.target
+    if (t.kind === "distance") return setDistance(d, walls, t.side, t.part, cm, elements)
+    if (t.kind === "width") return setWidth(d, walls, cm, elements)
+    if (t.kind === "height") return setHeight(d, cm)
+    return d.kind === "window" ? setSill(d, cm) : { kind: "rejected", reason: "invalid" }
+  }
+
+  const openEditor = (d: WallElement, n: EditableNumber): void => {
+    closeEditor()
+    const view = host.view()
+    const at = { x: (n.center.x - view.pan.x) * k(), y: (n.center.y - view.pan.y) * k() }
+    editor = openNumberEditor(
+      host.editorParent,
+      at,
+      host.formatCm(n.valueCm),
+      (text) => {
+        apply(d, edit(d, n, host.parseCm(text)))
+        host.redraw()
+      },
+      () => {
+        editor = null
+      },
+    )
+  }
+
+  return {
+    pressNumber(p) {
+      const d = single()
+      if (!d) return false
+      const numbers = editableNumbers(d, host.walls(), host.elements(), host.rooms(), host.unit(), k(), SCREEN_METRICS.labelPx)
+      const n = numberAt(p, numbers, HIT_TOLERANCE_PX / k())
+      if (!n) return false
+      openEditor(d, n)
+      return true
+    },
+    pressZone(p) {
+      const d = single()
+      if (!d || !isDoor(d)) return false
+      const zone = doorZoneAt(p, d, host.walls())
+      if (!zone) return false
+      apply(d, setDirection(d, zone.hinge, zone.swing))
+      host.redraw()
+      return true
+    },
+    closeEditor,
   }
 }

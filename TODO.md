@@ -171,3 +171,54 @@ Follow-ups from `add-door` implementation (2026-10-07).
 
 - The «H=…» label of a door uses the doorway placement rule and may sit inside the swing area when the door opens to
   the label's side (seen in the browser check: free wall, opening `left`). The user accepted the doorway rule.
+
+---
+
+Follow-ups from planning `popups-buttons-only` (2026-10-07).
+
+## Out of scope (decided, revisit if needed)
+
+- [ ] Wall panel still has a thickness field: the only exception to "popups contain only buttons" (`canvas-app`
+  «Вспомогательная панель инструмента»). The user deferred it; moving thickness onto the canvas needs a new
+  thickness number on the selected wall (explored option: a thickness dimension across the wall at ~¼ of its
+  length, clear of the middle marker). Walls also keep the old "last selected" default rule, not "last edited".
+- [ ] The selected wall's length is still edited in the bottom bar «Длина» field (not a popup, so not covered).
+
+## Docs (implementation, 2026-10-07)
+
+- [ ] Code kept only for approved tests, unused by production after `popups-buttons-only`: `elementDefaults` and
+  `acceptField` (`src/doorway/element-kind.ts`; tests DK-01, DK-02, WT-01, WT-02) and `ElementToolHost.unitLabel`
+  (`src/doorway/doorway-tool.ts`; still provided by the approved fake host in `selection-editing.test-utils.ts`).
+  Remove them through a test-change-request.
+- [ ] `index.html`: «Окно» and «Размер» keep an empty `tool-anchor` wrapper. PB-GR-01 slices the group panel up to the
+  next `tool-anchor`/separator, so a bare «Окно» button right after it would count as a panel button.
+- [ ] Number editor stays at its screen position if the view changes while typing (existing, see add-doorway
+  follow-up); now also reachable from the door/window labels.
+
+## Docs
+
+- [ ] `.claude/rules/ui.md` still describes the old pattern "panel values apply to new objects; selecting an object
+  opens its tool panel showing its values". After `popups-buttons-only` it should say: popups hold only buttons,
+  numbers are edited in place (dashed underline, click to edit), new objects inherit from the last edited one.
+  The file belongs to the user.
+- [ ] Purpose lines of the synced main specs are stale (a delta spec cannot change Purpose, the sync leaves it alone):
+  `openspec/specs/dimension-selection/spec.md` still mentions editing the offset "через панель свойств";
+  `openspec/specs/door/spec.md` still mentions «кнопкой поворота».
+
+## Tests
+
+- [ ] Number editor focus (found by the user 2026-10-07, fixed in `openNumberEditor`): focusing the input inside
+  `pointerdown` was undone by the browser's own `mousedown` focus handling, so the editor closed on `blur` at once.
+  Unit tests and synthetic `dispatchEvent` clicks cannot see this (no default actions); it needs a real-input
+  (trusted click) test once a DOM/e2e harness exists. Reproduced and verified manually with a trusted click.
+- [ ] `pointerdown` routing (number → door zone → `pressPick`) and the "no panel on selection" wiring in
+  `src/main.ts` are covered only by source-order checks (PB-INT-01/02, PB-GR-02); verify in the browser until a
+  DOM harness exists.
+- [ ] Validation revision 2 (PASS), non-blocking: no executable test shows that undo does not restore the
+  new-element parameters or that they are shared across tabs (only static guards PB-INT-01/03). A snapshot restore
+  added to undo in `main.ts` would survive. Cheap fix: a static check that the parameter variable is assigned only
+  at its declaration and in `inherit`.
+- [ ] PB-RN-04 checks "no underline in PDF" only near the label; a chain-number underline in PDF would survive
+  (chains are not drawn in a real export). Underline independence from zoom is also unchecked.
+- [ ] PB-INT-02/03 are text checks of `main.ts` tied to its current shape (`let v = initialParams()`,
+  `ElementToolHost = {`); a refactor fails loudly, not falsely. Replace with a DOM harness test when it exists.

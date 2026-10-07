@@ -1,5 +1,6 @@
 // Группа «Проёмы» на панели инструментов (change add-door, design D6): переходы состояния кнопки группы
-// и её панели без DOM. main.ts применяет переходы и отражает результат в разметке.
+// и её панели без DOM. main.ts применяет переходы и отражает результат в разметке. Выделение элемента группу
+// не трогает (change popups-buttons-only, spec canvas-app «Панель группы «Проёмы»»).
 
 export type GroupTool = "doorway" | "door"
 
@@ -19,11 +20,6 @@ export function groupButtonClick(s: GroupState): GroupState {
 // кнопка инструмента в панели группы: инструмент становится текущим и активным, панель остаётся открытой
 export function groupPick(s: GroupState, t: GroupTool): GroupState {
   return { ...s, current: t, active: t, panelOpen: true }
-}
-
-// выделение проёма или двери: панель показывает его вид, активный инструмент не меняется
-export function groupSelect(s: GroupState, kind: GroupTool): GroupState {
-  return { ...s, current: kind, panelOpen: true }
 }
 
 export const groupButtonActive = (s: GroupState): boolean => s.active !== "other"

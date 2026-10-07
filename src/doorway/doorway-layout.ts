@@ -1,5 +1,5 @@
 import type { Room } from "../room-area"
-import type { Point, Wall, WallDoor, WallElement, WallWindow } from "../types"
+import type { DoorHinge, DoorSwing, Point, Wall, WallDoor, WallElement, WallWindow } from "../types"
 import { RIGHT_SIN, add, clipHalfPlane, dot, lerp, mul, perp, pointInPolygon, polygonArea, sub, unit } from "../wall-geometry"
 import type { Seg } from "../wall-geometry"
 import { elementRuns, hostOf, hostPoint, jambsT } from "./doorway-faces"
@@ -184,6 +184,65 @@ export function doorLeaf(d: WallDoor, walls: readonly Wall[]): DoorLeaf | null {
     arcTo,
     side,
   }
+}
+
+export interface DoorDirection {
+  hinge: DoorHinge
+  swing: DoorSwing
+}
+
+export interface DoorZone extends DoorDirection {
+  poly: Point[] // 4 угла зоны
+}
+
+const HINGES: DoorHinge[] = ["a", "b"]
+const SWINGS: DoorSwing[] = ["left", "right"]
+
+interface ZoneBox {
+  t: [number, number] // вдоль оси от конца a: от откоса петель до середины двери
+  lat: [number, number] // поперёк оси со знаком стороны: от грани на ширину двери наружу
+}
+
+// зона направления (hinge, swing) выделенной двери (spec door «Направление выделенной двери»): вдоль оси — от
+// откоса петель до середины двери, поперёк — от грани стороны открывания на ширину двери; left — сторона −1
+function zoneBox(d: WallDoor, host: Wall, hinge: DoorHinge, swing: DoorSwing): ZoneBox {
+  const [j1, j2] = jambsT(d, host)
+  const mid = (j1 + j2) / 2
+  const hingeT = hinge === "a" ? j1 : j2
+  const side: Side = swing === "left" ? -1 : 1
+  const h = host.thicknessCm / 2
+  const near = side * h
+  const far = side * (h + d.widthCm)
+  return { t: [Math.min(hingeT, mid), Math.max(hingeT, mid)], lat: [Math.min(near, far), Math.max(near, far)] }
+}
+
+// четыре зоны направления двери: по одной на каждое направление
+export function doorZones(d: WallDoor, walls: readonly Wall[]): DoorZone[] {
+  const host = hostOf(d, walls)
+  if (!host) return []
+  return HINGES.flatMap((hinge) =>
+    SWINGS.map((swing) => {
+      const { t, lat } = zoneBox(d, host, hinge, swing)
+      return { hinge, swing, poly: [hostPoint(host, t[0], lat[0]), hostPoint(host, t[1], lat[0]), hostPoint(host, t[1], lat[1]), hostPoint(host, t[0], lat[1])] }
+    }),
+  )
+}
+
+// направление зоны, в которую попала точка (края включительно); середина двери принадлежит обеим половинам —
+// выбирается зона с петлями у a
+export function doorZoneAt(p: Point, d: WallDoor, walls: readonly Wall[]): DoorDirection | null {
+  const host = hostOf(d, walls)
+  if (!host) return null
+  const axis = unit(host.a, host.b)
+  const rel = sub(p, host.a)
+  const t = dot(rel, axis)
+  const lat = dot(rel, perp(axis))
+  for (const hinge of HINGES)
+    for (const swing of SWINGS) {
+      const box = zoneBox(d, host, hinge, swing)
+      if (t >= box.t[0] - TOL && t <= box.t[1] + TOL && lat >= box.lat[0] - TOL && lat <= box.lat[1] + TOL) return { hinge, swing }
+    }
+  return null
 }
 
 export interface ChainItem {

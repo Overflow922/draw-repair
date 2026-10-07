@@ -13,8 +13,6 @@
   --active-text: #1d4ed8;
   --active-hover: #bfdbfe;
   --focus-ring: #93c5fd;
-  --readonly-text: #777;
-  --readonly-bg: #f9fafb;
   --swatch-frame: #999;
   --swatch-border: #bbb;
   --popup-text: #7f1d1d;
@@ -38,8 +36,6 @@
   --active-text: #93c5fd;
   --active-hover: #24476f;
   --focus-ring: #3b82f6;
-  --readonly-text: #a1a1aa;
-  --readonly-bg: #232428;
   --swatch-frame: #5c5f66;
   --swatch-border: #5c5f66;
   --popup-text: #fecaca;
@@ -328,61 +324,17 @@ body {
   width: 44px;
 }
 
-#dim-offset-label,
-#dim-value-label {
-  font-size: 10px;
-  color: var(--text-muted);
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 2px;
-  white-space: nowrap;
-}
-
-#dim-offset,
-#dim-value {
-  width: 56px;
-  font-size: 12px;
-  padding: 2px 4px;
-  border: 1px solid var(--border);
-  border-radius: 3px;
-}
-
-/* инструменты «Проём» и «Окно» (change add-doorway, add-window) */
-.doorway-field {
-  font-size: 10px;
-  color: var(--text-muted);
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 2px;
-  white-space: nowrap;
-}
-
-#doorway-width,
-#doorway-height,
-#window-width,
-#window-height,
-#window-sill,
+/* поле ввода на месте правимого числа: числа размеров и подписей элементов стены */
 .doorway-number-input {
   width: 56px;
   font-size: 12px;
   padding: 2px 4px;
   border: 1px solid var(--border);
   border-radius: 3px;
-}
-
-/* поле ввода на месте числа размера проёма */
-.doorway-number-input {
   position: absolute;
   transform: translate(-50%, -100%);
   text-align: center;
   z-index: 5;
-}
-
-#dim-value[readonly] {
-  color: var(--readonly-text);
-  background: var(--readonly-bg);
 }
 
 #wall-types {
@@ -391,22 +343,12 @@ body {
   gap: 4px;
 }
 
-/* группа «Проёмы» (change add-door): кнопки инструментов и «Повернуть» — в стиле образцов материала */
-.group-tools,
-.group-fields {
+/* группа «Проёмы» (change add-door): кнопки инструментов — в стиле образцов материала */
+.group-tools {
   display: flex;
   flex-direction: column;
-  align-items: center;
-  gap: 8px;
-}
-
-.group-tools {
   gap: 4px;
   align-items: stretch;
-}
-
-.group-fields[hidden] {
-  display: none;
 }
 
 .wall-type,

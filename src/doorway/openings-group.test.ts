@@ -1,11 +1,11 @@
 import { readFileSync } from "node:fs"
 import { describe, expect, it } from "vitest"
-import { groupButtonActive, groupButtonClick, groupPick, groupSelect } from "./openings-group"
+import { groupButtonActive, groupButtonClick, groupPick } from "./openings-group"
 import type { GroupState } from "./openings-group"
 
 // change add-door: группа «Проёмы» — переходы состояния кнопки группы и её панели
-// (spec canvas-app «Группа «Проёмы»», «Группы инструментов»; doorway «Инструмент «Проём»», «Выделение проёма»;
-// door «Инструмент «Дверь»», «Панель выделенной двери»; window «Инструмент «Окно»»; design D6).
+// (spec canvas-app «Панель группы «Проёмы»», «Группы инструментов»; design D6). Реакция группы на выделение и кнопка
+// поворота сняты в change popups-buttons-only (popups-ui.test.ts).
 
 const initial: GroupState = { current: "doorway", active: "other", panelOpen: false }
 
@@ -47,25 +47,6 @@ describe("кнопки инструментов в панели", () => {
   })
 })
 
-describe("выделение элемента", () => {
-  it("GR-05: выделение двери делает «Дверь» текущей и открывает панель, активный инструмент не меняется", () => {
-    expect(groupSelect(initial, "door")).toEqual({ current: "door", active: "other", panelOpen: true })
-    expect(groupSelect({ current: "doorway", active: "doorway", panelOpen: false }, "door")).toEqual({
-      current: "door",
-      active: "doorway",
-      panelOpen: true,
-    })
-  })
-
-  it("GR-06: выделение проёма при текущей «Дверь» возвращает «Проём»", () => {
-    expect(groupSelect({ current: "door", active: "other", panelOpen: false }, "doorway")).toEqual({
-      current: "doorway",
-      active: "other",
-      panelOpen: true,
-    })
-  })
-})
-
 describe("состояние кнопки группы", () => {
   it("GR-07: кнопка группы активна при любом инструменте группы", () => {
     expect(groupButtonActive({ current: "doorway", active: "doorway", panelOpen: false })).toBe(true)
@@ -78,7 +59,6 @@ describe("состояние кнопки группы", () => {
     const copy = { ...s }
     groupButtonClick(s)
     groupPick(s, "door")
-    groupSelect(s, "door")
     groupButtonActive(s)
     expect(s).toEqual(copy)
   })
@@ -127,9 +107,5 @@ describe("разметка панели инструментов", () => {
     expect(door).toBeGreaterThan(doorway)
     // обе — до кнопки «Окно», то есть внутри якоря группы
     expect(door).toBeLessThan(at('id="tool-window"'))
-    // кнопка поворота двери — в панели группы
-    const rotate = at('id="door-rotate"')
-    expect(rotate).toBeGreaterThan(panel)
-    expect(rotate).toBeLessThan(at('id="tool-window"'))
   })
 })

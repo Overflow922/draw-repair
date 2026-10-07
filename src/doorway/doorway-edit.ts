@@ -2,7 +2,6 @@ import type { DoorHinge, DoorSwing, Doorway, Point, Wall, WallDoor, WallElement,
 import { RIGHT_SIN, dist, dot, sub, unit } from "../wall-geometry"
 import { elementRuns, hostOf, hostPoint, jambsT } from "./doorway-faces"
 import type { Side } from "./doorway-faces"
-import { nextDirection } from "./element-kind"
 
 // Установка и правка элемента стены (change add-doorway design D4; add-window design D3): запрос →
 // ближайшее допустимое значение по свободным участкам обеих граней, откосы соседних элементов —
@@ -137,9 +136,19 @@ export function placeDoor(
   return place(host, walls, cursor, proto, elements)
 }
 
-// следующее направление по кругу поворота; положение и размеры не меняются (spec door «Поворот двери»)
-export function rotateDoor(d: WallDoor): ElementEdit<WallDoor> {
-  return { kind: "applied", doorway: { ...d, ...nextDirection(d) } }
+// сторона открывания призрака по курсору: left — сторона нормали (d.y, −d.x) оси a → b; в мёртвой зоне у оси
+// (|s| ≤ deadCm) сохраняется прежняя сторона (spec door «Инструмент «Дверь» и параметры новых дверей»)
+export function ghostSwing(raw: Point, wall: Wall, prev: DoorSwing, deadCm: number): DoorSwing {
+  const d = unit(wall.a, wall.b)
+  const s = dot(sub(raw, wall.a), { x: d.y, y: -d.x })
+  if (Math.abs(s) <= deadCm) return prev
+  return s > 0 ? "left" : "right"
+}
+
+// направление открывания двери; положение и размеры не меняются (spec door «Направление выделенной двери»)
+export function setDirection(d: WallDoor, hinge: DoorHinge, swing: DoorSwing): ElementEdit<WallDoor> {
+  if (d.hinge === hinge && d.swing === swing) return NO_CHANGE
+  return { kind: "applied", doorway: { ...d, hinge, swing } }
 }
 
 interface Frame {

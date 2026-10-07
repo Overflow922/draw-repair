@@ -1,4 +1,8 @@
-import { cutContour, cutPieces, dimensionChains, doorLeaf, heightLabelAt, heightLabelSide, labelDirection, openingLines, windowLines } from "./doorway/doorway-layout"
+import { cutContour, cutPieces, dimensionChains, doorLeaf, doorZones, openingLines, windowLines } from "./doorway/doorway-layout"
+import { CHAIN_BAND_EM, CHAIN_OFFSET_EM, DIM_TEXT_GAP_PX, editableNumbers } from "./doorway/editable-numbers"
+import { CHAR_WIDTH, LABEL_GAP, elementLabelLayout } from "./doorway/element-label"
+import type { ElementLabel } from "./doorway/element-label"
+import { formatLength } from "./format-length"
 import { dimGeometry, dimPointPoint, visibleWorld } from "./geometry"
 import type { DimGeometry } from "./geometry"
 import { findRooms, formatArea } from "./room-area"
@@ -14,6 +18,10 @@ import type { TrackLine } from "./wall-tracking"
 
 const OUTLINE_PX = 4
 const HANDLE_PX = 5
+// правимые числа выделенного элемента (change popups-buttons-only, design D2) и альтернативные направления двери
+const UNDERLINE_DASH = [3, 2]
+const UNDERLINE_GAP_PX = 2 // зазор между нижним краем текста и штрихом
+const ALTERNATIVE_DASH = [4, 3]
 const MM = 96 / 25.4
 
 export interface RenderMetrics {
@@ -38,7 +46,7 @@ export const SCREEN_METRICS: RenderMetrics = {
   labelPx: 14,
   dimOvershootPx: 4,
   dimArrowPx: 9,
-  dimTextGapPx: 1.5,
+  dimTextGapPx: DIM_TEXT_GAP_PX,
   font: "sans-serif",
 }
 
@@ -226,24 +234,6 @@ export function drawScene(
   }
 }
 
-// подпись элемента стены в рамке: «H=…» у проёма; у окна — «H=…» и синее «H под.=…» (add-window design D6)
-interface ElementLabel {
-  parts: { text: string; color: "ink" | "sill" }[]
-}
-
-const LABEL_GAP = "  "
-export const LABEL_FRAME_PAD = 0.3 // поле рамки подписи, доля кегля
-
-export function elementLabel(d: WallElement, unit: Unit): ElementLabel {
-  const h = { text: `H=${formatLength(d.heightCm, unit)}`, color: "ink" as const }
-  if (!isWindow(d)) return { parts: [h] }
-  return { parts: [h, { text: `H под.=${formatLength(d.sillCm, unit)}`, color: "sill" as const }] }
-}
-
-// ширина подписи — оценка по кеглю: measureText контекста jsPDF возвращает не единицы листа
-export const labelWidth = (label: ElementLabel, labelPx: number): number =>
-  label.parts.map((x) => x.text).join(LABEL_GAP).length * labelPx * 0.6
-
 // подпись в системе текста: начало — центр подписи, ось x — направление текста вдоль стены (design D6)
 function drawElementLabel(
   ctx: CanvasRenderingContext2D,
@@ -270,7 +260,7 @@ function drawElementLabel(
     for (const part of label.parts) {
       ctx.fillStyle = part.color === "sill" ? p.sill : p.ink
       ctx.fillText(part.text, x, 0)
-      x += (part.text + LABEL_GAP).length * m.labelPx * 0.6
+      x += (part.text + LABEL_GAP).length * m.labelPx * CHAR_WIDTH
     }
   }
   ctx.strokeStyle = p.ink
@@ -326,10 +316,11 @@ function drawDoorways(
   for (const d of selected) outline(d, p.selection)
   if (opts.hoverDoorway) outline(opts.hoverDoorway, p.erase)
   // полотно двери линиями контура и тонкая дуга открывания с центром в петле (change add-door, design D3)
-  const drawLeaf = (d: WallDoor, color: string): void => {
+  const drawLeaf = (d: WallDoor, color: string, dash: number[] = []): void => {
     const l = doorLeaf(d, walls)
     if (!l) return
     ctx.save()
+    if (dash.length) ctx.setLineDash(dash)
     ctx.strokeStyle = color
     ctx.lineWidth = m.contourPx
     tracePolygon(ctx, [...l.leaf, l.leaf[0]].map(toScreen))
@@ -345,6 +336,12 @@ function drawDoorways(
     ctx.stroke()
     ctx.restore()
   }
+  const ghost = opts.doorwayGhost ?? null
+  // правится только одиночно выделенный элемент на экране; при призраке установки числа его цепочки — призрака
+  const editable = selected.length === 1 && !othersSelected && !ghost && m !== PDF_METRICS ? selected[0] : null
+  const labelNumbers = editable
+    ? editableNumbers(editable, walls, elements, rooms, unit, k, m.labelPx).filter((n) => n.target.kind === "height" || n.target.kind === "sill")
+    : []
   for (const d of elements) {
     if (isWindow(d)) {
       const lines = windowLines(d, walls, elements)
@@ -358,43 +355,60 @@ function drawDoorways(
       strokeSegs(lines.jambs, p.ink, m.contourPx)
       if (isDoor(d)) drawLeaf(d, p.ink)
     }
-    const side = heightLabelSide(d, walls, rooms)
-    const face = side === null ? null : heightLabelAt(d, walls, side, 0)
-    const out = side === null ? null : heightLabelAt(d, walls, side, 1)
-    const dir = labelDirection(d, walls)
-    if (!face || !out || !dir) continue
-    const label = elementLabel(d, unit)
+    // на экране — за полосой цепочки размеров; в PDF цепочек нет, подпись у грани
+    const band = m === PDF_METRICS ? m.labelPx * 0.5 : m.labelPx * CHAIN_BAND_EM
+    const layout = elementLabelLayout(d, walls, rooms, unit, k, m.labelPx, band)
+    if (!layout) continue
     ctx.save()
     ctx.font = `${m.labelPx}px ${m.font}`
     ctx.textBaseline = "middle"
     // текст параллелен стене: вдоль нормали грани подпись занимает только свою полувысоту (с полем рамки)
-    const width = labelWidth(label, m.labelPx)
-    const pad = LABEL_FRAME_PAD * m.labelPx
-    const half = m.labelPx / 2 + pad
-    // на экране — за полосой цепочки размеров; в PDF цепочек нет, подпись у грани
-    const band = m === PDF_METRICS ? m.labelPx * 0.5 : m.labelPx * 2.2
-    const gapCm = (band + half) / k
-    const s = toScreen({ x: face.x + (out.x - face.x) * gapCm, y: face.y + (out.y - face.y) * gapCm })
-    drawElementLabel(ctx, label, s, Math.atan2(dir.y, dir.x), width, pad, m, p)
+    drawElementLabel(ctx, layout.label, toScreen(layout.center), Math.atan2(layout.dir.y, layout.dir.x), layout.widthPx, layout.padPx, m, p)
     ctx.restore()
+    if (d === editable)
+      for (const n of labelNumbers) {
+        const down = { x: -n.dir.y, y: n.dir.x }
+        const at = toScreen(n.center)
+        const off = m.labelPx / 2 + UNDERLINE_GAP_PX
+        drawUnderline(ctx, { x: at.x + down.x * off, y: at.y + down.y * off }, n.dir, n.widthCm * k, n.target.kind === "sill" ? p.sill : p.ink, m)
+      }
   }
-  const ghost = opts.doorwayGhost ?? null
   if (ghost) outline(ghost, p.muted)
   if (ghost && isDoor(ghost)) drawLeaf(ghost, p.muted)
+  // выделенная дверь: полотно и дуга трёх других направлений штрихом (spec door «Направление выделенной двери»)
+  if (editable && isDoor(editable))
+    for (const z of doorZones(editable, walls))
+      if (z.hinge !== editable.hinge || z.swing !== editable.swing)
+        drawLeaf({ ...editable, hinge: z.hinge, swing: z.swing }, p.muted, ALTERNATIVE_DASH)
   const chained = ghost ?? (selected.length === 1 && !othersSelected ? selected[0] : null)
   if (!chained) return
-  const offsetCm = (m.labelPx * 1.2) / k
+  const underlineChain = editable !== null && chained === editable
+  const offsetCm = (m.labelPx * CHAIN_OFFSET_EM) / k
   for (const item of dimensionChains(chained, walls, elements)) {
     if (item.lengthCm > 1e-6) {
       const geom = dimGeometry(item.a, item.b, offsetCm * Math.sign(item.normal.x * -(item.b.y - item.a.y) + item.normal.y * (item.b.x - item.a.x)))
-      if (geom) drawDimensionGeom(ctx, geom, formatLength(item.lengthCm, unit), p.ink, view, m, p)
+      if (geom) drawDimensionGeom(ctx, geom, formatLength(item.lengthCm, unit), p.ink, view, m, p, false, underlineChain)
       continue
     }
     // нулевое расстояние — только число у откоса
     const s = toScreen({ x: item.a.x + item.normal.x * offsetCm, y: item.a.y + item.normal.y * offsetCm })
     ctx.fillStyle = p.ink
     ctx.fillText("0", s.x, s.y)
+    if (underlineChain) drawUnderline(ctx, { x: s.x, y: s.y + UNDERLINE_GAP_PX }, { x: 1, y: 0 }, m.labelPx * CHAR_WIDTH, p.ink, m)
   }
+}
+
+// штриховое подчёркивание правимого числа: отрезок шириной widthPx, центр — center, вдоль dir (экранные px)
+function drawUnderline(ctx: CanvasRenderingContext2D, center: Point, dir: Point, widthPx: number, color: string, m: RenderMetrics): void {
+  ctx.save()
+  ctx.setLineDash(UNDERLINE_DASH)
+  ctx.strokeStyle = color
+  ctx.lineWidth = m.hatchPx
+  ctx.beginPath()
+  ctx.moveTo(center.x - (dir.x * widthPx) / 2, center.y - (dir.y * widthPx) / 2)
+  ctx.lineTo(center.x + (dir.x * widthPx) / 2, center.y + (dir.y * widthPx) / 2)
+  ctx.stroke()
+  ctx.restore()
 }
 
 function fillRooms(ctx: CanvasRenderingContext2D, rooms: Room[], toScreen: (p: Point) => Point, color: string): void {
@@ -420,12 +434,6 @@ function drawRoomLabels(
     const s = toScreen(room.labelAt)
     ctx.fillText(formatArea(room.areaCm2), s.x, s.y)
   }
-}
-
-function formatLength(cm: number, unit: Unit): string {
-  if (unit === "cm") return `${Math.round(cm)}`
-  if (unit === "mm") return `${Math.round(cm * 10)}`
-  return `${(Math.round(cm) / 100).toString().replace(".", ",")}`
 }
 
 // линии трекинга от узла до конца превью: пунктир постоянной экранной толщины
@@ -746,6 +754,7 @@ function drawDimension(
   drawDimensionGeom(ctx, geom, formatLength(Math.hypot(to.x - from.x, to.y - from.y), unit), color, view, m, palette, handles)
 }
 
+// underline: число правимое — размерная линия под ним штриховая, вне числа сплошная (design D2)
 function drawDimensionGeom(
   ctx: CanvasRenderingContext2D,
   geom: DimGeometry,
@@ -755,6 +764,7 @@ function drawDimensionGeom(
   m: RenderMetrics,
   palette: Palette,
   handles = false,
+  underline = false,
 ): void {
   const k = PX_PER_CM * view.zoom
   const toScreen = (p: Point): Point => ({ x: (p.x - view.pan.x) * k, y: (p.y - view.pan.y) * k })
@@ -778,10 +788,26 @@ function drawDimensionGeom(
   ctx.strokeStyle = color
   ctx.fillStyle = color
   ctx.lineWidth = m.hatchPx
+  const under = underline ? Math.min(text.length * m.labelPx * CHAR_WIDTH, 2 * half) / 2 : 0
   ctx.beginPath()
-  ctx.moveTo(-half, 0)
-  ctx.lineTo(half, 0)
+  if (under > 0) {
+    ctx.moveTo(-half, 0)
+    ctx.lineTo(-under, 0)
+    ctx.moveTo(under, 0)
+    ctx.lineTo(half, 0)
+  } else {
+    ctx.moveTo(-half, 0)
+    ctx.lineTo(half, 0)
+  }
   ctx.stroke()
+  if (under > 0) {
+    ctx.setLineDash(UNDERLINE_DASH)
+    ctx.beginPath()
+    ctx.moveTo(-under, 0)
+    ctx.lineTo(under, 0)
+    ctx.stroke()
+    ctx.setLineDash([])
+  }
   for (const tip of [-half, half]) {
     const dir = tip < 0 ? 1 : -1
     ctx.beginPath()

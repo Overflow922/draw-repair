@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest"
-import type { WallDoor, WallElement } from "../types"
+import type { WallElement } from "../types"
 import { moveEndpointBounded, moveWallsBounded } from "../wall-edit"
-import { arrowSlide, nudgeElements, placeDoor, rotateDoor, setDistance, setHeight, setWidth, slideDoorway } from "./doorway-edit"
+import { arrowSlide, nudgeElements, placeDoor, setDistance, setHeight, setWidth, slideDoorway } from "./doorway-edit"
 import { doorwayHolds, jambsT } from "./doorway-faces"
 import { doorLeaf } from "./doorway-layout"
 import { expectPoint, sceneF, sceneRP } from "./doorway.test-utils"
@@ -96,25 +96,5 @@ describe("направление не меняется правками", () => 
     const next = applied(slideDoorway(d, walls, { x: 200, y: 0 }, list))
     expect(next).toEqual({ ...d, offsetCm: 160 })
     expect(doorwayHolds(next, walls, [next, x])).toBe(true)
-  })
-})
-
-describe("поворот двери", () => {
-  it("DE-07: rotateDoor даёт следующее направление, положение и размеры прежние, вход не мутирован", () => {
-    const d = DR("a", "left")
-    const next = applied(rotateDoor(d))
-    expect(next).toEqual({ ...d, hinge: "b", swing: "left" })
-    expect(d).toEqual(DR("a", "left"))
-  })
-
-  it("DE-07b: четыре поворота подряд проходят круг и возвращают исходную дверь", () => {
-    let d: WallDoor = DR("a", "left")
-    const seen: string[] = []
-    for (let i = 0; i < 4; i++) {
-      d = applied(rotateDoor(d))
-      seen.push(`${d.hinge}/${d.swing}`)
-    }
-    expect(seen).toEqual(["b/left", "b/right", "a/right", "a/left"])
-    expect(d).toEqual(DR("a", "left"))
   })
 })
