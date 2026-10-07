@@ -133,10 +133,15 @@ Follow-ups from `add-window` test validation (revision 2, 2026-10-06). Non-block
 
 ---
 
-Follow-ups from fixing the middle-marker move over a doorway (2026-10-07).
+Follow-ups from `fix-midpoint-marker-priority` (archived 2026-10-07).
 
 ## Tests
 
-- [ ] Pointer-press priority in `src/main.ts` (`pointerdown`) has no automated test: middle marker of the selected
-  wall over a doorway/window must start a wall move, a press on the element elsewhere must drag the element.
-  Checked only manually in the browser; needs an e2e/DOM harness for canvas gestures.
+- [ ] Press priority is covered by `pressPick` tests (`src/doorway/press-pick.test.ts`), but the `pointerdown`
+  routing in `src/main.ts` (options per tool, `selectedWall = null` for multi-selection, action per pick kind) is
+  checked only manually in the browser; needs an e2e/DOM harness for canvas gestures.
+
+## Out of scope (decided, revisit if needed)
+
+- End markers of a selected wall stay active in every tool, including «Проём»/«Окно» (only the middle marker is
+  disabled there). Unchanged by this change; spec `wall-selection` does not say either way.

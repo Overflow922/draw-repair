@@ -1,4 +1,4 @@
-import { dimHitDistance, distanceToWall, hitWall, segmentIntersectsRect } from "../geometry"
+import { dimHitDistance, distanceToWall, endpointAt, hitWall, midpointAt, segmentIntersectsRect } from "../geometry"
 import type { Scene } from "../history"
 import type { Dimension, Point, Wall, WallElement } from "../types"
 import { cross, degenerate, dot, sub, unit } from "../wall-geometry"
@@ -110,7 +110,43 @@ export function erasePick(p: Point, scene: Selection, tolCm: number, textFactor:
   return wall ? { kind: "wall", wall } : null
 }
 
-const refsWall = (d: Dimension, ids: ReadonlySet<string>): boolean =>
+// цель нажатия левой кнопки (change fix-midpoint-marker-priority, design D1; wall-selection «Приоритет маркеров
+// выделенной стены»): маркеры одиночной выделенной стены → размер → элемент стены → тело стены
+export type PressPick =
+  | { kind: "end"; wall: Wall; end: "a" | "b" }
+  | { kind: "middle"; wall: Wall }
+  | { kind: "dimension"; dimension: Dimension }
+  | { kind: "doorway"; doorway: WallElement }
+  | { kind: "wall"; wall: Wall }
+
+// selectedWall — одиночная выделенная стена; остальные поля — доступность целей при текущем инструменте
+export interface PressOptions {
+  selectedWall: Wall | null
+  middleMarker: boolean
+  dimensions: boolean
+  elements: boolean
+}
+
+export function pressPick(p: Point, scene: Selection, tolCm: number, textFactor: number, options: PressOptions): PressPick | null {
+  const sel = options.selectedWall
+  if (sel) {
+    const end = endpointAt(p, sel, tolCm)
+    if (end) return { kind: "end", wall: sel, end }
+    if (options.middleMarker && midpointAt(p, sel, tolCm)) return { kind: "middle", wall: sel }
+  }
+  if (options.dimensions) {
+    const dimension = scene.dimensions.find((d) => (dimHitDistance(p, d, scene.walls, textFactor) ?? Infinity) <= tolCm)
+    if (dimension) return { kind: "dimension", dimension }
+  }
+  if (options.elements) {
+    const doorway = hitDoorway(p, scene.walls, scene.doorways, tolCm)
+    if (doorway) return { kind: "doorway", doorway }
+  }
+  const wall = hitWall(p, scene.walls, tolCm)
+  return wall ? { kind: "wall", wall } : null
+}
+
+const refsWall =(d: Dimension, ids: ReadonlySet<string>): boolean =>
   ids.has(d.from.a.wallId) || ids.has(d.from.b.wallId) || ids.has(d.to.a.wallId) || ids.has(d.to.b.wallId)
 
 // удаление выделенного с каскадом размеров и проёмов удаляемых стен (wall-deletion)

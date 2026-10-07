@@ -1,7 +1,7 @@
 import "./style.css"
 import { cloneScene, drawingHistory, loadHistory, record, recordSnapshot, redoEntry, saveHistory, undoEntry } from "./history"
 import type { Scene } from "./history"
-import { dimGeometry, dimHitDistance, dimLevelSnap, dimensionOffsetAt, endpointAt, hitWall, midpointAt, nearestEdgeIntersection, dimPointPoint, pointsEqual, segmentIntersectsRect, snap, snapOthers, snapWithSource, zoomAt } from "./geometry"
+import { dimGeometry, dimLevelSnap, dimensionOffsetAt, hitWall, nearestEdgeIntersection, dimPointPoint, pointsEqual, segmentIntersectsRect, snap, snapOthers, snapWithSource, zoomAt } from "./geometry"
 import type { DimGeometry, SnapResult } from "./geometry"
 import { moveEndpointBounded, moveWallsBounded, resizeWallBounded } from "./wall-edit"
 import type { EditMode } from "./wall-edit"
@@ -19,7 +19,7 @@ import { availableFormats, exportDrawing, PAGE_FORMATS_MM } from "./export/pdf"
 import type { PageFormat } from "./export/pdf"
 import { loadStore, saveStore } from "./storage"
 import { thicknessAllowed, violatesDoorways } from "./doorway/doorway-guard"
-import { deleteObjects, doorwaysInRect, erasePick, wallsInRect } from "./doorway/doorway-scene"
+import { deleteObjects, doorwaysInRect, erasePick, pressPick, wallsInRect } from "./doorway/doorway-scene"
 import { createElementTool } from "./doorway/doorway-tool"
 import type { ElementToolHost } from "./doorway/doorway-tool"
 import { loadThemeChoice, paletteOf, resolveTheme, saveThemeChoice, themeToggleTitle, toggledTheme } from "./theme"
@@ -737,53 +737,53 @@ canvas.addEventListener("pointerdown", (e) => {
       return
     }
   }
-  if (selectedWalls.length === 1) {
-    const sel = selectedWalls[0]
-    const press = toWorld(e)
-    const handle = endpointAt(press, sel, radiusCm())
-    if (handle) {
-      suppressClick = true
-      const other = sel[handle === "a" ? "b" : "a"]
-      endpointDrag = {
-        wall: sel,
-        end: handle,
-        base: sel[handle],
-        snapshot: cloneScene(scene()),
-        gesture: startOrthoGesture("end", press, { ...other }),
-      }
-      canvas.setPointerCapture(e.pointerId)
-      return
+  // цель нажатия (change fix-midpoint-marker-priority, design D2): маркеры выделенной стены главнее
+  // размера, проёма и тела стены; доступность целей задаёт инструмент
+  const p = toWorld(e)
+  const pick = pressPick(p, { walls, dimensions, doorways }, radiusCm(), 2, {
+    selectedWall: selectedWalls.length === 1 ? selectedWalls[0] : null,
+    middleMarker: tool !== "eraser" && !placingTool(),
+    dimensions: tool !== "eraser",
+    elements: tool !== "eraser" && !chainStart && tool !== "dimension",
+  })
+  if (pick?.kind === "end") {
+    suppressClick = true
+    const other = pick.wall[pick.end === "a" ? "b" : "a"]
+    endpointDrag = {
+      wall: pick.wall,
+      end: pick.end,
+      base: pick.wall[pick.end],
+      snapshot: cloneScene(scene()),
+      gesture: startOrthoGesture("end", p, { ...other }),
     }
-    // средний маркер перемещает стену, даже если под ним проём (wall-selection)
-    if (tool !== "eraser" && !placingTool() && midpointAt(press, sel, radiusCm())) {
-      startGroupMove(sel, press, e)
-      return
-    }
+    canvas.setPointerCapture(e.pointerId)
+    return
   }
-  if (tool !== "eraser") {
-    const p = toWorld(e)
-    const dim = dimensions.find((d) => (dimHitDistance(p, d, walls, 2) ?? Infinity) <= radiusCm())
-    if (dim) {
-      dimDrag = { dim, baseOffset: dim.offset, snapshot: cloneScene(scene()) }
+  // ластик действует по клику
+  if (tool === "eraser") return
+  switch (pick?.kind) {
+    case "middle":
+      startGroupMove(pick.wall, p, e)
+      return
+    case "dimension":
+      dimDrag = { dim: pick.dimension, baseOffset: pick.dimension.offset, snapshot: cloneScene(scene()) }
       suppressClick = true
-      if (!dimDraft.a && !dimDraft.b) selectDimension(dim)
+      if (!dimDraft.a && !dimDraft.b) selectDimension(pick.dimension)
       canvas.setPointerCapture(e.pointerId)
       return
-    }
-    // проём выше стены: выделение и перетаскивание вдоль опорной стены (вне цепочки и «Размера»)
-    if (!chainStart && tool !== "dimension" && doorwayTool.pressDoorway(p)) {
-      suppressClick = true
-      canvas.setPointerCapture(e.pointerId)
+    case "doorway":
+      // выделение и перетаскивание элемента вдоль опорной стены
+      if (doorwayTool.pressDoorway(p)) {
+        suppressClick = true
+        canvas.setPointerCapture(e.pointerId)
+      }
       return
-    }
-    const wallHit = hitWall(p, walls, radiusCm())
-    if ((tool === "doorway" || tool === "window") && wallHit) return
-    if (wallHit && selectedWalls.length > 0) {
-      if (!selectedWalls.includes(wallHit)) selectWall(wallHit)
-      startGroupMove(wallHit, p, e)
+    case "wall":
+      if (placingTool() || !selectedWalls.length) return
+      if (!selectedWalls.includes(pick.wall)) selectWall(pick.wall)
+      startGroupMove(pick.wall, p, e)
       return
-    }
-    if (!wallHit) {
+    case undefined: {
       const r = canvas.getBoundingClientRect()
       marqueePending = { x: e.clientX - r.left, y: e.clientY - r.top }
       canvas.setPointerCapture(e.pointerId)
