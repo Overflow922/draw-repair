@@ -70,8 +70,8 @@ describe("разметка панелей", () => {
 })
 
 describe("группа «Проёмы»", () => {
-  it("PB-GR-02: переходы группы — только кнопка группы и выбор в панели; реакции на выделение нет", () => {
-    expect(Object.keys(group).sort()).toEqual(["groupButtonActive", "groupButtonClick", "groupPick"])
+  it("PB-GR-02: переходы группы — кнопка группы, выбор в панели и чистый переход afterElementPress (change deselect-tool-on-element-select); состояния реакции на выделение нет", () => {
+    expect(Object.keys(group).sort()).toEqual(["afterElementPress", "groupButtonActive", "groupButtonClick", "groupPick"])
     expect(main.includes("groupSelect")).toBe(false)
   })
 })

@@ -1,4 +1,5 @@
 import { cutContour, cutPieces, dimensionChains, doorLeaf, doorZones, openingLines, windowLines } from "./doorway/doorway-layout"
+import type { DoorDirection } from "./doorway/doorway-layout"
 import { CHAIN_BAND_EM, CHAIN_OFFSET_EM, DIM_TEXT_GAP_PX, editableNumbers } from "./doorway/editable-numbers"
 import { CHAR_WIDTH, LABEL_GAP, elementLabelLayout } from "./doorway/element-label"
 import type { ElementLabel } from "./doorway/element-label"
@@ -80,6 +81,7 @@ export interface RenderOptions {
   selectedDoorways?: WallElement[]
   doorwayGhost?: WallElement | null
   hoverDoorway?: WallElement | null // подсветка ластика
+  hoverDoorDirection?: DoorDirection | null // направление выделенной двери под курсором — рисуется сплошным
   square?: Point[] | null // вершины квадрата установки в мировых координатах
   // угол к стене примыкания у начала превью: дуга от луча отсчёта from к направлению to
   angle?: { at: Point; from: Point; to: Point; deg: number } | null
@@ -339,6 +341,7 @@ function drawDoorways(
   const ghost = opts.doorwayGhost ?? null
   // правится только одиночно выделенный элемент на экране; при призраке установки числа его цепочки — призрака
   const editable = selected.length === 1 && !othersSelected && !ghost && m !== PDF_METRICS ? selected[0] : null
+  const hovered = opts.hoverDoorDirection ?? null
   const labelNumbers = editable
     ? editableNumbers(editable, walls, elements, rooms, unit, k, m.labelPx).filter((n) => n.target.kind === "height" || n.target.kind === "sill")
     : []
@@ -379,7 +382,7 @@ function drawDoorways(
   if (editable && isDoor(editable))
     for (const z of doorZones(editable, walls))
       if (z.hinge !== editable.hinge || z.swing !== editable.swing)
-        drawLeaf({ ...editable, hinge: z.hinge, swing: z.swing }, p.muted, ALTERNATIVE_DASH)
+        drawLeaf({ ...editable, hinge: z.hinge, swing: z.swing }, p.muted, z.hinge === hovered?.hinge && z.swing === hovered.swing ? [] : ALTERNATIVE_DASH)
   const chained = ghost ?? (selected.length === 1 && !othersSelected ? selected[0] : null)
   if (!chained) return
   const underlineChain = editable !== null && chained === editable

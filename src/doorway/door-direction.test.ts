@@ -111,8 +111,8 @@ describe("зоны направления", () => {
     const outside: Point[] = [
       { x: 170, y: 100.5 },
       { x: 170, y: -100.5 },
-      { x: 99.5, y: 50 },
-      { x: 190.5, y: 50 },
+      { x: 85, y: 50 }, // за откосом и за тенью (change deselect-tool-on-element-select, test-change-request 2)
+      { x: 205, y: 50 },
       { x: 170, y: 9.5 },
       { x: 145, y: 0 }, // внутри тела стены
       { x: 170, y: 120 },

@@ -15,6 +15,8 @@ Follow-ups from `fix-wall-move-joints` (archived 2026-10-04, commit `83e9b78`).
 
 ## Tests
 
+- [ ] (deselect-tool-on-element-select, 2026-10-07) `src/main.ts` wiring has no automated test: `afterElementPress` calls in the `pointerdown` branches (element press, editable number / direction zone press) and in `finishMarquee`, `leavePlacing`, and the `hoverWorld` → `hoverDoorDirection` hover highlight. Only the pure rules (`afterElementPress`, `doorZoneAt`, `hoverDirection`, render option) are unit-tested; the DOM flow was checked by hand in the browser.
+
 - [ ] Ruler: add a direct test that the 1 cm corner margin applies (corner on a face at 14.27 cm), e.g. in
   `src/ruler-joint-tilt.test.ts`. Currently covered only indirectly via `faceCornerTol` (FM-1, CJ-16).
 - [ ] Far-end occupancy with drift: stem's far end joined at 14.14–15.14 cm, e.g. `g (0,0)-(200,0)`,
@@ -222,3 +224,4 @@ Follow-ups from planning `popups-buttons-only` (2026-10-07).
   (chains are not drawn in a real export). Underline independence from zoom is also unchecked.
 - [ ] PB-INT-02/03 are text checks of `main.ts` tied to its current shape (`let v = initialParams()`,
   `ElementToolHost = {`); a refactor fails loudly, not falsely. Replace with a DOM harness test when it exists.
+

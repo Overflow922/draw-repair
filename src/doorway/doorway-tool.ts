@@ -6,6 +6,7 @@ import { PX_PER_CM, isDoor } from "../types"
 import { ghostSwing, nudgeElements, placeDoor, placeDoorway, placeWindow, setDirection, setDistance, setHeight, setSill, setWidth, slideDoorway } from "./doorway-edit"
 import type { ElementEdit } from "./doorway-edit"
 import { doorZoneAt } from "./doorway-layout"
+import type { DoorDirection } from "./doorway-layout"
 import { hitDoorway, wallNearBody } from "./doorway-scene"
 import { editableNumbers, numberAt } from "./editable-numbers"
 import type { EditableNumber } from "./editable-numbers"
@@ -99,6 +100,7 @@ export interface ElementTool {
   dragTo(p: Point): void
   endDrag(): void
   nudge(arrow: Point, stepCm: number): boolean
+  clearGhost(): void // убрать призрак, не прерывая начатое перетаскивание
   reset(): void
 }
 
@@ -207,6 +209,9 @@ export function createElementTool(kind: ElementKind, host: ElementToolHost): Ele
       host.changed()
       return true
     },
+    clearGhost() {
+      ghost = null
+    },
     reset() {
       ghost = null
       drag = null
@@ -217,6 +222,7 @@ export function createElementTool(kind: ElementKind, host: ElementToolHost): Ele
 export interface SelectionEditing {
   pressNumber(p: Point): boolean // клик по правимому числу выделенного элемента — открывает поле ввода
   pressZone(p: Point): boolean // клик в зону направления выделенной двери — поглощает нажатие
+  hoverDirection(p: Point): DoorDirection | null // альтернативное направление под курсором (число главнее зоны)
   closeEditor(): void
 }
 
@@ -273,15 +279,26 @@ export function createSelectionEditing(host: ElementToolHost): SelectionEditing 
     )
   }
 
+  // правимое число выделенного элемента под точкой
+  const numberUnder = (d: WallElement, p: Point): EditableNumber | null => {
+    const numbers = editableNumbers(d, host.walls(), host.elements(), host.rooms(), host.unit(), k(), SCREEN_METRICS.labelPx)
+    return numberAt(p, numbers, HIT_TOLERANCE_PX / k())
+  }
+
   return {
     pressNumber(p) {
       const d = single()
       if (!d) return false
-      const numbers = editableNumbers(d, host.walls(), host.elements(), host.rooms(), host.unit(), k(), SCREEN_METRICS.labelPx)
-      const n = numberAt(p, numbers, HIT_TOLERANCE_PX / k())
+      const n = numberUnder(d, p)
       if (!n) return false
       openEditor(d, n)
       return true
+    },
+    hoverDirection(p) {
+      const d = single()
+      if (!d || !isDoor(d) || numberUnder(d, p)) return null
+      const zone = doorZoneAt(p, d, host.walls())
+      return zone && (zone.hinge !== d.hinge || zone.swing !== d.swing) ? zone : null
     },
     pressZone(p) {
       const d = single()

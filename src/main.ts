@@ -24,8 +24,8 @@ import { deleteObjects, doorwaysInRect, erasePick, pressPick, wallsInRect } from
 import { createElementTool, createSelectionEditing } from "./doorway/doorway-tool"
 import { initialParams, inheritFrom } from "./doorway/element-kind"
 import type { ElementToolHost } from "./doorway/doorway-tool"
-import { groupButtonActive, groupButtonClick, groupPick } from "./doorway/openings-group"
-import type { GroupState, GroupTool } from "./doorway/openings-group"
+import { afterElementPress, groupButtonActive, groupButtonClick, groupPick } from "./doorway/openings-group"
+import type { GroupState, GroupTool, Tool } from "./doorway/openings-group"
 import { loadThemeChoice, paletteOf, resolveTheme, saveThemeChoice, themeToggleTitle, toggledTheme } from "./theme"
 import type { Theme } from "./theme"
 import { GRID_STEP_CM, MATERIALS, PX_PER_CM } from "./types"
@@ -76,6 +76,7 @@ let selectedDoorways: WallElement[] = []
 let newParams = initialParams()
 let chainStart: Point | null = null
 let cursor: Point | null = null
+let hoverWorld: Point | null = null // сырая точка курсора для подсветки тени направления двери
 let chainRef: StartRef | null = null // стена примыкания начала (из прилипания первого клика)
 let segment: ChainSegment | null = null // сегмент построения: превью и фиксация
 let cursorSnap: VertexSnap | null = null // сам результат привязки: normal в нём неперечислима
@@ -101,7 +102,6 @@ let marqueePending: { x: number; y: number } | null = null
 let marquee: { x1: number; y1: number; x2: number; y2: number } | null = null
 let marqueeHits: { walls: Wall[]; dims: Dimension[]; doorways: WallElement[] } | null = null
 const MARQUEE_THRESHOLD_PX = 5
-type Tool = "wall" | "dimension" | "doorway" | "door" | "window" | "eraser" | "ruler" | "none"
 let tool: Tool = "wall"
 // группа «Проёмы» (change add-door, design D6): текущий инструмент группы и видимость её панели;
 // активный инструмент группы выводится из tool
@@ -309,6 +309,17 @@ function setTool(next: Tool): void {
   redraw()
 }
 
+// выход из установки без снятия выделения (change deselect-tool-on-element-select, design D1): setTool снимает
+// выделение, а нажатие уже выделило элемент и, возможно, начало его перетаскивание
+function leavePlacing(group: GroupState): void {
+  tool = "none"
+  for (const t of elementTools) t.clearGhost()
+  openingsCurrent = group.current
+  openingsPanelOpen = group.panelOpen
+  syncToolUI()
+  redraw()
+}
+
 const UNIT_TO_CM: Record<Unit, number> = { m: 100, cm: 1, mm: 0.1 }
 const UNIT_LABEL: Record<Unit, string> = { m: "м", cm: "см", mm: "мм" }
 
@@ -427,6 +438,7 @@ function redraw(): void {
     selectedDoorways,
     doorwayGhost: placingTool()?.ghost() ?? null,
     hoverDoorway: target.doorway,
+    hoverDoorDirection: tool !== "eraser" && hoverWorld ? selectionEditing.hoverDirection(hoverWorld) : null,
     marquee,
     marqueeHits,
     square,
@@ -695,13 +707,14 @@ canvas.addEventListener("pointermove", (e) => {
     placingTool()?.hover(cursor)
   }
   else cursor = toSnappedPoint(e)
+  hoverWorld = toWorld(e)
   redraw()
 })
 
-// линейка показывает замеры только пока курсор над холстом
+// линейка показывает замеры только пока курсор над холстом; подсветка тени направления двери — тоже
 canvas.addEventListener("pointerleave", () => {
-  if (tool !== "ruler" || !cursor) return
-  cursor = null
+  hoverWorld = null
+  if (tool === "ruler" && cursor) cursor = null
   redraw()
 })
 
@@ -731,12 +744,16 @@ canvas.addEventListener("pointerdown", (e) => {
     return
   }
   if (e.button !== 0) return
+  hoverWorld = null // нажатие начинает жест — подсветка до следующего движения не нужна
   // правка выделенного элемента на месте (change popups-buttons-only, design D6): правимое число, затем зона
   // направления выделенной двери — главнее любой цели нажатия
   if (tool !== "eraser") {
     const at = toWorld(e)
     if (selectionEditing.pressNumber(at) || selectionEditing.pressZone(at)) {
       suppressClick = true
+      // правка выделенного элемента — тоже режим правки: инструмент установки снимается (design D2b)
+      const next = afterElementPress({ tool, group: groupState(), selected: true })
+      if (next.tool !== tool) leavePlacing(next.group)
       return
     }
   }
@@ -778,6 +795,8 @@ canvas.addEventListener("pointerdown", (e) => {
       // выделение и перетаскивание элемента вдоль опорной стены
       if (doorwayTool.pressDoorway(p)) {
         suppressClick = true
+        const next = afterElementPress({ tool, group: groupState(), selected: true })
+        if (next.tool !== tool) leavePlacing(next.group)
         canvas.setPointerCapture(e.pointerId)
       }
       return
@@ -883,7 +902,10 @@ function finishMarquee(rect: { x1: number; y1: number; x2: number; y2: number },
     setWallMaterial(selectedWalls[0].type)
     setWallPanel(true)
   } else setWallPanel(false)
-  redraw()
+  // рамка захватила элемент стены — режим правки: инструмент установки снимается (design D2b)
+  const next = afterElementPress({ tool, group: groupState(), selected: picks.doorways.length > 0 })
+  if (next.tool !== tool) leavePlacing(next.group)
+  else redraw()
 }
 
 canvas.addEventListener("auxclick", (e) => e.preventDefault())

@@ -228,8 +228,24 @@ export function doorZones(d: WallDoor, walls: readonly Wall[]): DoorZone[] {
   )
 }
 
-// направление зоны, в которую попала точка (края включительно); середина двери принадлежит обеим половинам —
-// выбирается зона с петлями у a
+// тень направления (hinge, swing): сектор открывания — точки в пределах ширины от петли между закрытым положением
+// и открытым полотном (до 95° в сторону открывания) — и прямоугольник полотна (spec door «Направление выделенной двери»)
+function inShadow(p: Point, d: WallDoor, walls: readonly Wall[], dir: DoorDirection): boolean {
+  const host = hostOf(d, walls)
+  const leaf = doorLeaf({ ...d, ...dir }, walls)
+  if (!host || !leaf) return false
+  const axis = unit(host.a, host.b)
+  const u = dir.hinge === "a" ? axis : mul(axis, -1)
+  const n = mul(perp(axis), dir.swing === "left" ? -1 : 1)
+  const rel = sub(p, leaf.hinge)
+  const along = dot(rel, u)
+  const across = dot(rel, n)
+  const inSector = Math.hypot(rel.x, rel.y) <= d.widthCm + TOL && across >= -TOL && Math.atan2(across, along) <= DOOR_OPEN_RAD + TOL
+  return inSector || pointInPolygon(p, leaf.leaf)
+}
+
+// направление зоны, в которую попала точка (края включительно): прямоугольник зоны или тень направления; из
+// нескольких зон выбирается та, чья петля ближе к точке, при равенстве — петли у a
 export function doorZoneAt(p: Point, d: WallDoor, walls: readonly Wall[]): DoorDirection | null {
   const host = hostOf(d, walls)
   if (!host) return null
@@ -237,14 +253,23 @@ export function doorZoneAt(p: Point, d: WallDoor, walls: readonly Wall[]): DoorD
   const rel = sub(p, host.a)
   const t = dot(rel, axis)
   const lat = dot(rel, perp(axis))
+  let best: DoorDirection | null = null
+  let bestDistance = Infinity
   for (const hinge of HINGES)
     for (const swing of SWINGS) {
+      const dir = { hinge, swing }
       const box = zoneBox(d, host, hinge, swing)
-      if (t >= box.t[0] - TOL && t <= box.t[1] + TOL && lat >= box.lat[0] - TOL && lat <= box.lat[1] + TOL) return { hinge, swing }
+      const inBox = t >= box.t[0] - TOL && t <= box.t[1] + TOL && lat >= box.lat[0] - TOL && lat <= box.lat[1] + TOL
+      if (!inBox && !inShadow(p, d, walls, dir)) continue
+      const leaf = doorLeaf({ ...d, ...dir }, walls)
+      const distance = leaf ? Math.hypot(p.x - leaf.hinge.x, p.y - leaf.hinge.y) : Infinity
+      if (distance < bestDistance - TOL) {
+        best = dir
+        bestDistance = distance
+      }
     }
-  return null
+  return best
 }
-
 export interface ChainItem {
   side: Side
   a: Point // начало на грани (по t)
