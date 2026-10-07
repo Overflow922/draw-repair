@@ -140,6 +140,9 @@ Follow-ups from `fix-midpoint-marker-priority` (archived 2026-10-07).
 - [ ] Press priority is covered by `pressPick` tests (`src/doorway/press-pick.test.ts`), but the `pointerdown`
   routing in `src/main.ts` (options per tool, `selectedWall = null` for multi-selection, action per pick kind) is
   checked only manually in the browser; needs an e2e/DOM harness for canvas gestures.
+- [ ] Toolbar button wiring in `src/main.ts` has no automated test either: the «Стена» button did not open its
+  panel on the first click from another tool (fixed 2026-10-07, `canvas-app` scenario «Открытие при выборе
+  инструмента», checked manually). Cover tool-button → panel open/close once the DOM harness exists.
 
 ## Out of scope (decided, revisit if needed)
 

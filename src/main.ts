@@ -1183,8 +1183,10 @@ systemDark.addEventListener("change", () => {
 })
 
 toolWallBtn.addEventListener("click", () => {
-  if (tool !== "wall") setTool("wall")
-  else setWallPanel(!wallPanelOpen)
+  if (tool !== "wall") {
+    setTool("wall")
+    setWallPanel(true)
+  } else setWallPanel(!wallPanelOpen)
 })
 
 toolDimensionBtn.addEventListener("click", () => setTool("dimension"))
