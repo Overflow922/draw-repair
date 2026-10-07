@@ -220,10 +220,12 @@ body {
   box-shadow: 0 0 0 2px var(--focus-ring);
 }
 
+/* Clears the toolbar's padding and border plus a 12px gap; the first row
+   starts level with the tool button (panel padding + border above it). */
 .tool-panel {
   position: absolute;
-  left: calc(100% + 8px);
-  top: 0;
+  left: calc(100% + 8px + 1px + 12px);
+  top: calc(-10px - 1px);
   z-index: 10;
   display: none;
   flex-direction: column;
