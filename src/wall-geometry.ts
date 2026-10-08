@@ -246,6 +246,51 @@ function capExtension(w: Wall, E: Point, uIn: Point, target: FaceLine): Point[] 
   return poly.length >= 3 && polygonArea(poly) > 1e-9 ? poly : null
 }
 
+// Диагональный угловой стык (change diagonal-corner-snap, design D2): концы двух перпендикулярных стен
+// отстоят на диагональ угла, ни один не упирается в другую стену — продолжения осей пересекаются в точке I
+// за концом каждой стены на полутолщине соседа (допуск 1 см на каждое расстояние, в обе стороны).
+const DIAGONAL_MARGIN_CM = 1
+
+// Блок угла — торец стены, продолженный наружу на толщину соседа; принадлежит поздней стене пары
+// (превью — позднейшая). null — стык не диагональный, либо блок принадлежит соседу.
+function diagonalCornerBlock(wall: Wall, E: Point, uIn: Point, walls: Wall[], iWall: number, isLatest: boolean): Point[] | null {
+  const scene = walls.includes(wall) ? walls : [...walls, wall] // превью не в массиве
+  const hW = wall.thicknessCm / 2
+  const outW = neg(uIn)
+  let match: { c: Wall; v: Point } | null = null
+  for (const c of scene) {
+    if (c === wall || degenerate(c)) continue
+    const hC = c.thicknessCm / 2
+    for (const v of [c.a, c.b]) {
+      const outC = neg(inward(c, v))
+      const k = cross(outW, outC)
+      if (Math.abs(dot(outW, outC)) > RIGHT_SIN || Math.abs(k) < EPS) continue
+      const d = sub(v, E)
+      const s = cross(d, outC) / k // от конца E до пересечения I вдоль outW
+      const t = cross(d, outW) / k // от конца v до I вдоль outC
+      const within = (x: number, h: number): boolean => x > EPS && Math.abs(x - h) <= DIAGONAL_MARGIN_CM + SLICE
+      if (!within(s, hC) || !within(t, hW) || dist(E, v) <= jointTol(wall, c) + SLICE) continue
+      if (match) return null // два соседа: неоднозначно
+      match = { c, v }
+    }
+  }
+  if (!match) return null
+  const { c, v } = match
+  // других концов в пороге углового стыка нет — ни у конца E, ни у конца v
+  const reach = Math.hypot(c.thicknessCm / 2 + DIAGONAL_MARGIN_CM, hW + DIAGONAL_MARGIN_CM)
+  for (const t of scene) {
+    if (degenerate(t)) continue
+    for (const q of [t.a, t.b]) {
+      if (t !== wall && q !== v && dist(q, E) <= reach) return null
+      if (t !== c && q !== E && dist(q, v) <= reach) return null
+    }
+  }
+  if (!isLatest && iWall < scene.indexOf(c)) return null // блок у поздней стены
+  const n = mul(perp(uIn), hW)
+  const outer = mul(outW, c.thicknessCm)
+  return [add(E, n), sub(E, n), add(sub(E, n), outer), add(add(E, n), outer)]
+}
+
 interface EndShape {
   E: Point
   cap: [Point, Point]
@@ -386,7 +431,13 @@ export function displayPolygons(wall: Wall, walls: Wall[]): Point[][] {
     [wall.b, neg(uAB)],
   ] as const) {
     const fc = faceCornerAt(wall, E, walls)
-    if (!fc || fc.right) continue
+    if (!fc) {
+      // нет углового стыка на грани — возможен диагональный стык: блок угла у поздней стены
+      const block = diagonalCornerBlock(wall, E, uIn, walls, iWall, isLatest)
+      if (block) fills.push(block)
+      continue
+    }
+    if (fc.right) continue
     if (fc.role === "through") body = clipHalfPlane(body, fc.outerU.o, fc.outerU.n, fc.outerU.lo)
     const own = capExtension(wall, E, uIn, fc.ownTarget)
     if (own) fills.push(own)

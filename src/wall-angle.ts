@@ -35,7 +35,9 @@ function normalized(v: Point): Point {
 
 export function startRefOf(snap: VertexSnap): StartRef | null {
   if (snap.source !== "wall" || !snap.normal || !snap.target) return null
-  const ref: StartRef = { kind: snap.target, normal: { x: snap.normal.x, y: snap.normal.y } }
+  // угол свободного торца опирается на грань: направление — перпендикуляр наружу, угол — к грани
+  const kind = snap.target === "corner" ? "face" : snap.target
+  const ref: StartRef = { kind, normal: { x: snap.normal.x, y: snap.normal.y } }
   if (snap.target === "cap" && snap.base) ref.anchor = { x: snap.base.x, y: snap.base.y }
   return ref
 }

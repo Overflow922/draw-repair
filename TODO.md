@@ -225,3 +225,33 @@ Follow-ups from planning `popups-buttons-only` (2026-10-07).
 - [ ] PB-INT-02/03 are text checks of `main.ts` tied to its current shape (`let v = initialParams()`,
   `ElementToolHost = {`); a refactor fails loudly, not falsely. Replace with a DOM harness test when it exists.
 
+---
+
+Follow-ups from exploring and planning `diagonal-corner-snap` (2026-10-08).
+
+## Bugs
+
+- [ ] **Intermittent vitest worker crash.** `npx vitest run` sometimes ends with `[vitest-pool]: Worker forks emitted
+  error` / `Worker exited unexpectedly` and one test file is lost (85 of 86 files pass, exit code 255). Seen in 2 of 8
+  runs of the whole suite with the `diagonal-corner-snap` test files excluded, so they are not the cause. Suspected
+  cause: a forked worker dying on Windows (memory or process pool); not investigated.
+
+## Tests
+
+- [ ] `diagonal-corner-snap`: the wiring in `src/main.ts` (corner snap of the start vertex, preview of the closed
+  corner) has no automated test; check by hand in the browser (draw a wall, move the cursor to its end corner, click,
+  draw down).
+
+## Out of scope (decided, revisit if needed)
+
+- The diagonal corner snap applies to the first vertex of a wall only; the second vertex and the ray snap
+  (`snapOnRay`) keep the old rules.
+- Only right-angle diagonal corners are filled; non-right angles are not.
+- Moving one wall of a diagonal pair with `moveWalls` moves only the neighbour's joined end, so the neighbour slants
+  (about 8.5° in the planning example) and the pair stops being a right angle: the filled corner block disappears.
+  Whether such a pair should follow rigidly is not specified by this change.
+- Tolerance mismatch for a diagonal pair: the display closes the corner when each of the distances E→I and S→I is
+  within 1 cm of the neighbour's half-thickness (`diagonalCornerBlock`, `src/wall-geometry.ts`), but the move and edit
+  code treats ends as joined by `faceCornerTol` on `|S−E|` alone. A pair shifted by about 0.9 cm on both axes is shown
+  closed yet may not be recognised as joined when a wall is moved. Not covered by a test.
+

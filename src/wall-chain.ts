@@ -68,7 +68,7 @@ export function chainSegment(input: ChainInput): ChainSegment {
   const fixed = v ? constrainedDirection(input, v) : null
   const snap = fixed
     ? snapOnRay(raw, walls, radiusCm, gridStepCm, thicknessCm, start, fixed, doorways)
-    : snapVertex(raw, walls, radiusCm, gridStepCm, thicknessCm, undefined, doorways)
+    : snapVertex(raw, walls, radiusCm, gridStepCm, thicknessCm, undefined, doorways, false) // без диагонали: вторая вершина
   const track = tracked(input, snap, fixed)
   const target = track?.end ?? snap.point
   const dir = fixed ?? unitOrNull(sub(target, start))

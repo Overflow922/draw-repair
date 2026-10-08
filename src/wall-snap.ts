@@ -43,7 +43,7 @@ export function snapRadiusCm(zoom: number): number {
   return SNAP_RADIUS_PX / (PX_PER_CM * zoom)
 }
 
-export type SnapTarget = "face" | "cap"
+export type SnapTarget = "face" | "cap" | "corner"
 
 export interface VertexSnap {
   point: Point
@@ -202,6 +202,16 @@ function capCandidate(scene: SceneContour, w: Wall, end: Point, out: Point, newH
   return freeCap(scene, w, end, out) ? { point: add(end, mul(out, newHalf)), base: end, normal: out, target: "cap" } : null
 }
 
+// Кандидат на угле свободного торца (change diagonal-corner-snap, design D1): квадрат касается угла торца
+// своим углом и лежит за плоскостью торца и за гранью; вершина — на линии грани, на newHalf за плоскостью
+// торца (середина стороны квадрата, лежащей на линии грани). side — сторона грани, на которой угол.
+function cornerCandidate(scene: SceneContour, w: Wall, end: Point, out: Point, side: number, newHalf: number): Candidate | null {
+  if (!freeCap(scene, w, end, out)) return null
+  const normal = mul(perp(unit(w.a, w.b)), side)
+  const point = add(add(end, mul(normal, w.thicknessCm / 2)), mul(out, newHalf))
+  return { point, base: point, normal, target: "corner" }
+}
+
 // квадрат, приставленный стороной с центром в point, вытянутый на sizeCm по normal
 export function squareOnSide(point: Point, normal: Point, sizeCm: number): Point[] {
   const t = mul(perp(normal), sizeCm / 2)
@@ -245,6 +255,8 @@ function overlapsBodies(square: Point[], pieces: Point[][]): boolean {
   })
 }
 
+// corners — диагональное прилипание к углу свободного торца (change diagonal-corner-snap): для начальной
+// вершины включено; вторая вершина цепочки (wall-chain) отключает его — там действуют прежние правила
 export function snapVertex(
   p: Point,
   walls: Wall[],
@@ -253,6 +265,7 @@ export function snapVertex(
   newWallThicknessCm: number,
   orthoFrom?: Point,
   doorways: readonly WallElement[] = [],
+  corners = true,
 ): VertexSnap {
   // орто по осям экрана от свободного начала: сработало — конец на луче (design D4)
   if (orthoFrom) {
@@ -265,7 +278,8 @@ export function snapVertex(
   // принятые кандидаты в порядке стен массива; квадрат не налагается на тела (design D5)
   const accepted: Candidate[] = []
   const accept = acceptor(scene, newWallThicknessCm, accepted, doorwayBlock(walls, doorways, newWallThicknessCm))
-  for (const w of walls) if (!degenerate(w)) wallCandidates(w, p, scene, newHalf, reach, accept)
+  const cornerZone = corners ? reach : null
+  for (const w of walls) if (!degenerate(w)) wallCandidates(w, p, scene, newHalf, reach, cornerZone, accept)
   const best = nearest(p, accepted)
   if (best) return wallSnap(best)
   const grid = (v: number): number => Math.round(v / gridStepCm) * gridStepCm
@@ -291,7 +305,9 @@ export function snapStartVertex(
   const scene = lazyScene(walls)
   const accepted: Candidate[] = []
   const accept = acceptor(scene, newWallThicknessCm, accepted, doorwayBlock(walls, doorways, newWallThicknessCm))
-  for (const w of touched) wallCandidates(w, p, scene, newWallThicknessCm / 2, Infinity, accept)
+  // зона угла остаётся прежней и здесь: Infinity — только для граней и торцов касаемых стен
+  const cornerZone = Math.max(radiusCm, newWallThicknessCm / 2)
+  for (const w of touched) wallCandidates(w, p, scene, newWallThicknessCm / 2, Infinity, cornerZone, accept)
   const best = nearest(p, accepted)
   return best ? wallSnap(best) : base
 }
@@ -327,13 +343,15 @@ function acceptor(
 }
 
 // Кандидаты стены w для курсора p; reach — зона прилипания к торцу и к грани вне полосы
-// (design D3 change fix-grid-square-touching-wall).
+// (design D3 change fix-grid-square-touching-wall); cornerZone — зона диагонального прилипания
+// к углу свободного торца по каждой оси (null — угол не предлагается).
 function wallCandidates(
   w: Wall,
   p: Point,
   scene: () => SceneContour,
   newHalf: number,
   reach: number,
+  cornerZone: number | null,
   accept: (c: Candidate | null) => boolean,
 ): void {
   const u = unit(w.a, w.b)
@@ -352,6 +370,16 @@ function wallCandidates(
       if (-s <= reach) accept(capCandidate(scene(), w, w.a, mul(u, -1), newHalf))
     } else if (!accept(faceCandidate(scene(), w, side, p, newHalf))) accept(faceCandidate(scene(), w, -side, p, newHalf))
     return
+  }
+  // вне полосы за плоскостью торца — сначала угол торца (диагональ), приоритетнее грани той же стены:
+  // только в дальней части квадранта, по каждой оси от половины зоны до зоны включительно (допуск SLICE
+  // на границах — поворот стены сдвигает смещение на ~1e-15); ближе — прежняя грань заподлицо с торцом
+  const beyond = s > len ? s - len : s < 0 ? -s : 0
+  const across = Math.abs(lat) - hW
+  const inFarPart = (v: number, zone: number): boolean => v >= zone / 2 - SLICE && v <= zone + SLICE
+  if (cornerZone !== null && inFarPart(beyond, cornerZone) && inFarPart(across, cornerZone)) {
+    const atB = s > len
+    if (accept(cornerCandidate(scene(), w, atB ? w.b : w.a, atB ? u : mul(u, -1), side, newHalf))) return
   }
   // вне полосы — только грань: радиус привязки или край приставленного квадрата
   if (Math.abs(lat) - hW <= reach && s >= -reach && s <= len + reach) accept(faceCandidate(scene(), w, side, p, newHalf))
