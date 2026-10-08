@@ -34,26 +34,27 @@ describe("placeOnPage", () => {
     expect(500 * p.mmPerCm).toBe(100)
   })
 
-  it("альбом для широкого чертежа, портрет для высокого", () => {
+  it("страница всегда альбомная: и для широкого, и для высокого чертежа", () => {
     expect(placeOnPage(WIDE, 100, "A4").landscape).toBe(true)
-    expect(placeOnPage(TALL, 100, "A4").landscape).toBe(false)
+    expect(placeOnPage(TALL, 100, "A4").landscape).toBe(true)
   })
 
-  it("центрирует содержимое в полях при положительных координатах", () => {
+  it("центрирует содержимое в области чертежа при положительных координатах", () => {
     const p = placeOnPage({ minX: 0, minY: 0, maxX: 500, maxY: 250 }, 100, "A4")
     expect(p.landscape).toBe(true)
-    expect(p.offsetX).toBeCloseTo((297 - 50) / 2, 9)
-    expect(p.offsetY).toBeCloseTo((210 - 25) / 2, 9)
+    expect(p.offsetX).toBeCloseTo(20 + (272 - 50) / 2, 9)
+    expect(p.offsetY).toBeCloseTo(5 + (145 - 25) / 2, 9)
   })
 
   it("центрирование инвариантно к сдвигу координат", () => {
     const base = placeOnPage({ minX: 0, minY: 0, maxX: 500, maxY: 250 }, 100, "A4")
     const shifted = placeOnPage({ minX: -2000, minY: -1000, maxX: -1500, maxY: -750 }, 100, "A4")
     const left = (o: number, minX: number) => o + minX * 0.1
-    expect(left(base.offsetX, 0)).toBeCloseTo(123.5, 9)
-    expect(left(shifted.offsetX, -2000)).toBeCloseTo(123.5, 9)
-    expect(297 - left(base.offsetX, 500)).toBeCloseTo(123.5, 9)
-    expect(297 - left(shifted.offsetX, -1500)).toBeCloseTo(123.5, 9)
+    // область чертежа A4: x 20–292, поля слева и справа по (272 − 50) / 2 = 111 мм от её краёв (левый край чертежа — x 131)
+    expect(left(base.offsetX, 0)).toBeCloseTo(131, 9)
+    expect(left(shifted.offsetX, -2000)).toBeCloseTo(131, 9)
+    expect(292 - left(base.offsetX, 500)).toBeCloseTo(111, 9)
+    expect(292 - left(shifted.offsetX, -1500)).toBeCloseTo(111, 9)
   })
 })
 
@@ -138,10 +139,10 @@ describe("buildPdf", () => {
     expect(doc.internal.pageSize.getHeight()).toBe(210)
   })
 
-  it("высокий чертёж даёт портретную страницу формата", () => {
+  it("высокий чертёж тоже даёт альбомную страницу формата", () => {
     const doc = buildPdf([wall(0, 0, 0, 2000)], [], "mm", 100, "A2", font)
-    expect(doc.internal.pageSize.getWidth()).toBe(420)
-    expect(doc.internal.pageSize.getHeight()).toBe(594)
+    expect(doc.internal.pageSize.getWidth()).toBe(594)
+    expect(doc.internal.pageSize.getHeight()).toBe(420)
   })
 
   it("чертёж с размерами строится без ошибок", () => {

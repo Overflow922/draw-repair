@@ -255,3 +255,28 @@ Follow-ups from exploring and planning `diagonal-corner-snap` (2026-10-08).
   code treats ends as joined by `faceCornerTol` on `|S−E|` alone. A pair shifted by about 0.9 cm on both axes is shown
   closed yet may not be recognised as joined when a wall is moved. Not covered by a test.
 
+---
+
+Follow-ups from exploring the PDF frame (2026-10-08, change `pdf-frame-title-block`).
+
+## Tests
+
+- [ ] `availableFormats` padding `0.5 * scale` cm around the drawing (5 mm on paper) is not pinned by any test:
+  changing it does not fail the suite (mutation found by the validator, `test-validation.md`; same before this change).
+- [ ] PDF title block: a diagonal thin line inside the block is not detected (the test helper compares only
+  axis-aligned segments); the standard font size of the contents is not specified, so any fitting size passes;
+  the drawn text of cell 1 is not checked for file-name sanitising (only `titleBlockTexts` is).
+
+## Out of scope (decided, revisit if needed)
+
+- Several pages: the form of the title block for the following sheets (185 x 15 mm, 3 rows of 5 mm). Columns
+  left to right 10 / 10 / 10 / 10 / 15 / 10 (Изм., Кол., Лист, №док., Подп., Дата), then cell 1 (110 mm) and
+  cell 7 "Лист" (10 mm wide; 7 mm label row, 8 mm number row). Source: gk-drawing.ru, construction-drawing-title
+  page, "последующие листы". The export already works from a list of pages; this form and the "Лист / Листов"
+  numbers are to be added with multi-page export.
+- Portrait orientation: export is landscape only. A tall drawing may need a larger format than a portrait page
+  would (portrait A4 drawing area would be 185 x 232 mm).
+- Cell 5 (page name) of the title block stays empty until the page name is defined.
+- Additional graphs along the left margin of the frame (инв. № подл., подп. и дата, взам. инв. №; a 5 + 5 + 5 + 5 mm
+  strip) are not drawn.
+

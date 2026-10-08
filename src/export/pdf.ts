@@ -8,18 +8,13 @@ import { cross, dot, sub } from "../wall-geometry"
 import { DEFAULT_SCALE, PX_PER_CM, isDoor, isWindow } from "../types"
 import type { Dimension, Unit, Wall, WallElement } from "../types"
 import { FONT_B64 } from "./font"
+import { PAGE_FORMATS_MM } from "./page-format"
+import type { PageFormat } from "./page-format"
+import { drawSheet } from "./sheet-draw"
+import { drawingArea, sheetSizeMm } from "./sheet-layout"
 
-export type PageFormat = "A4" | "A3" | "A2" | "A1" | "A0"
-
-export const PAGE_FORMATS_MM: Record<PageFormat, [number, number]> = {
-  A4: [210, 297],
-  A3: [297, 420],
-  A2: [420, 594],
-  A1: [594, 841],
-  A0: [841, 1189],
-}
-
-export const PDF_MARGIN_MM = 10
+export { PAGE_FORMATS_MM }
+export type { PageFormat }
 
 export interface BBox {
   minX: number
@@ -29,7 +24,7 @@ export interface BBox {
 }
 
 export interface Placement {
-  landscape: boolean
+  landscape: true
   mmPerCm: number
   offsetX: number
   offsetY: number
@@ -105,17 +100,10 @@ export function wallsBBox(walls: Wall[], dimensions: Dimension[] = [], padCm = 0
   return { minX: minX - padCm, minY: minY - padCm, maxX: maxX + padCm, maxY: maxY + padCm }
 }
 
-function sheetMm(format: PageFormat, landscape: boolean): [number, number] {
-  const [pw, ph] = PAGE_FORMATS_MM[format]
-  return landscape ? [ph, pw] : [pw, ph]
-}
-
 export function fitsFormat(b: BBox, scale: number, format: PageFormat): boolean {
   const mmPerCm = 10 / scale
-  const dw = (b.maxX - b.minX) * mmPerCm
-  const dh = (b.maxY - b.minY) * mmPerCm
-  const [w, h] = sheetMm(format, dw > dh)
-  return dw <= w - 2 * PDF_MARGIN_MM && dh <= h - 2 * PDF_MARGIN_MM
+  const area = drawingArea(format)
+  return (b.maxX - b.minX) * mmPerCm <= area.w && (b.maxY - b.minY) * mmPerCm <= area.h
 }
 
 export function availableFormats(walls: Wall[], dimensions: Dimension[] = [], scale: number = 100, doorways: WallElement[] = []): PageFormat[] {
@@ -129,13 +117,12 @@ export function placeOnPage(b: BBox, scale: number, format: PageFormat): Placeme
   const mmPerCm = 10 / scale
   const dw = (b.maxX - b.minX) * mmPerCm
   const dh = (b.maxY - b.minY) * mmPerCm
-  const landscape = dw > dh
-  const [w, h] = sheetMm(format, landscape)
+  const area = drawingArea(format)
   return {
-    landscape,
+    landscape: true,
     mmPerCm,
-    offsetX: (w - 2 * PDF_MARGIN_MM - dw) / 2 + PDF_MARGIN_MM - b.minX * mmPerCm,
-    offsetY: (h - 2 * PDF_MARGIN_MM - dh) / 2 + PDF_MARGIN_MM - b.minY * mmPerCm,
+    offsetX: area.x + (area.w - dw) / 2 - b.minX * mmPerCm,
+    offsetY: area.y + (area.h - dh) / 2 - b.minY * mmPerCm,
   }
 }
 
@@ -153,13 +140,16 @@ export function buildPdf(
   format: PageFormat,
   fontB64: string,
   doorways: WallElement[] = [],
+  name = "",
+  date: Date = new Date(),
 ): jsPDF {
   const placement = placeOnPage(wallsBBox(walls, dimensions, 0.5 * scale, doorways, scale), scale, format)
   const [pw, ph] = PAGE_FORMATS_MM[format]
-  const doc = new jsPDF({ unit: "mm", format: [pw, ph], orientation: placement.landscape ? "landscape" : "portrait" })
+  const doc = new jsPDF({ unit: "mm", format: [pw, ph], orientation: "landscape" })
   doc.addFileToVFS("PTSans.ttf", fontB64)
   doc.addFont("PTSans.ttf", "PTSans", "normal")
-  const [w, h] = sheetMm(format, placement.landscape)
+  const { w, h } = sheetSizeMm(format)
+  drawSheet(doc, format, { name, scale, date })
   drawScene(
     doc.context2d as unknown as CanvasRenderingContext2D,
     w,
@@ -186,11 +176,12 @@ export function exportDrawing(
   name: string,
   doorways: WallElement[] = [],
 ): void {
-  const doc = buildPdf(walls, dimensions, unit, scale, format, FONT_B64, doorways)
+  const now = new Date()
+  const doc = buildPdf(walls, dimensions, unit, scale, format, FONT_B64, doorways, name, now)
   const url = URL.createObjectURL(new Blob([doc.output("arraybuffer")], { type: "application/pdf" }))
   const a = document.createElement("a")
   a.href = url
-  a.download = pdfFileName(name, new Date())
+  a.download = pdfFileName(name, now)
   a.click()
   URL.revokeObjectURL(url)
 }
