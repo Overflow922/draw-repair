@@ -1,6 +1,6 @@
 import { teeEndAttached } from "./geometry"
 import type { Point, Wall } from "./types"
-import { RIGHT_SIN, cross, dist, faceCornerTol, unit } from "./wall-geometry"
+import { cross, dist, faceCornerTol, unit } from "./wall-geometry"
 
 // Орто-растяжение связанных стен (change ortho-stretch-move, design D2): правка при включённом
 // орто сохраняет направление связанных стен — параллельные вектору растягиваются, остальные
@@ -18,6 +18,10 @@ export interface StretchPlan {
 }
 
 const ENDS: readonly WallEnd[] = ["a", "b"]
+
+// Допуск параллельности при растяжении (change fix-ortho-tilted-stretch, design D1): стена, задуманная
+// прямой, растягивается; настоящая диагональ смещается целиком. Не связан с допуском прямого угла RIGHT_SIN.
+const STRETCH_SIN = Math.sin((5 * Math.PI) / 180)
 
 export function planOrthoStretch(walls: readonly Wall[], seed: StretchSeed, v: Point): StretchPlan {
   const moved = new Map<Wall, { a: boolean; b: boolean }>()
@@ -41,7 +45,7 @@ export function planOrthoStretch(walls: readonly Wall[], seed: StretchSeed, v: P
   // связанная стена: параллельная v растягивается своим концом, остальные — целиком
   const link = (w: Wall, end: WallEnd): void => {
     if (whole.has(w)) return
-    const parallel = vDir !== null && Math.abs(cross(unit(w.a, w.b), vDir)) <= RIGHT_SIN
+    const parallel = vDir !== null && Math.abs(cross(unit(w.a, w.b), vDir)) <= STRETCH_SIN
     if (parallel) markEnd(w, end)
     else markWhole(w)
   }

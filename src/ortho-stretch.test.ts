@@ -25,7 +25,7 @@ const ends = (w: Wall): [Point, Point] => [w.a, w.b]
 const dirDeg = (w: Wall): number => (Math.atan2(w.b.y - w.a.y, w.b.x - w.a.x) * 180) / Math.PI
 
 // stretched — стены, которые по сценарию растягиваются, будучи не строго параллельны v (в пределах
-// допуска 0.5°): их направление меняется на доли градуса и из проверки INV-DIR исключается
+// допуска растяжения 5°): их направление меняется на доли градуса и из проверки INV-DIR исключается
 function run(walls: Wall[], seed: StretchSeed, v: Point, stretched: string[] = []): Map<string, [Point, Point]> {
   const before = new Map(walls.map((w) => [w.id, [{ ...w.a }, { ...w.b }] as [Point, Point]]))
   const dirs = new Map(walls.map((w) => [w.id, dirDeg(w)]))
@@ -147,7 +147,7 @@ describe("Орто-растяжение: перемещение стены", () 
     expect(ends(byId(ws, "leg"))).toEqual([P(180, 10), P(180, 200)])
   })
 
-  it("ST-11: допуск параллельности — 0.3° растягивается, 1° смещается целиком", () => {
+  it("ST-11: допуск параллельности — 0.3° и 1° растягиваются (граница 5° — в ortho-stretch-tilt.test.ts)", () => {
     const tilted = (deg: number): Wall[] => {
       const dx = 200 * Math.tan((deg * Math.PI) / 180)
       return [W("A", 0, 0, 200, 0), W("B", 200, 0, 200 + dx, 200)]
@@ -160,8 +160,8 @@ describe("Орто-растяжение: перемещение стены", () 
 
     const w1 = tilted(1)
     const b1 = { ...byId(w1, "B").b }
-    run(w1, walls(w1, ["A"]), P(0, -40))
-    expect(byId(w1, "B").b.y).toBeCloseTo(b1.y - 40, 9)
+    run(w1, walls(w1, ["A"]), P(0, -40), ["B"])
+    expect(byId(w1, "B").b).toEqual(b1)
     expect(byId(w1, "B").a).toEqual(P(200, -40))
   })
 

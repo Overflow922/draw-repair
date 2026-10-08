@@ -24,6 +24,8 @@ const CASES: Case[] = userWalls().flatMap((_, seed) =>
   ),
 )
 
+const onDominantAxis = (v: Point): Point => (Math.abs(v.x) >= Math.abs(v.y) ? { x: v.x, y: 0 } : { x: 0, y: v.y })
+
 const label = (c: Case): string => `seed ${c.seed}, v (${c.v.x.toFixed(2)}, ${c.v.y.toFixed(2)}), ortho ${c.mode.ortho}`
 
 function run(c: Case): { before: Wall[]; after: Wall[]; applied: Point } {
@@ -77,10 +79,12 @@ describe("инварианты ограниченной правки на чер
       const { after, applied } = run(c)
       const lenReq = Math.hypot(c.v.x, c.v.y)
       if (Math.hypot(applied.x, applied.y) > lenReq + 1e-6) problems.push(`${label(c)}: длиннее запроса`)
-      // итог примитива без ограничений
+      // итог примитива без ограничений; при орто правка идёт по оси большей составляющей
+      // (wall-selection «Орто без боковой составляющей»), поэтому примитив получает вектор на оси
+      const req = c.mode.ortho ? onDominantAxis(c.v) : c.v
       const free = userWalls()
-      if (c.mode.ortho) applyStretch(planOrthoStretch(free, { kind: "walls", walls: [free[c.seed]] }, c.v), c.v)
-      else moveWalls(free, [free[c.seed]], c.v)
+      if (c.mode.ortho) applyStretch(planOrthoStretch(free, { kind: "walls", walls: [free[c.seed]] }, req), req)
+      else moveWalls(free, [free[c.seed]], req)
       // сравнение только для правок, не затрагивающих ни одной стены T-примыкания:
       // там действует проекция и диапазон, а не только запрет пересечений
       const moved = (i: number): boolean =>
@@ -96,7 +100,7 @@ describe("инварианты ограниченной правки на чер
       )
       if (!attachOk || !overlapOk) continue
       admissibleCount++
-      if (Math.abs(applied.x - c.v.x) > 1e-6 || Math.abs(applied.y - c.v.y) > 1e-6) {
+      if (Math.abs(applied.x - req.x) > 1e-6 || Math.abs(applied.y - req.y) > 1e-6) {
         problems.push(`${label(c)}: допустимый запрос ограничен до (${applied.x}, ${applied.y})`)
         continue
       }

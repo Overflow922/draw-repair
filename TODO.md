@@ -38,16 +38,8 @@ Follow-ups from `fix-wall-move-joints` (archived 2026-10-04, commit `83e9b78`).
 
 Follow-ups from exploring ortho wall moves (2026-10-05, planned change `ortho-axis-lock`).
 
-## Bugs
-
-- [ ] **A slightly tilted wall makes an ortho move drag the whole drawing.** `planOrthoStretch`
-  (`src/ortho-stretch.ts`) treats a wall as parallel to the move vector only within `RIGHT_SIN` (0.5°).
-  A wall tilted more (e.g. 3 cm over 300 cm, 0.57°) counts as "not parallel" and moves whole, and the
-  spread then reaches every connected wall. The fix should not swap one magic tolerance for another.
-- [ ] **Typing a length for a tilted wall with ortho on can drag the whole drawing.** `resizeWallBounded`
-  (`src/wall-edit.ts`) moves the end along the wall's own direction; for a tilted wall that vector is
-  diagonal, and `planOrthoStretch` moves every connected wall whole (same cascade as the diagonal drag
-  fixed by `ortho-axis-lock`). Length input is not covered by that change's axis lock.
+(The two bugs "slightly tilted wall drags the drawing" and "typed length for a tilted wall drags the drawing"
+were fixed by `fix-ortho-tilted-stretch`, 2026-10-08, and removed from this list.)
 
 ## Tests
 
@@ -279,4 +271,24 @@ Follow-ups from exploring the PDF frame (2026-10-08, change `pdf-frame-title-blo
 - Cell 5 (page name) of the title block stays empty until the page name is defined.
 - Additional graphs along the left margin of the frame (инв. № подл., подп. и дата, взам. инв. №; a 5 + 5 + 5 + 5 mm
   strip) are not drawn.
+
+---
+
+Follow-ups from `fix-ortho-tilted-stretch` (archived 2026-10-08).
+
+## Tests
+
+- [ ] Manual browser check not done (task 2.5): a drawing with a side wall tilted 3 cm over 300 cm; with ortho on,
+  moving a wall, dragging a corner and typing a length must not move the rest of the drawing. Unit tests cover the same
+  path (`TL-01`…`TL-16`, `src/ortho-stretch-tilt.test.ts`, `src/wall-edit-ortho-tilt.test.ts`); the `src/main.ts` wiring
+  was not changed.
+- [ ] No test sits exactly on the 5° boundary: `<=` vs `<` in `link` (`src/ortho-stretch.ts`) survives mutation
+  (judged non-critical in `test-validation.md`: a bit-exact input would be coupled to how the constant is computed).
+- [ ] `TL-05b` (`src/ortho-stretch-tilt.test.ts`) still quotes the old spec wording «вправо вдоль себя» in its title; it
+  works as a pin that a perpendicular neighbour moves whole.
+
+## Out of scope (decided, revisit if needed)
+
+- A neighbour stretched within 5° can rotate slightly (at most `atan(|v|·sin 5° / L)`; about 1.7° for v = 100 cm,
+  L = 300 cm) because the joint stays exact. Chosen over keeping direction exactly, which would pull the joint apart.
 
