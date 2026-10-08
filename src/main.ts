@@ -19,7 +19,9 @@ import { rulerReading } from "./ruler"
 import { availableFormats, exportDrawing, PAGE_FORMATS_MM } from "./export/pdf"
 import type { PageFormat } from "./export/pdf"
 import { loadStore, saveStore } from "./storage"
-import { thicknessAllowed, violatesDoorways } from "./doorway/doorway-guard"
+import { placeWall, syncAutoDimensions } from "./auto-dimensions"
+import { mergeContinuation } from "./wall-merge"
+import { thicknessAllowed } from "./doorway/doorway-guard"
 import { deleteObjects, doorwaysInRect, erasePick, pressPick, wallsInRect } from "./doorway/doorway-scene"
 import { createElementTool, createSelectionEditing } from "./doorway/doorway-tool"
 import { initialParams, inheritFrom } from "./doorway/element-kind"
@@ -586,11 +588,31 @@ function commitPoint(): void {
   const end = segment?.end ?? cursor ?? chainStart
   if (!pointsEqual(a, end)) {
     const wall: Wall = { id: crypto.randomUUID(), a, b: end, thicknessCm, type: wallMaterial }
+    // продолжение свободного конца стены той же толщины и материала удлиняет её (change merge-collinear-walls)
+    const merge = mergeContinuation(scene(), wall)
     // стена, нарушающая проём, не фиксируется: цепочка продолжается (spec wall-drawing)
-    if (violatesDoorways(walls, [...walls, wall], doorways)) return
-    pushRecord()
-    dirty = true
-    walls.push(wall)
+    if (merge.kind === "blocked") return
+    if (merge.kind === "merged") {
+      // удлинённая стена пересчитывает свои автоматические размеры в той же записи истории
+      const next = syncAutoDimensions(merge.scene)
+      pushRecord()
+      dirty = true
+      next.walls.forEach((w, i) => {
+        walls[i] = w
+      })
+      dimensions = next.dimensions
+      current().dimensions = dimensions
+      setDoorways(next.doorways ?? [])
+    } else {
+      // новая стена получает размеры и пересчитывает размеры соседей в той же записи истории (design D1, D6)
+      const placed = placeWall(scene(), wall)
+      if (!placed) return
+      pushRecord()
+      dirty = true
+      walls.push(wall)
+      dimensions = placed.dimensions
+      current().dimensions = dimensions
+    }
   }
   // стена не продолжается автоматически: инструмент ждёт новый старт
   clearChain()
@@ -654,6 +676,8 @@ canvas.addEventListener("pointermove", (e) => {
         const dragged = dimDrag.dim
         const level = dimLevelSnap(p, axis, dimensions.filter((d) => d !== dragged), walls, radiusCm())
         dragged.offset = level ? level.offset : dimensionOffsetAt(p, axis)
+        // передвинутый пользователем размер больше не автоматический: пересчёт его не заменяет (change auto-wall-dimensions, design D5)
+        delete dragged.auto
         dirty = true
         redraw()
       }

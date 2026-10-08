@@ -1,7 +1,7 @@
 import type { Axis } from "./ortho-axis"
 import { ZOOM_MAX, ZOOM_MIN } from "./types"
 import type { Dimension, DimPoint, EdgeRef, Point, View, Wall } from "./types"
-import { faceCornerTol } from "./wall-geometry"
+import { faceCornerTol, pointInPolygon } from "./wall-geometry"
 
 // попадание курсора — канонический расчёт по отображаемой форме (design D1)
 export { hitWall } from "./wall-geometry"
@@ -237,6 +237,14 @@ function endLink(p: Point, w: Wall, group: readonly Wall[]): EndLink {
 function endOccupied(p: Point, w: Wall, walls: readonly Wall[]): boolean {
   return walls.some((c) => c !== w && !pointsEqual(c.a, c.b) &&
     (distance(p, c.a) <= faceCornerTol(w, c) || distance(p, c.b) <= faceCornerTol(w, c) || teeEndAttached(p, w, c)))
+}
+
+// конец end стены wall занят другой стеной (change auto-wall-dimensions, design D3): стык,
+// примыкание к оси или грани либо конец внутри замкнутого контура другой стены
+export function wallEndOccupied(wall: Wall, end: "a" | "b", walls: Wall[]): boolean {
+  const p = wall[end]
+  if (jointAt(wall, p, walls)) return true
+  return walls.some((c) => c !== wall && !pointsEqual(c.a, c.b) && (teeEndAttached(p, wall, c) || pointInPolygon(p, wallShape(c, walls))))
 }
 
 // какие концы несдвигаемой стены следуют за группой (change fix-wall-move-joints, design D2):

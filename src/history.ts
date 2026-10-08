@@ -47,6 +47,7 @@ export function cloneScene(scene: Scene): Scene {
       from: { a: { ...d.from.a }, b: { ...d.from.b } },
       to: { a: { ...d.to.a }, b: { ...d.to.b } },
       offset: d.offset,
+      ...(d.auto !== undefined ? { auto: d.auto } : null),
     })),
     ...(scene.doorways ? { doorways: scene.doorways.map((d) => ({ ...d })) } : null),
   }

@@ -38,6 +38,8 @@ export interface Dimension {
   from: DimPoint
   to: DimPoint
   offset: number
+  // идентификатор стены-владельца у размера, созданного автоматически (change auto-wall-dimensions, design D5)
+  auto?: string
 }
 
 // Проём в стене (change add-doorway, design D1): положение — расстояние вдоль оси опорной стены

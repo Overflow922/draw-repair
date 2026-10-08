@@ -33,7 +33,8 @@ const isDimPoint = (p: unknown): p is DimPoint =>
 
 export const isDimension = (dim: unknown): dim is Dimension =>
   typeof dim === "object" && dim !== null && isDimPoint((dim as Dimension).from) && isDimPoint((dim as Dimension).to) &&
-  typeof (dim as Dimension).offset === "number" && Number.isFinite((dim as Dimension).offset)
+  typeof (dim as Dimension).offset === "number" && Number.isFinite((dim as Dimension).offset) &&
+  ((dim as Dimension).auto === undefined || typeof (dim as Dimension).auto === "string")
 
 const num = (v: unknown): v is number => typeof v === "number" && Number.isFinite(v)
 
@@ -131,7 +132,7 @@ export function parseStore(raw: string): LoadedStore | null {
         walls: assignIds(dr.walls),
         ...loadDoorways(dr.doorways, dr.walls),
         dimensions: (Array.isArray(dr.dimensions) ? dr.dimensions : []).filter(isDimension)
-          .map((dim) => ({ from: { ...dim.from }, to: { ...dim.to }, offset: dim.offset })),
+          .map((dim) => ({ from: { ...dim.from }, to: { ...dim.to }, offset: dim.offset, ...(dim.auto !== undefined ? { auto: dim.auto } : null) })),
         ...(version === 1 ? { scale: DEFAULT_SCALE } : null),
       }))
       return { store: { version: 3, activeId: d.activeId, drawings }, readOnly: false }

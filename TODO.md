@@ -292,3 +292,39 @@ Follow-ups from `fix-ortho-tilted-stretch` (archived 2026-10-08).
 - A neighbour stretched within 5° can rotate slightly (at most `atan(|v|·sin 5° / L)`; about 1.7° for v = 100 cm,
   L = 300 cm) because the joint stays exact. Chosen over keeping direction exactly, which would pull the joint apart.
 
+
+---
+
+Follow-ups from the change `auto-wall-dimensions` (model of visible face pieces, 2026-10-09).
+
+## Bugs
+
+- [ ] Oblique joints and parallel overlaps are not described by the spec: a wall end meeting another at a slanted angle (e.g. 60° corner, 45° stem) can give one length dimension instead of two, and a 5 cm gap between collinear walls removes the length dimensions of both walls (the implementation only skips pieces with a resolved length below 1e-6 cm). Decide the expected dimensions in the spec and add tests.
+
+## Tests
+
+- [ ] `src/main.ts` wiring of `placeWall`/`syncAutoDimensions` in `commitPoint` (one `pushRecord()`, `dimensions` replaced by the result) and the `delete dragged.auto` on dragging a dimension line have no automated test; checked by hand in the browser (single wall: four dimensions; stem on a bar: eight, the bar's face dimension replaced; undo and redo as one step). Dragging a dimension to clear `auto` was not exercised in the browser.
+- [ ] Test validation of `auto-wall-dimensions` stopped after two FAIL rounds without PASS (agreed limit); tests were then checked with 35 mutants of the real implementation (see `openspec/changes/auto-wall-dimensions/test-validation.md`). Survivors left as notes: array position of the placed wall, anchor-radius and key-scale constants, `-0` in the geometry key.
+
+## Docs
+
+- [ ] `openspec/specs/wall-dimensions` Purpose says automatic dimensioning of walls was removed; after `auto-wall-dimensions` it is outdated (dimensions are created when a wall is placed and recomputed for touched walls). Reword the Purpose.
+
+## Out of scope (decided, revisit if needed)
+
+- Dimensions of the wall pieces on both sides of a doorway (chain with a total, as in the reference drawing `img.png`): separate change, needs a new anchor kind for doorway reveals in `dimension-tool`, storage and following the doorway.
+- Automatic dimensions are not recomputed when a wall is erased, moved, stretched, or its thickness or doorways change: dimensions follow their walls through anchors; a stale piece dimension can remain after the neighbour is erased.
+- A wall started on one wall and ended on another is covered by the visible-pieces rule; its own scenarios have not been specified separately.
+
+## merge-collinear-walls (2026-10-09)
+
+### Tests
+
+- [ ] `src/main.ts` wiring of `mergeContinuation` in `commitPoint` (one `pushRecord()`, in-place replacement of `walls` and `doorways`, `blocked` leaves the chain) has no automated test; checked by hand in the browser (two collinear segments give one wall, undo and redo as one step, a perpendicular wall at the end stays separate).
+- [ ] Test validation of `merge-collinear-walls` ended after five FAIL rounds without PASS (user decision); the tests were later checked with the validators' mutants against the real implementation (see `openspec/changes/merge-collinear-walls/test-validation.md`).
+
+### Out of scope (decided, revisit if needed)
+
+- Bridge: a wall between two collinear free ends merges only with the first one; joining the two existing walls into one is a separate change.
+- Merging walls that are already drawn (on load or by a command) is not done.
+- The spec does not say which wall wins when several walls qualify as the continued one (design D2: smallest gap, then first in the array), nor how a zero-length wall is treated.
