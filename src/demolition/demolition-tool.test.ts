@@ -535,6 +535,165 @@ describe("правка чисел выделенной пометки", () => {
   })
 })
 
+describe("после постановки пометка выделена (change demolition-select-after-mark)", () => {
+  // up возвращает идентификатор поставленной пометки; main.ts по нему снимает инструмент, не сбрасывая выделение
+  const clickUp = (s: Setup, p: Point): string | null => {
+    s.tool.down(p, px(p))
+    return s.tool.up(p, px(p))
+  }
+  const dragUp = (s: Setup, a: Point, b: Point): string | null => {
+    s.tool.down(a, px(a))
+    s.tool.move(b, px(b))
+    return s.tool.up(b, px(b))
+  }
+
+  it("TL-23: клик по стене создаёт пометку, up возвращает её идентификатор, она выделена", () => {
+    const s = setup()
+    expect(clickUp(s, { x: 250, y: 0 })).toBe("n1")
+    expect(s.tool.selectedId()).toBe("n1")
+  })
+
+  it("TL-23: протяжка создаёт пометку: идентификатор возвращён, пометка выделена", () => {
+    const s = setup({ radius: 1 })
+    expect(dragUp(s, { x: 100, y: 0 }, { x: 190, y: 0 })).toBe("n1")
+    expect(s.tool.selectedId()).toBe("n1")
+    expect(s.marks()).toEqual([mk("n1", "W", "a", 100, 190)])
+  })
+
+  it("TL-23: постановка переносит выделение с другой пометки на новую", () => {
+    const s = setup({ marks: [mk("m1", "W", "a", 100, 190)], radius: 1 })
+    s.tool.select({ x: 150, y: 0 })
+    expect(s.tool.selectedId()).toBe("m1")
+    expect(dragUp(s, { x: 300, y: 0 }, { x: 350, y: 0 })).toBe("n1")
+    expect(s.tool.selectedId()).toBe("n1")
+  })
+
+  it("TL-23: первая перерисовка после замены списка пометок (и само сохранение) уже видит выделение новой пометки", () => {
+    const s = setup({ radius: 1 })
+    let replaced = false
+    let seenOnFirstRedraw: string | null | undefined
+    let seenOnChanged: string | null | undefined
+    const setMarks = s.host.setMarks
+    const changed = s.host.changed
+    const redraw = s.host.redraw
+    s.host.setMarks = (next) => {
+      replaced = true
+      setMarks(next)
+    }
+    s.host.changed = () => {
+      seenOnChanged = s.tool.selectedId()
+      changed()
+    }
+    s.host.redraw = () => {
+      if (replaced && seenOnFirstRedraw === undefined) seenOnFirstRedraw = s.tool.selectedId()
+      redraw()
+    }
+    dragUp(s, { x: 100, y: 0 }, { x: 190, y: 0 })
+    expect(seenOnChanged).toBe("n1")
+    expect(seenOnFirstRedraw).toBe("n1")
+  })
+
+  it("TL-28: на двух стенах выбирается пометка именно той стены, где поставлен участок (клик): у стены V уже есть пометка той же длины", () => {
+    const V = wall(0, 300, 500, 300, "V")
+    const s = setup({ walls: [W(), V], marks: [mk("v1", "V", "a", 0, 500)] })
+    expect(clickUp(s, { x: 250, y: 0 })).toBe("n1")
+    expect(s.tool.selectedId()).toBe("n1")
+  })
+
+  it("TL-28: на двух стенах — то же для протяжки: пометка V с тем же участком не выбирается", () => {
+    const V = wall(0, 300, 500, 300, "V")
+    const s = setup({ walls: [W(), V], marks: [mk("v1", "V", "a", 50, 400)], radius: 1 })
+    expect(dragUp(s, { x: 100, y: 0 }, { x: 190, y: 0 })).toBe("n1")
+    expect(s.tool.selectedId()).toBe("n1")
+  })
+
+  it("TL-28: слияние на W, пока в списке позже стоит пометка другой стены: возвращается m1, а не последняя в списке", () => {
+    const V = wall(0, 300, 500, 300, "V")
+    const s = setup({ walls: [W(), V], marks: [mk("m1", "W", "a", 100, 200), mk("v1", "V", "a", 0, 500)], radius: 1 })
+    expect(dragUp(s, { x: 150, y: 0 }, { x: 300, y: 0 })).toBe("m1")
+    expect(s.tool.selectedId()).toBe("m1")
+  })
+
+  it("TL-28: постановка до существующей пометки той же стены: выбирается новая, а не пометка, лежащая правее (100–190 при m1 300–350)", () => {
+    const s = setup({ marks: [mk("m1", "W", "a", 300, 350)], radius: 1 })
+    expect(dragUp(s, { x: 100, y: 0 }, { x: 190, y: 0 })).toBe("n1")
+    expect(s.tool.selectedId()).toBe("n1")
+  })
+
+  it("TL-28: постановка между двумя существующими пометками и левее их: выбирается новая (100–190 при m1 50–80 и m2 400–450)", () => {
+    const s = setup({ marks: [mk("m1", "W", "a", 50, 80), mk("m2", "W", "a", 400, 450)], radius: 1 })
+    expect(dragUp(s, { x: 100, y: 0 }, { x: 190, y: 0 })).toBe("n1")
+    expect(s.tool.selectedId()).toBe("n1")
+  })
+
+  it("TL-24: слияние — возвращается и выделяется слитая пометка (идентификатор первой): 100–200 + 150–300 → m1 100–300", () => {
+    const s = setup({ marks: [mk("m1", "W", "a", 100, 200)], radius: 1 })
+    expect(dragUp(s, { x: 150, y: 0 }, { x: 300, y: 0 })).toBe("m1")
+    expect(s.tool.selectedId()).toBe("m1")
+    expect(s.marks()).toEqual([mk("m1", "W", "a", 100, 300)])
+  })
+
+  it("TL-24: клик по неснесённой части стены с другой пометкой поглощает её: возвращается и выделяется m1", () => {
+    const s = setup({ marks: [mk("m1", "W", "a", 100, 190)] })
+    expect(clickUp(s, { x: 400, y: 0 })).toBe("m1")
+    expect(s.tool.selectedId()).toBe("m1")
+  })
+
+  it("TL-25: снятие пометки кликом — null, выделение не появляется", () => {
+    const s = setup({ marks: [mk("m1", "W", "a", 100, 190)] })
+    expect(clickUp(s, { x: 150, y: 0 })).toBeNull()
+    expect(s.tool.selectedId()).toBeNull()
+  })
+
+  it("TL-25: снятие выделенной пометки сбрасывает выделение, снятие другой его не меняет", () => {
+    const s = setup({ marks: [mk("m1", "W", "a", 100, 190), mk("m2", "W", "a", 300, 400)] })
+    s.tool.select({ x: 350, y: 0 })
+    expect(clickUp(s, { x: 150, y: 0 })).toBeNull()
+    expect(s.tool.selectedId()).toBe("m2")
+    expect(clickUp(s, { x: 350, y: 0 })).toBeNull()
+    expect(s.tool.selectedId()).toBeNull()
+  })
+
+  it("TL-25: железобетон, клик мимо стены и отсутствие нажатия — null, выделение не меняется", () => {
+    const reinforced = setup({ walls: [W("reinforced")] })
+    expect(clickUp(reinforced, { x: 250, y: 0 })).toBeNull()
+    expect(reinforced.tool.selectedId()).toBeNull()
+    const off = setup({ marks: [mk("m1", "W", "a", 100, 190)] })
+    off.tool.select({ x: 150, y: 0 })
+    expect(clickUp(off, { x: 250, y: 200 })).toBeNull()
+    expect(off.tool.selectedId()).toBe("m1")
+    expect(off.tool.up({ x: 100, y: 0 }, px({ x: 100, y: 0 }))).toBeNull()
+  })
+
+  it("TL-25: Escape во время протяжки — null при последующем отпускании, выделение не меняется", () => {
+    const s = setup({ radius: 1 })
+    s.tool.down({ x: 100, y: 0 }, px({ x: 100, y: 0 }))
+    s.tool.move({ x: 190, y: 0 }, px({ x: 190, y: 0 }))
+    s.tool.cancel()
+    expect(s.tool.up({ x: 190, y: 0 }, px({ x: 190, y: 0 }))).toBeNull()
+    expect(s.tool.selectedId()).toBeNull()
+  })
+
+  it("TL-26: операция, ничего не изменившая (протяжка внутри уже снесённого участка), — null, выделение не меняется", () => {
+    const s = setup({ marks: [mk("m1", "W", "a", 100, 300), mk("m2", "W", "a", 400, 450)], radius: 1 })
+    s.tool.select({ x: 425, y: 0 })
+    expect(dragUp(s, { x: 150, y: 0 }, { x: 200, y: 0 })).toBeNull()
+    expect(s.tool.selectedId()).toBe("m2")
+    expect(s.log).toMatchObject({ record: 0, set: 0 })
+  })
+
+  it("TL-27: сразу после протяжки число ширины находится и правится: 100–190 → ширина 120 → 100–220, пометка остаётся выделенной", () => {
+    const s = setup({ radius: 1 })
+    dragUp(s, { x: 100, y: 0 }, { x: 190, y: 0 })
+    const spot = s.tool.numberAt({ x: 145, y: 14.15 }, "cm", K, 14, 1)
+    expect(spot?.target).toBe("width")
+    expect(s.tool.applyNumber("width", 120)).toBe(true)
+    expect(s.marks()).toEqual([mk("n1", "W", "a", 100, 220)])
+    expect(s.tool.selectedId()).toBe("n1")
+    expect(s.log.record).toBe(2)
+  })
+})
+
 describe("протяжка по стенам не вдоль оси x", () => {
   it("TL-22: вертикальная стена (0,0)-(0,500): нажатие (5, 100), отпускание (80, 190) даёт 100–190", () => {
     const s = setup({ walls: [wall(0, 0, 0, 500, "V")], radius: 1 })

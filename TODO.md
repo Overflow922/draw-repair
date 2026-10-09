@@ -391,6 +391,12 @@ Follow-ups from the change `auto-wall-dimensions` (model of visible face pieces,
 - Dimensions, room areas and element labels on the demolition plan; eraser and selection of underlay walls; partial demolition of a wall element (user decision, 2026-10-09).
 - Page name in the title block (graph 5) is still empty, now on both pages (see `drawing-plans` above).
 
+## demolition-select-after-mark (2026-10-09)
+
+### Tests
+
+- [ ] Non-blocking gaps from validation: no test selects the placed mark on a diagonal wall (`EPS_CM` tolerance in `place`); no test checks the redraw after `applyNumber`/`deleteSelected` or the redraw that clears the preview after an empty operation; `main.ts` `leaveDemolitionTool` condition (`up(...) !== null`) is only checked by hand (2026-10-09).
+
 ## demolition-show-elements (2026-10-09)
 
 ### Docs

@@ -4,7 +4,7 @@ import { dist, dot, sub, unit as unitVector } from "../wall-geometry"
 import { alongNodes, snapAlong } from "./mark-snap"
 import { editNumber, markNumberAt, markNumberLayout } from "./mark-numbers"
 import type { MarkNumberSpot, NumberTarget } from "./mark-numbers"
-import { MIN_WIDTH_CM, addMark, effectiveMarks, markAt, removeMark, sameMarks } from "./marks"
+import { EPS_CM, MIN_WIDTH_CM, addMark, effectiveMarks, markAt, removeMark, sameMarks, span } from "./marks"
 
 // Инструмент «Демонтаж», выделение пометки и правка чисел на месте (change demolition-plan, design D10): состояние
 // жеста и выделения без DOM. Данные чертежа, история и перерисовка — через явный DemolitionToolHost.
@@ -31,7 +31,7 @@ export interface Ghost {
 export interface DemolitionTool {
   down(p: Point, px: Point): void // p — мир (см), px — экранная точка (мёртвая зона жеста — в px)
   move(p: Point, px: Point): void
-  up(p: Point, px: Point): void
+  up(p: Point, px: Point): string | null // идентификатор поставленной (слитой) пометки; null — ничего не поставлено
   cancel(): void // Escape: прервать протяжку без изменений
   dragging(): boolean
   ghost(): Ghost | null
@@ -78,6 +78,25 @@ export function createDemolitionTool(host: DemolitionToolHost): DemolitionTool {
     return [Math.min(t0, t1), Math.max(t0, t1)]
   }
 
+  // Постановка участка [from, to] от конца a: поставленная (слитая) пометка выделяется до замены списка, чтобы
+  // перерисовка уже видела выделение; возвращается её идентификатор, null — список не изменился (change
+  // demolition-select-after-mark, design D1)
+  const place = (wall: Wall, from: number, to: number): string | null => {
+    const marks = host.marks()
+    const next = addMark(marks, host.walls(), wall.id, from, to, host.newId)
+    if (next === marks) return null
+    const lo = Math.max(0, from)
+    const hi = Math.min(dist(wall.a, wall.b), to)
+    const placed = next.find((m) => {
+      if (m.wallId !== wall.id) return false
+      const [start, end] = span(m, wall)
+      return start <= lo + EPS_CM && end >= hi - EPS_CM
+    })
+    if (placed) selected = placed.id
+    commit(next)
+    return placed?.id ?? null
+  }
+
   const reset = (): void => {
     press = null
     dragging = false
@@ -107,18 +126,23 @@ export function createDemolitionTool(host: DemolitionToolHost): DemolitionTool {
       const pr = press
       const drag = dragging || (pr !== null && dist(px, pr.px) > DEAD_ZONE_PX)
       reset()
-      if (!pr) return
+      if (!pr) return null
       const marks = host.marks()
       const walls = host.walls()
       const [from, to] = bounds(pr, p)
+      let placed: string | null = null
       if (drag && to - from >= MIN_WIDTH_CM) {
-        commit(addMark(marks, walls, pr.wall.id, from, to, host.newId))
+        placed = place(pr.wall, from, to)
       } else {
         // клик: по снесённой области — снять её пометку, иначе пометить стену целиком
         const hit = markAt(pr.p, effectiveMarks(marks, walls), walls)
-        commit(hit ? removeMark(marks, hit.mark.id) : addMark(marks, walls, pr.wall.id, 0, dist(pr.wall.a, pr.wall.b), host.newId))
+        if (hit) {
+          if (hit.mark.id === selected) selected = null
+          commit(removeMark(marks, hit.mark.id))
+        } else placed = place(pr.wall, 0, dist(pr.wall.a, pr.wall.b))
       }
       host.redraw()
+      return placed
     },
     cancel() {
       reset()

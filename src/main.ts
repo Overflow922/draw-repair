@@ -230,6 +230,13 @@ const resetDemolition = (): void => {
   closeDemolitionEditor()
 }
 
+// снять инструмент «Демонтаж» без сброса выделения (setTool выделение снимает)
+function leaveDemolitionTool(): void {
+  tool = "none"
+  syncToolUI()
+  redraw()
+}
+
 // нажатие на правимое число выделенной пометки — поле ввода на месте (как у чисел проёма); Enter применяет
 function pressDemolitionNumber(p: Point): boolean {
   const k = PX_PER_CM * view.zoom
@@ -979,7 +986,8 @@ canvas.addEventListener("pointerdown", () => {
 
 canvas.addEventListener("pointerup", (e) => {
   if (onDemolition() && e.button === 0) {
-    if (tool === "demolition") demolitionTool.up(toWorld(e), screenPoint(e))
+    // поставленная пометка остаётся выделенной, инструмент снимается — как у проёма (change demolition-select-after-mark)
+    if (tool === "demolition" && demolitionTool.up(toWorld(e), screenPoint(e)) !== null) leaveDemolitionTool()
     return
   }
   if (marquee) {
