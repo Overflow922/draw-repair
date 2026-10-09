@@ -357,3 +357,19 @@ Follow-ups from the change `auto-wall-dimensions` (model of visible face pieces,
 ### Out of scope (decided, revisit if needed)
 
 - Selection is only possible in the «Без инструмента» state. Editing a wall during drawing requires Esc first (user decision, 2026-10-09).
+
+## drawing-plans (explore + planning, 2026-10-09)
+
+### Tests
+
+- [ ] `buildPdfPages` page colours/palette are not asserted for any page: `pdf-ops.test-utils` `parsePaths` does not parse colour operators, so "pages after the first use a different palette" and "grid drawn on all pages" survive the whole `src/export` suite (test-validation round 4). Add colour-aware parsing and a "no grid, light palette" test through a test-change-request.
+- [ ] The legacy single-page wrappers `buildPdf`, `availableFormats`, `exportDrawing` exist only for approved tests (`exportDrawing` doorway forwarding is untested). Drop them by updating those tests once a test-change-request is approved.
+- [ ] The plan switcher (`#plan-switch`, `setPlan`) and its reset of selection/gestures have no automated test (no DOM harness); MAN-04 (reset on switching between two plans) becomes checkable only with the second plan in `demolition-plan`.
+
+### Docs
+
+- [ ] `pdf-export` «Заполнение основной надписи»: graph 5 (page name) and graphs 7/8 (Лист/Листов) stay empty. Filling graph 5 with the plan name and numbering the sheets was left out of `drawing-plans`; it needs a spec change and a change to the approved test "графа 5 пуста" (FL-3 in `sheet-pdf.test.ts`).
+
+### Out of scope (decided, revisit if needed)
+
+- `Drawing.walls/dimensions/doorways` stay as the content of plan `measure`; a nested `plans` structure with a version-4 document was rejected for this change (approved tests and format churn). Revisit if plans multiply (design D1).

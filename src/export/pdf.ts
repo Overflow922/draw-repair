@@ -3,10 +3,11 @@ import { doorLeaf, heightLabelAt, heightLabelSide, labelDirection } from "../doo
 import { dimGeometry, dimPointPoint } from "../geometry"
 import { LABEL_FRAME_PAD, elementLabel, labelWidth } from "../doorway/element-label"
 import { drawScene, PDF_METRICS } from "../render"
+import { PLANS } from "../plans"
 import { findRooms } from "../room-area"
 import { cross, dot, sub } from "../wall-geometry"
 import { DEFAULT_SCALE, PX_PER_CM, isDoor, isWindow } from "../types"
-import type { Dimension, Unit, Wall, WallElement } from "../types"
+import type { Dimension, Drawing, Unit, Wall, WallElement } from "../types"
 import { FONT_B64 } from "./font"
 import { PAGE_FORMATS_MM } from "./page-format"
 import type { PageFormat } from "./page-format"
@@ -106,11 +107,36 @@ export function fitsFormat(b: BBox, scale: number, format: PageFormat): boolean 
   return (b.maxX - b.minX) * mmPerCm <= area.w && (b.maxY - b.minY) * mmPerCm <= area.h
 }
 
+// Страница PDF — содержимое одного плана чертежа (change drawing-plans, design D5)
+export interface PlanPage {
+  walls: Wall[]
+  dimensions: Dimension[]
+  doorways: WallElement[]
+}
+
+// страницы чертежа: по одной на план каталога в порядке каталога; пока единственный план — обмерочный,
+// его объекты лежат в прежних полях чертежа (design D1)
+export function pagesOf(drawing: Drawing): PlanPage[] {
+  return PLANS.map(() => ({ walls: drawing.walls, dimensions: drawing.dimensions, doorways: drawing.doorways ?? [] }))
+}
+
+const ALL_FORMATS = Object.keys(PAGE_FORMATS_MM) as PageFormat[]
+
+// форматы, на которые страница помещается по своим габаритам; пустая страница ничего не ограничивает
+function pageFormats(page: PlanPage, scale: number): PageFormat[] {
+  if (page.walls.length === 0) return ALL_FORMATS
+  const b = wallsBBox(page.walls, page.dimensions, 0.5 * scale, page.doorways, scale)
+  return ALL_FORMATS.filter((f) => fitsFormat(b, scale, f))
+}
+
+// форматы, на которые помещаются все страницы (spec pdf-export «Форматы учитывают все страницы»)
+export function availableFormatsForPages(pages: PlanPage[], scale: number): PageFormat[] {
+  const perPage = pages.map((p) => pageFormats(p, scale))
+  return ALL_FORMATS.filter((f) => perPage.every((formats) => formats.includes(f)))
+}
+
 export function availableFormats(walls: Wall[], dimensions: Dimension[] = [], scale: number = 100, doorways: WallElement[] = []): PageFormat[] {
-  const all = Object.keys(PAGE_FORMATS_MM) as PageFormat[]
-  if (walls.length === 0) return all
-  const b = wallsBBox(walls, dimensions, 0.5 * scale, doorways, scale)
-  return all.filter((f) => fitsFormat(b, scale, f))
+  return availableFormatsForPages([{ walls, dimensions, doorways }], scale)
 }
 
 export function placeOnPage(b: BBox, scale: number, format: PageFormat): Placement {
@@ -132,6 +158,60 @@ export function pdfFileName(name: string, now: Date): string {
   return `${clean}_${now.getFullYear()}-${p(now.getMonth() + 1)}-${p(now.getDate())}_${p(now.getHours())}-${p(now.getMinutes())}-${p(now.getSeconds())}.pdf`
 }
 
+// рамка, основная надпись и чертёж одной страницы на текущей странице документа
+function drawPage(doc: jsPDF, page: PlanPage, unit: Unit, scale: number, format: PageFormat, name: string, date: Date): void {
+  const placement = placeOnPage(wallsBBox(page.walls, page.dimensions, 0.5 * scale, page.doorways, scale), scale, format)
+  const { w, h } = sheetSizeMm(format)
+  drawSheet(doc, format, { name, scale, date })
+  drawScene(
+    doc.context2d as unknown as CanvasRenderingContext2D,
+    w,
+    h,
+    page.walls,
+    null,
+    unit,
+    {
+      zoom: placement.mmPerCm / PX_PER_CM,
+      pan: { x: -placement.offsetX / placement.mmPerCm, y: -placement.offsetY / placement.mmPerCm },
+    },
+    [],
+    { grid: false, metrics: PDF_METRICS, dimensions: page.dimensions, doorways: page.doorways },
+  )
+}
+
+// PDF из упорядоченного списка страниц: один формат, масштаб, имя и дата на всех страницах
+export function buildPdfPages(
+  pages: PlanPage[],
+  unit: Unit,
+  scale: number,
+  format: PageFormat,
+  fontB64: string,
+  name = "",
+  date: Date = new Date(),
+): jsPDF {
+  const [pw, ph] = PAGE_FORMATS_MM[format]
+  const doc = new jsPDF({ unit: "mm", format: [pw, ph], orientation: "landscape" })
+  doc.addFileToVFS("PTSans.ttf", fontB64)
+  doc.addFont("PTSans.ttf", "PTSans", "normal")
+  pages.forEach((page, i) => {
+    if (i > 0) doc.addPage([pw, ph], "landscape")
+    drawPage(doc, page, unit, scale, format, name, date)
+  })
+  return doc
+}
+
+export function exportPages(pages: PlanPage[], unit: Unit, scale: number, format: PageFormat, name: string): void {
+  const now = new Date()
+  const doc = buildPdfPages(pages, unit, scale, format, FONT_B64, name, now)
+  const url = URL.createObjectURL(new Blob([doc.output("arraybuffer")], { type: "application/pdf" }))
+  const a = document.createElement("a")
+  a.href = url
+  a.download = pdfFileName(name, now)
+  a.click()
+  URL.revokeObjectURL(url)
+}
+
+// одностраничные формы с прежними сигнатурами
 export function buildPdf(
   walls: Wall[],
   dimensions: Dimension[],
@@ -143,28 +223,7 @@ export function buildPdf(
   name = "",
   date: Date = new Date(),
 ): jsPDF {
-  const placement = placeOnPage(wallsBBox(walls, dimensions, 0.5 * scale, doorways, scale), scale, format)
-  const [pw, ph] = PAGE_FORMATS_MM[format]
-  const doc = new jsPDF({ unit: "mm", format: [pw, ph], orientation: "landscape" })
-  doc.addFileToVFS("PTSans.ttf", fontB64)
-  doc.addFont("PTSans.ttf", "PTSans", "normal")
-  const { w, h } = sheetSizeMm(format)
-  drawSheet(doc, format, { name, scale, date })
-  drawScene(
-    doc.context2d as unknown as CanvasRenderingContext2D,
-    w,
-    h,
-    walls,
-    null,
-    unit,
-    {
-      zoom: placement.mmPerCm / PX_PER_CM,
-      pan: { x: -placement.offsetX / placement.mmPerCm, y: -placement.offsetY / placement.mmPerCm },
-    },
-    [],
-    { grid: false, metrics: PDF_METRICS, dimensions, doorways },
-  )
-  return doc
+  return buildPdfPages([{ walls, dimensions, doorways }], unit, scale, format, fontB64, name, date)
 }
 
 export function exportDrawing(
@@ -176,12 +235,5 @@ export function exportDrawing(
   name: string,
   doorways: WallElement[] = [],
 ): void {
-  const now = new Date()
-  const doc = buildPdf(walls, dimensions, unit, scale, format, FONT_B64, doorways, name, now)
-  const url = URL.createObjectURL(new Blob([doc.output("arraybuffer")], { type: "application/pdf" }))
-  const a = document.createElement("a")
-  a.href = url
-  a.download = pdfFileName(name, now)
-  a.click()
-  URL.revokeObjectURL(url)
+  exportPages([{ walls, dimensions, doorways }], unit, scale, format, name)
 }

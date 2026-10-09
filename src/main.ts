@@ -1,5 +1,5 @@
 import "./style.css"
-import { cloneScene, drawingHistory, loadHistory, record, recordSnapshot, redoEntry, saveHistory, undoEntry } from "./history"
+import { cloneScene, loadHistory, planHistory, record, recordSnapshot, redoEntry, saveHistory, undoEntry } from "./history"
 import type { Scene } from "./history"
 import { dimGeometry, dimLevelSnap, dimensionOffsetAt, hitWall, nearestEdgeIntersection, dimPointPoint, pointsEqual, segmentIntersectsRect, snap, snapOthers, snapWithSource, zoomAt } from "./geometry"
 import type { DimGeometry, SnapResult } from "./geometry"
@@ -16,8 +16,10 @@ import type { ChainSegment } from "./wall-chain"
 import { drawPatternPreview, render } from "./render"
 import { findRooms } from "./room-area"
 import { rulerReading } from "./ruler"
-import { availableFormats, exportDrawing, PAGE_FORMATS_MM } from "./export/pdf"
+import { availableFormatsForPages, exportPages, pagesOf, PAGE_FORMATS_MM } from "./export/pdf"
 import type { PageFormat } from "./export/pdf"
+import { PLANS, activePlanOf, isPlanId } from "./plans"
+import type { PlanId } from "./plans"
 import { loadStore, saveStore } from "./storage"
 import { placeWall, syncAutoDimensions } from "./auto-dimensions"
 import { mergeContinuation } from "./wall-merge"
@@ -46,6 +48,7 @@ const orthoToggle = document.querySelector<HTMLButtonElement>("#ortho-toggle")!
 const themeToggle = document.querySelector<HTMLButtonElement>("#theme-toggle")!
 const tabsEl = document.querySelector<HTMLElement>("#tabs")!
 const tabAdd = document.querySelector<HTMLButtonElement>("#tab-add")!
+const planSwitch = document.querySelector<HTMLElement>("#plan-switch")!
 const undoBtn = document.querySelector<HTMLButtonElement>("#undo-btn")!
 const redoBtn = document.querySelector<HTMLButtonElement>("#redo-btn")!
 const toolWallBtn = document.querySelector<HTMLButtonElement>("#tool-wall")!
@@ -123,9 +126,12 @@ const radiusCm = (): number => snapRadiusCm(view.zoom)
 // текущая сцена чертежа: стены, размеры, проёмы (снимок истории — change add-doorway)
 const scene = (): Scene => ({ walls, dimensions, doorways })
 
+// история активного плана активного чертежа (change drawing-plans, design D4)
+const activeHistory = () => planHistory(historyStore, store.activeId, activePlanOf(current()))
+
 const pushRecord = (): void => {
   nudgeBurst = false
-  record(drawingHistory(historyStore, store.activeId), scene())
+  record(activeHistory(), scene())
 }
 
 // список проёмов заменяется целиком: правки проёма возвращают новый объект
@@ -232,7 +238,7 @@ function selectDoorway(d: WallElement): void {
 
 const pushSnapshot = (snapshot: Scene): void => {
   nudgeBurst = false
-  recordSnapshot(drawingHistory(historyStore, store.activeId), snapshot)
+  recordSnapshot(activeHistory(), snapshot)
 }
 
 function setWallPanel(open: boolean): void {
@@ -405,7 +411,7 @@ function updateAngleBox(): void {
 }
 
 function syncHistoryButtons(): void {
-  const h = drawingHistory(historyStore, store.activeId)
+  const h = activeHistory()
   undoBtn.disabled = h.past.length === 0
   redoBtn.disabled = h.future.length === 0
 }
@@ -510,13 +516,14 @@ function showFitPopup(unavailable: PageFormat[]): void {
 }
 
 function syncFormats(): void {
-  const available = availableFormats(walls, dimensions, current().scale, doorways)
+  const pages = pagesOf(current())
+  const available = availableFormatsForPages(pages, current().scale)
   const all = Object.keys(PAGE_FORMATS_MM) as PageFormat[]
   const unavailable = all.filter((f) => !available.includes(f))
   pdfFormat.replaceChildren(...available.map((f) => new Option(f, f)))
   if (!available.includes(pdfFormat.value as PageFormat)) pdfFormat.value = available[0] ?? ""
   pdfFormat.disabled = available.length === 0
-  pdfExportBtn.disabled = walls.length === 0 || available.length === 0
+  pdfExportBtn.disabled = pages.every((p) => p.walls.length === 0) || available.length === 0
   if (unavailableFormats !== null && unavailable.length > unavailableFormats.length) showFitPopup(unavailable)
   else if (unavailableFormats !== null && unavailable.length < unavailableFormats.length) hideFitPopup()
   unavailableFormats = unavailable
@@ -1234,6 +1241,32 @@ function renderTabs(): void {
   }
 }
 
+// переключатель планов: по кнопке на план каталога, активный план активного чертежа выделен
+function renderPlanSwitch(): void {
+  const active = activePlanOf(current())
+  planSwitch.replaceChildren(
+    ...PLANS.map((p) => {
+      const btn = document.createElement("button")
+      btn.className = p.id === active ? "plan-btn active" : "plan-btn"
+      btn.type = "button"
+      btn.dataset.plan = p.id
+      btn.textContent = p.label
+      return btn
+    }),
+  )
+}
+
+function setPlan(id: PlanId): void {
+  if (id === activePlanOf(current())) return
+  current().activePlan = id
+  activate(store.activeId)
+}
+
+planSwitch.addEventListener("click", (e) => {
+  const id = (e.target as HTMLElement).closest<HTMLElement>(".plan-btn")?.dataset.plan
+  if (isPlanId(id)) setPlan(id)
+})
+
 function nextName(): string {
   const used = new Set(store.drawings.map((d) => d.name))
   for (let n = 1; ; n++) if (!used.has(`Чертёж ${n}`)) return `Чертёж ${n}`
@@ -1275,6 +1308,7 @@ function activate(id: string): void {
   syncScaleSelector()
   dirty = true
   renderTabs()
+  renderPlanSwitch()
   redraw()
 }
 
@@ -1283,7 +1317,7 @@ function closeDrawing(id: string): void {
   if (!confirm(`Удалить чертёж «${drawing.name}»?`)) return
   const idx = store.drawings.indexOf(drawing)
   removeDrawing(id, idx)
-  const h = drawingHistory(historyStore, store.activeId)
+  const h = activeHistory()
   h.past.push({ kind: "close", index: idx, drawingId: id })
   h.future = []
   dirty = true
@@ -1319,7 +1353,7 @@ function resetEditing(): void {
 
 function undo(): void {
   if (groupMove || endpointDrag || panDrag || dimDrag || doorwayTool.dragging()) return
-  const h = drawingHistory(historyStore, store.activeId)
+  const h = activeHistory()
   const e = undoEntry(h, scene())
   if (!e) return
   if (e.kind === "walls") {
@@ -1342,7 +1376,7 @@ function undo(): void {
 
 function redo(): void {
   if (groupMove || endpointDrag || panDrag || dimDrag || doorwayTool.dragging()) return
-  const h = drawingHistory(historyStore, store.activeId)
+  const h = activeHistory()
   const e = redoEntry(h, scene())
   if (!e) return
   if (e.kind === "walls") {
@@ -1366,7 +1400,7 @@ redoBtn.addEventListener("click", redo)
 
 pdfExportBtn.addEventListener("click", () => {
   const drawing = current()
-  exportDrawing(drawing.walls, drawing.dimensions, unit, drawing.scale, pdfFormat.value as PageFormat, drawing.name, drawing.doorways ?? [])
+  exportPages(pagesOf(drawing), unit, drawing.scale, pdfFormat.value as PageFormat, drawing.name)
 })
 
 pdfScale.addEventListener("change", () => {
@@ -1491,4 +1525,5 @@ window.addEventListener("resize", redraw)
 syncThicknessBox()
 syncToolUI()
 renderTabs()
+renderPlanSwitch()
 applyTheme()

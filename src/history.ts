@@ -1,3 +1,5 @@
+import { historyKey } from "./plans"
+import type { PlanId } from "./plans"
 import { isDimension, isDrawing, isWall, isWallElement } from "./storage"
 import type { Dimension, Drawing, Wall, WallElement } from "./types"
 
@@ -38,6 +40,11 @@ export interface LoadedHistory {
 
 export function drawingHistory(history: HistoryStore, id: string): DrawingHistory {
   return (history.histories[id] ??= { past: [], future: [] })
+}
+
+// история плана чертежа; у обмерочного плана это прежняя история чертежа (change drawing-plans, design D4)
+export function planHistory(history: HistoryStore, drawingId: string, plan: PlanId): DrawingHistory {
+  return drawingHistory(history, historyKey(drawingId, plan))
 }
 
 export function cloneScene(scene: Scene): Scene {

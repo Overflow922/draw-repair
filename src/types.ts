@@ -1,3 +1,5 @@
+import type { PlanId } from "./plans"
+
 export interface Point {
   x: number
   y: number
@@ -113,11 +115,14 @@ export const isScale = (value: unknown): value is ScaleDenominator =>
 export interface Drawing {
   id: string
   name: string
+  // walls, dimensions и doorways — содержимое плана "measure" (change drawing-plans, design D1)
   walls: Wall[]
   dimensions: Dimension[]
   // элементы стены (проёмы и окна); отсутствие — пустой список, при загрузке не дописывается
   // (add-doorway design D9); JSON-ключ прежний (add-window design D1)
   doorways?: WallElement[]
+  // активный план; отсутствие или неизвестное значение читается как план по умолчанию (drawing-plans design D3)
+  activePlan?: PlanId
   view: View
   scale: ScaleDenominator
 }

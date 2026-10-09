@@ -72,9 +72,16 @@ body {
   z-index: 10;
   max-width: calc(100% - 24px);
   display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  padding: 6px 8px;
+}
+
+#tab-row {
+  display: flex;
   align-items: center;
   gap: 8px;
-  padding: 6px 8px;
 }
 
 #tabs {
@@ -430,12 +437,14 @@ body {
   display: block;
 }
 
-#unit-row {
+#unit-row,
+#plan-switch {
   display: flex;
   gap: 2px;
 }
 
-.unit {
+.unit,
+.plan-btn {
   width: 24px;
   height: 28px;
   padding: 0;
@@ -447,8 +456,15 @@ body {
   cursor: pointer;
 }
 
-.unit.active {
+.unit.active,
+.plan-btn.active {
   background: var(--active-bg);
   border-color: var(--active-border);
   color: var(--active-text);
+}
+
+/* переключатель планов: кнопка шириной по подписи (change drawing-plans, design D6) */
+.plan-btn {
+  width: auto;
+  padding: 0 8px;
 }

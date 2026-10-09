@@ -1,3 +1,4 @@
+import { isPlanId } from "./plans"
 import { isDoor, isScale, isWindow, DEFAULT_SCALE, normalizeMaterial } from "./types"
 import type { Dimension, DimPoint, Doorway, Drawing, DrawingStore, EdgeRef, Point, View, Wall, WallDoor, WallElement, WallWindow } from "./types"
 
@@ -127,8 +128,10 @@ export function parseStore(raw: string): LoadedStore | null {
       typeof d.activeId === "string" && d.drawings.every((x) => isDrawing(x, version)) &&
       d.drawings.some((x) => (x as Drawing).id === d.activeId)
     ) {
-      const drawings = (d.drawings as Drawing[]).map((dr) => ({
+      const drawings = (d.drawings as Drawing[]).map(({ activePlan, ...dr }) => ({
         ...dr,
+        // активный план — необязательное поле: допустимое сохраняется, остальное отбрасывается (drawing-plans design D3)
+        ...(isPlanId(activePlan) ? { activePlan } : null),
         walls: assignIds(dr.walls),
         ...loadDoorways(dr.doorways, dr.walls),
         dimensions: (Array.isArray(dr.dimensions) ? dr.dimensions : []).filter(isDimension)
