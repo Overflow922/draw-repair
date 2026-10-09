@@ -99,12 +99,12 @@ describe("клик: пометка и снятие пометки", () => {
     expect(s.marks()).toHaveLength(1)
   })
 
-  it("TL-02: повторный клик по снесённой области снимает пометку, которой принадлежит область: одна запись истории", () => {
+  // TCR-5 (change demolition-doorway-sizes): клик по снесённой области больше не снимает пометку (снимает «Ластик»)
+  it("TL-02: повторный клик по снесённой области ничего не меняет: пометки те же, шага истории нет", () => {
     const s = setup({ marks: [mk("m1", "W", "a", 100, 190), mk("m2", "W", "a", 300, 400)] })
     click(s, { x: 150, y: 0 })
-    expect(s.marks()).toEqual([mk("m2", "W", "a", 300, 400)])
-    expect(s.log.record).toBe(1)
-    expect(s.log.set).toBe(1)
+    expect(s.marks()).toEqual([mk("m1", "W", "a", 100, 190), mk("m2", "W", "a", 300, 400)])
+    expect(s.log).toMatchObject({ record: 0, set: 0 })
   })
 
   it("TL-02: клик по неснесённой части стены с другими пометками помечает всю стену и поглощает их", () => {
@@ -273,11 +273,11 @@ describe("протяжка", () => {
     expect(s.log).toMatchObject({ record: 0, set: 0 })
   })
 
-  it("TL-11: каждая операция — ровно одна запись истории: пометка, протяжка, снятие", () => {
+  it("TL-11: каждая операция — ровно одна запись истории: пометка, снятие (ластик), протяжка", () => {
     const s = setup({ radius: 1 })
     click(s, { x: 250, y: 0 })
     expect(s.log.record).toBe(1)
-    click(s, { x: 250, y: 0 })
+    s.tool.erase({ x: 250, y: 0 })
     expect(s.log.record).toBe(2)
     drag(s, { x: 100, y: 0 }, { x: 190, y: 0 })
     expect(s.log.record).toBe(3)
@@ -488,7 +488,7 @@ describe("правка чисел выделенной пометки", () => {
 
   it("TL-17: applyNumber меняет участок одним шагом истории и сохраняет выделение", () => {
     const s = selected()
-    expect(s.tool.applyNumber("width", 200)).toBe(true)
+    expect(s.tool.applyNumber({ target: "width", side: 1 }, 200)).toBe(true)
     expect(s.marks()).toEqual([mk("m", "W", "a", 100, 300)])
     expect(s.log.order).toEqual(["record", "set"])
     expect(s.tool.selectedId()).toBe("m")
@@ -497,31 +497,31 @@ describe("правка чисел выделенной пометки", () => {
   it("TL-17: слияние при правке — выделение следует за слитой пометкой", () => {
     const s = setup({ marks: [mk("m2", "W", "a", 10, 50), mk("m", "W", "a", 100, 190)] })
     s.tool.select({ x: 150, y: 0 })
-    expect(s.tool.applyNumber("gapA", 40)).toBe(true)
+    expect(s.tool.applyNumber({ target: "gapA", side: 1 }, 40)).toBe(true)
     expect(s.marks()).toHaveLength(1)
     expect(s.tool.selectedId()).toBe(s.marks()[0]?.id)
   })
 
   it("TL-18: недопустимый ввод ничего не меняет: false, нет записи истории", () => {
     const s = selected()
-    expect(s.tool.applyNumber("width", 0)).toBe(false)
-    expect(s.tool.applyNumber("gapA", -5)).toBe(false)
-    expect(s.tool.applyNumber("width", Number.NaN)).toBe(false)
+    expect(s.tool.applyNumber({ target: "width", side: 1 }, 0)).toBe(false)
+    expect(s.tool.applyNumber({ target: "gapA", side: 1 }, -5)).toBe(false)
+    expect(s.tool.applyNumber({ target: "width", side: 1 }, Number.NaN)).toBe(false)
     expect(s.marks()).toEqual([mk("m", "W", "a", 100, 190)])
     expect(s.log).toMatchObject({ record: 0, set: 0 })
   })
 
   it("TL-18: без выделения applyNumber возвращает false", () => {
     const s = setup({ marks: [mk("m", "W", "a", 100, 190)] })
-    expect(s.tool.applyNumber("width", 200)).toBe(false)
+    expect(s.tool.applyNumber({ target: "width", side: 1 }, 200)).toBe(false)
     expect(s.log.record).toBe(0)
   })
 
   it("TL-19: ввод, не меняющий участок (то же значение), — операция, ничего не изменившая: false, нет записи истории и замены", () => {
     const s = selected()
-    expect(s.tool.applyNumber("width", 90)).toBe(false)
-    expect(s.tool.applyNumber("gapA", 100)).toBe(false)
-    expect(s.tool.applyNumber("gapB", 310)).toBe(false)
+    expect(s.tool.applyNumber({ target: "width", side: 1 }, 90)).toBe(false)
+    expect(s.tool.applyNumber({ target: "gapA", side: 1 }, 100)).toBe(false)
+    expect(s.tool.applyNumber({ target: "gapB", side: 1 }, 310)).toBe(false)
     expect(s.marks()).toEqual([mk("m", "W", "a", 100, 190)])
     expect(s.log).toMatchObject({ record: 0, set: 0 })
     expect(s.tool.selectedId()).toBe("m")
@@ -530,7 +530,7 @@ describe("правка чисел выделенной пометки", () => {
   it("TL-19: значение за пределами, которое зажимается в прежнее состояние, тоже не меняет участок и не пишет историю", () => {
     const s = setup({ marks: [mk("m", "W", "b", 0, 400)] }) // 100–500
     s.tool.select({ x: 300, y: 0 })
-    expect(s.tool.applyNumber("width", 900)).toBe(false)
+    expect(s.tool.applyNumber({ target: "width", side: 1 }, 900)).toBe(false)
     expect(s.log).toMatchObject({ record: 0, set: 0 })
   })
 })
@@ -639,19 +639,21 @@ describe("после постановки пометка выделена (chang
     expect(s.tool.selectedId()).toBe("m1")
   })
 
-  it("TL-25: снятие пометки кликом — null, выделение не появляется", () => {
+  it("TL-25: клик по снесённой области — null, пометка остаётся, выделение не появляется", () => {
     const s = setup({ marks: [mk("m1", "W", "a", 100, 190)] })
     expect(clickUp(s, { x: 150, y: 0 })).toBeNull()
+    expect(s.marks()).toEqual([mk("m1", "W", "a", 100, 190)])
     expect(s.tool.selectedId()).toBeNull()
   })
 
-  it("TL-25: снятие выделенной пометки сбрасывает выделение, снятие другой его не меняет", () => {
+  it("TL-25: клик по снесённой области не меняет выделение — ни выделенной, ни другой пометки (снятие пометки — только ластик)", () => {
     const s = setup({ marks: [mk("m1", "W", "a", 100, 190), mk("m2", "W", "a", 300, 400)] })
     s.tool.select({ x: 350, y: 0 })
     expect(clickUp(s, { x: 150, y: 0 })).toBeNull()
     expect(s.tool.selectedId()).toBe("m2")
     expect(clickUp(s, { x: 350, y: 0 })).toBeNull()
-    expect(s.tool.selectedId()).toBeNull()
+    expect(s.tool.selectedId()).toBe("m2")
+    expect(s.marks()).toHaveLength(2)
   })
 
   it("TL-25: железобетон, клик мимо стены и отсутствие нажатия — null, выделение не меняется", () => {
@@ -687,7 +689,7 @@ describe("после постановки пометка выделена (chang
     dragUp(s, { x: 100, y: 0 }, { x: 190, y: 0 })
     const spot = s.tool.numberAt({ x: 145, y: 14.15 }, "cm", K, 14, 1)
     expect(spot?.target).toBe("width")
-    expect(s.tool.applyNumber("width", 120)).toBe(true)
+    expect(s.tool.applyNumber({ target: "width", side: 1 }, 120)).toBe(true)
     expect(s.marks()).toEqual([mk("n1", "W", "a", 100, 220)])
     expect(s.tool.selectedId()).toBe("n1")
     expect(s.log.record).toBe(2)

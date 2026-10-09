@@ -21,6 +21,7 @@ export interface DemolitionScene {
   selectedId?: string | null
   ghost?: { wallId: string; from: number; to: number } | null // превью протяжки, от конца a
   ruler?: RulerReading | null // замеры инструмента «Линейка» по подложке
+  erasing?: string | null // пометка под курсором ластика: область обводится цветом подсветки ластика
 }
 
 export interface DemolitionOptions {
@@ -28,6 +29,7 @@ export interface DemolitionOptions {
   grid?: boolean
   metrics?: RenderMetrics
   palette?: Palette
+  widths?: boolean // ширина каждой действующей пометки одним размером (страница PDF); на экране размеры — только у выделенной и у превью
 }
 
 export const demolitionColor = (theme: Theme): string => (theme === "dark" ? "#ff5252" : "#d32f2f")
@@ -87,11 +89,12 @@ export function drawDemolitionScene(
     ctx.restore()
   }
 
-  // размеры пометки: размер чертежа с выносными линиями; нулевой — только число (change demolition-dimension-chains)
-  const drawDimensions = (span: MarkSpan, selected: boolean): void => {
-    for (const d of markDimensions(span, selected, unit, k, m.labelPx)) {
-      if (d.geom) drawDimensionGeom(ctx, d.geom, d.text, opts.color, view, m, palette, false, selected)
-      else drawNumber(d.spot, selected)
+  // размеры пометки как у проёма: размер чертежа с выносными линиями; нулевой — только число (change
+  // demolition-doorway-sizes); underline — правимые числа выделенной пометки
+  const drawDimensions = (span: MarkSpan, mode: "chain" | "width", underline: boolean): void => {
+    for (const d of markDimensions(span, scene.walls, mode, unit, k, m.labelPx)) {
+      if (d.geom) drawDimensionGeom(ctx, d.geom, d.text, opts.color, view, m, palette, false, underline)
+      else drawNumber(d.spot, underline)
     }
   }
 
@@ -115,7 +118,17 @@ export function drawDemolitionScene(
       tracePolygons(ctx, [poly])
       ctx.stroke()
     }
-    drawDimensions(r, scene.selectedId === r.mark.id)
+    // подсветка ластика — обводка области поверх контура
+    if (scene.erasing === r.mark.id) {
+      ctx.strokeStyle = palette.erase
+      ctx.lineWidth = m.contourPx * 2
+      for (const poly of polygons) {
+        tracePolygons(ctx, [poly])
+        ctx.stroke()
+      }
+    }
+    if (scene.selectedId === r.mark.id) drawDimensions(r, "chain", true)
+    else if (opts.widths) drawDimensions(r, "width", false)
   }
 
   // элементы стен не скрываются сносом и рисуются поверх закраски области (change demolition-show-elements)
@@ -134,7 +147,7 @@ export function drawDemolitionScene(
       ctx.stroke()
     }
     ctx.restore()
-    drawDimensions(span, false)
+    drawDimensions(span, "chain", false)
   }
 }
 

@@ -2,8 +2,9 @@ import { wallNearBody } from "../doorway/doorway-scene"
 import type { DemolitionMark, Point, Unit, Wall, WallElement } from "../types"
 import { dist, dot, sub, unit as unitVector } from "../wall-geometry"
 import { alongNodes, snapAlong } from "./mark-snap"
-import { editNumber, markNumberAt, markNumberLayout } from "./mark-numbers"
-import type { MarkNumberSpot, NumberTarget } from "./mark-numbers"
+import { markDimensions } from "./mark-dimensions"
+import { editNumber, markNumberAt } from "./mark-numbers"
+import type { MarkNumberSpot, NumberRef } from "./mark-numbers"
 import { EPS_CM, MIN_WIDTH_CM, addMark, effectiveMarks, markAt, removeMark, sameMarks, span } from "./marks"
 
 // Инструмент «Демонтаж», выделение пометки и правка чисел на месте (change demolition-plan, design D10): состояние
@@ -40,7 +41,9 @@ export interface DemolitionTool {
   clearSelection(): void
   deleteSelected(): boolean
   numberAt(p: Point, unit: Unit, k: number, labelPx: number, tolCm: number): MarkNumberSpot | null // правимое число выделенной
-  applyNumber(which: NumberTarget, valueCm: number): boolean
+  applyNumber(ref: NumberRef, valueCm: number): boolean
+  erase(p: Point): boolean // ластик: снять пометку под точкой одним шагом истории; false — под точкой нет области сноса
+  eraseTarget(p: Point): string | null // идентификатор пометки под точкой (подсветка ластика)
 }
 
 const DEAD_ZONE_PX = 4 // сдвиг до этого — ещё клик
@@ -134,12 +137,9 @@ export function createDemolitionTool(host: DemolitionToolHost): DemolitionTool {
       if (drag && to - from >= MIN_WIDTH_CM) {
         placed = place(pr.wall, from, to)
       } else {
-        // клик: по снесённой области — снять её пометку, иначе пометить стену целиком
+        // клик: по неснесённой части — пометить стену целиком; по снесённой области ничего не меняется (снимает ластик)
         const hit = markAt(pr.p, effectiveMarks(marks, walls), walls)
-        if (hit) {
-          if (hit.mark.id === selected) selected = null
-          commit(removeMark(marks, hit.mark.id))
-        } else placed = place(pr.wall, 0, dist(pr.wall.a, pr.wall.b))
+        if (!hit) placed = place(pr.wall, 0, dist(pr.wall.a, pr.wall.b))
       }
       host.redraw()
       return placed
@@ -169,11 +169,18 @@ export function createDemolitionTool(host: DemolitionToolHost): DemolitionTool {
     },
     numberAt(p, unit, k, labelPx, tolCm) {
       const r = selectedMark()
-      return r ? markNumberAt(p, markNumberLayout(r, unit, k, labelPx), tolCm) : null
+      return r ? markNumberAt(p, markDimensions(r, host.walls(), "chain", unit, k, labelPx).map((d) => d.spot), tolCm) : null
     },
-    applyNumber(which, valueCm) {
+    erase(p) {
+      const hit = markAt(p, effectiveMarks(host.marks(), host.walls()), host.walls())
+      if (!hit) return false
+      if (hit.mark.id === selected) selected = null
+      return commit(removeMark(host.marks(), hit.mark.id))
+    },
+    eraseTarget: (p) => markAt(p, effectiveMarks(host.marks(), host.walls()), host.walls())?.mark.id ?? null,
+    applyNumber(ref, valueCm) {
       if (selected === null) return false
-      const edited = editNumber(host.marks(), host.walls(), selected, which, valueCm)
+      const edited = editNumber(host.marks(), host.walls(), selected, ref.target, ref.side, valueCm)
       if (!edited || sameMarks(edited.marks, host.marks())) return false
       selected = edited.id // выделение следует за слитой пометкой; перерисовка в commit уже видит его
       return commit(edited.marks)

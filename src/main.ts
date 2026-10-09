@@ -249,7 +249,7 @@ function pressDemolitionNumber(p: Point): boolean {
     at,
     formatCm(spot.valueCm, unit),
     (text) => {
-      demolitionTool.applyNumber(spot.target, parseFloat(text.replace(",", ".")) * UNIT_TO_CM[unit])
+      demolitionTool.applyNumber(spot, parseFloat(text.replace(",", ".")) * UNIT_TO_CM[unit])
       redraw()
     },
     () => {
@@ -534,6 +534,7 @@ function drawDemolitionPlan(): void {
       selectedId: demolitionTool.selectedId(),
       ghost: demolitionTool.ghost(),
       ruler: tool === "ruler" && cursor && !gestureActive() ? rulerReading(cursor, walls) : null,
+      erasing: tool === "eraser" && cursor ? demolitionTool.eraseTarget(cursor) : null,
     },
     unit,
     view,
@@ -842,9 +843,9 @@ canvas.addEventListener("pointermove", (e) => {
     return
   }
   if (onDemolition()) {
-    // протяжка пометки перерисовывает сама; «Линейка» следит за курсором
+    // протяжка пометки перерисовывает сама; «Линейка» и «Ластик» следят за курсором
     if (tool === "demolition") demolitionTool.move(toWorld(e), screenPoint(e))
-    else if (tool === "ruler") {
+    else if (tool === "ruler" || tool === "eraser") {
       cursor = toWorld(e)
       redraw()
     }
@@ -876,7 +877,7 @@ canvas.addEventListener("pointermove", (e) => {
 // линейка показывает замеры только пока курсор над холстом; подсветка тени направления двери — тоже
 canvas.addEventListener("pointerleave", () => {
   hoverWorld = null
-  if (tool === "ruler" && cursor) cursor = null
+  if ((tool === "ruler" || (tool === "eraser" && onDemolition())) && cursor) cursor = null
   redraw()
 })
 
@@ -1092,8 +1093,12 @@ canvas.addEventListener("click", (e) => {
     suppressClick = false
     return
   }
-  // на плане «Демонтаж» жесты разбирает адаптер по нажатию и отпусканию (change demolition-plan, design D10)
-  if (onDemolition()) return
+  // на плане «Демонтаж» жесты разбирает адаптер по нажатию и отпусканию (change demolition-plan, design D10);
+  // «Ластик» снимает пометку под курсором по клику (change demolition-doorway-sizes, design D5)
+  if (onDemolition()) {
+    if (tool === "eraser") demolitionTool.erase(toWorld(e))
+    return
+  }
   const p = toSnappedPoint(e)
   const raw = toWorld(e)
   if (tool === "eraser") {

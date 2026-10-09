@@ -391,6 +391,13 @@ Follow-ups from the change `auto-wall-dimensions` (model of visible face pieces,
 - Dimensions, room areas and element labels on the demolition plan; eraser and selection of underlay walls; partial demolition of a wall element (user decision, 2026-10-09).
 - Page name in the title block (graph 5) is still empty, now on both pages (see `drawing-plans` above).
 
+## demolition-doorway-sizes (2026-10-10)
+
+### Tests
+
+- [ ] Подключение в `main.ts` проверяется только вручную: кнопка и курсор «Ластика» на плане «Демонтаж», подсветка под курсором (`hover` → `erasing`), снятие выделения и протяжки при активации ластика, возврат на «Стену» при смене плана, разбор «1,2» в единицах ввода.
+- [ ] Габариты страницы PDF с размерами пометок считаются по `page.walls` (стыки с соседними стенами); тест — на свободных стенах и диагоналях, комната в `demolition-dimensions-pdf.test.ts` не покрыта (мутация «extent по одной стене» выживает).
+
 ## demolition-dimension-chains (2026-10-10)
 
 ### Tests

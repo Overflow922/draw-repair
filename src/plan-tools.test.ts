@@ -15,17 +15,27 @@ describe("наборы инструментов", () => {
     expect(sorted(toolsOf("measure"))).toEqual(sorted(["wall", "doorway", "door", "window", "dimension", "ruler", "eraser"]))
   })
 
-  it("PT-02: план «Демонтаж» — только «Демонтаж» и «Линейка»", () => {
-    expect(sorted(toolsOf("demolition"))).toEqual(sorted(["demolition", "ruler"]))
+  // TCR-6 (change demolition-doorway-sizes): на плане «Демонтаж» есть «Ластик» (удаляет пометки)
+  it("PT-02: план «Демонтаж» — «Демонтаж», «Линейка» и «Ластик»", () => {
+    expect(sorted(toolsOf("demolition"))).toEqual(sorted(["demolition", "ruler", "eraser"]))
   })
 
-  it("PT-02: инструменты планов пересекаются только по «Линейке»", () => {
+  it("PT-02: инструменты планов пересекаются только по «Линейке» и «Ластику»", () => {
     const common = toolsOf("measure").filter((t) => toolsOf("demolition").includes(t))
-    expect(common).toEqual(["ruler"])
+    expect(sorted(common)).toEqual(sorted(["ruler", "eraser"]))
   })
 
   it("PT-02: в наборе плана «Демонтаж» нет инструментов правки стен", () => {
-    for (const t of ["wall", "doorway", "door", "window", "dimension", "eraser"] as const) expect(toolsOf("demolition")).not.toContain(t)
+    for (const t of ["wall", "doorway", "door", "window", "dimension"] as const) expect(toolsOf("demolition")).not.toContain(t)
+  })
+
+  it("SZ-70: «Ластик» идёт после «Линейки» в наборе плана «Демонтаж», инструмент по умолчанию — «Демонтаж»", () => {
+    expect(toolsOf("demolition")).toEqual(["demolition", "ruler", "eraser"])
+    expect(defaultToolOf("demolition")).toBe("demolition")
+  })
+
+  it("SZ-71: набор обмерочного плана не изменился: «Ластик» в нём остаётся, «Демонтажа» нет", () => {
+    expect(sorted(toolsOf("measure"))).toEqual(sorted(["wall", "doorway", "door", "window", "dimension", "ruler", "eraser"]))
   })
 
   it("PT-02: в наборе обмерочного плана нет инструмента «Демонтаж»", () => {

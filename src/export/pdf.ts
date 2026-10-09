@@ -148,7 +148,7 @@ const ALL_FORMATS = Object.keys(PAGE_FORMATS_MM) as PageFormat[]
 // страница демонтажа дополнительно — размеры пометок (change demolition-dimension-chains, design D4): k — px листа на см чертежа
 export function pageBounds(page: PlanPage, scale: number): BBox {
   const k = 10 / scale
-  const extra = (page.demolition ?? []).flatMap((r) => markDimensionExtent(r, k, PDF_METRICS))
+  const extra = (page.demolition ?? []).flatMap((r) => markDimensionExtent(r, page.walls, k, PDF_METRICS))
   return wallsBBox(page.walls, page.dimensions, 0.5 * scale, page.doorways, scale, extra)
 }
 
@@ -200,7 +200,7 @@ function drawPage(doc: jsPDF, page: PlanPage, unit: Unit, scale: number, format:
   drawSheet(doc, format, { name, scale, date })
   if (page.demolition !== undefined) {
     const scene = { walls: page.walls, doorways: page.doorways, marks: page.demolition }
-    drawDemolitionScene(ctx, w, h, scene, unit, view, { color: demolitionColor("light"), grid: false, metrics: PDF_METRICS, palette: LIGHT_PALETTE })
+    drawDemolitionScene(ctx, w, h, scene, unit, view, { color: demolitionColor("light"), grid: false, metrics: PDF_METRICS, palette: LIGHT_PALETTE, widths: true })
     return
   }
   drawScene(ctx, w, h, page.walls, null, unit, view, [], { grid: false, metrics: PDF_METRICS, dimensions: page.dimensions, doorways: page.doorways })
