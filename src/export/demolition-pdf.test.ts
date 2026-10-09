@@ -4,7 +4,7 @@ import { describe, expect, it, vi } from "vitest"
 import { effectiveMarks } from "../demolition/marks"
 import { demolitionColor } from "../demolition/demolition-render"
 import { LIGHT_PALETTE } from "../theme"
-import type { DemolitionMark, Dimension, Doorway, Drawing, Wall } from "../types"
+import type { DemolitionMark, Dimension, Doorway, Drawing, Wall, WallDoor } from "../types"
 import type { PageFormat, PlanPage } from "./pdf"
 import { colorSegments, hexToRgb01, isGray, isRed, parseColoredStrokes, sameColor } from "./pdf-colors.test-utils"
 import { insideRect, parsePaths, pathsBBox, rectEdgesDrawn, strokeSegments } from "./pdf-ops.test-utils"
@@ -106,13 +106,19 @@ describe("pagesOf: страница демонтажа", () => {
     expect(pagesOf(d)[1]?.demolition).toEqual([])
   })
 
-  it("PG-11: проём, пересекающийся с участком, на странице демонтажа не передаётся; на обмерочной странице остаётся", () => {
+  // TCR-3 (change demolition-show-elements): элементы на странице демонтажа не скрываются сносом
+  it("PG-21: проём, пересекающийся с участком, передаётся на страницу демонтажа так же, как на обмерочную", () => {
     const d = drawing({ doorways: [DOOR], demolition: [{ ...M1, fromCm: 350, toCm: 450 }] })
-    expect(pagesOf(d)[1]?.doorways).toEqual([])
+    expect(pagesOf(d)[1]?.doorways).toEqual([DOOR])
     expect(pagesOf(d)[0]?.doorways).toEqual([DOOR])
   })
 
-  it("PG-11: проём вне участка остаётся на странице демонтажа", () => {
+  it("PG-21: проём внутри участка и проём, касающийся участка, тоже передаются", () => {
+    expect(pagesOf(drawing({ doorways: [DOOR], demolition: [{ ...M1, fromCm: 100, toCm: 500 }] }))[1]?.doorways).toEqual([DOOR])
+    expect(pagesOf(drawing({ doorways: [DOOR], demolition: [{ ...M1, fromCm: 390, toCm: 500 }] }))[1]?.doorways).toEqual([DOOR])
+  })
+
+  it("PG-21: проём вне участка остаётся на странице демонтажа", () => {
     expect(pagesOf(drawing({ doorways: [DOOR] }))[1]?.doorways).toEqual([DOOR])
   })
 
@@ -181,13 +187,19 @@ describe("страница демонтажа в документе PDF", () => 
     expect(digitsAbove(2)).toEqual(["90"])
   })
 
-  it("PG-04: на странице демонтажа нет подписей площади и подписей элементов (H=…)", () => {
+  // TCR-4 (change demolition-show-elements): подписи элементов («H=…») теперь есть и на странице демонтажа
+  it("PG-04: на странице демонтажа нет подписи площади, а подпись высоты элемента «H=210» есть, как на первой", () => {
     const room = [wall(0, 0, 500, 0, "w1"), wall(500, 0, 500, 400, "r"), wall(500, 400, 0, 400, "b"), wall(0, 400, 0, 0, "l")]
     build(drawing({ walls: room, doorways: [DOOR] }))
     expect(textsOn(1).some((t) => / м²$/.test(t))).toBe(true)
     expect(textsOn(2).some((t) => / м²$/.test(t))).toBe(false)
-    expect(textsOn(1).some((t) => t.startsWith("H="))).toBe(true)
-    expect(textsOn(2).some((t) => t.startsWith("H="))).toBe(false)
+    expect(textsOn(1)).toContain("H=210")
+    expect(textsOn(2)).toContain("H=210")
+  })
+
+  it("PG-22: при целиком снесённой стене подпись «H=210» проёма нарисована на странице демонтажа", () => {
+    build(drawing({ doorways: [DOOR], demolition: [{ ...M1, fromCm: 0, toCm: 500 }] }))
+    expect(textsOn(2)).toContain("H=210")
   })
 
   it("PG-05: ширина участка числом: «90» при единице «см» на второй странице, на первой этого числа нет", () => {
@@ -318,6 +330,25 @@ describe("подложка из нескольких стен: габариты 
 describe("форматы и доступность экспорта", () => {
   // масштаб 1:10: 1 см = 1 мм листа; запас 5 см на сторону → стена длины L занимает (L + 30) мм по ширине
   const tight = (len: number): Drawing => drawing({ walls: [wall(0, 0, len, 0, "w1")], demolition: [] })
+
+  it("PG-23: габариты и форматы страницы демонтажа учитывают элементы: дверь с полотном 140 см выходит за габариты стены и исключает A4, как на обмерочной странице", () => {
+    const door: WallDoor = { kind: "door", id: "d", wallId: "w1", anchor: "a", offsetCm: 5, widthCm: 140, heightCm: 210, hinge: "a", swing: "left" }
+    const withDoor = drawing({ walls: [wall(0, 0, 150, 0, "w1")], doorways: [door], demolition: [] })
+    const without = drawing({ walls: [wall(0, 0, 150, 0, "w1")], demolition: [] })
+    const second = (d: Drawing): PlanPage => pagesOf(d)[1] as PlanPage
+    expect(availableFormatsForPages([second(without)], 10)).toContain("A4")
+    expect(availableFormatsForPages([second(withDoor)], 10)).not.toContain("A4")
+    expect(availableFormatsForPages([second(withDoor)], 10)).toEqual(availableFormatsForPages([pagesOf(withDoor)[0] as PlanPage], 10))
+  })
+
+  it("PG-23: пометка на стене с дверью габариты не меняет: полотно двери по-прежнему исключает A4", () => {
+    const door: WallDoor = { kind: "door", id: "d", wallId: "w1", anchor: "a", offsetCm: 5, widthCm: 140, heightCm: 210, hinge: "a", swing: "left" }
+    const marked = drawing({ walls: [wall(0, 0, 150, 0, "w1")], doorways: [door], demolition: [{ id: "m", wallId: "w1", anchor: "a", fromCm: 0, toCm: 150 }] })
+    const second = pagesOf(marked)[1] as PlanPage
+    expect(second.demolition?.length).toBe(1)
+    expect(availableFormatsForPages([second], 10)).not.toContain("A4")
+    expect(availableFormatsForPages([second], 10)).toEqual(availableFormatsForPages([pagesOf(marked)[0] as PlanPage], 10))
+  })
 
   it("PG-07: габариты страницы демонтажа — по стенам подложки: стена 242 см при 1:10 помещается на A4, 243 — нет", () => {
     expect(availableFormatsForPages(pagesOf(tight(242)), 10)).toContain("A4")

@@ -1,4 +1,4 @@
-import { drawScene, prepareCanvas, SCREEN_METRICS, strokeHatch135, tracePolygons } from "../render"
+import { drawElementsLayer, drawScene, prepareCanvas, SCREEN_METRICS, strokeHatch135, tracePolygons } from "../render"
 import type { RenderMetrics } from "../render"
 import type { RulerReading } from "../ruler"
 import { LIGHT_PALETTE } from "../theme"
@@ -50,12 +50,14 @@ export function drawDemolitionScene(
   const k = PX_PER_CM * view.zoom
   const toScreen = (p: Point): Point => ({ x: (p.x - view.pan.x) * k, y: (p.y - view.pan.y) * k })
   const walls = [...scene.walls]
+  const doorways = [...scene.doorways]
+  const grey = { ...palette, ink: palette.muted } // подложка и элементы стен серые
   drawScene(ctx, w, h, walls, null, unit, view, [], {
     grid: opts.grid,
     metrics: m,
-    palette: { ...palette, ink: palette.muted },
+    palette: grey,
     dimensions: [],
-    doorways: [...scene.doorways],
+    doorways,
     ruler: scene.ruler,
     underlay: true,
   })
@@ -108,6 +110,9 @@ export function drawDemolitionScene(
     if (scene.selectedId === r.mark.id) for (const spot of markNumberLayout(r, unit, k, m.labelPx)) drawNumber(spot, true)
     else drawNumber(markLabelSpot(r, unit, k, m.labelPx), false)
   }
+
+  // элементы стен не скрываются сносом и рисуются поверх закраски области (change demolition-show-elements)
+  drawElementsLayer(ctx, walls, unit, view, { metrics: m, palette: grey, doorways })
 
   const ghost = scene.ghost
   const ghostWall = ghost ? walls.find((x) => x.id === ghost.wallId) : undefined

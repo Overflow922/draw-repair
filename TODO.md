@@ -390,3 +390,13 @@ Follow-ups from the change `auto-wall-dimensions` (model of visible face pieces,
 
 - Dimensions, room areas and element labels on the demolition plan; eraser and selection of underlay walls; partial demolition of a wall element (user decision, 2026-10-09).
 - Page name in the title block (graph 5) is still empty, now on both pages (see `drawing-plans` above).
+
+## demolition-show-elements (2026-10-09)
+
+### Docs
+
+- [ ] Elements on the demolition plan are drawn in the underlay grey over the red region (user decision: «пока отображай все элементы»); readability over the red hatching and a possible final rule for elements in demolished zones are open (same colour question as the underlay contrast above).
+
+### Tests
+
+- [ ] `main.ts` wiring (all elements passed to the demolition canvas) has no automated test; checked by hand in the browser on 2026-10-09 (window, door and doorway under a whole-wall mark). Label `textAlign`/`textBaseline` of the elements layer are set by `drawDoorways`, so they are not separately observable (validation M14/M20).

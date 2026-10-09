@@ -16,7 +16,6 @@ import type { ChainSegment } from "./wall-chain"
 import { drawPatternPreview, render, SCREEN_METRICS } from "./render"
 import { demolitionColor, renderDemolition } from "./demolition/demolition-render"
 import { reanchorMarks } from "./demolition/mark-follow"
-import { visibleElements } from "./demolition/mark-region"
 import { effectiveMarks } from "./demolition/marks"
 import { createDemolitionTool } from "./demolition/demolition-tool"
 import type { DemolitionToolHost } from "./demolition/demolition-tool"
@@ -523,7 +522,7 @@ function drawDemolitionPlan(): void {
     canvas,
     {
       walls,
-      doorways: visibleElements(doorways, marks),
+      doorways,
       marks,
       selectedId: demolitionTool.selectedId(),
       ghost: demolitionTool.ghost(),

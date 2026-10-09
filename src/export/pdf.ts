@@ -4,7 +4,6 @@ import { dimGeometry, dimPointPoint } from "../geometry"
 import { LABEL_FRAME_PAD, elementLabel, labelWidth } from "../doorway/element-label"
 import { drawScene, PDF_METRICS } from "../render"
 import { demolitionColor, drawDemolitionScene } from "../demolition/demolition-render"
-import { visibleElements } from "../demolition/mark-region"
 import { effectiveMarks } from "../demolition/marks"
 import type { ResolvedMark } from "../demolition/marks"
 import { PLANS } from "../plans"
@@ -129,16 +128,16 @@ export function pagesOf(drawing: Drawing): PlanPage[] {
   return PLANS.map(
     (plan): PlanPage =>
       plan.id === "demolition"
-        ? { walls: drawing.walls, dimensions: [], doorways: visibleElements(doorways, marks), demolition: marks }
+        ? { walls: drawing.walls, dimensions: [], doorways, demolition: marks }
         : { walls: drawing.walls, dimensions: drawing.dimensions, doorways },
   )
 }
 
 const ALL_FORMATS = Object.keys(PAGE_FORMATS_MM) as PageFormat[]
 
-// габариты страницы с запасом; страница демонтажа — только стены подложки (она не рисует размеры и слой элементов)
+// габариты страницы с запасом: стены, размеры и элементы (страница демонтажа — без размеров, но с элементами)
 function pageBounds(page: PlanPage, scale: number): BBox {
-  return wallsBBox(page.walls, page.dimensions, 0.5 * scale, page.demolition === undefined ? page.doorways : [], scale)
+  return wallsBBox(page.walls, page.dimensions, 0.5 * scale, page.doorways, scale)
 }
 
 // форматы, на которые страница помещается по своим габаритам; пустая страница ничего не ограничивает

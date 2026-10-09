@@ -127,6 +127,14 @@ export function render(
   if (target) drawScene(target.ctx, target.w, target.h, walls, preview, unit, view, selectedWalls, opts)
 }
 
+// Слой элементов стен отдельно от стен (change demolition-show-elements, design D1): подписи, полотно и дуга двери.
+// План «Демонтаж» рисует его после области сноса, чтобы закраска бумагой элементы не закрывала.
+export function drawElementsLayer(ctx: CanvasRenderingContext2D, walls: Wall[], unit: Unit, view: View, opts: RenderOptions = {}): void {
+  const m = opts.metrics ?? SCREEN_METRICS
+  const p = opts.palette ?? LIGHT_PALETTE
+  drawDoorways(ctx, walls, findRooms(walls), unit, view, m, p, opts, false)
+}
+
 export function drawScene(
   ctx: CanvasRenderingContext2D,
   w: number,

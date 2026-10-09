@@ -1,16 +1,17 @@
 import { describe, expect, it } from "vitest"
 import { door, recorder, sceneR, segments, strokes, texts, clips, AREA_LABEL, H_LABEL } from "../doorway/doorway.test-utils"
 import type { Op } from "../doorway/doorway.test-utils"
-import { PDF_METRICS, SCREEN_METRICS } from "../render"
+import { drawScene, PDF_METRICS, SCREEN_METRICS } from "../render"
 import { DARK_PALETTE, LIGHT_PALETTE } from "../theme"
 import type { Point, View, Wall } from "../types"
 import { PX_PER_CM } from "../types"
-import { W, mk } from "./demolition.test-utils"
+import { W, door_, mk, window_ } from "./demolition.test-utils"
 import { demolitionColor, drawDemolitionScene } from "./demolition-render"
 import type { DemolitionScene } from "./demolition-render"
 import { markRegion } from "./mark-region"
 import { markLabelSpot, markNumberLayout } from "./mark-numbers"
 import { effectiveMarks } from "./marks"
+import type { ResolvedMark } from "./marks"
 
 // change demolition-plan: отрисовка плана «Демонтаж» (spec demolition-plan «Отображение плана «Демонтаж»»;
 // design D8). Подложка рисуется серым, область сноса — бумагой, красным контуром и красной штриховкой 135°.
@@ -36,10 +37,8 @@ const samePolygon = (a: Point[], b: Point[], tol = 1e-6): boolean => {
   return ka.size === new Set(b.map(key)).size && b.every((p) => ka.has(key(p)))
 }
 
-const regionScreen = (): Point[][] => {
-  const [r] = marksOn()
-  return markRegion(r!, walls).map((poly) => poly.map(toScreen))
-}
+const regionScreenOf = (list: readonly ResolvedMark[]): Point[][] => list.flatMap((r) => markRegion(r, walls).map((poly) => poly.map(toScreen)))
+const regionScreen = (): Point[][] => regionScreenOf(marksOn())
 
 const stylesOf = (ops: Op[]): Set<string> => {
   const s = new Set<string>()
@@ -76,10 +75,11 @@ describe("подложка", () => {
     expect(texts(ops).filter((t) => AREA_LABEL.test(t.text))).toEqual([])
   })
 
-  it("RN-05: подписи элементов стены на подложке не рисуются (H=…), даже для переданных (видимых) проёмов", () => {
+  // TCR-2 (change demolition-show-elements): элементы на подложке рисуются полностью, в том числе подписи высоты
+  it("RN-05: подпись высоты проёма «H=210» рисуется на подложке один раз; других подписей нет", () => {
     const ops = render({ doorways: [door("W", "a", 300, 90, 210)] })
-    expect(texts(ops).filter((t) => H_LABEL.test(t.text))).toEqual([])
-    expect(texts(ops)).toEqual([])
+    expect(texts(ops).filter((t) => H_LABEL.test(t.text)).map((t) => t.text)).toEqual(["H=210"])
+    expect(texts(ops).map((t) => t.text)).toEqual(["H=210"])
   })
 
   it("RN-05: вырез видимого проёма остаётся в подложке: контур стены с проёмом отличается от контура сплошной стены", () => {
@@ -90,6 +90,117 @@ describe("подложка", () => {
 
   it("RN-12: без пометок и превью красного нет", () => {
     expect(stylesOf(render({})).has(RED)).toBe(false)
+  })
+})
+
+describe("элементы стены на плане демонтажа (change demolition-show-elements)", () => {
+  const whole = () => marksOn([mk("m", "W", "a", 0, 500)])
+  const hLabels = (ops: Op[]): string[] => texts(ops).filter((t) => H_LABEL.test(t.text)).map((t) => t.text)
+
+  it("RN-14: проём внутри снесённого участка отображается: подпись «H=210» нарисована", () => {
+    const ops = render({ doorways: [door("W", "a", 300, 90, 210)], marks: marksOn([mk("m", "W", "a", 100, 400)]) })
+    expect(hLabels(ops)).toEqual(["H=210"])
+  })
+
+  it("RN-14: проём в целиком снесённой стене отображается", () => {
+    expect(hLabels(render({ doorways: [door("W", "a", 300, 90, 210)], marks: whole() }))).toEqual(["H=210"])
+  })
+
+  it("RN-15: проём, частично пересекающийся с участком (250–400 и проём 300–390 внутри; 350–500 и проём 300–390 пересекается), и проём, касающийся участка (390–500), отображаются", () => {
+    for (const [from, to] of [[250, 400], [350, 500], [390, 500], [100, 300]] as const) {
+      const ops = render({ doorways: [door("W", "a", 300, 90, 210)], marks: marksOn([mk("m", "W", "a", from, to)]) })
+      expect(hLabels(ops), `участок ${from}–${to}`).toEqual(["H=210"])
+    }
+  })
+
+  it("RN-15: проём вне участка тоже отображается", () => {
+    expect(hLabels(render({ doorways: [door("W", "a", 300, 90, 210)], marks: marksOn([mk("m", "W", "a", 0, 100)]) }))).toEqual(["H=210"])
+  })
+
+  it("RN-16: дверь и окно в целиком снесённой стене: полотно и дуга двери и подписи высоты дверь/окно нарисованы", () => {
+    const withElements = render({ doorways: [door_("W", "a", 100, 90, "d1"), window_("W", "a", 300, 90, "w1")], marks: whole() })
+    const bare = render({ marks: whole() })
+    const mutedStrokes = (ops: Op[]) => strokes(ops).filter((o) => o.strokeStyle === LIGHT_PALETTE.muted).flatMap(segments).length
+    expect(mutedStrokes(withElements)).toBeGreaterThan(mutedStrokes(bare))
+    expect(texts(withElements).some((t) => t.text.includes("210"))).toBe(true)
+    expect(texts(withElements).some((t) => t.text.includes("120"))).toBe(true)
+  })
+
+  it("RN-17: элементы рисуются поверх области сноса: подпись «H=210» идёт после закраски бумагой области", () => {
+    const ops = render({ doorways: [door("W", "a", 300, 90, 210)], marks: whole() })
+    const region = regionScreenOf(whole())
+    const paper = ops.findIndex((o) => o.kind === "fill" && o.fillStyle === LIGHT_PALETTE.paper && o.subpaths.some((sp) => region.some((poly) => samePolygon(sp, poly))))
+    const label = ops.findIndex((o) => o.kind === "text" && H_LABEL.test(o.text))
+    expect(paper).toBeGreaterThanOrEqual(0)
+    expect(label).toBeGreaterThan(paper)
+  })
+
+  it("RN-18: элементы серые: цвета ink нет нигде, цвет muted есть", () => {
+    const ops = render({ doorways: [door_("W", "a", 300, 90, "d1")], marks: whole() })
+    const styles = stylesOf(ops)
+    expect(styles.has(LIGHT_PALETTE.ink)).toBe(false)
+    expect(styles.has(LIGHT_PALETTE.muted)).toBe(true)
+  })
+
+  it("RN-19: вырез элемента в стене рисуется и в снесённой зоне: контур подложки с проёмом длиннее контура сплошной стены", () => {
+    const solid = strokes(render({ marks: whole() })).filter((o) => o.strokeStyle === LIGHT_PALETTE.muted && o.lineWidth === SCREEN_METRICS.contourPx).flatMap(segments).length
+    const cut = strokes(render({ doorways: [door("W", "a", 300, 90, 210)], marks: whole() })).filter((o) => o.strokeStyle === LIGHT_PALETTE.muted && o.lineWidth === SCREEN_METRICS.contourPx).flatMap(segments).length
+    expect(cut).toBeGreaterThan(solid)
+  })
+})
+
+describe("элементы на плане демонтажа совпадают с обмерочным планом (change demolition-show-elements)", () => {
+  // Без пометок слой элементов и вырезы стен на плане «Демонтаж» должны давать те же операции канваса, что
+  // drawScene обмерочного плана с серой палитрой: позиции, толщины, шрифт, выравнивание и базовая линия подписей.
+  // Комната фиксирует сторону подписей; подпись площади на обмерочном плане исключается (на подложке её нет).
+  const room = sceneR().walls
+  const elements = [door("W", "a", 100, 90, 210), door_("B", "a", 200, 90, "d1"), window_("R", "a", 120, 120, "w1")]
+  const grey = { ...LIGHT_PALETTE, ink: LIGHT_PALETTE.muted }
+
+  function capture() {
+    const { ctx, ops } = recorder()
+    const seen: string[] = []
+    const original = ctx.fillText.bind(ctx)
+    ctx.fillText = (text: string, x: number, y: number, maxWidth?: number): void => {
+      seen.push(`${text}|${ctx.textAlign}|${ctx.textBaseline}`)
+      original(text, x, y, maxWidth)
+    }
+    return { ctx, ops, seen }
+  }
+
+  const noArea = (xs: string[]): string[] => xs.filter((s) => !AREA_LABEL.test(s.split("|")[0] ?? ""))
+
+  function both(metrics: typeof SCREEN_METRICS) {
+    const demo = capture()
+    drawDemolitionScene(demo.ctx, 800, 600, { walls: room, doorways: elements, marks: [] }, "cm", VIEW, { color: RED, grid: false, metrics, palette: LIGHT_PALETTE })
+    const measure = capture()
+    drawScene(measure.ctx, 800, 600, [...room], null, "cm", VIEW, [], { grid: false, metrics, palette: grey, doorways: [...elements] })
+    return { demo, measure }
+  }
+
+  it.each([
+    ["экранные метрики", SCREEN_METRICS],
+    ["метрики PDF", PDF_METRICS],
+  ] as const)("RN-20: %s — штрихи, закраски и подписи (позиция, шрифт, выравнивание, базовая линия) такие же, как у обмерочного плана", (_name, metrics) => {
+    const { demo, measure } = both(metrics)
+    expect(demo.ops.filter((o) => o.kind !== "text")).toEqual(measure.ops.filter((o) => o.kind !== "text"))
+    expect(texts(demo.ops)).toEqual(texts(measure.ops).filter((t) => !AREA_LABEL.test(t.text)))
+    expect(demo.seen).toEqual(noArea(measure.seen))
+    expect(demo.seen.length).toBeGreaterThan(0)
+  })
+
+  it("RN-20: подписи элементов не пусты: «H=210» у проёма, 210 у двери, 120 у окна", () => {
+    const { demo } = both(SCREEN_METRICS)
+    expect(demo.seen.some((s) => s.startsWith("H=210"))).toBe(true)
+    expect(texts(demo.ops).some((t) => t.text.includes("120"))).toBe(true)
+  })
+
+  it("RN-21: вырез стены по проёму рисуется на подложке: контур стены с проёмом отличается от сплошной (список элементов передан в подложку)", () => {
+    const { demo } = both(SCREEN_METRICS)
+    const solid = capture()
+    drawDemolitionScene(solid.ctx, 800, 600, { walls: room, doorways: [], marks: [] }, "cm", VIEW, { color: RED, grid: false, palette: LIGHT_PALETTE })
+    const contour = (ops: Op[]) => strokes(ops).filter((o) => o.lineWidth === SCREEN_METRICS.contourPx && o.strokeStyle === LIGHT_PALETTE.muted).flatMap(segments).length
+    expect(contour(demo.ops)).toBeGreaterThan(contour(solid.ops))
   })
 })
 
