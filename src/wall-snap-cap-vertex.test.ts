@@ -170,7 +170,12 @@ describe("зона торца считается от плоскости тор�
   it("CV-BAND-1: граница полосы — на полосе торец, за ней грань", () => {
     const walls = deepFreeze(sceneS())
     expectCap(free({ x: 104, y: -10 }, walls), 110, 0, 1, 0)
-    const face = free({ x: 104, y: -10.001 }, walls)
+    // change widen-corner-snap-window: за полосой и за плоскостью торца в пределах окна T × T — угол торца
+    const corner = free({ x: 104, y: -10.001 }, walls)
+    expect(corner.target).toBe("corner")
+    expectPoint(corner.point, 110, -10)
+    // грань — у курсора не за плоскостью торца
+    const face = free({ x: 96, y: -10.001 }, walls)
     expect(face.target).toBe("face")
     expectPoint(face.point, 90, -10)
   })

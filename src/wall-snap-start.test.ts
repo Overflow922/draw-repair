@@ -104,13 +104,20 @@ describe("квадрат по сетке у грани — прилипание 
     expectStuckWithoutOverlap(snap, walls)
   })
 
-  it("GS-11: вне полосы у конца стены — прилипание к грани стороны курсора, не к торцу", () => {
+  it("GS-11: вне полосы у конца стены — прилипание к грани стороны курсора (не за плоскостью торца) или к углу торца (в окне), не к торцу", () => {
     const walls = vertical20()
-    const snap = start({ x: 22, y: -3 }, walls)
-    expect(snap.target).toBe("face")
-    expectPoint(snap.normal ?? { x: NaN, y: NaN }, 1, 0)
-    expect(snap.point.x).toBeCloseTo(10, 6)
-    expectStuckWithoutOverlap(snap, walls)
+    // не за плоскостью торца y = 0: грань стороны курсора, заподлицо с торцом
+    const face = start({ x: 22, y: 3 }, walls)
+    expect(face.target).toBe("face")
+    expectPoint(face.normal ?? { x: NaN, y: NaN }, 1, 0)
+    expect(face.point.x).toBeCloseTo(10, 6)
+    expectStuckWithoutOverlap(face, walls)
+    // change widen-corner-snap-window: за плоскостью торца в окне T × T — диагональное прилипание к углу торца
+    const corner = start({ x: 22, y: -3 }, walls)
+    expect(corner.target).toBe("corner")
+    expectPoint(corner.normal ?? { x: NaN, y: NaN }, 1, 0)
+    expectPoint(corner.point, 10, -10)
+    expectStuckWithoutOverlap(corner, walls)
   })
 })
 
@@ -141,18 +148,41 @@ describe("выбор ближайшей цели (GS-14, GS-16, GS-17)", () => {
     expectStuckWithoutOverlap(snap, walls)
   })
 
-  it("GS-17: цель — у касаемой стены, не первой среди касаемых (торец за соседом без места)", () => {
+  it("GS-17: цель — у касаемой стены, не первой среди касаемых (угол торца B за плоскостью торца)", () => {
     // узел (120, 210): квадрат касается тела B (углом) и торца C; у грани B места нет
-    // (квадрат налёг бы на C), цель — свободный торец C
+    // (квадрат налёг бы на C). change widen-corner-snap-window: курсор в окне T × T за углом свободного торца B —
+    // диагональное прилипание к углу торца B (квадрат [110, 130] × [200, 220] касается C лишь по линии y = 200)
     const walls = deepFreeze(sceneN())
     const sq = gridSquare({ x: 120, y: 210 }, NEW)
     expect(walls.map((w) => displayPolygons(w, walls).some((pc) => touches(sq, pc)))).toEqual([false, true, true])
     const snap = start({ x: 115.37, y: 210.61 }, walls)
     expect(snap.source).toBe("wall")
-    expectPoint(snap.point, 125, 210) // центр квадрата у торца C (change cap-snap-vertex-at-square-center)
-    expectPoint(snap.normal ?? { x: NaN, y: NaN }, 0, 1)
-    expect(snap.target).toBe("cap")
+    expect(snap.target).toBe("corner")
+    expectPoint(snap.point, 110, 210)
+    expectPoint(snap.normal ?? { x: NaN, y: NaN }, 1, 0)
     expectStuckWithoutOverlap(snap, walls)
+  })
+
+  it("GS-17b: цель — у второй из касаемых стен (угол торца C) и свободный торец C вне окон", () => {
+    const walls = deepFreeze(sceneN())
+    // узел (110, 210): квадрат касается и B, и C (по линии y = 200); курсор вне окна угла B, в окне левого угла торца C —
+    // цель у C, второй по массиву среди касаемых, а не у первой касаемой B
+    const sq = gridSquare({ x: 110, y: 210 }, NEW)
+    expect(walls.map((w) => displayPolygons(w, walls).some((pc) => touches(sq, pc)))).toEqual([false, true, true])
+    const second = start({ x: 107, y: 208 }, walls)
+    expect(second.source).toBe("wall")
+    expect(second.target).toBe("corner")
+    expectPoint(second.point, 115, 210)
+    expectPoint(second.normal ?? { x: NaN, y: NaN }, -1, 0)
+    expectStuckWithoutOverlap(second, walls)
+    // курсор в полосе C за торцом — прежнее продолжение: свободный торец C, центр квадрата на оси
+    // (change cap-snap-vertex-at-square-center)
+    const cap = start({ x: 127, y: 205 }, walls)
+    expect(cap.source).toBe("wall")
+    expect(cap.target).toBe("cap")
+    expectPoint(cap.point, 125, 210)
+    expectPoint(cap.normal ?? { x: NaN, y: NaN }, 0, 1)
+    expectStuckWithoutOverlap(cap, walls)
   })
 })
 
@@ -175,17 +205,23 @@ describe("расширенная зона только у касаемой ст�
     expectStuckWithoutOverlap(snap, walls)
   })
 
-  it("GS-18b: квадрат касается только торца A — грань A, а не торец B", () => {
+  it("GS-18b: квадрат касается только торца A — цель у A (угол торца), а не у B", () => {
     const walls = twoWalls()
     const p = { x: 113.37, y: -12.39 }
-    expect(snapVertex(p, walls, R08, GRID, NEW)).toEqual({ point: { x: 110, y: -10 }, source: "grid" })
+    // change widen-corner-snap-window: сам snapVertex уже прилипает к углу торца A (курсор в окне T × T)
+    const direct = snapVertex(p, walls, R08, GRID, NEW)
+    expect(direct.source).toBe("wall")
+    expect(direct.target).toBe("corner")
+    expectPoint(direct.point, 110, -10)
     expect(touched(walls, { x: 110, y: -10 })).toEqual([true, false])
     const snap = start(p, walls)
     expect(snap.source).toBe("wall")
-    expectPoint(snap.point, 90, -10)
+    expectPoint(snap.point, 110, -10)
     expectPoint(snap.normal ?? { x: NaN, y: NaN }, 0, -1)
-    expect(snap.target).toBe("face")
+    expect(snap.target).toBe("corner")
     expectStuckWithoutOverlap(snap, walls)
+    // за окном (дальше T за плоскостью торца) — диагонали нет
+    expect(start({ x: 121.5, y: -12.39 }, walls).target).not.toBe("corner")
   })
 })
 

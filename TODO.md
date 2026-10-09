@@ -328,3 +328,14 @@ Follow-ups from the change `auto-wall-dimensions` (model of visible face pieces,
 - Bridge: a wall between two collinear free ends merges only with the first one; joining the two existing walls into one is a separate change.
 - Merging walls that are already drawn (on load or by a command) is not done.
 - The spec does not say which wall wins when several walls qualify as the continued one (design D2: smallest gap, then first in the array), nor how a zero-length wall is treated.
+
+## widen-corner-snap-window (2026-10-09)
+
+### Tests
+
+- [ ] `snapStartVertex` (`src/wall-snap.ts`): the corner candidate in the touched-walls branch looks unreachable, because the base `snapVertex` call before it already offers the same corner candidates (same window, same acceptance), so the branch can only see corners the base call rejected. No test reaches it; it passes `true` per design D3. Verify and either drop the flag there or keep a test that proves it is reachable.
+- [ ] Test validation of `widen-corner-snap-window` ended with PASS in round 2 (round 1 FAIL: no test for corner vs another wall's candidate, GS-17 coverage lost). Equivalent survivors left as notes: lower bound `> 0` without the `SLICE` margin, dropping the lower bound on `across`, no `return` after an accepted corner.
+
+### Docs
+
+- [ ] `openspec/specs/wall-drawing` "Привязка к существующим стенам" scenario "Привязка к концу стены" still says a cursor outside the wall strip snaps to the face; since this change the window past the end plane gives the corner snap instead. Reword when the change is archived.

@@ -278,8 +278,7 @@ export function snapVertex(
   // принятые кандидаты в порядке стен массива; квадрат не налагается на тела (design D5)
   const accepted: Candidate[] = []
   const accept = acceptor(scene, newWallThicknessCm, accepted, doorwayBlock(walls, doorways, newWallThicknessCm))
-  const cornerZone = corners ? reach : null
-  for (const w of walls) if (!degenerate(w)) wallCandidates(w, p, scene, newHalf, reach, cornerZone, accept)
+  for (const w of walls) if (!degenerate(w)) wallCandidates(w, p, scene, newHalf, reach, corners, accept)
   const best = nearest(p, accepted)
   if (best) return wallSnap(best)
   const grid = (v: number): number => Math.round(v / gridStepCm) * gridStepCm
@@ -305,9 +304,8 @@ export function snapStartVertex(
   const scene = lazyScene(walls)
   const accepted: Candidate[] = []
   const accept = acceptor(scene, newWallThicknessCm, accepted, doorwayBlock(walls, doorways, newWallThicknessCm))
-  // зона угла остаётся прежней и здесь: Infinity — только для граней и торцов касаемых стен
-  const cornerZone = Math.max(radiusCm, newWallThicknessCm / 2)
-  for (const w of touched) wallCandidates(w, p, scene, newWallThicknessCm / 2, Infinity, cornerZone, accept)
+  // угол предлагается и здесь: Infinity — только для граней и торцов касаемых стен
+  for (const w of touched) wallCandidates(w, p, scene, newWallThicknessCm / 2, Infinity, true, accept)
   const best = nearest(p, accepted)
   return best ? wallSnap(best) : base
 }
@@ -343,15 +341,15 @@ function acceptor(
 }
 
 // Кандидаты стены w для курсора p; reach — зона прилипания к торцу и к грани вне полосы
-// (design D3 change fix-grid-square-touching-wall); cornerZone — зона диагонального прилипания
-// к углу свободного торца по каждой оси (null — угол не предлагается).
+// (design D3 change fix-grid-square-touching-wall); corners — предлагать ли диагональное прилипание
+// к углу свободного торца (окно — квадрат установки, зависит только от толщины новой стены).
 function wallCandidates(
   w: Wall,
   p: Point,
   scene: () => SceneContour,
   newHalf: number,
   reach: number,
-  cornerZone: number | null,
+  corners: boolean,
   accept: (c: Candidate | null) => boolean,
 ): void {
   const u = unit(w.a, w.b)
@@ -372,12 +370,13 @@ function wallCandidates(
     return
   }
   // вне полосы за плоскостью торца — сначала угол торца (диагональ), приоритетнее грани той же стены:
-  // только в дальней части квадранта, по каждой оси от половины зоны до зоны включительно (допуск SLICE
-  // на границах — поворот стены сдвигает смещение на ~1e-15); ближе — прежняя грань заподлицо с торцом
+  // курсор над квадратом установки (change widen-corner-snap-window, design D1, D2) — по каждой оси от угла
+  // строго больше нуля и не больше толщины новой стены включительно (допуск SLICE на границах — поворот стены
+  // сдвигает смещение на ~1e-15); на плоскости торца и на линии грани — прежние правила
   const beyond = s > len ? s - len : s < 0 ? -s : 0
   const across = Math.abs(lat) - hW
-  const inFarPart = (v: number, zone: number): boolean => v >= zone / 2 - SLICE && v <= zone + SLICE
-  if (cornerZone !== null && inFarPart(beyond, cornerZone) && inFarPart(across, cornerZone)) {
+  const inCornerWindow = (v: number): boolean => v > SLICE && v <= 2 * newHalf + SLICE
+  if (corners && inCornerWindow(beyond) && inCornerWindow(across)) {
     const atB = s > len
     if (accept(cornerCandidate(scene(), w, atB ? w.b : w.a, atB ? u : mul(u, -1), side, newHalf))) return
   }

@@ -136,8 +136,10 @@ describe("snapVertex: привязка к граням и торцам", () => {
 
   it("SNAP-END-3: зоны конца стены — граница полосы строго различает угол и торец", () => {
     const walls = [W(0, 0, 100, 0)]
+    // change widen-corner-snap-window: за полосой и за плоскостью торца в пределах окна T × T — диагональное прилипание
+    // к углу торца (вершина за плоскостью торца на полутолщину новой стены), а не грань заподлицо
     const outsideBand = snapVertex({ x: 104, y: -14 }, walls, R, GRID, 20)
-    expect(outsideBand.point).toEqual({ x: 90, y: -10 })
+    expect(outsideBand.point).toEqual({ x: 110, y: -10 })
     const insideBand = snapVertex({ x: 104, y: 6 }, walls, R, GRID, 20)
     expect(insideBand.point).toEqual({ x: 110, y: 0 })
     // |d| = полутолщина ровно: курсор в пределах полосы -> торец (продолжение)
@@ -145,7 +147,10 @@ describe("snapVertex: привязка к граням и торцам", () => {
     expect(onBandEdge.point).toEqual({ x: 110, y: 0 })
     // на 0.001 за полосой -> уже угол
     const justOutside = snapVertex({ x: 104, y: -10.001 }, walls, R, GRID, 20)
-    expect(justOutside.point).toEqual({ x: 90, y: -10 })
+    expect(justOutside.point).toEqual({ x: 110, y: -10 })
+    // грань заподлицо с торцом — у курсора не за плоскостью торца: граница полосы различает её и торец по-прежнему
+    expect(snapVertex({ x: 96, y: -10.001 }, walls, R, GRID, 20).point).toEqual({ x: 90, y: -10 })
+    expect(snapVertex({ x: 96, y: -14 }, walls, R, GRID, 20).point).toEqual({ x: 90, y: -10 })
   })
 
   it("SNAP-CONT-1: продолжение полосы за торцом, торец вне радиуса", () => {
