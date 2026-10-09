@@ -184,7 +184,8 @@ describe("страница демонтажа в документе PDF", () => 
     build(drawing({ dimensions: [dimension] }))
     const digitsAbove = (n: number): string[] => texts.filter((t) => t.page === n && t.y < titleBlockRect("A4").y - 1 && /^\d/.test(t.text)).map((t) => t.text)
     expect(digitsAbove(1).length).toBeGreaterThan(0)
-    expect(digitsAbove(2)).toEqual(["90"])
+    // TCR-2 (change demolition-dimension-chains): число размера выводится дважды (обводка и заливка) — сравниваем множество
+    expect([...new Set(digitsAbove(2))]).toEqual(["90"])
   })
 
   // TCR-4 (change demolition-show-elements): подписи элементов («H=…») теперь есть и на странице демонтажа
@@ -216,7 +217,8 @@ describe("страница демонтажа в документе PDF", () => 
 
   it("PG-05: несколько участков — число у каждого", () => {
     build(drawing({ demolition: [M1, { id: "m2", wallId: "w1", anchor: "a", fromCm: 300, toCm: 420 }] }))
-    expect(textsOn(2).filter((t) => t === "90" || t === "120").sort()).toEqual(["120", "90"])
+    // TCR-3 (change demolition-dimension-chains): число размера выводится дважды (обводка и заливка)
+    expect([...new Set(textsOn(2).filter((t) => t === "90" || t === "120"))].sort()).toEqual(["120", "90"])
   })
 
   it("PG-06: первая страница содержит обмерочный план так же, как до введения плана «Демонтаж»: те же операторы, что у buildPdf, и ни одной красной линии", () => {

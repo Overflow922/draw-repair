@@ -391,6 +391,17 @@ Follow-ups from the change `auto-wall-dimensions` (model of visible face pieces,
 - Dimensions, room areas and element labels on the demolition plan; eraser and selection of underlay walls; partial demolition of a wall element (user decision, 2026-10-09).
 - Page name in the title block (graph 5) is still empty, now on both pages (see `drawing-plans` above).
 
+## demolition-dimension-chains (2026-10-10)
+
+### Tests
+
+- [ ] Non-blocking gaps from validation: число шире участка у конца стены (E02), порог нулевого размера 1e-6 против 0,5 см (F17), `markDimensionExtent` считает число в «см» и не учитывает единицу «мм» (число шире), порядок отрисовки размеров относительно закраски области и бумажная обводка числа (`strokeText`) записывающим холстом не фиксируются.
+
+### Out of scope
+
+- [ ] Правка размеров пометки перетаскиванием выносных линий (правка — только числами).
+- [ ] Число размера выводится `drawDimensionGeom` дважды (обводка и заливка) — в тестах PDF сравнивается множество чисел (TCR-2/TCR-3).
+
 ## demolition-select-after-mark (2026-10-09)
 
 ### Tests

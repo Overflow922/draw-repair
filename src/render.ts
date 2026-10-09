@@ -788,7 +788,7 @@ function drawDimension(
 }
 
 // underline: число правимое — размерная линия под ним штриховая, вне числа сплошная (design D2)
-function drawDimensionGeom(
+export function drawDimensionGeom(
   ctx: CanvasRenderingContext2D,
   geom: DimGeometry,
   text: string,

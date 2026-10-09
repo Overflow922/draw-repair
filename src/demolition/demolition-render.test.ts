@@ -235,7 +235,8 @@ describe("область сноса", () => {
 
   it("RN-02: красная штриховка идёт под 135° (dx·dy > 0, |dx| = |dy|), толщиной hatchPx, внутри клипа по области", () => {
     const ops = render({ marks: marksOn() })
-    const lines = hatchOf(ops, RED)
+    // TCR-1 (change demolition-dimension-chains): выносные и размерные линии той же толщины осевые — это не штриховка
+    const lines = hatchOf(ops, RED).filter(([p, q]) => Math.abs(q.x - p.x) > 1e-6 && Math.abs(q.y - p.y) > 1e-6)
     expect(lines.length).toBeGreaterThan(3)
     for (const [p, q] of lines) {
       const dx = q.x - p.x

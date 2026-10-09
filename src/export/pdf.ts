@@ -4,6 +4,7 @@ import { dimGeometry, dimPointPoint } from "../geometry"
 import { LABEL_FRAME_PAD, elementLabel, labelWidth } from "../doorway/element-label"
 import { drawScene, PDF_METRICS } from "../render"
 import { demolitionColor, drawDemolitionScene } from "../demolition/demolition-render"
+import { markDimensionExtent } from "../demolition/mark-dimensions"
 import { effectiveMarks } from "../demolition/marks"
 import type { ResolvedMark } from "../demolition/marks"
 import { PLANS } from "../plans"
@@ -11,7 +12,7 @@ import { findRooms } from "../room-area"
 import { LIGHT_PALETTE } from "../theme"
 import { cross, dot, sub } from "../wall-geometry"
 import { DEFAULT_SCALE, PX_PER_CM, isDoor, isWindow } from "../types"
-import type { Dimension, Drawing, Unit, Wall, WallElement } from "../types"
+import type { Dimension, Drawing, Point, Unit, Wall, WallElement } from "../types"
 import { FONT_B64 } from "./font"
 import { PAGE_FORMATS_MM } from "./page-format"
 import type { PageFormat } from "./page-format"
@@ -36,7 +37,14 @@ export interface Placement {
 }
 
 // doorways: подписи высоты выходят за стену со своей стороны (change add-doorway, design D10)
-export function wallsBBox(walls: Wall[], dimensions: Dimension[] = [], padCm = 0, doorways: WallElement[] = [], scale: number = DEFAULT_SCALE): BBox {
+export function wallsBBox(
+  walls: Wall[],
+  dimensions: Dimension[] = [],
+  padCm = 0,
+  doorways: WallElement[] = [],
+  scale: number = DEFAULT_SCALE,
+  extra: readonly Point[] = [],
+): BBox {
   let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity
   const add = (x: number, y: number): void => {
     minX = Math.min(minX, x)
@@ -59,6 +67,7 @@ export function wallsBBox(walls: Wall[], dimensions: Dimension[] = [], padCm = 0
     add(g.p1.x, g.p1.y)
     add(g.p2.x, g.p2.y)
   }
+  for (const p of extra) add(p.x, p.y)
   const rooms = doorways.length ? findRooms(walls) : []
   // полотно и дуга двери (add-door design D8): углы полотна, концы дуги и её крайние точки по осям в пределах пролёта
   for (const d of doorways) {
@@ -136,8 +145,11 @@ export function pagesOf(drawing: Drawing): PlanPage[] {
 const ALL_FORMATS = Object.keys(PAGE_FORMATS_MM) as PageFormat[]
 
 // габариты страницы с запасом: стены, размеры и элементы (страница демонтажа — без размеров, но с элементами)
-function pageBounds(page: PlanPage, scale: number): BBox {
-  return wallsBBox(page.walls, page.dimensions, 0.5 * scale, page.doorways, scale)
+// страница демонтажа дополнительно — размеры пометок (change demolition-dimension-chains, design D4): k — px листа на см чертежа
+export function pageBounds(page: PlanPage, scale: number): BBox {
+  const k = 10 / scale
+  const extra = (page.demolition ?? []).flatMap((r) => markDimensionExtent(r, k, PDF_METRICS))
+  return wallsBBox(page.walls, page.dimensions, 0.5 * scale, page.doorways, scale, extra)
 }
 
 // форматы, на которые страница помещается по своим габаритам; пустая страница ничего не ограничивает

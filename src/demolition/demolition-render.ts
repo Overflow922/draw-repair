@@ -1,11 +1,11 @@
-import { drawElementsLayer, drawScene, prepareCanvas, SCREEN_METRICS, strokeHatch135, tracePolygons } from "../render"
+import { drawDimensionGeom, drawElementsLayer, drawScene, prepareCanvas, SCREEN_METRICS, strokeHatch135, tracePolygons } from "../render"
 import type { RenderMetrics } from "../render"
 import type { RulerReading } from "../ruler"
 import { LIGHT_PALETTE } from "../theme"
 import type { Palette, Theme } from "../theme"
 import { PX_PER_CM } from "../types"
 import type { Point, Unit, View, Wall, WallElement } from "../types"
-import { markLabelSpot, markNumberLayout } from "./mark-numbers"
+import { markDimensions } from "./mark-dimensions"
 import type { MarkNumberSpot } from "./mark-numbers"
 import type { MarkSpan, ResolvedMark } from "./mark-model"
 import { markRegion } from "./mark-region"
@@ -87,6 +87,14 @@ export function drawDemolitionScene(
     ctx.restore()
   }
 
+  // размеры пометки: размер чертежа с выносными линиями; нулевой — только число (change demolition-dimension-chains)
+  const drawDimensions = (span: MarkSpan, selected: boolean): void => {
+    for (const d of markDimensions(span, selected, unit, k, m.labelPx)) {
+      if (d.geom) drawDimensionGeom(ctx, d.geom, d.text, opts.color, view, m, palette, false, selected)
+      else drawNumber(d.spot, selected)
+    }
+  }
+
   // штриховка линиями 135°: линия проходит через точку при y − x = const, фаза — от начала координат экрана
   const origin = toScreen({ x: 0, y: 0 })
   const hatchAnchor = origin.y - origin.x
@@ -107,8 +115,7 @@ export function drawDemolitionScene(
       tracePolygons(ctx, [poly])
       ctx.stroke()
     }
-    if (scene.selectedId === r.mark.id) for (const spot of markNumberLayout(r, unit, k, m.labelPx)) drawNumber(spot, true)
-    else drawNumber(markLabelSpot(r, unit, k, m.labelPx), false)
+    drawDimensions(r, scene.selectedId === r.mark.id)
   }
 
   // элементы стен не скрываются сносом и рисуются поверх закраски области (change demolition-show-elements)
@@ -127,7 +134,7 @@ export function drawDemolitionScene(
       ctx.stroke()
     }
     ctx.restore()
-    drawNumber(markLabelSpot(span, unit, k, m.labelPx), false)
+    drawDimensions(span, false)
   }
 }
 
