@@ -26,8 +26,9 @@ import { deleteObjects, doorwaysInRect, erasePick, pressPick, wallsInRect } from
 import { createElementTool, createSelectionEditing } from "./doorway/doorway-tool"
 import { initialParams, inheritFrom } from "./doorway/element-kind"
 import type { ElementToolHost } from "./doorway/doorway-tool"
-import { afterElementPress, groupButtonActive, groupButtonClick, groupPick } from "./doorway/openings-group"
+import { groupButtonActive, groupButtonClick, groupPick } from "./doorway/openings-group"
 import type { GroupState, GroupTool, Tool } from "./doorway/openings-group"
+import { afterPlace, escapeAction, selectionAllowed } from "./tool-mode"
 import { loadThemeChoice, paletteOf, resolveTheme, saveThemeChoice, themeToggleTitle, toggledTheme } from "./theme"
 import type { Theme } from "./theme"
 import { GRID_STEP_CM, MATERIALS, PX_PER_CM } from "./types"
@@ -311,8 +312,8 @@ function setTool(next: Tool): void {
   redraw()
 }
 
-// выход из установки без снятия выделения (change deselect-tool-on-element-select, design D1): setTool снимает
-// выделение, а нажатие уже выделило элемент и, возможно, начало его перетаскивание
+// выход из установки без снятия выделения (change select-only-without-tool, design D2): setTool снимает
+// выделение, а установка уже выделила поставленный элемент
 function leavePlacing(group: GroupState): void {
   tool = "none"
   for (const t of elementTools) t.clearGhost()
@@ -769,26 +770,23 @@ canvas.addEventListener("pointerdown", (e) => {
   }
   if (e.button !== 0) return
   hoverWorld = null // нажатие начинает жест — подсветка до следующего движения не нужна
+  // при активном инструменте нажатие ничего не выделяет и не правит: его действие выполняет click
+  // (change select-only-without-tool, spec canvas-app «Выделение и правка только без инструмента»)
+  if (!selectionAllowed(tool)) return
   // правка выделенного элемента на месте (change popups-buttons-only, design D6): правимое число, затем зона
   // направления выделенной двери — главнее любой цели нажатия
-  if (tool !== "eraser") {
-    const at = toWorld(e)
-    if (selectionEditing.pressNumber(at) || selectionEditing.pressZone(at)) {
-      suppressClick = true
-      // правка выделенного элемента — тоже режим правки: инструмент установки снимается (design D2b)
-      const next = afterElementPress({ tool, group: groupState(), selected: true })
-      if (next.tool !== tool) leavePlacing(next.group)
-      return
-    }
+  const p = toWorld(e)
+  if (selectionEditing.pressNumber(p) || selectionEditing.pressZone(p)) {
+    suppressClick = true
+    return
   }
   // цель нажатия (change fix-midpoint-marker-priority, design D2): маркеры выделенной стены главнее
-  // размера, проёма и тела стены; доступность целей задаёт инструмент
-  const p = toWorld(e)
+  // размера, проёма и тела стены
   const pick = pressPick(p, { walls, dimensions, doorways }, radiusCm(), 2, {
     selectedWall: selectedWalls.length === 1 ? selectedWalls[0] : null,
-    middleMarker: tool !== "eraser" && !placingTool(),
-    dimensions: tool !== "eraser",
-    elements: tool !== "eraser" && !chainStart && tool !== "dimension",
+    middleMarker: true,
+    dimensions: true,
+    elements: true,
   })
   if (pick?.kind === "end") {
     suppressClick = true
@@ -803,8 +801,6 @@ canvas.addEventListener("pointerdown", (e) => {
     canvas.setPointerCapture(e.pointerId)
     return
   }
-  // ластик действует по клику
-  if (tool === "eraser") return
   switch (pick?.kind) {
     case "middle":
       startGroupMove(pick.wall, p, e)
@@ -812,20 +808,18 @@ canvas.addEventListener("pointerdown", (e) => {
     case "dimension":
       dimDrag = { dim: pick.dimension, baseOffset: pick.dimension.offset, snapshot: cloneScene(scene()) }
       suppressClick = true
-      if (!dimDraft.a && !dimDraft.b) selectDimension(pick.dimension)
+      selectDimension(pick.dimension)
       canvas.setPointerCapture(e.pointerId)
       return
     case "doorway":
       // выделение и перетаскивание элемента вдоль опорной стены
       if (doorwayTool.pressDoorway(p)) {
         suppressClick = true
-        const next = afterElementPress({ tool, group: groupState(), selected: true })
-        if (next.tool !== tool) leavePlacing(next.group)
         canvas.setPointerCapture(e.pointerId)
       }
       return
     case "wall":
-      if (placingTool() || !selectedWalls.length) return
+      if (!selectedWalls.length) return
       if (!selectedWalls.includes(pick.wall)) selectWall(pick.wall)
       startGroupMove(pick.wall, p, e)
       return
@@ -926,10 +920,7 @@ function finishMarquee(rect: { x1: number; y1: number; x2: number; y2: number },
     setWallMaterial(selectedWalls[0].type)
     setWallPanel(true)
   } else setWallPanel(false)
-  // рамка захватила элемент стены — режим правки: инструмент установки снимается (design D2b)
-  const next = afterElementPress({ tool, group: groupState(), selected: picks.doorways.length > 0 })
-  if (next.tool !== tool) leavePlacing(next.group)
-  else redraw()
+  redraw()
 }
 
 canvas.addEventListener("auxclick", (e) => e.preventDefault())
@@ -959,21 +950,18 @@ canvas.addEventListener("click", (e) => {
   }
   const placing = placingTool()
   if (placing) {
+    const placed = doorways.length
     placing.place(raw)
+    // установка снимает инструмент, поставленный элемент остаётся выделенным (spec doorway «Установка проёма»)
+    if (doorways.length > placed) leavePlacing(afterPlace(tool, groupState()).group)
     return
   }
   if (tool === "dimension") {
     placeDimension(raw)
     return
   }
-  if (!chainStart) {
-    // в инструменте «Стена» тело выделяет (и у торца, и у стыка), прилипший квадрат рисует;
-    // без инструмента — прежнее попадание с полосным допуском
-    let wall: Wall | null
-    if (tool === "wall") {
-      const action = wallClickAction(raw, snapStartVertex(raw, walls, radiusCm(), GRID_STEP_CM, thicknessCm, doorways), walls, radiusCm())
-      wall = action.kind === "select" ? action.wall : null
-    } else wall = hitWall(raw, walls, radiusCm())
+  if (selectionAllowed(tool)) {
+    const wall = hitWall(raw, walls, radiusCm())
     if (wall) {
       selectWall(wall)
       return
@@ -981,22 +969,21 @@ canvas.addEventListener("click", (e) => {
     selectedWalls = []
     lengthDirty = false
     clearDimSelection()
-    if (tool !== "wall") {
-      redraw()
-      return
-    }
+    redraw()
+    return
   }
-  if (tool === "wall") updateWallCursor(e)
+  // остался инструмент «Стена» (линейка не кликает): тело существующей стены стену не выделяет и не начинает,
+  // прилипший квадрат рисует (change select-only-without-tool, spec wall-drawing «Квадрат при установке стены»)
+  if (tool !== "wall") return
+  if (!chainStart && wallClickAction(raw, snapStartVertex(raw, walls, radiusCm(), GRID_STEP_CM, thicknessCm, doorways), walls, radiusCm()).kind === "select") return
+  updateWallCursor(e)
   commitPoint()
 })
 
 function placeDimension(p: Point): void {
   if (!dimDraft.a || !dimDraft.b) {
     const hit = nearestEdgeIntersection(p, walls, radiusCm())
-    if (!hit) {
-      clearDimSelection()
-      return
-    }
+    if (!hit) return
     const point: DimPoint = { a: hit.a, b: hit.b }
     if (!dimDraft.a) dimDraft.a = point
     else dimDraft.b = point
@@ -1453,12 +1440,18 @@ window.addEventListener("keydown", (e) => {
     return
   }
   if (e.key === "Escape") {
-    if (chainStart) endChain()
-    else if (dimDraft.a || dimDraft.b) {
+    const action = escapeAction({
+      tool,
+      gestureActive: !!chainStart,
+      dimensionDraft: !!(dimDraft.a || dimDraft.b),
+      hasSelection: selectedDimensions.length + selectedWalls.length + selectedDoorways.length > 0,
+    })
+    if (action === "end-gesture") endChain()
+    else if (action === "cancel-dimension-draft") {
       dimDraft = emptyDraft()
       redraw()
-    } else if (selectedDimensions.length || selectedWalls.length || selectedDoorways.length) clearSelection()
-    else if (tool === "eraser" || tool === "dimension" || tool === "ruler" || placingTool()) setTool("none")
+    } else if (action === "clear-selection") clearSelection()
+    else if (action === "deactivate-tool") setTool("none")
   }
   if (e.key !== "ArrowUp" && e.key !== "ArrowDown" && e.key !== "ArrowLeft" && e.key !== "ArrowRight") return
   if (e.target instanceof HTMLInputElement) return

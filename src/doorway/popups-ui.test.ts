@@ -70,8 +70,8 @@ describe("разметка панелей", () => {
 })
 
 describe("группа «Проёмы»", () => {
-  it("PB-GR-02: переходы группы — кнопка группы, выбор в панели и чистый переход afterElementPress (change deselect-tool-on-element-select); состояния реакции на выделение нет", () => {
-    expect(Object.keys(group).sort()).toEqual(["afterElementPress", "groupButtonActive", "groupButtonClick", "groupPick"])
+  it("PB-GR-02: переходы группы — кнопка группы и выбор в панели (переход после установки — afterPlace в tool-mode, change select-only-without-tool); состояния реакции на выделение нет", () => {
+    expect(Object.keys(group).sort()).toEqual(["groupButtonActive", "groupButtonClick", "groupPick"])
     expect(main.includes("groupSelect")).toBe(false)
   })
 })
@@ -102,7 +102,7 @@ describe("связки в main.ts", () => {
     if (inherit) expect(inherit[0]).toMatch(new RegExp(`\\b${v}\\s*=\\s*inheritFrom\\(`))
   })
 
-  it("PB-INT-02: нажатие вне ластика — правимое число, затем зона двери, затем выбор цели", () => {
+  it("PB-INT-02: нажатие без инструмента — правимое число, затем зона двери, затем выбор цели", () => {
     const start = main.indexOf('addEventListener("pointerdown"')
     expect(start).toBeGreaterThanOrEqual(0)
     const body = main.slice(start)
@@ -112,8 +112,8 @@ describe("связки в main.ts", () => {
     expect(num).toBeGreaterThan(0)
     expect(zone).toBeGreaterThan(num)
     expect(pick).toBeGreaterThan(zone)
-    // обе проверки — внутри ветки «не ластик»
-    const guard = body.lastIndexOf('tool !== "eraser"', num)
+    // обе проверки — после выхода при активном инструменте (change select-only-without-tool)
+    const guard = body.lastIndexOf("!selectionAllowed(tool)", num)
     expect(guard).toBeGreaterThanOrEqual(0)
   })
 })

@@ -339,3 +339,21 @@ Follow-ups from the change `auto-wall-dimensions` (model of visible face pieces,
 ### Docs
 
 - [ ] `openspec/specs/wall-drawing` "Привязка к существующим стенам" scenario "Привязка к концу стены" still says a cursor outside the wall strip snaps to the face; since this change the window past the end plane gives the corner snap instead. Reword when the change is archived.
+
+## select-only-without-tool (explore + planning, 2026-10-09)
+
+### Tests
+
+- [ ] `src/main.ts` wiring (pointerdown/click/marquee gated by `selectionAllowed`, Esc via `escapeAction`, `afterPlace` after a placement) has no automated test; checked by hand in the browser on 2026-10-09 (wall tool click on a body, Esc/Esc, ruler/dimension clicks, marquee with and without a tool, door placement, a room drawn wall by wall). Not exercised by hand: marker drag, dimension offset drag, in-place number editing and door direction zones under an active tool (they share the single early `return` in `pointerdown`).
+- [ ] `PB-INT-02` (`src/doorway/popups-ui.test.ts`) is a source-text check: a guard `!selectionAllowed(tool)` without a `return` would still pass. Tighten the regex to `if (!selectionAllowed(tool)) return` through a test-change-request.
+- [ ] `afterPlace` has no "an element was placed" input; `main.ts` calls it only when `doorways.length` grew. No unit test for "click over an existing element keeps the tool" (test-validation note, former DS-4b).
+
+### Docs
+
+- [ ] Three scenario titles in the delta specs keep the old, now false wording because `openspec validate` requires a MODIFIED requirement to keep all current scenario titles: `door` «Клик по окну в инструменте «Дверь» выделяет окно», `window` «Клик по проёму в инструменте «Окно» выделяет проём», `wall-drawing` «Клик по телу стены выделяет, клик по квадрату рисует» (also `canvas-app` «Выделение двери при инструменте группы деактивирует его», true only for placement). Rename them after archiving.
+
+- [ ] Spec wording: `canvas-app` «Выделение и правка только без инструмента» says "Esc или выбор состояния «Без инструмента»", but the app has no button for that state; only Esc leaves a tool. Reword on archive.
+
+### Out of scope (decided, revisit if needed)
+
+- Selection is only possible in the «Без инструмента» state. Editing a wall during drawing requires Esc first (user decision, 2026-10-09).

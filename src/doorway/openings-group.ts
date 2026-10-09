@@ -25,17 +25,3 @@ export function groupPick(s: GroupState, t: GroupTool): GroupState {
 export const groupButtonActive = (s: GroupState): boolean => s.active !== "other"
 
 export type Tool = "wall" | "dimension" | "doorway" | "door" | "window" | "eraser" | "ruler" | "none"
-
-export interface ElementPress {
-  tool: Tool
-  group: GroupState
-  selected: boolean // нажатие выделило существующий элемент стены
-}
-
-// нажатие на элемент при активном инструменте установки («Проём», «Дверь», «Окно») выводит из установки:
-// инструмента нет, панель группы закрыта, текущий инструмент группы помнится (spec doorway «Выделение проёма
-// кликом»); при других инструментах и без выделения ничего не меняется
-export function afterElementPress({ tool, group, selected }: ElementPress): { tool: Tool; group: GroupState } {
-  if (!selected || (tool !== "doorway" && tool !== "door" && tool !== "window")) return { tool, group }
-  return { tool: "none", group: { current: group.current, active: "other", panelOpen: false } }
-}

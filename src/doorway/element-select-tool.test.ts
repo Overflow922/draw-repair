@@ -2,82 +2,34 @@ import { describe, expect, it } from "vitest"
 import type { WallDoor, WallElement, WallWindow } from "../types"
 import { createElementTool, createSelectionEditing } from "./doorway-tool"
 import type { ElementKind } from "./element-kind"
-import { afterElementPress, groupButtonActive, groupButtonClick } from "./openings-group"
-import type { GroupState, Tool } from "./openings-group"
+import { groupButtonActive, groupButtonClick } from "./openings-group"
+import type { GroupState } from "./openings-group"
+import { afterPlace } from "../tool-mode"
 import { door as doorwayOf, sceneF } from "./doorway.test-utils"
 import { DR } from "./door.test-utils"
 import { byId, fakeHost } from "./selection-editing.test-utils"
 
-// change deselect-tool-on-element-select: выделение существующего элемента стены при активном инструменте
-// установки выводит из установки (spec doorway «Выделение проёма кликом», canvas-app «Панель группы «Проёмы»»;
-// design D1–D5). Правило перехода — чистая функция afterElementPress (design D2a); сброс призрака
-// без сброса перетаскивания — ElementTool.clearGhost (design D3). Раскладка pointerdown в main.ts здесь не
-// проверяется (test-plan «Out of Scope»).
-
-const PLACING = ["doorway", "door", "window"] as const
-const OTHERS = ["wall", "dimension", "ruler", "eraser", "none"] as const
-const ALL = [...PLACING, ...OTHERS] as const
+// change deselect-tool-on-element-select, пересмотрено в change select-only-without-tool (test-change-request):
+// выделение существующего элемента кликом при инструменте установки больше не выводит из установки — при
+// инструменте элементы не выделяются вовсе; инструмент установки снимает сама установка (чистое правило
+// afterPlace, тесты TM-PLACE-* в tool-mode.test.ts). Здесь остались проверки ElementTool без инструмента
+// (выделение, зоны направления, сброс призрака — design D3 прежнего change). Раскладка pointerdown в main.ts
+// здесь не проверяется (test-plan «Out of Scope»).
 
 const win: WallWindow = { kind: "window", id: "x0", wallId: "W", anchor: "a", offsetCm: 300, widthCm: 120, heightCm: 150, sillCm: 85 }
 
-// группы на входе: активен инструмент группы или нет, панель открыта/закрыта, текущий инструмент группы любой
-const groups = (active: GroupState["active"]): GroupState[] =>
-  (["doorway", "door"] as const).flatMap((current) => [true, false].map((panelOpen) => ({ current, active, panelOpen })))
-
-const press = (tool: Tool, group: GroupState, selected: boolean): { tool: Tool; group: GroupState } => afterElementPress({ tool, group, selected })
-
-describe("переход после нажатия на элемент", () => {
-  it("DS-1: «Дверь» и «Проём» после выделения элемента — нет инструмента", () => {
-    const group: GroupState = { current: "door", active: "door", panelOpen: true }
-    expect(press("door", group, true).tool).toBe("none")
-    expect(press("doorway", { ...group, current: "doorway", active: "doorway" }, true).tool).toBe("none")
-  })
-
-  it("DS-2: «Окно» после выделения элемента — нет инструмента", () => {
-    expect(press("window", { current: "doorway", active: "other", panelOpen: false }, true).tool).toBe("none")
-  })
-
-  it("DS-3: у каждого инструмента установки группа закрывается, не активна и помнит текущий инструмент; повтор ничего не меняет", () => {
-    for (const tool of PLACING) {
-      const active: GroupState["active"] = tool === "window" ? "other" : tool
-      for (const group of groups(active)) {
-        const r = press(tool, group, true)
-        const label = `${tool} ${group.current} panel=${group.panelOpen}`
-        expect(r.tool, label).toBe("none")
-        expect(r.group, label).toEqual({ current: group.current, active: "other", panelOpen: false })
-        expect(press(r.tool, r.group, true), label).toEqual(r)
-      }
-    }
-  })
-
-  it("DS-4: остальные инструменты выделением элемента не меняются — ни инструмент, ни группа", () => {
-    for (const tool of OTHERS)
-      for (const group of groups("other")) {
-        const r = press(tool, group, true)
-        expect(r.tool, tool).toBe(tool)
-        expect(r.group, tool).toEqual(group)
-      }
-  })
-
-  it("DS-4b: нажатие, ничего не выделившее, не меняет ни инструмент, ни группу — при любом инструменте", () => {
-    for (const tool of ALL)
-      for (const group of [...groups("other"), ...groups("door")]) {
-        const r = press(tool, group, false)
-        expect(r.tool, tool).toBe(tool)
-        expect(r.group, tool).toEqual(group)
-      }
-  })
-
-  it("DS-5: функция не мутирует вход; группа результата — кнопка не активна, клик возвращает текущий инструмент и открывает панель", () => {
+describe("группа после установки элемента", () => {
+  it("DS-5: группа результата — кнопка не активна, клик возвращает текущий инструмент и открывает панель; вход не мутируется", () => {
     const group: GroupState = { current: "door", active: "door", panelOpen: true }
     const copy = { ...group }
-    const r = press("door", group, true)
+    const r = afterPlace("door", group)
     expect(group).toEqual(copy)
     expect(groupButtonActive(r.group)).toBe(false)
     expect(groupButtonClick(r.group)).toEqual({ current: "door", active: "door", panelOpen: true })
   })
 })
-describe("выделение элемента из режима установки: правка направления двери", () => {
+
+describe("выделение элемента без инструмента: правка направления двери", () => {
   const setup = (): { host: ReturnType<typeof fakeHost>; tool: ReturnType<typeof createElementTool>; editing: ReturnType<typeof createSelectionEditing> } => {
     const { walls } = sceneF()
     const host = fakeHost(walls, [DR("a", "left"), win])
@@ -118,7 +70,7 @@ describe("выделение элемента из режима установк
     expect(host.state.records).toBe(0)
   })
 
-  it("DS-6d: окно из режима установки выделяется, зоны направления у окна нет", () => {
+  it("DS-6d: окно выделяется без инструмента, зоны направления у окна нет", () => {
     const { host, tool, editing } = setup()
     expect(tool.pressDoorway({ x: 360, y: 0 })).toBe(true)
     tool.endDrag()
