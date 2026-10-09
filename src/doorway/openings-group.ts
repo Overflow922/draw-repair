@@ -24,4 +24,4 @@ export function groupPick(s: GroupState, t: GroupTool): GroupState {
 
 export const groupButtonActive = (s: GroupState): boolean => s.active !== "other"
 
-export type Tool = "wall" | "dimension" | "doorway" | "door" | "window" | "eraser" | "ruler" | "none"
+export type Tool = "wall" | "dimension" | "doorway" | "door" | "window" | "eraser" | "ruler" | "demolition" | "none"

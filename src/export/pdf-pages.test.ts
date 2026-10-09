@@ -125,18 +125,21 @@ describe("pagesOf", () => {
     ...extra,
   })
 
-  it("PG-01: единственный план каталога даёт одну страницу с его стенами, размерами и проёмами", () => {
+  // TCR-2 (change demolition-plan): pagesOf даёт страницу на каждый план каталога (две); обмерочный план — первая
+  // страница с прежним содержимым, вторая — страница демонтажа (проверяется в demolition-pdf.test.ts)
+  it("PG-01: первая страница — обмерочный план с его стенами, размерами и проёмами; страниц по числу планов каталога", () => {
     const dim = { from: { a: { wallId: "wa", edge: 2 }, b: { wallId: "wa", edge: 1 } }, to: { a: { wallId: "wa", edge: 3 }, b: { wallId: "wa", edge: 1 } }, offset: 30 }
     const d = drawing({ dimensions: [dim], doorways: [DOOR_A] })
-    expect(pagesOf(d)).toEqual([{ walls: [WA], dimensions: [dim], doorways: [DOOR_A] }])
+    expect(pagesOf(d)).toHaveLength(2)
+    expect(pagesOf(d)[0]).toEqual({ walls: [WA], dimensions: [dim], doorways: [DOOR_A] })
   })
 
   it("PG-01: отсутствующий список проёмов превращается в пустой", () => {
-    expect(pagesOf(drawing())).toEqual([{ walls: [WA], dimensions: [], doorways: [] }])
+    expect(pagesOf(drawing())[0]).toEqual({ walls: [WA], dimensions: [], doorways: [] })
   })
 
-  it("PG-01: чертёж без объектов даёт одну пустую страницу, а не пустой список", () => {
-    expect(pagesOf(drawing({ walls: [] }))).toEqual([{ walls: [], dimensions: [], doorways: [] }])
+  it("PG-01: чертёж без объектов даёт пустую первую страницу, а не пустой список", () => {
+    expect(pagesOf(drawing({ walls: [] }))[0]).toEqual({ walls: [], dimensions: [], doorways: [] })
   })
 
   it("PG-07: результат не зависит от активного плана чертежа", () => {

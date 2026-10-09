@@ -1,7 +1,7 @@
 import { historyKey } from "./plans"
 import type { PlanId } from "./plans"
-import { isDimension, isDrawing, isWall, isWallElement } from "./storage"
-import type { Dimension, Drawing, Wall, WallElement } from "./types"
+import { isDemolitionMark, isDimension, isDrawing, isWall, isWallElement } from "./storage"
+import type { DemolitionMark, Dimension, Drawing, Wall, WallElement } from "./types"
 
 const KEY = "draw-repair:history"
 export const HISTORY_LIMIT = 50
@@ -16,6 +16,8 @@ export interface Scene {
 export type HistoryEntry =
   | { kind: "walls"; walls: Wall[]; dimensions: Dimension[]; doorways?: WallElement[] }
   | { kind: "close"; index: number; drawingId: string }
+  // шаг плана «Демонтаж» (change demolition-plan, design D7): список пометок чертежа до операции
+  | { kind: "demolition"; marks: DemolitionMark[] }
 
 export interface DrawingHistory {
   past: HistoryEntry[]
@@ -70,6 +72,29 @@ export function recordSnapshot(history: DrawingHistory, snapshot: Scene): void {
   history.future = []
 }
 
+const copyMarks = (marks: readonly DemolitionMark[]): DemolitionMark[] => marks.map((m) => ({ ...m }))
+
+export function recordMarks(history: DrawingHistory, marks: readonly DemolitionMark[]): void {
+  history.past.push({ kind: "demolition", marks: copyMarks(marks) })
+  if (history.past.length > HISTORY_LIMIT) history.past.shift()
+  history.future = []
+}
+
+// отмена: снимок из past возвращается, текущие пометки кладутся в future (в истории плана «Демонтаж» только такие записи)
+export function undoMarks(history: DrawingHistory, current: readonly DemolitionMark[]): DemolitionMark[] | null {
+  const e = history.past.pop()
+  if (!e || e.kind !== "demolition") return null
+  history.future.push({ kind: "demolition", marks: copyMarks(current) })
+  return copyMarks(e.marks)
+}
+
+export function redoMarks(history: DrawingHistory, current: readonly DemolitionMark[]): DemolitionMark[] | null {
+  const e = history.future.pop()
+  if (!e || e.kind !== "demolition") return null
+  history.past.push({ kind: "demolition", marks: copyMarks(current) })
+  return copyMarks(e.marks)
+}
+
 export function undoEntry(history: DrawingHistory, scene: Scene): HistoryEntry | null {
   const e = history.past.pop()
   if (!e) return null
@@ -99,6 +124,7 @@ const isHistoryEntry = (e: unknown): e is HistoryEntry => {
     return Array.isArray(x.walls) && x.walls.every(isWall) &&
       Array.isArray(x.dimensions) && x.dimensions.every(isDimension) &&
       (x.doorways === undefined || (Array.isArray(x.doorways) && x.doorways.every(isWallElement)))
+  if (x.kind === "demolition") return Array.isArray(x.marks) && x.marks.every(isDemolitionMark)
   return x.kind === "close" && typeof x.drawingId === "string" &&
     typeof x.index === "number" && Number.isInteger(x.index) && x.index >= 0
 }

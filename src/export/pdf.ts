@@ -3,8 +3,13 @@ import { doorLeaf, heightLabelAt, heightLabelSide, labelDirection } from "../doo
 import { dimGeometry, dimPointPoint } from "../geometry"
 import { LABEL_FRAME_PAD, elementLabel, labelWidth } from "../doorway/element-label"
 import { drawScene, PDF_METRICS } from "../render"
+import { demolitionColor, drawDemolitionScene } from "../demolition/demolition-render"
+import { visibleElements } from "../demolition/mark-region"
+import { effectiveMarks } from "../demolition/marks"
+import type { ResolvedMark } from "../demolition/marks"
 import { PLANS } from "../plans"
 import { findRooms } from "../room-area"
+import { LIGHT_PALETTE } from "../theme"
 import { cross, dot, sub } from "../wall-geometry"
 import { DEFAULT_SCALE, PX_PER_CM, isDoor, isWindow } from "../types"
 import type { Dimension, Drawing, Unit, Wall, WallElement } from "../types"
@@ -112,20 +117,34 @@ export interface PlanPage {
   walls: Wall[]
   dimensions: Dimension[]
   doorways: WallElement[]
+  // действующие пометки сноса: страница плана «Демонтаж» (change demolition-plan, design D9); у остальных страниц нет
+  demolition?: readonly ResolvedMark[]
 }
 
-// страницы чертежа: по одной на план каталога в порядке каталога; пока единственный план — обмерочный,
-// его объекты лежат в прежних полях чертежа (design D1)
+// страницы чертежа: по одной на план каталога в порядке каталога; объекты обмерочного плана лежат в прежних полях
+// чертежа (design D1), страница демонтажа — подложка из тех же стен без размеров, видимые элементы и пометки
 export function pagesOf(drawing: Drawing): PlanPage[] {
-  return PLANS.map(() => ({ walls: drawing.walls, dimensions: drawing.dimensions, doorways: drawing.doorways ?? [] }))
+  const doorways = drawing.doorways ?? []
+  const marks = effectiveMarks(drawing.demolition ?? [], drawing.walls)
+  return PLANS.map(
+    (plan): PlanPage =>
+      plan.id === "demolition"
+        ? { walls: drawing.walls, dimensions: [], doorways: visibleElements(doorways, marks), demolition: marks }
+        : { walls: drawing.walls, dimensions: drawing.dimensions, doorways },
+  )
 }
 
 const ALL_FORMATS = Object.keys(PAGE_FORMATS_MM) as PageFormat[]
 
+// габариты страницы с запасом; страница демонтажа — только стены подложки (она не рисует размеры и слой элементов)
+function pageBounds(page: PlanPage, scale: number): BBox {
+  return wallsBBox(page.walls, page.dimensions, 0.5 * scale, page.demolition === undefined ? page.doorways : [], scale)
+}
+
 // форматы, на которые страница помещается по своим габаритам; пустая страница ничего не ограничивает
 function pageFormats(page: PlanPage, scale: number): PageFormat[] {
   if (page.walls.length === 0) return ALL_FORMATS
-  const b = wallsBBox(page.walls, page.dimensions, 0.5 * scale, page.doorways, scale)
+  const b = pageBounds(page, scale)
   return ALL_FORMATS.filter((f) => fitsFormat(b, scale, f))
 }
 
@@ -160,23 +179,20 @@ export function pdfFileName(name: string, now: Date): string {
 
 // рамка, основная надпись и чертёж одной страницы на текущей странице документа
 function drawPage(doc: jsPDF, page: PlanPage, unit: Unit, scale: number, format: PageFormat, name: string, date: Date): void {
-  const placement = placeOnPage(wallsBBox(page.walls, page.dimensions, 0.5 * scale, page.doorways, scale), scale, format)
+  const placement = placeOnPage(pageBounds(page, scale), scale, format)
   const { w, h } = sheetSizeMm(format)
+  const ctx = doc.context2d as unknown as CanvasRenderingContext2D
+  const view = {
+    zoom: placement.mmPerCm / PX_PER_CM,
+    pan: { x: -placement.offsetX / placement.mmPerCm, y: -placement.offsetY / placement.mmPerCm },
+  }
   drawSheet(doc, format, { name, scale, date })
-  drawScene(
-    doc.context2d as unknown as CanvasRenderingContext2D,
-    w,
-    h,
-    page.walls,
-    null,
-    unit,
-    {
-      zoom: placement.mmPerCm / PX_PER_CM,
-      pan: { x: -placement.offsetX / placement.mmPerCm, y: -placement.offsetY / placement.mmPerCm },
-    },
-    [],
-    { grid: false, metrics: PDF_METRICS, dimensions: page.dimensions, doorways: page.doorways },
-  )
+  if (page.demolition !== undefined) {
+    const scene = { walls: page.walls, doorways: page.doorways, marks: page.demolition }
+    drawDemolitionScene(ctx, w, h, scene, unit, view, { color: demolitionColor("light"), grid: false, metrics: PDF_METRICS, palette: LIGHT_PALETTE })
+    return
+  }
+  drawScene(ctx, w, h, page.walls, null, unit, view, [], { grid: false, metrics: PDF_METRICS, dimensions: page.dimensions, doorways: page.doorways })
 }
 
 // PDF из упорядоченного списка страниц: один формат, масштаб, имя и дата на всех страницах

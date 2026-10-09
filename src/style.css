@@ -187,6 +187,11 @@ body {
   border-top: 1px solid var(--border);
 }
 
+/* инструменты и разделители других планов скрыты (change demolition-plan, spec drawing-plans «Инструменты плана») */
+#toolbar [hidden] {
+  display: none;
+}
+
 .tool {
   width: 40px;
   height: 40px;

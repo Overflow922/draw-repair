@@ -9,8 +9,12 @@ const drawing = (extra: Record<string, unknown> = {}): Drawing =>
   ({ id: "a", name: "Чертёж 1", walls: [], dimensions: [], view: { zoom: 1, pan: { x: 0, y: 0 } }, scale: 100, ...extra }) as Drawing
 
 describe("каталог планов", () => {
-  it("PL-01: каталог содержит единственный план «Обмерочный план» с идентификатором measure", () => {
-    expect(PLANS).toEqual([{ id: "measure", label: "Обмерочный план" }])
+  // TCR-1 (change demolition-plan): каталог содержит два плана; прежнее ожидание — единственный план measure
+  it("PL-01: каталог содержит «Обмерочный план» (measure) и «Демонтаж» (demolition) в этом порядке", () => {
+    expect(PLANS).toEqual([
+      { id: "measure", label: "Обмерочный план" },
+      { id: "demolition", label: "Демонтаж" },
+    ])
   })
 
   it("PL-02: план по умолчанию — measure и он первый в каталоге", () => {

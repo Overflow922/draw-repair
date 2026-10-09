@@ -1,6 +1,7 @@
+import { mergeAll } from "./demolition/marks"
 import { isPlanId } from "./plans"
 import { isDoor, isScale, isWindow, DEFAULT_SCALE, normalizeMaterial } from "./types"
-import type { Dimension, DimPoint, Doorway, Drawing, DrawingStore, EdgeRef, Point, View, Wall, WallDoor, WallElement, WallWindow } from "./types"
+import type { DemolitionMark, Dimension, DimPoint, Doorway, Drawing, DrawingStore, EdgeRef, Point, View, Wall, WallDoor, WallElement, WallWindow } from "./types"
 
 const KEY = "draw-repair:drawing"
 
@@ -67,6 +68,21 @@ export const isWallDoor = (d: unknown): d is WallDoor => {
 
 export const isWallElement = (d: unknown): d is WallElement => isDoorway(d) || isWallWindow(d) || isWallDoor(d)
 
+// пометка сноса (change demolition-plan, design D7): идентификаторы, конец привязки и 0 ≤ fromCm < toCm
+export const isDemolitionMark = (m: unknown): m is DemolitionMark => {
+  if (typeof m !== "object" || m === null) return false
+  const x = m as Record<string, unknown>
+  return typeof x.id === "string" && x.id !== "" && typeof x.wallId === "string" && x.wallId !== "" &&
+    (x.anchor === "a" || x.anchor === "b") && num(x.fromCm) && num(x.toCm) && x.fromCm >= 0 && x.toCm > x.fromCm
+}
+
+// пометки чертежа при загрузке: корректные и со своей стеной, слитые; отсутствие поля сохраняется
+function loadDemolition(raw: unknown, walls: Wall[]): { demolition?: DemolitionMark[] } {
+  if (!Array.isArray(raw)) return {}
+  const ids = new Set(walls.map((w) => w.id))
+  return { demolition: mergeAll(raw.filter(isDemolitionMark).filter((m) => ids.has(m.wallId)), walls) }
+}
+
 // копия элемента только с полями его вида: проём — без kind и sillCm
 export function normalizeElement(e: WallElement): WallElement {
   const base = { id: e.id, wallId: e.wallId, anchor: e.anchor, offsetCm: e.offsetCm, widthCm: e.widthCm, heightCm: e.heightCm }
@@ -128,11 +144,12 @@ export function parseStore(raw: string): LoadedStore | null {
       typeof d.activeId === "string" && d.drawings.every((x) => isDrawing(x, version)) &&
       d.drawings.some((x) => (x as Drawing).id === d.activeId)
     ) {
-      const drawings = (d.drawings as Drawing[]).map(({ activePlan, ...dr }) => ({
+      const drawings = (d.drawings as Drawing[]).map(({ activePlan, demolition, ...dr }) => ({
         ...dr,
         // активный план — необязательное поле: допустимое сохраняется, остальное отбрасывается (drawing-plans design D3)
         ...(isPlanId(activePlan) ? { activePlan } : null),
         walls: assignIds(dr.walls),
+        ...loadDemolition(demolition, dr.walls),
         ...loadDoorways(dr.doorways, dr.walls),
         dimensions: (Array.isArray(dr.dimensions) ? dr.dimensions : []).filter(isDimension)
           .map((dim) => ({ from: { ...dim.from }, to: { ...dim.to }, offset: dim.offset, ...(dim.auto !== undefined ? { auto: dim.auto } : null) })),

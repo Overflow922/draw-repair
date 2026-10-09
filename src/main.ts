@@ -1,5 +1,5 @@
 import "./style.css"
-import { cloneScene, loadHistory, planHistory, record, recordSnapshot, redoEntry, saveHistory, undoEntry } from "./history"
+import { cloneScene, loadHistory, planHistory, record, recordMarks, recordSnapshot, redoEntry, redoMarks, saveHistory, undoEntry, undoMarks } from "./history"
 import type { Scene } from "./history"
 import { dimGeometry, dimLevelSnap, dimensionOffsetAt, hitWall, nearestEdgeIntersection, dimPointPoint, pointsEqual, segmentIntersectsRect, snap, snapOthers, snapWithSource, zoomAt } from "./geometry"
 import type { DimGeometry, SnapResult } from "./geometry"
@@ -13,19 +13,26 @@ import type { OrthoGesture } from "./ortho-gesture"
 import type { StartRef } from "./wall-angle"
 import { chainSegment } from "./wall-chain"
 import type { ChainSegment } from "./wall-chain"
-import { drawPatternPreview, render } from "./render"
+import { drawPatternPreview, render, SCREEN_METRICS } from "./render"
+import { demolitionColor, renderDemolition } from "./demolition/demolition-render"
+import { reanchorMarks } from "./demolition/mark-follow"
+import { visibleElements } from "./demolition/mark-region"
+import { effectiveMarks } from "./demolition/marks"
+import { createDemolitionTool } from "./demolition/demolition-tool"
+import type { DemolitionToolHost } from "./demolition/demolition-tool"
 import { findRooms } from "./room-area"
 import { rulerReading } from "./ruler"
 import { availableFormatsForPages, exportPages, pagesOf, PAGE_FORMATS_MM } from "./export/pdf"
 import type { PageFormat } from "./export/pdf"
-import { PLANS, activePlanOf, isPlanId } from "./plans"
+import { PLANS, activePlanOf, defaultToolOf, isPlanId, toolsOf } from "./plans"
 import type { PlanId } from "./plans"
 import { loadStore, saveStore } from "./storage"
 import { placeWall, syncAutoDimensions } from "./auto-dimensions"
 import { mergeContinuation } from "./wall-merge"
 import { thicknessAllowed } from "./doorway/doorway-guard"
 import { deleteObjects, doorwaysInRect, erasePick, pressPick, wallsInRect } from "./doorway/doorway-scene"
-import { createElementTool, createSelectionEditing } from "./doorway/doorway-tool"
+import { createElementTool, createSelectionEditing, openNumberEditor } from "./doorway/doorway-tool"
+import type { NumberEditor } from "./doorway/doorway-tool"
 import { initialParams, inheritFrom } from "./doorway/element-kind"
 import type { ElementToolHost } from "./doorway/doorway-tool"
 import { groupButtonActive, groupButtonClick, groupPick } from "./doorway/openings-group"
@@ -34,7 +41,7 @@ import { afterPlace, escapeAction, selectionAllowed } from "./tool-mode"
 import { loadThemeChoice, paletteOf, resolveTheme, saveThemeChoice, themeToggleTitle, toggledTheme } from "./theme"
 import type { Theme } from "./theme"
 import { GRID_STEP_CM, MATERIALS, PX_PER_CM } from "./types"
-import type { Dimension, DimPoint, Drawing, Material, Point, Unit, View, Wall, WallElement } from "./types"
+import type { DemolitionMark, Dimension, DimPoint, Drawing, Material, Point, Unit, View, Wall, WallElement } from "./types"
 
 const canvas = document.querySelector<HTMLCanvasElement>("#canvas")!
 const canvasWrap = document.querySelector<HTMLElement>("#canvas-wrap")!
@@ -55,6 +62,8 @@ const toolWallBtn = document.querySelector<HTMLButtonElement>("#tool-wall")!
 const toolDimensionBtn = document.querySelector<HTMLButtonElement>("#tool-dimension")!
 const toolEraserBtn = document.querySelector<HTMLButtonElement>("#tool-eraser")!
 const toolRulerBtn = document.querySelector<HTMLButtonElement>("#tool-ruler")!
+const toolDemolitionBtn = document.querySelector<HTMLButtonElement>("#tool-demolition")!
+const toolbar = document.querySelector<HTMLElement>("#toolbar")!
 const wallPanel = document.querySelector<HTMLElement>("#wall-panel")!
 const pdfScale = document.querySelector<HTMLSelectElement>("#pdf-scale")!
 const pdfFormat = document.querySelector<HTMLSelectElement>("#pdf-format")!
@@ -108,7 +117,7 @@ let marqueePending: { x: number; y: number } | null = null
 let marquee: { x1: number; y1: number; x2: number; y2: number } | null = null
 let marqueeHits: { walls: Wall[]; dims: Dimension[]; doorways: WallElement[] } | null = null
 const MARQUEE_THRESHOLD_PX = 5
-let tool: Tool = "wall"
+let tool: Tool = defaultToolOf(activePlanOf(current()))
 // группа «Проёмы» (change add-door, design D6): текущий инструмент группы и видимость её панели;
 // активный инструмент группы выводится из tool
 let openingsCurrent: GroupTool = "doorway"
@@ -186,6 +195,63 @@ const doorTool = createElementTool("door", elementHost)
 const windowTool = createElementTool("window", elementHost)
 const elementTools = [doorwayTool, doorTool, windowTool]
 const selectionEditing = createSelectionEditing(elementHost)
+
+// план «Демонтаж» (change demolition-plan, design D10): пометки чертежа лежат в current().demolition; пока их нет —
+// общий неизменяемый пустой список (тот же экземпляр: инструмент по нему узнаёт, что операция ничего не изменила)
+const onDemolition = (): boolean => activePlanOf(current()) === "demolition"
+const NO_MARKS: DemolitionMark[] = []
+const demolitionHost: DemolitionToolHost = {
+  walls: () => walls,
+  elements: () => doorways,
+  marks: () => current().demolition ?? NO_MARKS,
+  setMarks: (next) => {
+    current().demolition = next
+  },
+  record: () => recordMarks(activeHistory(), current().demolition ?? NO_MARKS),
+  changed: () => {
+    dirty = true
+  },
+  redraw: () => redraw(),
+  radiusCm: () => radiusCm(),
+  newId: () => crypto.randomUUID(),
+}
+const demolitionTool = createDemolitionTool(demolitionHost)
+const NUMBER_HIT_PX = 4 // допуск попадания в правимое число участка, как у чисел проёма
+let demolitionEditor: NumberEditor | null = null
+
+const closeDemolitionEditor = (): void => {
+  demolitionEditor?.close()
+  demolitionEditor = null
+}
+
+// сброс жеста, выделения и поля ввода плана «Демонтаж» (смена плана, чертежа и инструмента, отмена и повтор)
+const resetDemolition = (): void => {
+  demolitionTool.cancel()
+  demolitionTool.clearSelection()
+  closeDemolitionEditor()
+}
+
+// нажатие на правимое число выделенной пометки — поле ввода на месте (как у чисел проёма); Enter применяет
+function pressDemolitionNumber(p: Point): boolean {
+  const k = PX_PER_CM * view.zoom
+  const spot = demolitionTool.numberAt(p, unit, k, SCREEN_METRICS.labelPx, NUMBER_HIT_PX / k)
+  if (!spot) return false
+  closeDemolitionEditor()
+  const at = { x: (spot.center.x - view.pan.x) * k, y: (spot.center.y - view.pan.y) * k }
+  demolitionEditor = openNumberEditor(
+    canvasWrap,
+    at,
+    formatCm(spot.valueCm, unit),
+    (text) => {
+      demolitionTool.applyNumber(spot.target, parseFloat(text.replace(",", ".")) * UNIT_TO_CM[unit])
+      redraw()
+    },
+    () => {
+      demolitionEditor = null
+    },
+  )
+  return true
+}
 
 // инструмент установки активного вида; null — вне инструментов «Проём», «Дверь» и «Окно»
 const placingTool = () => (tool === "window" ? windowTool : tool === "door" ? doorTool : tool === "doorway" ? doorwayTool : null)
@@ -284,13 +350,27 @@ function clearSelection(): void {
   redraw()
 }
 
+// панель инструментов показывает только инструменты активного плана (change demolition-plan, spec drawing-plans
+// «Инструменты плана»): элементы с data-tools скрыты, если ни один их инструмент не входит в набор плана;
+// элементы с data-plan (разделители) показаны только на своём плане
+function syncToolbar(): void {
+  const plan = activePlanOf(current())
+  const tools = toolsOf(plan)
+  for (const el of toolbar.querySelectorAll<HTMLElement>("[data-tools]")) {
+    el.hidden = !(el.dataset.tools ?? "").split(" ").some((t) => tools.some((own) => own === t))
+  }
+  for (const el of toolbar.querySelectorAll<HTMLElement>("[data-plan]")) el.hidden = el.dataset.plan !== plan
+}
+
 function syncToolUI(): void {
   toolWallBtn.classList.toggle("active", tool === "wall")
   toolDimensionBtn.classList.toggle("active", tool === "dimension")
   toolEraserBtn.classList.toggle("active", tool === "eraser")
   toolRulerBtn.classList.toggle("active", tool === "ruler")
   toolWindowBtn.classList.toggle("active", tool === "window")
+  toolDemolitionBtn.classList.toggle("active", tool === "demolition")
   syncOpeningsUI()
+  syncToolbar()
   canvas.classList.toggle("tool-eraser", tool === "eraser")
 }
 
@@ -311,6 +391,7 @@ function setTool(next: Tool): void {
   marquee = null
   marqueeHits = null
   marqueePending = null
+  resetDemolition()
   setWallPanel(false)
   closeOpeningsPanel()
   syncToolUI()
@@ -422,6 +503,39 @@ function drawPatternPreviews(): void {
 }
 
 function redraw(): void {
+  if (onDemolition()) drawDemolitionPlan()
+  else drawMeasurePlan()
+  updateLengthBox()
+  updateAngleBox()
+  syncHistoryButtons()
+  syncFormats()
+  if (dirty) {
+    dirty = false
+    if (!readOnly) saveStore(store)
+    if (!readOnly && !historyReadOnly) saveHistory(historyStore)
+  }
+}
+
+// план «Демонтаж»: подложка из стен обмерочного плана без сносимых элементов, область сноса, выделение и превью
+function drawDemolitionPlan(): void {
+  const marks = effectiveMarks(demolitionHost.marks(), walls)
+  renderDemolition(
+    canvas,
+    {
+      walls,
+      doorways: visibleElements(doorways, marks),
+      marks,
+      selectedId: demolitionTool.selectedId(),
+      ghost: demolitionTool.ghost(),
+      ruler: tool === "ruler" && cursor && !gestureActive() ? rulerReading(cursor, walls) : null,
+    },
+    unit,
+    view,
+    { color: demolitionColor(theme), palette: paletteOf(theme) },
+  )
+}
+
+function drawMeasurePlan(): void {
   const p = chainStart && segment ? segment.end : null
   const target = tool === "eraser" && cursor ? eraserTarget(cursor) : { wall: null, dim: null, doorway: null }
   const draft = dimDraftGeometry()
@@ -459,20 +573,11 @@ function redraw(): void {
     ruler: tool === "ruler" && cursor && !gestureActive() ? rulerReading(cursor, walls) : null,
     palette: paletteOf(theme),
   })
-  updateLengthBox()
-  updateAngleBox()
-  syncHistoryButtons()
-  syncFormats()
-  if (dirty) {
-    dirty = false
-    if (!readOnly) saveStore(store)
-    if (!readOnly && !historyReadOnly) saveHistory(historyStore)
-  }
 }
 
-// нажатая кнопка мыши: рамка, перетаскивание стен или размера, сдвиг вида
+// нажатая кнопка мыши: рамка, перетаскивание стен или размера, протяжка пометки, сдвиг вида
 function gestureActive(): boolean {
-  return !!(marquee || marqueePending || groupMove || endpointDrag || dimDrag || doorwayTool.dragging() || panDrag)
+  return !!(marquee || marqueePending || groupMove || endpointDrag || dimDrag || doorwayTool.dragging() || demolitionTool.dragging() || panDrag)
 }
 
 // ластик: размер → проём → стена (wall-deletion «Инструмент «Ластик»»)
@@ -537,6 +642,12 @@ function toWorld(e: MouseEvent): Point {
   const r = canvas.getBoundingClientRect()
   const k = PX_PER_CM * view.zoom
   return { x: (e.clientX - r.left) / k + view.pan.x, y: (e.clientY - r.top) / k + view.pan.y }
+}
+
+// экранная точка курсора относительно холста, px (мёртвая зона жеста пометки)
+function screenPoint(e: MouseEvent): Point {
+  const r = canvas.getBoundingClientRect()
+  return { x: e.clientX - r.left, y: e.clientY - r.top }
 }
 
 function toSnappedPoint(e: MouseEvent): Point {
@@ -605,9 +716,13 @@ function commitPoint(): void {
       const next = syncAutoDimensions(merge.scene)
       pushRecord()
       dirty = true
+      const wallsBefore = [...walls]
       next.walls.forEach((w, i) => {
         walls[i] = w
       })
+      // пометки сноса удлинённой стены остаются на месте в плане (change demolition-plan, design D6)
+      const marks = current().demolition
+      if (marks) current().demolition = reanchorMarks(marks, wallsBefore, next.walls)
       dimensions = next.dimensions
       current().dimensions = dimensions
       setDoorways(next.doorways ?? [])
@@ -720,6 +835,15 @@ canvas.addEventListener("pointermove", (e) => {
     redraw()
     return
   }
+  if (onDemolition()) {
+    // протяжка пометки перерисовывает сама; «Линейка» следит за курсором
+    if (tool === "demolition") demolitionTool.move(toWorld(e), screenPoint(e))
+    else if (tool === "ruler") {
+      cursor = toWorld(e)
+      redraw()
+    }
+    return
+  }
   if (marqueePending) {
     const r = canvas.getBoundingClientRect()
     const x = e.clientX - r.left
@@ -777,6 +901,17 @@ canvas.addEventListener("pointerdown", (e) => {
   }
   if (e.button !== 0) return
   hoverWorld = null // нажатие начинает жест — подсветка до следующего движения не нужна
+  if (onDemolition()) {
+    const p = toWorld(e)
+    if (tool === "demolition") {
+      canvas.setPointerCapture(e.pointerId) // отпускание за пределами холста завершает протяжку
+      demolitionTool.down(p, screenPoint(e))
+    } else if (selectionAllowed(tool)) {
+      // без инструмента: правимое число выделенной пометки, иначе выделение пометки под точкой
+      if (!pressDemolitionNumber(p)) demolitionTool.select(p)
+    }
+    return
+  }
   // при активном инструменте нажатие ничего не выделяет и не правит: его действие выполняет click
   // (change select-only-without-tool, spec canvas-app «Выделение и правка только без инструмента»)
   if (!selectionAllowed(tool)) return
@@ -844,6 +979,10 @@ canvas.addEventListener("pointerdown", () => {
 })
 
 canvas.addEventListener("pointerup", (e) => {
+  if (onDemolition() && e.button === 0) {
+    if (tool === "demolition") demolitionTool.up(toWorld(e), screenPoint(e))
+    return
+  }
   if (marquee) {
     if (e.button === 0) {
       const rect = marquee
@@ -946,6 +1085,8 @@ canvas.addEventListener("click", (e) => {
     suppressClick = false
     return
   }
+  // на плане «Демонтаж» жесты разбирает адаптер по нажатию и отпусканию (change demolition-plan, design D10)
+  if (onDemolition()) return
   const p = toSnappedPoint(e)
   const raw = toWorld(e)
   if (tool === "eraser") {
@@ -1217,6 +1358,7 @@ toolDoorBtn.addEventListener("click", () => applyGroup(groupPick(groupState(), "
 toolWindowBtn.addEventListener("click", () => setTool("window"))
 
 toolRulerBtn.addEventListener("click", () => setTool("ruler"))
+toolDemolitionBtn.addEventListener("click", () => setTool("demolition"))
 
 wallTypesRow.addEventListener("click", (e) => {
   const btn = (e.target as HTMLElement).closest<HTMLButtonElement>(".wall-type")
@@ -1285,8 +1427,9 @@ function activate(id: string): void {
   dimensions = current().dimensions
   doorways = current().doorways ?? []
   view = current().view
-  tool = "wall"
+  tool = defaultToolOf(activePlanOf(current()))
   syncToolUI()
+  resetDemolition()
   clearChain()
   closeDoorwayEditor()
   selectedWalls = []
@@ -1337,6 +1480,7 @@ function removeDrawing(id: string, index: number): void {
 }
 
 function resetEditing(): void {
+  resetDemolition()
   clearChain()
   closeDoorwayEditor()
   selectedWalls = []
@@ -1351,9 +1495,23 @@ function resetEditing(): void {
   syncThicknessBox()
 }
 
+// отмена или повтор шага пометок плана «Демонтаж» (change demolition-plan, design D7)
+function stepMarks(step: typeof undoMarks): void {
+  const next = step(activeHistory(), current().demolition ?? NO_MARKS)
+  if (!next) return
+  current().demolition = next
+  dirty = true
+  resetEditing()
+  redraw()
+}
+
 function undo(): void {
-  if (groupMove || endpointDrag || panDrag || dimDrag || doorwayTool.dragging()) return
+  if (groupMove || endpointDrag || panDrag || dimDrag || doorwayTool.dragging() || demolitionTool.dragging()) return
   const h = activeHistory()
+  if (h.past[h.past.length - 1]?.kind === "demolition") {
+    stepMarks(undoMarks)
+    return
+  }
   const e = undoEntry(h, scene())
   if (!e) return
   if (e.kind === "walls") {
@@ -1362,7 +1520,7 @@ function undo(): void {
     walls = e.walls
     dimensions = e.dimensions
     setDoorways(e.doorways ?? [])
-  } else {
+  } else if (e.kind === "close") {
     const i = historyStore.trash.findIndex((t) => t.drawing.id === e.drawingId)
     if (i < 0) return
     const { drawing } = historyStore.trash.splice(i, 1)[0]
@@ -1375,8 +1533,12 @@ function undo(): void {
 }
 
 function redo(): void {
-  if (groupMove || endpointDrag || panDrag || dimDrag || doorwayTool.dragging()) return
+  if (groupMove || endpointDrag || panDrag || dimDrag || doorwayTool.dragging() || demolitionTool.dragging()) return
   const h = activeHistory()
+  if (h.future[h.future.length - 1]?.kind === "demolition") {
+    stepMarks(redoMarks)
+    return
+  }
   const e = redoEntry(h, scene())
   if (!e) return
   if (e.kind === "walls") {
@@ -1385,7 +1547,7 @@ function redo(): void {
     walls = e.walls
     dimensions = e.dimensions
     setDoorways(e.doorways ?? [])
-  } else {
+  } else if (e.kind === "close") {
     const idx = store.drawings.findIndex((d) => d.id === e.drawingId)
     if (idx < 0) return
     removeDrawing(e.drawingId, idx)
@@ -1469,8 +1631,24 @@ window.addEventListener("keydown", (e) => {
   }
   if (e.key === "Delete") {
     if (e.target instanceof HTMLInputElement) return
+    if (onDemolition()) {
+      if (!demolitionTool.dragging()) demolitionTool.deleteSelected()
+      return
+    }
     if (groupMove || endpointDrag || panDrag || dimDrag || doorwayTool.dragging()) return
     deleteSelection()
+    return
+  }
+  if (e.key === "Escape" && onDemolition()) {
+    const action = escapeAction({
+      tool,
+      gestureActive: demolitionTool.dragging(),
+      dimensionDraft: false,
+      hasSelection: demolitionTool.selectedId() !== null,
+    })
+    if (action === "end-gesture") demolitionTool.cancel()
+    else if (action === "clear-selection") demolitionTool.clearSelection()
+    else if (action === "deactivate-tool") setTool("none")
     return
   }
   if (e.key === "Escape") {
@@ -1489,6 +1667,8 @@ window.addEventListener("keydown", (e) => {
   }
   if (e.key !== "ArrowUp" && e.key !== "ArrowDown" && e.key !== "ArrowLeft" && e.key !== "ArrowRight") return
   if (e.target instanceof HTMLInputElement) return
+  // на плане «Демонтаж» нет стен, материалов и элементов: стрелки ничего не двигают и не переключают
+  if (onDemolition()) return
   if (groupMove || endpointDrag || panDrag || dimDrag || doorwayTool.dragging()) return
   if (selectedWalls.length || selectedDimensions.length || selectedDoorways.length) {
     if (!selectedWalls.length) {

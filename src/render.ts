@@ -87,6 +87,7 @@ export interface RenderOptions {
   angle?: { at: Point; from: Point; to: Point; deg: number } | null
   tracks?: TrackLine[] | null // линии трекинга по узлам в мировых координатах
   ruler?: RulerReading | null // замеры инструмента «Линейка» под курсором
+  underlay?: boolean // подложка плана «Демонтаж»: без подписей помещений, размеров и слоя элементов стен (вырезы остаются)
   palette?: Palette // цвета схемы; по умолчанию светлая (PDF — всегда светлая)
 }
 
@@ -97,6 +98,22 @@ const ANGLE_LINE_PX = 2
 const TRACK_LINE_PX = 1.5
 const TRACK_DASH_PX = [6, 4]
 
+// холст под текущий размер и плотность пикселей, очищенный; размер в CSS-пикселях
+export function prepareCanvas(canvas: HTMLCanvasElement): { ctx: CanvasRenderingContext2D; w: number; h: number } | null {
+  const dpr = window.devicePixelRatio || 1
+  const w = canvas.clientWidth
+  const h = canvas.clientHeight
+  if (canvas.width !== Math.round(w * dpr) || canvas.height !== Math.round(h * dpr)) {
+    canvas.width = Math.round(w * dpr)
+    canvas.height = Math.round(h * dpr)
+  }
+  const ctx = canvas.getContext("2d")
+  if (!ctx) return null
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
+  ctx.clearRect(0, 0, w, h)
+  return { ctx, w, h }
+}
+
 export function render(
   canvas: HTMLCanvasElement,
   walls: Wall[],
@@ -106,18 +123,8 @@ export function render(
   selectedWalls: Wall[] = [],
   opts: RenderOptions = {},
 ): void {
-  const dpr = window.devicePixelRatio || 1
-  const w = canvas.clientWidth
-  const h = canvas.clientHeight
-  if (canvas.width !== Math.round(w * dpr) || canvas.height !== Math.round(h * dpr)) {
-    canvas.width = Math.round(w * dpr)
-    canvas.height = Math.round(h * dpr)
-  }
-  const ctx = canvas.getContext("2d")
-  if (!ctx) return
-  ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
-  ctx.clearRect(0, 0, w, h)
-  drawScene(ctx, w, h, walls, preview, unit, view, selectedWalls, opts)
+  const target = prepareCanvas(canvas)
+  if (target) drawScene(target.ctx, target.w, target.h, walls, preview, unit, view, selectedWalls, opts)
 }
 
 export function drawScene(
@@ -184,11 +191,11 @@ export function drawScene(
   }
   if (opts.tracks?.length) drawTracks(ctx, opts.tracks, toScreen, p.track)
   if (opts.angle) drawAngle(ctx, opts.angle, toScreen, m, p)
-  drawRoomLabels(ctx, rooms, toScreen, m, p.ink)
+  if (!opts.underlay) drawRoomLabels(ctx, rooms, toScreen, m, p.ink)
   ctx.font = `${m.labelPx}px ${m.font}`
   ctx.textAlign = "center"
   ctx.textBaseline = "bottom"
-  drawDoorways(ctx, walls, rooms, unit, view, m, p, opts, selectedWalls.length > 0 || selectedDims.length > 0)
+  if (!opts.underlay) drawDoorways(ctx, walls, rooms, unit, view, m, p, opts, selectedWalls.length > 0 || selectedDims.length > 0)
   for (const dim of opts.dimensions ?? []) drawDimension(ctx, dim, walls, unit, p.ink, view, m, p)
   for (const dim of opts.marqueeHits?.dims ?? [])
     if (!selectedDims.includes(dim)) drawDimension(ctx, dim, walls, unit, p.marqueeDim, view, m, p)
@@ -554,7 +561,7 @@ function tracePolygon(ctx: CanvasRenderingContext2D, poly: Point[]): void {
   tracePolygons(ctx, [poly])
 }
 
-function tracePolygons(ctx: CanvasRenderingContext2D, polys: Point[][]): void {
+export function tracePolygons(ctx: CanvasRenderingContext2D, polys: Point[][]): void {
   ctx.beginPath()
   for (const poly of polys) {
     poly.forEach((p, i) => (i ? ctx.lineTo(p.x, p.y) : ctx.moveTo(p.x, p.y)))
@@ -592,6 +599,21 @@ function strokeHatch45(
   }
   ctx.stroke()
   ctx.setLineDash([])
+}
+
+// штриховка сноса: линии под 135° к осям (направление экрана (1, 1), перпендикулярно штриховке «Кирпича»)
+// с шагом и фазой strokeHatch45 (change demolition-plan, design D8)
+export function strokeHatch135(ctx: CanvasRenderingContext2D, poly: Point[], anchorC: number, m: RenderMetrics): void {
+  const [minX, minY, maxX, maxY] = polyBounds(poly)
+  const step = 3 * m.mmPx * Math.SQRT2
+  const minC = minY - maxX
+  ctx.setLineDash([])
+  ctx.beginPath()
+  for (let c = minC - mod(minC - anchorC, step); c <= maxY - minX; c += step) {
+    ctx.moveTo(minX, minX + c)
+    ctx.lineTo(maxX, maxX + c)
+  }
+  ctx.stroke()
 }
 
 function woodLong(ctx: CanvasRenderingContext2D, a: Point, b: Point, thicknessPx: number, m: RenderMetrics): void {

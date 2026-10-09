@@ -373,3 +373,20 @@ Follow-ups from the change `auto-wall-dimensions` (model of visible face pieces,
 ### Out of scope (decided, revisit if needed)
 
 - `Drawing.walls/dimensions/doorways` stay as the content of plan `measure`; a nested `plans` structure with a version-4 document was rejected for this change (approved tests and format churn). Revisit if plans multiply (design D1).
+
+## demolition-plan (explore + planning + implementation, 2026-10-09)
+
+### Bugs
+
+- [ ] The grey underlay of the demolition plan is `palette.muted` as the spec says, but `#555` (light) / `#a1a1aa` (dark) are close to the wall ink `#333` / `#d4d4d8`, so the underlay barely differs from the measurement plan on screen (checked in the browser, both themes). Needs a lighter underlay colour: a spec change (`demolition-plan` «Отображение плана «Демонтаж»») and a palette/alpha decision; the approved render and PDF tests assert `muted`.
+
+### Tests
+
+- [ ] Optional hardening listed in `openspec/changes/archive/*-demolition-plan/test-validation.md` (not blocking): `addMark` with a range like −50…0.5 returns the same array; `alongNodes` negative case for a wall ending off the strip face; loading a mark with `id: ""` is rejected; `markAt` picks the last of overlapping regions at a corner; the touching tolerance 0,01 on one side of the merge. Needs a test-change step (approved tests are immutable after validation).
+- [ ] Not exercised in the browser: re-anchoring of marks when a wall is extended by merging on the measurement plan (MAN-15); covered by `mark-follow.test.ts` with the real `mergeContinuation`, but `commitPoint` wiring in `main.ts` was only reviewed. The plan switch, tool visibility, click/drag marking, snapping, selection, in-place number editing, Delete, undo/redo, ruler, persistence and both themes were checked by hand on 2026-10-09.
+- [ ] `canvas.setPointerCapture` in the demolition tool's `pointerdown` throws `NotFoundError` for synthetic pointer ids (browser checks need `canvas.setPointerCapture = () => {}`); real pointers are fine.
+
+### Out of scope (decided, revisit if needed)
+
+- Dimensions, room areas and element labels on the demolition plan; eraser and selection of underlay walls; partial demolition of a wall element (user decision, 2026-10-09).
+- Page name in the title block (graph 5) is still empty, now on both pages (see `drawing-plans` above).

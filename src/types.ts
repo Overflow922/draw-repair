@@ -112,6 +112,16 @@ export const DEFAULT_SCALE: ScaleDenominator = 100
 export const isScale = (value: unknown): value is ScaleDenominator =>
   typeof value === "number" && (SCALE_DENOMINATORS as readonly unknown[]).includes(value)
 
+// Пометка сноса плана «Демонтаж» (change demolition-plan, design D2): участок оси стены обмерочного плана
+// от конца привязки (anchor): расстояния fromCm (до ближней границы) и toCm (до дальней), 0 ≤ fromCm < toCm
+export interface DemolitionMark {
+  id: string
+  wallId: string
+  anchor: "a" | "b"
+  fromCm: number
+  toCm: number
+}
+
 export interface Drawing {
   id: string
   name: string
@@ -123,6 +133,8 @@ export interface Drawing {
   doorways?: WallElement[]
   // активный план; отсутствие или неизвестное значение читается как план по умолчанию (drawing-plans design D3)
   activePlan?: PlanId
+  // пометки сноса плана "demolition"; отсутствие — пустой список (design D7)
+  demolition?: DemolitionMark[]
   view: View
   scale: ScaleDenominator
 }
