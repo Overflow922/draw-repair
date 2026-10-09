@@ -1,4 +1,4 @@
-﻿import { describe, expect, it } from "vitest"
+import { describe, expect, it } from "vitest"
 import { autoWallDimensions, placeWall, syncAutoDimensions } from "./auto-dimensions"
 import { expectLength, expectOutsideBodies, expectPoint, expectThickness, dimsOf, measure, permutations, placeAll, split, w } from "./auto-dimensions.test-utils"
 import { door } from "./doorway/doorway.test-utils"
@@ -29,14 +29,14 @@ describe("одиночная стена", () => {
     expectLength(s.minus[0], W, -1, 0, 500)
     expectThickness(s.thickness[0], W, 0, -1)
     expectThickness(s.thickness[1], W, 500, 1)
-    // линии на y = +50, y = −50, x = −40, x = 540 (spec «Одиночная стена получает четыре размера»)
-    expectPoint(s.plus[0].line[0], s.plus[0].line[0].x, 50)
-    expectPoint(s.minus[0].line[0], s.minus[0].line[0].x, -50)
-    expect(s.thickness[0].line[0].x).toBeCloseTo(-40, 5)
-    expect(s.thickness[1].line[0].x).toBeCloseTo(540, 5)
+    // линии на y = +30, y = −30, x = −20, x = 520 (spec «Одиночная стена получает четыре размера»)
+    expectPoint(s.plus[0].line[0], s.plus[0].line[0].x, 30)
+    expectPoint(s.minus[0].line[0], s.minus[0].line[0].x, -30)
+    expect(s.thickness[0].line[0].x).toBeCloseTo(-20, 5)
+    expect(s.thickness[1].line[0].x).toBeCloseTo(520, 5)
   })
 
-  it("AD-2: наклонная стена (0,0)-(300,400) — две длины по 500 и две толщины, линии параллельны и на 40 см снаружи", () => {
+  it("AD-2: наклонная стена (0,0)-(300,400) — две длины по 500 и две толщины, линии параллельны и на 20 см снаружи", () => {
     const W = w(0, 0, 300, 400, "W")
     const scene = placeAll([W])
     expect(scene.dimensions).toHaveLength(4)
@@ -58,7 +58,7 @@ describe("одиночная стена", () => {
     expectThickness(s.thickness[1], W, 500, 1)
   })
 
-  it("AD-2c: размеры разной толщины — толщина 40 даёт число 40, линии на 40 см от граней y = ±20", () => {
+  it("AD-2c: размеры разной толщины — толщина 40 даёт число 40, линии на 20 см от граней y = ±20", () => {
     const W = w(0, 0, 500, 0, "W", 40)
     const s = split(placeAll([W]), W)
     expectLength(s.plus[0], W, 1, 0, 500)
@@ -105,7 +105,7 @@ describe("примыкание: ножка (T)", () => {
     expect(dimsOf(after, "W")).toHaveLength(5)
     // нетронутые размеры остались такими же объектами данных
     const old = dimsOf(before, "W")
-    const replaced = old.filter((d) => d.offset === -40 && Math.abs(measure(d, before.walls).length - 500) < 1e-6)
+    const replaced = old.filter((d) => d.offset === -20 && Math.abs(measure(d, before.walls).length - 500) < 1e-6)
     expect(replaced).toHaveLength(1)
     for (const d of old.filter((x) => !replaced.includes(x))) expect(after.dimensions).toContainEqual(d)
     expect(after.dimensions).not.toContainEqual(replaced[0])
@@ -301,7 +301,7 @@ describe("слияние и пересчёт", () => {
   it("AD-17: размер, который пользователь передвинул (метки нет), не заменяется и не удаляется, остальные размеры стены пересчитаны", () => {
     const W = w(0, 0, 500, 0, "W")
     const base = placeAll([W])
-    const minusLength = base.dimensions.find((d) => d.offset === -40 && Math.abs(measure(d, base.walls).length - 500) < 1e-6)
+    const minusLength = base.dimensions.find((d) => d.offset === -20 && Math.abs(measure(d, base.walls).length - 500) < 1e-6)
     if (!minusLength) throw new Error("нет размера длины по грани −")
     const moved: Dimension = { from: minusLength.from, to: minusLength.to, offset: -70 }
     const prepared: Scene = { ...base, dimensions: base.dimensions.map((d) => (d === minusLength ? moved : d)) }
@@ -451,7 +451,7 @@ describe("AD-29/AD-30: сравнение набора при пересчёте
 
   it("AD-29: набор того же числа размеров, но с иной точкой замера или смещением, заменяется целиком", () => {
     const base = placeAll([W()])
-    const target = base.dimensions.find((x) => x.offset === 40 && Math.abs(measure(x, base.walls).length - 500) < 1e-6)
+    const target = base.dimensions.find((x) => x.offset === 20 && Math.abs(measure(x, base.walls).length - 500) < 1e-6)
     if (!target) throw new Error("нет размера")
     const pairs: [Dimension, Dimension][] = [
       ...base.dimensions.map((d): [Dimension, Dimension] => [d, { ...d, offset: d.offset * 2 }]),
@@ -470,7 +470,7 @@ describe("AD-29/AD-30: сравнение набора при пересчёте
   it("AD-30: неизменившийся набор остаётся без изменений (эквивалентная запись точки сохраняется)", () => {
     const A = w(0, 0, 500, 0, "A")
     const base = placeAll([A, w(0, 300, 500, 300, "B"), w(0, 600, 500, 600, "C")])
-    const target = base.dimensions.find((d) => d.auto === "A" && d.offset === 40 && Math.abs(measure(d, base.walls).length - 500) < 1e-6)
+    const target = base.dimensions.find((d) => d.auto === "A" && d.offset === 20 && Math.abs(measure(d, base.walls).length - 500) < 1e-6)
     if (!target) throw new Error("нет размера")
     const swapped: Dimension = { ...target, from: { a: target.from.b, b: target.from.a } }
     const prepared: Scene = { ...base, dimensions: base.dimensions.map((d) => (d === target ? swapped : d)) }
@@ -551,7 +551,7 @@ describe("AD-34: короткая стена", () => {
 describe("AD-35: пересчёт стены с единственным автоматическим размером", () => {
   it("у стены остался один автоматический размер (остальные переданы пользователю) — новая стена заменяет его новым набором", () => {
     const base = placeAll([w(0, 0, 500, 0, "W")])
-    const keep = base.dimensions.find((d) => d.offset === -40 && Math.abs(measure(d, base.walls).length - 500) < 1e-6)
+    const keep = base.dimensions.find((d) => d.offset === -20 && Math.abs(measure(d, base.walls).length - 500) < 1e-6)
     if (!keep) throw new Error("нет размера")
     const released: Dimension[] = base.dimensions.map((d) => (d === keep ? d : { from: d.from, to: d.to, offset: d.offset }))
     const prepared: Scene = { ...base, dimensions: released }

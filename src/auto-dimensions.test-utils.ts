@@ -8,7 +8,7 @@ import type { Dimension, Point, Wall } from "./types"
 // для тестов (spec dimension-tool «Автоматические размеры стены»). Эталоны выведены из спецификации
 // и геометрии сцен (контуры стен), а не из модуля автоматических размеров.
 
-export const OFFSET_CM = 40
+export const OFFSET_CM = 20
 
 export const w = (ax: number, ay: number, bx: number, by: number, id: string, thicknessCm = 20): Wall => ({
   id,
@@ -80,7 +80,7 @@ export function split(scene: Scene, wall: Wall): Split {
 const DIGITS = 5
 
 // размер длины по грани: точки замера на грани стороны side (±1), по оси от t0 до t1;
-// размерная линия — на 40 см снаружи от грани, параллельно ей, число — t1 - t0
+// размерная линия — на 20 см снаружи от грани, параллельно ей, число — t1 - t0
 export function expectLength(m: Measured, wall: Wall, side: 1 | -1, t0: number, t1: number, digits = DIGITS): void {
   const f = frameOf(wall)
   const half = wall.thicknessCm / 2
@@ -96,7 +96,7 @@ export function expectLength(m: Measured, wall: Wall, side: 1 | -1, t0: number, 
 }
 
 // размер толщины на торце в t = tEnd: точки замера — два угла торца, размерная линия — за торцом
-// (outward = +1 дальше от конца a, -1 в сторону от конца b) на 40 см от него, число — толщина
+// (outward = +1 дальше от конца a, -1 в сторону от конца b) на 20 см от него, число — толщина
 export function expectThickness(m: Measured, wall: Wall, tEnd: number, outward: 1 | -1, digits = DIGITS): void {
   const f = frameOf(wall)
   const half = wall.thicknessCm / 2
