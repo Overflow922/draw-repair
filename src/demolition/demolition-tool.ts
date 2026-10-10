@@ -146,17 +146,9 @@ export function createDemolitionTool(host: DemolitionToolHost): DemolitionTool {
       const drag = dragging || (pr !== null && dist(px, pr.px) > DEAD_ZONE_PX)
       reset()
       if (!pr) return null
-      const marks = host.marks()
-      const walls = host.walls()
+      // участок помечает только протяжка; клик ничего не меняет (стену целиком — протяжкой от конца до конца)
       const [from, to] = bounds(pr, p)
-      let placed: string | null = null
-      if (drag && to - from >= MIN_WIDTH_CM) {
-        placed = place(pr.wall, from, to)
-      } else {
-        // клик: по неснесённой части — пометить стену целиком; по снесённой области ничего не меняется (снимает ластик)
-        const hit = markAt(pr.p, effectiveMarks(marks, walls, host.elements()), walls)
-        if (!hit) placed = place(pr.wall, pr.range[0], pr.range[1])
-      }
+      const placed = drag && to - from >= MIN_WIDTH_CM ? place(pr.wall, from, to) : null
       host.redraw()
       return placed
     },

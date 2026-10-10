@@ -92,9 +92,10 @@ describe("стена с окном не помечается", () => {
 })
 
 describe("проёмы, двери и окна других стен не мешают", () => {
-  it("NW-12: стена с проёмом помечается целиком: 0–500, пометка выделена, возвращён идентификатор", () => {
+  // TCR-1 (change demolition-drag-only): стену целиком помечает протяжка от конца до конца, клик ничего не ставит
+  it("NW-12: стена с проёмом помечается целиком протяжкой: 0–500, пометка выделена, возвращён идентификатор", () => {
     const s = setup({ elements: [door("W", "a", 210, 90, 210, "p")] })
-    expect(click(s, { x: 50, y: 0 })).toBe("n1")
+    expect(drag(s, { x: 0, y: 0 }, { x: 500, y: 0 })).toBe("n1")
     expect(s.marks()).toEqual([mk("n1", "W", "a", 0, 500)])
     expect(s.tool.selectedId()).toBe("n1")
   })
@@ -105,17 +106,17 @@ describe("проёмы, двери и окна других стен не меш
     expect(s.marks()).toEqual([mk("n1", "W", "a", 50, 300)])
   })
 
-  it("NW-12: стена с проёмом и дверью — клик на самом проёме помечает стену (проём в области сноса)", () => {
+  it("NW-12: стена с проёмом и дверью — протяжка поверх проёма помечает стену (проём в области сноса)", () => {
     const s = setup({ elements: [door("W", "a", 100, 90, 210, "p"), door_("W", "b", 100, 90, "dr")] })
-    expect(click(s, { x: 145, y: 0 })).toBe("n1")
+    expect(drag(s, { x: 0, y: 0 }, { x: 500, y: 0 })).toBe("n1")
     expect(s.marks()).toEqual([mk("n1", "W", "a", 0, 500)])
   })
 
   it("NW-13: окно на другой стене не мешает пометить W", () => {
     const two = [W(), wall(0, 300, 500, 300, "V")]
     const s = setup({ walls: two, elements: [window_("V", "a", 210, 90, "w1")] })
-    expect(click(s, { x: 50, y: 0 })).toBe("n1")
-    expect(click(s, { x: 50, y: 300 })).toBeNull()
+    expect(drag(s, { x: 0, y: 0 }, { x: 500, y: 0 })).toBe("n1")
+    expect(drag(s, { x: 0, y: 300 }, { x: 500, y: 300 })).toBeNull()
     expect(s.marks()).toEqual([mk("n1", "W", "a", 0, 500)])
   })
 })

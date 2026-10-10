@@ -55,41 +55,41 @@ const wallW = (s: Setup): Wall => {
 }
 const spans = (s: Setup): [number, number][] => s.marks().map((m) => span(m, wallW(s)))
 
-describe("клик", () => {
-  it("SW-21: клик по чистому участку (x = 400) помечает участок 295–500, а не всю стену; одна запись истории", () => {
+// TCR-1 (change demolition-drag-only): участок помечает только протяжка; клик ничего не ставит. Тесты, где клик помечал
+// чистый участок или стену, переведены на протяжку по чистому участку.
+describe("клик и протяжка по чистому участку", () => {
+  it("SW-21: протяжка по чистому участку (350 → 700) ограничена участком 295–500: пометка 350–500, одна запись истории", () => {
     const s = setup()
-    expect(click(s, { x: 400, y: 0 })).toBe("n1")
-    expect(spans(s)).toEqual([[295, 500]])
+    expect(dragTo(s, { x: 350, y: 0 }, { x: 700, y: 0 })).toBe("n1")
+    expect(spans(s)).toEqual([[350, 500]])
     expect(s.log).toMatchObject({ record: 1, set: 1 })
     expect(s.tool.selectedId()).toBe("n1")
   })
 
-  it("SW-21: клик в разрыве грани (x = 300, под перегородкой) относится к соседнему чистому участку: 295–500", () => {
+  it("SW-21: протяжка, начатая в разрыве грани (x = 300, под перегородкой), относится к соседнему чистому участку: 300–500", () => {
     const s = setup()
-    expect(click(s, { x: 300, y: 0 })).toBe("n1")
-    expect(spans(s)).toEqual([[295, 500]])
+    expect(dragTo(s, { x: 300, y: 0 }, { x: 700, y: 0 })).toBe("n1")
+    expect(spans(s)).toEqual([[300, 500]])
   })
 
-  it("SW-22: клик по участку окна (x = 50 и на самом окне x = 150) ничего не меняет", () => {
+  it("SW-22: клик по участку окна (x = 50, на самом окне x = 150 и x = 250) ничего не меняет; клик по чистому участку (x = 400) тоже", () => {
     const s = setup()
-    expect(click(s, { x: 50, y: 0 })).toBeNull()
-    expect(click(s, { x: 150, y: 0 })).toBeNull()
-    expect(click(s, { x: 250, y: 0 })).toBeNull()
+    for (const x of [50, 150, 250, 400]) expect(click(s, { x, y: 0 })).toBeNull()
     expect(s.marks()).toEqual([])
     expect(s.log).toMatchObject({ record: 0, set: 0 })
   })
 
-  it("SW-21: окно справа — чистый участок слева: клик в x = 50 помечает 0–305", () => {
+  it("SW-21: окно справа — чистый участок слева: протяжка 50 → 200 помечает 50–200, протяжка, начатая в x = 400 (участок окна), ничего не создаёт", () => {
     const s = setup({ elements: [window_("W", "a", 350, 90, "wr")] })
-    expect(click(s, { x: 50, y: 0 })).toBe("n1")
-    expect(spans(s)).toEqual([[0, 305]])
-    expect(click(s, { x: 400, y: 0 })).toBeNull()
+    expect(dragTo(s, { x: 50, y: 0 }, { x: 200, y: 0 })).toBe("n1")
+    expect(spans(s)).toEqual([[50, 200]])
+    expect(dragTo(s, { x: 400, y: 0 }, { x: 450, y: 0 })).toBeNull()
   })
 
-  it("SW-21: клик по чистому участку, где уже есть пометка, сливает её в весь чистый участок", () => {
+  it("SW-21: протяжка по чистому участку, где уже есть пометка (320–400), сливается с ней: 320–500, возвращён m1", () => {
     const s = setup({ marks: [mk("m1", "W", "a", 320, 400)] })
-    expect(click(s, { x: 450, y: 0 })).toBe("m1")
-    expect(spans(s)).toEqual([[295, 500]])
+    expect(dragTo(s, { x: 350, y: 0 }, { x: 700, y: 0 })).toBe("m1")
+    expect(spans(s)).toEqual([[320, 500]])
   })
 
   it("SW-21: клик по снесённой области чистого участка по-прежнему ничего не меняет", () => {
@@ -98,28 +98,27 @@ describe("клик", () => {
     expect(s.log.record).toBe(0)
   })
 
-  it("SW-20: свободная стена с окном: чистых участков нет — клик ничего не меняет", () => {
+  it("SW-20: свободная стена с окном: чистых участков нет — протяжка ничего не создаёт", () => {
     const s = setup({ walls: [W()], elements: [window_("W", "a", 210, 90, "w1")] })
-    expect(click(s, { x: 50, y: 0 })).toBeNull()
-    expect(click(s, { x: 450, y: 0 })).toBeNull()
+    expect(dragTo(s, { x: 0, y: 0 }, { x: 500, y: 0 })).toBeNull()
+    expect(dragTo(s, { x: 450, y: 0 }, { x: 480, y: 0 })).toBeNull()
     expect(s.marks()).toEqual([])
   })
 
-  it("SW-20: без окна клик помечает всю стену, как раньше (перегородка стену не делит)", () => {
+  it("SW-20: без окна протяжка от конца до конца помечает всю стену (перегородка стену не делит)", () => {
     const s = setup({ elements: [] })
-    expect(click(s, { x: 400, y: 0 })).toBe("n1")
+    expect(dragTo(s, { x: 0, y: 0 }, { x: 700, y: 0 })).toBe("n1")
     expect(spans(s)).toEqual([[0, 500]])
   })
 
-  it("SW-20: окно на перегородке (другой стене) и проём с дверью на W не блокируют: клик помечает всю стену", () => {
+  it("SW-20: окно на перегородке (другой стене) и проём с дверью на W не блокируют: протяжка от конца до конца помечает всю стену", () => {
     for (const elements of [[window_("P", "a", 100, 90, "wp")], [door("W", "a", 100, 90, 210, "p"), door_("W", "b", 100, 90, "dr")]]) {
       const s = setup({ elements })
-      expect(click(s, { x: 50, y: 0 })).toBe("n1")
+      expect(dragTo(s, { x: 0, y: 0 }, { x: 700, y: 0 })).toBe("n1")
       expect(spans(s)).toEqual([[0, 500]])
     }
   })
 })
-
 describe("протяжка", () => {
   it("SW-23: протяжка, начатая на чистом участке (x = 400) и ушедшая на участок окна (x = 150), обрезается по границе 295: 295–400", () => {
     const s = setup()
@@ -177,13 +176,12 @@ describe("скрытые пометки на участке окна", () => {
     expect(s.log.record).toBe(0)
   })
 
-  it("SW-31: клик по чистому участку, где лежит скрытая пометка (200–400), ставит новую 295–500 и не сливает скрытую", () => {
+  // TCR-1 (change demolition-drag-only): вариант с кликом удалён — клик ничего не ставит; остаётся протяжка
+  it("SW-31: клик по месту скрытой пометки (200–400) ничего не создаёт и не трогает её", () => {
     const s = setup({ marks: [mk("m1", "W", "a", 200, 400)] })
-    expect(click(s, { x: 350, y: 0 })).toBe("n1")
-    expect(s.tool.selectedId()).toBe("n1")
-    expect(s.marks().find((m) => m.id === "m1")).toEqual(mk("m1", "W", "a", 200, 400))
-    expect(s.marks().filter((m) => m.id !== "m1").map((m) => span(m, wallW(s)))).toEqual([[295, 500]])
-    expect(s.marks()).toHaveLength(2)
+    expect(click(s, { x: 350, y: 0 })).toBeNull()
+    expect(s.marks()).toEqual([mk("m1", "W", "a", 200, 400)])
+    expect(s.log.record).toBe(0)
   })
 
   it("SW-31: протяжка по месту скрытой пометки тоже не сливается с ней", () => {

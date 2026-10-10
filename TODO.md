@@ -391,6 +391,12 @@ Follow-ups from the change `auto-wall-dimensions` (model of visible face pieces,
 - Dimensions, room areas and element labels on the demolition plan; eraser and selection of underlay walls; partial demolition of a wall element (user decision, 2026-10-09).
 - Page name in the title block (graph 5) is still empty, now on both pages (see `drawing-plans` above).
 
+## demolition-drag-only (2026-10-10)
+
+### Out of scope
+
+- [ ] Подсказка пользователю: зону демонтажа нужно растянуть на стене (клик по стене больше ничего не помечает, `demolition-drag-only`). Вариант: текст-подсказка у курсора при активном инструменте («Растяните зону на стене») или у кнопки «Демонтаж»; по существующим образцам интерфейса (`.claude/rules/ui.md`) — согласовать с пользователем, пока ничего не придумано.
+
 ## demolition-window-sections (2026-10-10)
 
 ### Bugs

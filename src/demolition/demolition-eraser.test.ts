@@ -80,14 +80,15 @@ describe("клик инструментом «Демонтаж» по снесё
     expect(s.tool.selectedId()).toBe("m1")
   })
 
-  it("SZ-41: клик по неснесённой части стены с пометкой помечает стену целиком: 0–500 одной пометкой, она выделена и возвращена", () => {
+  // TCR-1 (change demolition-drag-only): клик по неснесённой части больше ничего не помечает
+  it("SZ-41: клик по неснесённой части стены с пометкой ничего не меняет: пометка m1 та же, шага истории нет", () => {
     const s = setup({ marks: [m1] })
     const p = { x: 400, y: 0 }
     s.tool.down(p, px(p))
-    expect(s.tool.up(p, px(p))).toBe("m1")
-    expect(s.marks()).toEqual([mk("m1", "W", "a", 0, 500)])
-    expect(s.tool.selectedId()).toBe("m1")
-    expect(s.log.record).toBe(1)
+    expect(s.tool.up(p, px(p))).toBeNull()
+    expect(s.marks()).toEqual([m1])
+    expect(s.tool.selectedId()).toBeNull()
+    expect(s.log.record).toBe(0)
   })
 
   it("SZ-40: протяжка внутри снесённой области ничего не меняет (слияние без изменений)", () => {
