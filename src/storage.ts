@@ -1,7 +1,7 @@
 import { mergeAll } from "./demolition/marks"
 import { isPlanId } from "./plans"
 import { isDoor, isScale, isWindow, DEFAULT_SCALE, normalizeMaterial } from "./types"
-import type { DemolitionMark, Dimension, DimPoint, Doorway, Drawing, DrawingStore, EdgeRef, Point, View, Wall, WallDoor, WallElement, WallWindow } from "./types"
+import type { DemolitionMark, Dimension, DimPoint, Doorway, Drawing, DrawingStore, EdgeRef, MountingContent, Point, View, Wall, WallDoor, WallElement, WallWindow } from "./types"
 
 const KEY = "draw-repair:drawing"
 
@@ -109,6 +109,25 @@ export const isDrawing = (d: unknown, version: number = 3): d is Drawing =>
 const assignIds = (walls: Wall[]): Wall[] =>
   walls.map((w) => ({ ...w, id: w.id || crypto.randomUUID(), type: normalizeMaterial(w.type) }))
 
+const copyDimension = (dim: Dimension): Dimension =>
+  ({ from: { ...dim.from }, to: { ...dim.to }, offset: dim.offset, ...(dim.auto !== undefined ? { auto: dim.auto } : null) })
+
+// объекты плана «Монтаж» при загрузке (change mounting-plan, design D4): некорректные стены, размеры и элементы
+// отбрасываются по одному; ссылки на отсутствующие стены сохраняются (объект может вернуться); поле, не являющееся
+// объектом, читается как отсутствующее; список элементов не дописывается
+function loadMounting(raw: unknown): { mounting?: MountingContent } {
+  if (typeof raw !== "object" || raw === null || Array.isArray(raw)) return {}
+  const x = raw as Record<string, unknown>
+  const list = (v: unknown): unknown[] => (Array.isArray(v) ? v : [])
+  return {
+    mounting: {
+      walls: assignIds(list(x.walls).filter(isWallBase)),
+      dimensions: list(x.dimensions).filter(isDimension).map(copyDimension),
+      ...(x.doorways === undefined ? null : { doorways: list(x.doorways).filter(isWallElement).map(normalizeElement) }),
+    },
+  }
+}
+
 const emptyDrawing = (name: string): Drawing => ({
   id: crypto.randomUUID(),
   name,
@@ -144,15 +163,15 @@ export function parseStore(raw: string): LoadedStore | null {
       typeof d.activeId === "string" && d.drawings.every((x) => isDrawing(x, version)) &&
       d.drawings.some((x) => (x as Drawing).id === d.activeId)
     ) {
-      const drawings = (d.drawings as Drawing[]).map(({ activePlan, demolition, ...dr }) => ({
+      const drawings = (d.drawings as Drawing[]).map(({ activePlan, demolition, mounting, ...dr }) => ({
         ...dr,
         // активный план — необязательное поле: допустимое сохраняется, остальное отбрасывается (drawing-plans design D3)
         ...(isPlanId(activePlan) ? { activePlan } : null),
         walls: assignIds(dr.walls),
         ...loadDemolition(demolition, dr.walls),
+        ...loadMounting(mounting),
         ...loadDoorways(dr.doorways, dr.walls),
-        dimensions: (Array.isArray(dr.dimensions) ? dr.dimensions : []).filter(isDimension)
-          .map((dim) => ({ from: { ...dim.from }, to: { ...dim.to }, offset: dim.offset, ...(dim.auto !== undefined ? { auto: dim.auto } : null) })),
+        dimensions: (Array.isArray(dr.dimensions) ? dr.dimensions : []).filter(isDimension).map(copyDimension),
         ...(version === 1 ? { scale: DEFAULT_SCALE } : null),
       }))
       return { store: { version: 3, activeId: d.activeId, drawings }, readOnly: false }

@@ -122,6 +122,14 @@ export interface DemolitionMark {
   toCm: number
 }
 
+// Собственные объекты плана «Монтаж» (change mounting-plan, design D4): те же типы, что у обмера; остатки стен
+// обмера после сноса вычисляются и здесь не хранятся
+export interface MountingContent {
+  walls: Wall[]
+  dimensions: Dimension[]
+  doorways?: WallElement[]
+}
+
 export interface Drawing {
   id: string
   name: string
@@ -135,6 +143,8 @@ export interface Drawing {
   activePlan?: PlanId
   // пометки сноса плана "demolition"; отсутствие — пустой список (design D7)
   demolition?: DemolitionMark[]
+  // объекты плана "mounting"; отсутствие — пустой «Монтаж», при загрузке не дописывается
+  mounting?: MountingContent
   view: View
   scale: ScaleDenominator
 }

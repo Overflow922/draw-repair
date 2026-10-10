@@ -458,3 +458,15 @@ Follow-ups from the change `auto-wall-dimensions` (model of visible face pieces,
 ### Tests
 
 - [ ] `main.ts` wiring (all elements passed to the demolition canvas) has no automated test; checked by hand in the browser on 2026-10-09 (window, door and doorway under a whole-wall mark). Label `textAlign`/`textBaseline` of the elements layer are set by `drawDoorways`, so they are not separately observable (validation M14/M20).
+
+---
+
+Follow-ups from change `mounting-plan` (exploration and tests, 2026-10-10).
+
+## Tests
+
+- [ ] `main.ts` wiring of the «Монтаж» plan has no automated test: remnants and old elements must not be selectable, erasable, or affected by Delete and marquee; own objects are edited by the same tools as the measure plan; the plan switcher shows three segments; `commitMounting`/`restoreScene`/`historyOf` glue. Only the model (`mountingScene`, `remnantWalls`, `openWorkspace`, `storedContent`) is unit-tested. Checked by hand in the browser on 2026-10-10 (remnant click/marquee/eraser, old opening eraser/click/Delete, own wall draw/erase/undo/redo, own doorway on a remnant, reload, demolition mark removed → «Монтаж» updates).
+- [ ] `src/mounting/mounting-workspace.test.ts` was added during apply and was not part of the validated test suite (`test-validation.md`); have it reviewed by a validator.
+- [ ] Not checked by hand: arrow-key nudge of an own wall T-attached to a remnant, and dragging an own wall's end onto a remnant. The neighbour-follow rules in `wall-edit` may move the remnant while the gesture runs; `restoreRemnants` (`src/main.ts`) puts remnants back on every redraw, so the remnant is never changed, but the own wall may be bounded by it.
+- [ ] `EPS_CM` tolerance at the boundary of an own element in `mountingScene` has no test: an element sticking out of its remnant by 0.005 cm should still be visible (validation survivors `own-left-eps0`, `own-right-eps0`, `test-validation.md` of `mounting-plan`).
+- [ ] `remnantWalls` with a sliver between two unmerged marks of one wall (gap up to `EPS_CM`) and with overlapping unmerged marks is untested; unreachable while marks are merged on add and on load (survivors `rem-gap-zero`, `rem-cursor-to`).

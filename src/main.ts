@@ -28,6 +28,8 @@ import type { PlanId } from "./plans"
 import { loadStore, saveStore } from "./storage"
 import { placeWall, syncAutoDimensions } from "./auto-dimensions"
 import { mergeContinuation } from "./wall-merge"
+import { openWorkspace, storedContent } from "./mounting/mounting-workspace"
+import type { Workspace } from "./mounting/mounting-workspace"
 import { thicknessAllowed } from "./doorway/doorway-guard"
 import { deleteObjects, doorwaysInRect, erasePick, pressPick, wallsInRect } from "./doorway/doorway-scene"
 import { createElementTool, createSelectionEditing, openNumberEditor } from "./doorway/doorway-tool"
@@ -85,6 +87,10 @@ let dimensions: Dimension[] = current().dimensions
 // элементы стен (проёмы и окна) активного чертежа (change add-doorway, add-window); в чертёж пишутся
 // при первом изменении
 let doorways: WallElement[] = current().doorways ?? []
+// рабочий набор плана «Монтаж» (change mounting-plan, design D5): на этом плане walls, dimensions и doorways — сцена
+// «остатки + собственные объекты», а в чертёж пишется хранимое представление; null на остальных планах
+let workspace: Workspace | null = null
+let remnantHome = new Map<string, { a: Point; b: Point }>() // исходные концы остатков: остатки не двигаются
 let selectedDoorways: WallElement[] = []
 // параметры новых проёмов, дверей и окон (change popups-buttons-only): общие для вкладок, в чертёж не входят
 let newParams = initialParams()
@@ -137,17 +143,79 @@ const scene = (): Scene => ({ walls, dimensions, doorways })
 // история активного плана активного чертежа (change drawing-plans, design D4)
 const activeHistory = () => planHistory(historyStore, store.activeId, activePlanOf(current()))
 
+// сцена в представлении чертежа и истории: на плане «Монтаж» — только собственные объекты, без остатков и старых
+// элементов (design D6); на остальных планах — сама сцена
+const historyOf = (s: Scene): Scene => {
+  if (!workspace) return s
+  const stored = storedContent(s, workspace, current())
+  return { walls: stored.walls, dimensions: stored.dimensions, ...(stored.doorways ? { doorways: stored.doorways } : null) }
+}
+
 const pushRecord = (): void => {
   nudgeBurst = false
-  record(activeHistory(), scene())
+  record(activeHistory(), historyOf(scene()))
 }
 
 // список проёмов заменяется целиком: правки проёма возвращают новый объект
 function setDoorways(next: WallElement[]): void {
   doorways = next
-  current().doorways = next
+  if (!workspace) current().doorways = next
   selectedDoorways = selectedDoorways.filter((d) => next.includes(d))
 }
+
+// список размеров заменяется целиком; размеры плана «Монтаж» пишутся в чертёж при фиксации (commitMounting)
+function setDimensions(next: Dimension[]): void {
+  if (!workspace) {
+    dimensions = next
+    current().dimensions = next
+    return
+  }
+  // остаток автоматических размеров не получает
+  const remnants = workspace.remnantIds
+  dimensions = next.filter((d) => d.auto === undefined || !remnants.has(d.auto))
+}
+
+// рабочие списки активного плана активного чертежа; «Монтаж» — сцена из остатков и собственных объектов
+function loadWorking(): void {
+  const d = current()
+  if (activePlanOf(d) !== "mounting") {
+    walls = d.walls
+    dimensions = d.dimensions
+    doorways = d.doorways ?? []
+    workspace = null
+    remnantHome = new Map()
+    return
+  }
+  const opened = openWorkspace(d)
+  walls = opened.scene.walls
+  dimensions = opened.scene.dimensions
+  doorways = opened.scene.doorways
+  workspace = opened.workspace
+  remnantHome = new Map(walls.filter((w) => opened.workspace.remnantIds.has(w.id)).map((w) => [w.id, { a: { ...w.a }, b: { ...w.b } }]))
+}
+
+// запись собственных объектов «Монтажа» в чертёж; пока их нет и поля не было, оно не создаётся
+function commitMounting(): void {
+  const drawing = store.drawings.find((d) => d.id === store.activeId)
+  if (!workspace || !drawing) return // вкладка уже закрыта — писать некуда
+  const next = storedContent(scene(), workspace, drawing)
+  if (next.walls.length === 0 && next.dimensions.length === 0 && next.doorways === undefined && drawing.mounting === undefined) return
+  drawing.mounting = next
+}
+
+// остатки и старые элементы только для чтения: правка соседа не должна сдвигать остаток
+function restoreRemnants(): void {
+  for (const w of walls) {
+    const home = remnantHome.get(w.id)
+    if (home && (!pointsEqual(w.a, home.a) || !pointsEqual(w.b, home.b))) {
+      w.a = { ...home.a }
+      w.b = { ...home.b }
+    }
+  }
+}
+
+const editableWall = (w: Wall): boolean => !workspace?.remnantIds.has(w.id)
+const editableElement = (e: WallElement): boolean => !workspace?.oldElementIds.has(e.id)
 
 function replaceDoorway(prev: WallElement, next: WallElement): void {
   selectedDoorways = selectedDoorways.map((d) => (d === prev ? next : d))
@@ -322,7 +390,7 @@ function selectDoorway(d: WallElement): void {
 
 const pushSnapshot = (snapshot: Scene): void => {
   nudgeBurst = false
-  recordSnapshot(activeHistory(), snapshot)
+  recordSnapshot(activeHistory(), historyOf(snapshot))
 }
 
 function setWallPanel(open: boolean): void {
@@ -377,7 +445,7 @@ function syncToolbar(): void {
   for (const el of toolbar.querySelectorAll<HTMLElement>("[data-tools]")) {
     el.hidden = !(el.dataset.tools ?? "").split(" ").some((t) => tools.some((own) => own === t))
   }
-  for (const el of toolbar.querySelectorAll<HTMLElement>("[data-plan]")) el.hidden = el.dataset.plan !== plan
+  for (const el of toolbar.querySelectorAll<HTMLElement>("[data-plan]")) el.hidden = !(el.dataset.plan ?? "").split(" ").includes(plan)
 }
 
 function syncToolUI(): void {
@@ -521,6 +589,10 @@ function drawPatternPreviews(): void {
 }
 
 function redraw(): void {
+  if (workspace) {
+    restoreRemnants()
+    if (dirty) commitMounting()
+  }
   if (onDemolition()) drawDemolitionPlan()
   else drawMeasurePlan()
   updateLengthBox()
@@ -601,7 +673,9 @@ function gestureActive(): boolean {
 
 // ластик: размер → проём → стена (wall-deletion «Инструмент «Ластик»»)
 function eraserTarget(p: Point): { wall: Wall | null; dim: Dimension | null; doorway: WallElement | null } {
-  const pick = erasePick(p, { walls, dimensions, doorways }, radiusCm(), 2)
+  const found = erasePick(p, { walls, dimensions, doorways }, radiusCm(), 2)
+  // остатки и старые элементы ластиком не стираются
+  const pick = found && (found.kind === "doorway" ? !editableElement(found.doorway) : found.kind === "wall" && !editableWall(found.wall)) ? null : found
   return {
     wall: pick?.kind === "wall" ? pick.wall : null,
     dim: pick?.kind === "dimension" ? pick.dimension : null,
@@ -730,7 +804,12 @@ function commitPoint(): void {
     const merge = mergeContinuation(scene(), wall)
     // стена, нарушающая проём, не фиксируется: цепочка продолжается (spec wall-drawing)
     if (merge.kind === "blocked") return
-    if (merge.kind === "merged") {
+    // остаток стены обмера не удлиняется: на плане «Монтаж» продолжение остатка остаётся отдельной стеной
+    const extendsRemnant =
+      workspace !== null &&
+      merge.kind === "merged" &&
+      merge.scene.walls.some((w, i) => workspace?.remnantIds.has(w.id) === true && !(pointsEqual(w.a, walls[i].a) && pointsEqual(w.b, walls[i].b)))
+    if (merge.kind === "merged" && !extendsRemnant) {
       // удлинённая стена пересчитывает свои автоматические размеры в той же записи истории
       const next = syncAutoDimensions(merge.scene)
       pushRecord()
@@ -741,9 +820,8 @@ function commitPoint(): void {
       })
       // пометки сноса удлинённой стены остаются на месте в плане (change demolition-plan, design D6)
       const marks = current().demolition
-      if (marks) current().demolition = reanchorMarks(marks, wallsBefore, next.walls)
-      dimensions = next.dimensions
-      current().dimensions = dimensions
+      if (marks && !workspace) current().demolition = reanchorMarks(marks, wallsBefore, next.walls)
+      setDimensions(next.dimensions)
       setDoorways(next.doorways ?? [])
     } else {
       // новая стена получает размеры и пересчитывает размеры соседей в той же записи истории (design D1, D6)
@@ -752,8 +830,7 @@ function commitPoint(): void {
       pushRecord()
       dirty = true
       walls.push(wall)
-      dimensions = placed.dimensions
-      current().dimensions = dimensions
+      setDimensions(placed.dimensions)
     }
   }
   // стена не продолжается автоматически: инструмент ждёт новый старт
@@ -946,12 +1023,14 @@ canvas.addEventListener("pointerdown", (e) => {
   }
   // цель нажатия (change fix-midpoint-marker-priority, design D2): маркеры выделенной стены главнее
   // размера, проёма и тела стены
-  const pick = pressPick(p, { walls, dimensions, doorways }, radiusCm(), 2, {
+  const found = pressPick(p, { walls, dimensions, doorways }, radiusCm(), 2, {
     selectedWall: selectedWalls.length === 1 ? selectedWalls[0] : null,
     middleMarker: true,
     dimensions: true,
     elements: true,
   })
+  // остатки и старые элементы только для чтения: нажатие по ним ничего не выделяет (spec mounting-plan)
+  const pick = found && (found.kind === "doorway" ? !editableElement(found.doorway) : "wall" in found && !editableWall(found.wall)) ? null : found
   if (pick?.kind === "end") {
     suppressClick = true
     const other = pick.wall[pick.end === "a" ? "b" : "a"]
@@ -1066,14 +1145,14 @@ function marqueePicks(rect: { x1: number; y1: number; x2: number; y2: number }):
   const min = { x: Math.min(rect.x1, rect.x2) / k + view.pan.x, y: Math.min(rect.y1, rect.y2) / k + view.pan.y }
   const max = { x: Math.max(rect.x1, rect.x2) / k + view.pan.x, y: Math.max(rect.y1, rect.y2) / k + view.pan.y }
   // ось стены на участке её проёма стену не выделяет (multi-selection «Рамка выделения»)
-  const wallsPicked = wallsInRect(min, max, walls, doorways)
+  const wallsPicked = wallsInRect(min, max, walls, doorways).filter(editableWall)
   const dimsPicked = dimensions.filter((d) => {
     const a = dimPointPoint(d.from, walls)
     const b = dimPointPoint(d.to, walls)
     const geom = a && b ? dimGeometry(a, b, d.offset) : null
     return !!geom && segmentIntersectsRect(geom.p1, geom.p2, min, max)
   })
-  return { walls: wallsPicked, dims: dimsPicked, doorways: doorwaysInRect(min, max, walls, doorways) }
+  return { walls: wallsPicked, dims: dimsPicked, doorways: doorwaysInRect(min, max, walls, doorways).filter(editableElement) }
 }
 
 function finishMarquee(rect: { x1: number; y1: number; x2: number; y2: number }, additive: boolean): void {
@@ -1136,7 +1215,7 @@ canvas.addEventListener("click", (e) => {
     return
   }
   if (selectionAllowed(tool)) {
-    const wall = hitWall(raw, walls, radiusCm())
+    const wall = hitWall(raw, walls.filter(editableWall), radiusCm())
     if (wall) {
       selectWall(wall)
       return
@@ -1235,8 +1314,7 @@ function endChain(): void {
 function removeObjects(picked: { walls: Wall[]; dimensions: Dimension[]; doorways: WallElement[] }): void {
   const next = deleteObjects(scene(), picked)
   for (const w of picked.walls) walls.splice(walls.indexOf(w), 1)
-  dimensions = next.dimensions
-  current().dimensions = dimensions
+  setDimensions(next.dimensions)
   setDoorways(next.doorways ?? [])
 }
 
@@ -1427,6 +1505,7 @@ function renderPlanSwitch(): void {
 
 function setPlan(id: PlanId): void {
   if (id === activePlanOf(current())) return
+  commitMounting()
   current().activePlan = id
   activate(store.activeId)
 }
@@ -1449,10 +1528,9 @@ function newDrawing(): void {
 }
 
 function activate(id: string): void {
+  commitMounting()
   store.activeId = id
-  walls = current().walls
-  dimensions = current().dimensions
-  doorways = current().doorways ?? []
+  loadWorking()
   view = current().view
   tool = defaultToolOf(activePlanOf(current()))
   syncToolUI()
@@ -1532,6 +1610,21 @@ function stepMarks(step: typeof undoMarks): void {
   redraw()
 }
 
+// сцена из записи истории: на плане «Монтаж» запись хранит содержимое «Монтажа» — рабочая сцена строится заново
+// (остатки берутся по текущему обмеру и демонтажу), на остальных планах запись подставляется как есть
+function restoreScene(e: Scene): void {
+  if (workspace) {
+    current().mounting = { walls: e.walls, dimensions: e.dimensions, ...(e.doorways ? { doorways: e.doorways } : null) }
+    loadWorking()
+    return
+  }
+  current().walls = e.walls
+  current().dimensions = e.dimensions
+  walls = e.walls
+  dimensions = e.dimensions
+  setDoorways(e.doorways ?? [])
+}
+
 function undo(): void {
   if (groupMove || endpointDrag || panDrag || dimDrag || doorwayTool.dragging() || demolitionTool.dragging()) return
   const h = activeHistory()
@@ -1539,14 +1632,10 @@ function undo(): void {
     stepMarks(undoMarks)
     return
   }
-  const e = undoEntry(h, scene())
+  const e = undoEntry(h, historyOf(scene()))
   if (!e) return
   if (e.kind === "walls") {
-    current().walls = e.walls
-    current().dimensions = e.dimensions
-    walls = e.walls
-    dimensions = e.dimensions
-    setDoorways(e.doorways ?? [])
+    restoreScene(e)
   } else if (e.kind === "close") {
     const i = historyStore.trash.findIndex((t) => t.drawing.id === e.drawingId)
     if (i < 0) return
@@ -1566,14 +1655,10 @@ function redo(): void {
     stepMarks(redoMarks)
     return
   }
-  const e = redoEntry(h, scene())
+  const e = redoEntry(h, historyOf(scene()))
   if (!e) return
   if (e.kind === "walls") {
-    current().walls = e.walls
-    current().dimensions = e.dimensions
-    walls = e.walls
-    dimensions = e.dimensions
-    setDoorways(e.doorways ?? [])
+    restoreScene(e)
   } else if (e.kind === "close") {
     const idx = store.drawings.findIndex((d) => d.id === e.drawingId)
     if (idx < 0) return
@@ -1734,6 +1819,7 @@ window.addEventListener("keydown", (e) => {
 })
 
 window.addEventListener("resize", redraw)
+loadWorking()
 syncThicknessBox()
 syncToolUI()
 renderTabs()

@@ -82,7 +82,8 @@ describe("pagesOf: страница демонтажа", () => {
   it("PG-12: вторая страница — подложка (стены обмерочного плана), без размеров, действующие пометки", () => {
     const d = drawing({ dimensions: [dimension] })
     const pages = pagesOf(d)
-    expect(pages).toHaveLength(2)
+    // TCR-5 (change mounting-plan): страниц три — третья страница плана «Монтаж»; вторая по-прежнему демонтаж
+    expect(pages).toHaveLength(3)
     expect(pages[1]?.walls).toEqual([W1])
     expect(pages[1]?.dimensions).toEqual([])
     expect(pages[1]?.demolition).toEqual(effectiveMarks([M1], [W1]))
@@ -137,10 +138,12 @@ describe("pagesOf: страница демонтажа", () => {
 })
 
 describe("страница демонтажа в документе PDF", () => {
-  it("PG-02: PDF содержит две страницы; красное и красная штриховка только на второй", () => {
+  // TCR-5 (change mounting-plan): страниц три; красное и красная штриховка по-прежнему только на второй (демонтаж)
+  it("PG-02: PDF содержит три страницы; красное и красная штриховка только на второй", () => {
     const doc = build(drawing())
-    expect(doc.getNumberOfPages()).toBe(2)
+    expect(doc.getNumberOfPages()).toBe(3)
     expect(redOn(doc, 1)).toEqual([])
+    expect(redOn(doc, 3)).toEqual([])
     expect(redOn(doc, 2).length).toBeGreaterThan(0)
   })
 
@@ -232,7 +235,8 @@ describe("страница демонтажа в документе PDF", () => 
 
   it("PG-14: без пометок вторая страница — только серая подложка, красного нет", () => {
     const doc = build(drawing({ demolition: [] }))
-    expect(doc.getNumberOfPages()).toBe(2)
+    // TCR-5 (change mounting-plan): страниц три
+    expect(doc.getNumberOfPages()).toBe(3)
     expect(redOn(doc, 2)).toEqual([])
   })
 
@@ -385,12 +389,13 @@ describe("форматы и доступность экспорта", () => {
     expect(availableFormatsForPages(pagesOf(withMark), 10)).toEqual(availableFormatsForPages(pagesOf(without), 10))
   })
 
-  it("PG-09: нет стен — обе страницы пусты, но остаются в документе", () => {
+  // TCR-5 (change mounting-plan): страниц три — пусты все три, остаются в документе
+  it("PG-09: нет стен — все страницы пусты, но остаются в документе", () => {
     const d = drawing({ walls: [], demolition: [] })
     const pages = pagesOf(d)
     expect(pages.every((p) => p.walls.length === 0)).toBe(true)
     const doc = build(d)
-    expect(doc.getNumberOfPages()).toBe(2)
+    expect(doc.getNumberOfPages()).toBe(3)
     expect(rectEdgesDrawn(strokeSegments(parsePaths(doc, 2)), frameRect("A4"), FRAME_LINE_MM)).toBe(true)
   })
 })

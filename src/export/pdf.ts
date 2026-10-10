@@ -6,6 +6,7 @@ import { drawScene, PDF_METRICS } from "../render"
 import { demolitionColor, drawDemolitionScene } from "../demolition/demolition-render"
 import { markDimensionExtent } from "../demolition/mark-dimensions"
 import { effectiveMarks } from "../demolition/marks"
+import { mountingScene } from "../mounting/mounting-scene"
 import type { ResolvedMark } from "../demolition/marks"
 import { PLANS } from "../plans"
 import { findRooms } from "../room-area"
@@ -135,12 +136,18 @@ export interface PlanPage {
 export function pagesOf(drawing: Drawing): PlanPage[] {
   const doorways = drawing.doorways ?? []
   const marks = effectiveMarks(drawing.demolition ?? [], drawing.walls, doorways)
-  return PLANS.map(
-    (plan): PlanPage =>
-      plan.id === "demolition"
-        ? { walls: drawing.walls, dimensions: [], doorways, demolition: marks, title: plan.label }
-        : { walls: drawing.walls, dimensions: drawing.dimensions, doorways, title: plan.label },
-  )
+  // страница «Монтаж» — остатки и собственные объекты плана (change mounting-plan, design D7)
+  const mounting = mountingScene(drawing)
+  return PLANS.map((plan): PlanPage => {
+    switch (plan.id) {
+      case "demolition":
+        return { walls: drawing.walls, dimensions: [], doorways, demolition: marks, title: plan.label }
+      case "mounting":
+        return { walls: mounting.walls, dimensions: mounting.dimensions, doorways: mounting.doorways, title: plan.label }
+      case "measure":
+        return { walls: drawing.walls, dimensions: drawing.dimensions, doorways, title: plan.label }
+    }
+  })
 }
 
 const ALL_FORMATS = Object.keys(PAGE_FORMATS_MM) as PageFormat[]

@@ -6,6 +6,7 @@ import type { Drawing } from "./types"
 export const PLANS = [
   { id: "measure", label: "Обмерочный план" },
   { id: "demolition", label: "Демонтаж" },
+  { id: "mounting", label: "Монтаж" },
 ] as const
 
 export type PlanId = (typeof PLANS)[number]["id"]
@@ -24,6 +25,8 @@ export const historyKey = (drawingId: string, plan: PlanId): string => (plan ===
 const PLAN_TOOLS: Record<PlanId, readonly [Tool, ...Tool[]]> = {
   measure: ["wall", "doorway", "door", "window", "dimension", "ruler", "eraser"],
   demolition: ["demolition", "ruler", "eraser"],
+  // «Монтаж» (change mounting-plan, design D5): набор обмерочного плана
+  mounting: ["wall", "doorway", "door", "window", "dimension", "ruler", "eraser"],
 }
 
 export const toolsOf = (plan: PlanId): readonly Tool[] => PLAN_TOOLS[plan]

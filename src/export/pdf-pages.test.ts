@@ -130,7 +130,8 @@ describe("pagesOf", () => {
   it("PG-01: первая страница — обмерочный план с его стенами, размерами и проёмами; страниц по числу планов каталога", () => {
     const dim = { from: { a: { wallId: "wa", edge: 2 }, b: { wallId: "wa", edge: 1 } }, to: { a: { wallId: "wa", edge: 3 }, b: { wallId: "wa", edge: 1 } }, offset: 30 }
     const d = drawing({ dimensions: [dim], doorways: [DOOR_A] })
-    expect(pagesOf(d)).toHaveLength(2)
+    // TCR-3 (change mounting-plan): страниц три — добавлена страница плана «Монтаж» (pdf-export «Страница плана «Монтаж»»)
+    expect(pagesOf(d)).toHaveLength(3)
     // TCR-1 (change pdf-plan-page-names): страница плана несёт название плана для графы 5
     expect(pagesOf(d)[0]).toEqual({ walls: [WA], dimensions: [dim], doorways: [DOOR_A], title: "Обмерочный план" })
   })
