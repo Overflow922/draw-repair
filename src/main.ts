@@ -36,7 +36,7 @@ import { initialParams, inheritFrom } from "./doorway/element-kind"
 import type { ElementToolHost } from "./doorway/doorway-tool"
 import { groupButtonActive, groupButtonClick, groupPick } from "./doorway/openings-group"
 import type { GroupState, GroupTool, Tool } from "./doorway/openings-group"
-import { afterPlace, escapeAction, selectionAllowed } from "./tool-mode"
+import { afterPlace, escapeAction, resumesAfterSelectionCleared, selectionAllowed } from "./tool-mode"
 import { loadThemeChoice, paletteOf, resolveTheme, saveThemeChoice, themeToggleTitle, toggledTheme } from "./theme"
 import type { Theme } from "./theme"
 import { GRID_STEP_CM, MATERIALS, PX_PER_CM } from "./types"
@@ -225,13 +225,25 @@ const closeDemolitionEditor = (): void => {
 
 // сброс жеста, выделения и поля ввода плана «Демонтаж» (смена плана, чертежа и инструмента, отмена и повтор)
 const resetDemolition = (): void => {
+  resumeDemolition = false
   demolitionTool.cancel()
   demolitionTool.clearSelection()
   closeDemolitionEditor()
 }
 
+// инструмент «Демонтаж» снят постановкой пометки и должен вернуться, когда выделение будет снято
+let resumeDemolition = false
+
+// вернуть инструмент «Демонтаж», если он снят постановкой и выделение пометки уже снято
+function resumeDemolitionTool(): void {
+  if (!resumesAfterSelectionCleared(resumeDemolition, demolitionTool.selectedId() !== null)) return
+  resumeDemolition = false
+  setTool("demolition")
+}
+
 // снять инструмент «Демонтаж» без сброса выделения (setTool выделение снимает)
 function leaveDemolitionTool(): void {
+  resumeDemolition = true
   tool = "none"
   syncToolUI()
   redraw()
@@ -915,7 +927,10 @@ canvas.addEventListener("pointerdown", (e) => {
       demolitionTool.down(p, screenPoint(e))
     } else if (selectionAllowed(tool)) {
       // без инструмента: правимое число выделенной пометки, иначе выделение пометки под точкой
-      if (!pressDemolitionNumber(p)) demolitionTool.select(p)
+      if (!pressDemolitionNumber(p)) {
+        demolitionTool.select(p)
+        resumeDemolitionTool()
+      }
     }
     return
   }
@@ -1644,7 +1659,10 @@ window.addEventListener("keydown", (e) => {
   if (e.key === "Delete") {
     if (e.target instanceof HTMLInputElement) return
     if (onDemolition()) {
-      if (!demolitionTool.dragging()) demolitionTool.deleteSelected()
+      if (!demolitionTool.dragging()) {
+        demolitionTool.deleteSelected()
+        resumeDemolitionTool()
+      }
       return
     }
     if (groupMove || endpointDrag || panDrag || dimDrag || doorwayTool.dragging()) return
@@ -1659,8 +1677,10 @@ window.addEventListener("keydown", (e) => {
       hasSelection: demolitionTool.selectedId() !== null,
     })
     if (action === "end-gesture") demolitionTool.cancel()
-    else if (action === "clear-selection") demolitionTool.clearSelection()
-    else if (action === "deactivate-tool") setTool("none")
+    else if (action === "clear-selection") {
+      demolitionTool.clearSelection()
+      resumeDemolitionTool()
+    } else if (action === "deactivate-tool") setTool("none")
     return
   }
   if (e.key === "Escape") {

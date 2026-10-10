@@ -25,6 +25,10 @@ export function escapeAction({ tool, gestureActive, dimensionDraft, hasSelection
   return hasSelection ? "clear-selection" : "none"
 }
 
+// после постановки пометки сноса инструмент «Демонтаж» снимается; когда выделение пометки снято, он включается снова
+// (spec demolition-plan «Инструмент «Демонтаж»»): armed — инструмент снят постановкой и ещё не заменён другим
+export const resumesAfterSelectionCleared = (armed: boolean, hasSelection: boolean): boolean => armed && !hasSelection
+
 // после установки «Проёма», «Двери» или «Окна» инструмент снимается и панель группы закрывается; текущий
 // инструмент группы помнится (spec doorway «Установка проёма»)
 export function afterPlace(tool: Tool, group: GroupState): { tool: Tool; group: GroupState } {
