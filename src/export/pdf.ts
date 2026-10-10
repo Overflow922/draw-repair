@@ -127,6 +127,7 @@ export interface PlanPage {
   doorways: WallElement[]
   // действующие пометки сноса: страница плана «Демонтаж» (change demolition-plan, design D9); у остальных страниц нет
   demolition?: readonly ResolvedMark[]
+  title?: string // название плана страницы — в графу 5 основной надписи (change pdf-plan-page-names)
 }
 
 // страницы чертежа: по одной на план каталога в порядке каталога; объекты обмерочного плана лежат в прежних полях
@@ -137,8 +138,8 @@ export function pagesOf(drawing: Drawing): PlanPage[] {
   return PLANS.map(
     (plan): PlanPage =>
       plan.id === "demolition"
-        ? { walls: drawing.walls, dimensions: [], doorways, demolition: marks }
-        : { walls: drawing.walls, dimensions: drawing.dimensions, doorways },
+        ? { walls: drawing.walls, dimensions: [], doorways, demolition: marks, title: plan.label }
+        : { walls: drawing.walls, dimensions: drawing.dimensions, doorways, title: plan.label },
   )
 }
 
@@ -197,7 +198,7 @@ function drawPage(doc: jsPDF, page: PlanPage, unit: Unit, scale: number, format:
     zoom: placement.mmPerCm / PX_PER_CM,
     pan: { x: -placement.offsetX / placement.mmPerCm, y: -placement.offsetY / placement.mmPerCm },
   }
-  drawSheet(doc, format, { name, scale, date })
+  drawSheet(doc, format, page.title === undefined ? { name, scale, date } : { name, scale, date, pageName: page.title })
   if (page.demolition !== undefined) {
     const scene = { walls: page.walls, doorways: page.doorways, marks: page.demolition }
     drawDemolitionScene(ctx, w, h, scene, unit, view, { color: demolitionColor("light"), grid: false, metrics: PDF_METRICS, palette: LIGHT_PALETTE, widths: true })

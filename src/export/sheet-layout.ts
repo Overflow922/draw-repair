@@ -134,6 +134,7 @@ export interface TitleBlockContent {
   name: string
   scale: number
   date: Date
+  pageName?: string // название плана страницы (графа 5); без него графа 5 пуста
 }
 
 export interface TitleBlockText {
@@ -143,12 +144,13 @@ export interface TitleBlockText {
 
 const pad2 = (n: number): string => String(n).padStart(2, "0")
 
-// Только заполненные графы: 1 — имя чертежа, 6 — стадия «Р», 25 — масштаб, 13 — месяц и год «ММ.ГГ».
-// Графа 5 (наименование страницы) намеренно пуста.
+// Только заполненные графы: 1 — имя чертежа, 5 — название плана страницы (если задано), 6 — стадия «Р», 25 — масштаб,
+// 13 — месяц и год «ММ.ГГ».
 export function titleBlockTexts(content: TitleBlockContent): TitleBlockText[] {
-  const { name, scale, date } = content
+  const { name, scale, date, pageName } = content
   const texts: TitleBlockText[] = []
   if (name !== "") texts.push({ cellId: "1", text: name })
+  if (pageName !== undefined && pageName !== "") texts.push({ cellId: "5", text: pageName })
   texts.push({ cellId: "6", text: "Р" })
   texts.push({ cellId: "25", text: `1:${scale}` })
   texts.push({ cellId: "13", text: `${pad2(date.getMonth() + 1)}.${pad2(date.getFullYear() % 100)}` })

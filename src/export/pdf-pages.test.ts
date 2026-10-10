@@ -131,15 +131,16 @@ describe("pagesOf", () => {
     const dim = { from: { a: { wallId: "wa", edge: 2 }, b: { wallId: "wa", edge: 1 } }, to: { a: { wallId: "wa", edge: 3 }, b: { wallId: "wa", edge: 1 } }, offset: 30 }
     const d = drawing({ dimensions: [dim], doorways: [DOOR_A] })
     expect(pagesOf(d)).toHaveLength(2)
-    expect(pagesOf(d)[0]).toEqual({ walls: [WA], dimensions: [dim], doorways: [DOOR_A] })
+    // TCR-1 (change pdf-plan-page-names): страница плана несёт название плана для графы 5
+    expect(pagesOf(d)[0]).toEqual({ walls: [WA], dimensions: [dim], doorways: [DOOR_A], title: "Обмерочный план" })
   })
 
   it("PG-01: отсутствующий список проёмов превращается в пустой", () => {
-    expect(pagesOf(drawing())[0]).toEqual({ walls: [WA], dimensions: [], doorways: [] })
+    expect(pagesOf(drawing())[0]).toEqual({ walls: [WA], dimensions: [], doorways: [], title: "Обмерочный план" })
   })
 
   it("PG-01: чертёж без объектов даёт пустую первую страницу, а не пустой список", () => {
-    expect(pagesOf(drawing({ walls: [] }))[0]).toEqual({ walls: [], dimensions: [], doorways: [] })
+    expect(pagesOf(drawing({ walls: [] }))[0]).toEqual({ walls: [], dimensions: [], doorways: [], title: "Обмерочный план" })
   })
 
   it("PG-07: результат не зависит от активного плана чертежа", () => {
