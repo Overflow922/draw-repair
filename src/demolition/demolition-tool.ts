@@ -5,7 +5,7 @@ import { alongNodes, snapAlong } from "./mark-snap"
 import { markDimensions } from "./mark-dimensions"
 import { editNumber, markNumberAt } from "./mark-numbers"
 import type { MarkNumberSpot, NumberRef } from "./mark-numbers"
-import { canDemolish } from "./mark-model"
+import { cleanRanges } from "./mark-sections"
 import { EPS_CM, MIN_WIDTH_CM, addMark, effectiveMarks, markAt, removeMark, sameMarks, span } from "./marks"
 
 // Инструмент «Демонтаж», выделение пометки и правка чисел на месте (change demolition-plan, design D10): состояние
@@ -53,6 +53,7 @@ interface Press {
   wall: Wall
   p: Point
   px: Point
+  range: [number, number] // чистый участок стены, на котором нажали: границы протяжки и пометка клика
 }
 
 export function createDemolitionTool(host: DemolitionToolHost): DemolitionTool {
@@ -71,12 +72,20 @@ export function createDemolitionTool(host: DemolitionToolHost): DemolitionTool {
     return true
   }
 
-  // границы участка протяжки от конца a: проекции точки нажатия и точки p на ось, с привязкой к узлам
+  // нажатие на стену: жест начинается, только если точка лежит на чистом участке (не железобетон и не участок окна)
+  const pressOn = (wall: Wall, p: Point, px: Point): Press | null => {
+    const t = Math.min(Math.max(dot(sub(p, wall.a), unitVector(wall.a, wall.b)), 0), dist(wall.a, wall.b))
+    const range = cleanRanges(wall, host.walls(), host.elements()).find(([lo, hi]) => t >= lo - EPS_CM && t <= hi + EPS_CM)
+    return range ? { wall, p, px, range } : null
+  }
+
+  // границы участка протяжки от конца a: проекции точки нажатия и точки p на ось, с привязкой к узлам, в пределах
+  // чистого участка нажатия
   const bounds = (pr: Press, p: Point): [number, number] => {
-    const { wall } = pr
+    const { wall, range } = pr
     const axis = unitVector(wall.a, wall.b)
     const nodes = alongNodes(wall, host.walls(), host.elements())
-    const snapped = (q: Point): number => snapAlong(dot(sub(q, wall.a), axis), nodes, host.radiusCm(), dist(wall.a, wall.b))
+    const snapped = (q: Point): number => Math.min(Math.max(snapAlong(dot(sub(q, wall.a), axis), nodes, host.radiusCm(), dist(wall.a, wall.b)), range[0]), range[1])
     const t0 = snapped(pr.p)
     const t1 = snapped(p)
     return [Math.min(t0, t1), Math.max(t0, t1)]
@@ -87,8 +96,13 @@ export function createDemolitionTool(host: DemolitionToolHost): DemolitionTool {
   // demolition-select-after-mark, design D1)
   const place = (wall: Wall, from: number, to: number): string | null => {
     const marks = host.marks()
-    const next = addMark(marks, host.walls(), wall.id, from, to, host.newId)
-    if (next === marks) return null
+    // слияние только с действующими пометками: скрытые (например, под окном) остаются без изменений
+    const acting = new Set(effectiveMarks(marks, host.walls(), host.elements()).map((r) => r.mark.id))
+    const live = marks.filter((m) => acting.has(m.id))
+    const merged = addMark(live, host.walls(), wall.id, from, to, host.newId)
+    if (merged === live) return null
+    const hidden = marks.filter((m) => !acting.has(m.id))
+    const next = hidden.length === 0 ? merged : [...hidden, ...merged]
     const lo = Math.max(0, from)
     const hi = Math.min(dist(wall.a, wall.b), to)
     const placed = next.find((m) => {
@@ -111,9 +125,9 @@ export function createDemolitionTool(host: DemolitionToolHost): DemolitionTool {
 
   return {
     down(p, px) {
-      // стена из железобетона или с окном не сносится: нажатие на неё жеста не начинает
+      // железобетон и участок окна не сносятся: нажатие на них жеста не начинает
       const wall = wallNearBody(p, host.walls(), host.radiusCm())
-      press = wall && canDemolish(wall, host.elements()) ? { wall, p, px } : null
+      press = wall ? pressOn(wall, p, px) : null
       dragging = false
       ghost = null
     },
@@ -141,7 +155,7 @@ export function createDemolitionTool(host: DemolitionToolHost): DemolitionTool {
       } else {
         // клик: по неснесённой части — пометить стену целиком; по снесённой области ничего не меняется (снимает ластик)
         const hit = markAt(pr.p, effectiveMarks(marks, walls, host.elements()), walls)
-        if (!hit) placed = place(pr.wall, 0, dist(pr.wall.a, pr.wall.b))
+        if (!hit) placed = place(pr.wall, pr.range[0], pr.range[1])
       }
       host.redraw()
       return placed

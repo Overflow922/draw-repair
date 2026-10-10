@@ -9,31 +9,16 @@ import { canDemolish, effectiveMarks } from "./mark-model"
 const win = window_("W", "a", 210, 90, "w1") // откосы 200–290
 const m = mk("m", "W", "a", 100, 190)
 
-describe("canDemolish с элементами", () => {
-  it("NW-01: свободная стена сносится; с окном на ней — нет", () => {
+describe("canDemolish", () => {
+  // TCR-1 (change demolition-window-sections): окно блокирует участок стены, а не стену, — canDemolish снова принимает
+  // только стену; варианты с элементами перенесены в mark-sections.test.ts (SW-01 … SW-08)
+  it("NW-01: свободная стена сносится", () => {
     expect(canDemolish(W())).toBe(true)
-    expect(canDemolish(W(), [])).toBe(true)
-    expect(canDemolish(W(), [win])).toBe(false)
   })
 
-  it("NW-04: проём и дверь на стене не мешают: стена сносится", () => {
-    expect(canDemolish(W(), [door("W", "a", 100, 90, 210, "p")])).toBe(true)
-    expect(canDemolish(W(), [door_("W", "a", 100, 90, "dr")])).toBe(true)
-    expect(canDemolish(W(), [door("W", "a", 100, 90, 210, "p"), door_("W", "b", 100, 90, "dr")])).toBe(true)
-  })
-
-  it("NW-05: окно другой стены не мешает", () => {
-    expect(canDemolish(W(), [window_("V", "a", 210, 90, "w1")])).toBe(true)
-  })
-
-  it("NW-01: окно среди других элементов запрещает снос", () => {
-    expect(canDemolish(W(), [door("W", "a", 10, 90, 210, "p"), win, door_("W", "b", 10, 90, "dr")])).toBe(false)
-  })
-
-  it("NW-06: железобетон не сносится ни с элементами, ни без; вырожденная стена — тоже", () => {
+  it("NW-06: железобетон не сносится; вырожденная стена — тоже", () => {
     expect(canDemolish(W("reinforced"))).toBe(false)
-    expect(canDemolish(W("reinforced"), [door("W", "a", 100, 90, 210, "p")])).toBe(false)
-    expect(canDemolish(wall(10, 10, 10, 10, "Z"), [])).toBe(false)
+    expect(canDemolish(wall(10, 10, 10, 10, "Z"))).toBe(false)
   })
 })
 

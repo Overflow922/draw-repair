@@ -391,6 +391,17 @@ Follow-ups from the change `auto-wall-dimensions` (model of visible face pieces,
 - Dimensions, room areas and element labels on the demolition plan; eraser and selection of underlay walls; partial demolition of a wall element (user decision, 2026-10-09).
 - Page name in the title block (graph 5) is still empty, now on both pages (see `drawing-plans` above).
 
+## demolition-window-sections (2026-10-10)
+
+### Bugs
+
+- [ ] `editNumber` (`src/demolition/mark-numbers.ts`) считает действующие пометки без элементов: правка ширины или расстояния может продлить пометку на участок окна, и она молча пропадёт с плана. Нужно решение: зажимать правку в чистый участок.
+
+### Out of scope
+
+- [ ] Участки стены определяются только Т-примыканиями (разрывами граней); углы и границы помещений без перегородки стену не делят.
+- [ ] Между окнами по обе стороны перегородки остаётся тонкий чистый участок (толщина перегородки) — по правилу «разрыв относится к соседнему чистому участку».
+
 ## demolition-no-window-walls (2026-10-10)
 
 ### Tests
