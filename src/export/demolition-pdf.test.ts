@@ -46,7 +46,7 @@ vi.mock("jspdf", async (importOriginal) => {
   return { ...mod, jsPDF: RecordingPdf }
 })
 
-const { availableFormats, availableFormatsForPages, buildPdf, buildPdfPages, pagesOf } = await import("./pdf")
+const { availableFormats, availableFormatsForPages, buildPdf, buildPdfPages, pageBounds, pagesOf } = await import("./pdf")
 const { drawingArea, frameRect, titleBlockRect, FRAME_LINE_MM } = await import("./sheet-layout")
 
 const font = readFileSync(new URL("../assets/pt-sans-regular.ttf", import.meta.url)).toString("base64")
@@ -180,12 +180,13 @@ describe("страница демонтажа в документе PDF", () => 
     expect(contour.some((s) => sameColor(s.color, ink))).toBe(false)
   })
 
-  it("PG-04: на странице демонтажа нет размеров: на первой подпись размера есть, на второй её нет", () => {
+  it("PG-04: на странице демонтажа нет размеров обмерочного плана; числа на ней — только цепочка пометки 100, 90, 310 (change demolition-corner-dimensions, TCR-4)", () => {
     build(drawing({ dimensions: [dimension] }))
     const digitsAbove = (n: number): string[] => texts.filter((t) => t.page === n && t.y < titleBlockRect("A4").y - 1 && /^\d/.test(t.text)).map((t) => t.text)
     expect(digitsAbove(1).length).toBeGreaterThan(0)
     // TCR-2 (change demolition-dimension-chains): число размера выводится дважды (обводка и заливка) — сравниваем множество
-    expect([...new Set(digitsAbove(2))]).toEqual(["90"])
+    // TCR-4 (change demolition-corner-dimensions): вместо одной ширины — цепочка пометки на обеих гранях
+    expect([...new Set(digitsAbove(2))].sort()).toEqual(["100", "310", "90"])
   })
 
   // TCR-4 (change demolition-show-elements): подписи элементов («H=…») теперь есть и на странице демонтажа
@@ -308,24 +309,33 @@ describe("подложка из нескольких стен: габариты 
     expect(availableFormatsForPages([{ walls: [short], dimensions: [], doorways: [] }], 10)).toContain("A4")
   })
 
-  it("PG-18: габариты и центрирование страницы — по всем стенам: серый контур охватывает обе стены (ширина 30 мм по осям с торцами вровень, высота 22 мм с толщиной стены при 1:100) и центрирован", () => {
+  // TCR-4 (change demolition-corner-dimensions): габариты страницы включают цепочку пометки на обеих гранях, поэтому центрируются
+  // габариты стен вместе с размерами (pageBounds), а не один серый контур: контур смещён от центра области на (центр стен − центр габаритов)
+  it("PG-18: габариты и центрирование страницы — по всем стенам и размерам: серый контур охватывает обе стены (ширина 30 мм, высота 22 мм при 1:100) и смещён от центра области ровно на разницу центров стен и габаритов страницы", () => {
     const area: Rect = drawingArea("A4")
-    const box = inkBox(build(two()), 2)
+    const d = two()
+    const box = inkBox(build(d), 2)
+    const b = pageBounds(pagesOf(d)[1] as PlanPage, 100)
     expect(box).not.toBeNull()
     expect(box!.w).toBeCloseTo(30, 0)
     expect(box!.h).toBeCloseTo(22, 0)
-    expect(box!.x + box!.w / 2).toBeCloseTo(area.x + area.w / 2, 0)
-    expect(box!.y + box!.h / 2).toBeCloseTo(area.y + area.h / 2, 0)
+    // стены: x 0…300, y −10…210 (толщина 20) → центр (150, 100) см; 1 см = 0,1 мм
+    expect(box!.x + box!.w / 2).toBeCloseTo(area.x + area.w / 2 + (150 - (b.minX + b.maxX) / 2) / 10, 1)
+    expect(box!.y + box!.h / 2).toBeCloseTo(area.y + area.h / 2 + (100 - (b.minY + b.maxY) / 2) / 10, 1)
   })
 
-  it("PG-18: страница демонтажа размещена так же, как обмерочная страница тех же стен", () => {
-    const doc = build(two())
+  it("PG-18: страница демонтажа размещена по тем же правилам, что обмерочная страница тех же стен: размер контура тот же, смещение — разница центров габаритов страниц", () => {
+    const d = two()
+    const doc = build(d)
+    const [p1, p2] = pagesOf(d)
     const a = inkBox(doc, 1)
     const b = inkBox(doc, 2)
-    expect(b?.x).toBeCloseTo(a!.x, 1)
-    expect(b?.y).toBeCloseTo(a!.y, 1)
+    const b1 = pageBounds(p1 as PlanPage, 100)
+    const b2 = pageBounds(p2 as PlanPage, 100)
     expect(b?.w).toBeCloseTo(a!.w, 1)
     expect(b?.h).toBeCloseTo(a!.h, 1)
+    expect(b!.x - a!.x).toBeCloseTo(((b1.minX + b1.maxX) / 2 - (b2.minX + b2.maxX) / 2) / 10, 1)
+    expect(b!.y - a!.y).toBeCloseTo(((b1.minY + b1.maxY) / 2 - (b2.minY + b2.maxY) / 2) / 10, 1)
   })
 })
 

@@ -49,26 +49,47 @@ describe("размеры пометок на странице PDF", () => {
   const length = (s: { a: { x: number; y: number }; b: { x: number; y: number } }): number => Math.hypot(s.b.x - s.a.x, s.b.y - s.a.y)
   const isVertical = (s: { a: { x: number }; b: { x: number } }): boolean => Math.abs(s.a.x - s.b.x) < 1e-3
   const isHorizontal = (s: { a: { y: number }; b: { y: number } }): boolean => Math.abs(s.a.y - s.b.y) < 1e-3
+  const distinct = (values: number[]): number[] => [...new Set(values.map((v) => Math.round(v * 100) / 100))].sort((p, q) => p - q)
+  const gaps = (xs: number[]): number[] => xs.slice(1).map((x, i) => Math.round((x - (xs[i] ?? 0)) * 100) / 100)
 
-  it("DC-20: две выносные линии толщиной 0,25 мм, красные, вертикальные, на расстоянии 9 мм (участок 90 см)", () => {
-    const ext = thin.filter(isVertical)
-    expect(ext).toHaveLength(2)
-    expect(Math.abs(Math.abs(ext[0]!.a.x - ext[1]!.a.x) - 9)).toBeLessThan(0.01)
+  it("CD-11: выносные линии цепочки — красные вертикальные тонкие — стоят в четырёх местах x = 0, 100, 190, 500 см: промежутки 10, 9 и 31 мм", () => {
+    const xs = distinct(thin.filter(isVertical).map((s) => s.a.x))
+    expect(xs).toHaveLength(4)
+    expect(gaps(xs)).toEqual([10, 9, 31])
   })
 
-  it("DC-20: длина выносной линии — от грани до линии размера плюс выступ: 4,2 + 1,5 = 5,7 мм", () => {
+  it("CD-11: выносные линии есть на обеих гранях: на каждом из четырёх мест по линии выше и по линии ниже стены (две разные стороны от стены)", () => {
     const ext = thin.filter(isVertical)
-    expect(ext).toHaveLength(2)
+    const ys = distinct(ext.flatMap((s) => [s.a.y, s.b.y]))
+    // концы выносных линий у граней и у размерных линий: четыре различных высоты (две грани × грань и линия за выступом)
+    expect(ys.length).toBeGreaterThanOrEqual(4)
+    for (const x of distinct(ext.map((s) => s.a.x))) expect(ext.filter((s) => Math.abs(s.a.x - x) < 0.01).length).toBeGreaterThanOrEqual(2)
+  })
+
+  it("CD-11: длина выносной линии — от грани до линии размера плюс выступ: 4,2 + 1,5 = 5,7 мм", () => {
+    const ext = thin.filter(isVertical)
+    expect(ext.length).toBeGreaterThan(0)
     for (const s of ext) expect(Math.abs(length(s) - (1.2 * LABEL_MM + 1.5))).toBeLessThan(0.01)
   })
 
-  it("DC-20: размерная линия 9 мм между выносными линиями, горизонтальная, красная", () => {
-    const line = thin.filter(isHorizontal)
-    expect(line).toHaveLength(1)
-    expect(Math.abs(length(line[0]!) - 9)).toBeLessThan(0.01)
+  it("CD-11: на каждой грани размерные линии идут сплошь от x = 0 до x = 500 см (50 мм) тремя размерами — две горизонтали на разной высоте", () => {
+    const lines = thin.filter(isHorizontal)
+    const ys = distinct(lines.map((s) => s.a.y))
+    expect(ys).toHaveLength(2)
+    for (const y of ys) {
+      const onY = lines.filter((s) => Math.abs(s.a.y - y) < 0.01)
+      const total = onY.reduce((sum, s) => sum + length(s), 0)
+      expect(Math.abs(total - 50)).toBeLessThan(0.05)
+    }
   })
 
-  it("DC-20: на странице обмерочного плана красных линий нет", () => {
+  it("CD-11: подчёркивания на странице нет: на каждой размерной линии штрихи не короче размера без разрывов под числами — суммарная длина штрихов равна 50 мм", () => {
+    const lines = thin.filter(isHorizontal)
+    const total = lines.reduce((sum, s) => sum + length(s), 0)
+    expect(Math.abs(total - 100)).toBeLessThan(0.1)
+  })
+
+  it("CD-11: на странице обмерочного плана красных линий нет", () => {
     expect(parseColoredStrokes(doc, 1).filter((s) => isRed(s.color))).toEqual([])
   })
 
@@ -76,18 +97,29 @@ describe("размеры пометок на странице PDF", () => {
     const empty = buildPdfPages(pagesOf(drawing([W1], [])), "cm", SCALE, "A4", font, "Чертёж 1", SEP)
     expect(parseColoredStrokes(empty, 2).filter((s) => isRed(s.color))).toEqual([])
   })
-})
 
+  it("CD-14: нулевое расстояние в PDF не рисуется: у пометки 0–190 выносные линии стоят только в x = 0, 190, 500 — промежутки 19 и 31 мм", () => {
+    const zero = buildPdfPages(pagesOf(drawing([W1], [mark("z", "w1", 0, 190)])), "cm", SCALE, "A4", font, "Чертёж 1", SEP)
+    const zthin = colorSegments(parseColoredStrokes(zero, 2).filter((s) => isRed(s.color))).filter((s) => Math.abs(s.widthMm - THIN_MM) < 0.005)
+    const xs = distinct(zthin.filter(isVertical).map((s) => s.a.x))
+    expect(xs).toHaveLength(3)
+    expect(gaps(xs)).toEqual([19, 31])
+    const total = zthin.filter(isHorizontal).reduce((sum, s) => sum + length(s), 0)
+    expect(Math.abs(total - 100)).toBeLessThan(0.1)
+  })
+})
 describe("габариты страницы демонтажа", () => {
   const top = (b: ReturnType<typeof pageBounds>) => b.minY
-  it("DC-21: нормаль наружу: размер выступает за стену — maxY = 10 + 42 + 15 + поле 50 см", () => {
+  it("CD-15: цепочка обеих граней выступает за стену: maxY = 10 + 42 + 15 + поле 50 см (грань +1), minY = −10 − 42 − число 50 − поле 50 см (число грани −1 над линией)", () => {
     const without = pageBounds(pageOf([W1], []), SCALE)
     const withMark = pageBounds(pageOf([W1], [M1]), SCALE)
+    const numberFarEdgeCm = (1.5 + LABEL_MM) * CM_PER_MM
     expect(withMark.maxY).toBeCloseTo(10 + OFF_CM + OVERSHOOT_CM + PAD_CM, 6)
     expect(withMark.maxY).toBeGreaterThan(without.maxY)
+    expect(withMark.minY).toBeCloseTo(-10 - OFF_CM - numberFarEdgeCm - PAD_CM, 6)
+    expect(withMark.minY).toBeLessThan(top(without))
     expect(withMark.minX).toBeCloseTo(without.minX, 6)
     expect(withMark.maxX).toBeCloseTo(without.maxX, 6)
-    expect(top(withMark)).toBeCloseTo(top(without), 6)
   })
 
   it("DC-21: страница без пометок: габариты как у стен с полем 50 см", () => {
@@ -95,30 +127,31 @@ describe("габариты страницы демонтажа", () => {
     expect(b).toEqual({ minX: -10 - PAD_CM, minY: -10 - PAD_CM, maxX: 510 + PAD_CM, maxY: 10 + PAD_CM })
   })
 
-  it("DC-22: стена в обратном направлении: число лежит за линией размера (его дальний край — зазор 1,5 + кегль 3,5 = 5 мм = 50 см), поэтому minY = −10 − 42 − 50 − 50; maxY как у стен", () => {
+  it("CD-15: стена в обратном направлении: число грани +1 лежит за линией размера (дальний край — зазор 1,5 + кегль 3,5 = 5 мм = 50 см), поэтому minY = −10 − 42 − 50 − 50; цепочка грани −1 даёт maxY = 10 + 42 + 15 + 50", () => {
     const rev = wall(500, 0, 0, 0, "r")
-    const without = pageBounds(pageOf([rev], []), SCALE)
     const withMark = pageBounds(pageOf([rev], [mark("m", "r", 100, 190)]), SCALE)
     const numberFarEdgeCm = (1.5 + LABEL_MM) * CM_PER_MM
     expect(withMark.minY).toBeCloseTo(-10 - OFF_CM - numberFarEdgeCm - PAD_CM, 6)
-    expect(withMark.maxY).toBeCloseTo(without.maxY, 6)
+    expect(withMark.maxY).toBeCloseTo(10 + OFF_CM + OVERSHOOT_CM + PAD_CM, 6)
   })
 
-  it("DC-22: два участка на разных стенах учитываются оба, в любом порядке пометок: внешний размер расширяет габариты, внутренний — нет", () => {
-    const right = wall(600, 0, 600, 300, "v") // нормаль (−1, 0): размер уходит влево, внутрь
-    const left = wall(0, 0, 0, 300, "l") // нормаль (−1, 0): размер уходит влево, наружу
-    const outer = mark("m", "l", 100, 190)
-    const inner = mark("n", "v", 100, 190)
-    const both = [pageBounds(pageOf([left, right], [outer, inner]), SCALE), pageBounds(pageOf([left, right], [inner, outer]), SCALE)]
-    const onlyOuter = pageBounds(pageOf([left, right], [outer]), SCALE)
-    expect(both[0]).toEqual(onlyOuter)
-    expect(both[1]).toEqual(onlyOuter)
-    expect(onlyOuter.minX).toBeLessThan(pageBounds(pageOf([left, right], []), SCALE).minX)
+  it("CD-15: два участка на разных стенах учитываются оба, в любом порядке пометок: габариты расширены с обеих сторон (у каждой стены внешняя грань)", () => {
+    const right = wall(600, 0, 600, 300, "v")
+    const left = wall(0, 0, 0, 300, "l")
+    const onLeft = mark("m", "l", 100, 190)
+    const onRight = mark("n", "v", 100, 190)
+    const both = [pageBounds(pageOf([left, right], [onLeft, onRight]), SCALE), pageBounds(pageOf([left, right], [onRight, onLeft]), SCALE)]
+    const without = pageBounds(pageOf([left, right], []), SCALE)
+    const onlyLeft = pageBounds(pageOf([left, right], [onLeft]), SCALE)
+    expect(both[1]).toEqual(both[0])
+    expect(both[0].minX).toBeCloseTo(onlyLeft.minX, 6)
+    expect(onlyLeft.minX).toBeLessThan(without.minX)
+    expect(both[0].maxX).toBeGreaterThan(without.maxX)
   })
-
-  // независимый расчёт габаритов размера ширины участка 100–190 от конца a: концы выносных линий за линией размера и
-  // четыре угла числа; ось d = (b − a)/|b − a|, нормаль (−d.y, d.x), текст идёт вдоль оси слева направо, «вверх»
-  // от текста — (t.y, −t.x), число стоит над линией с зазором 1,5 мм
+  // независимый расчёт габаритов цепочки пометки 100–190 от конца a на свободной стене: на каждой грани (боковое смещение
+  // s·10 от оси) концы выносных линий в t = 0, 100, 190, L за линией размера и четыре угла каждого из трёх чисел;
+  // ось d = (b − a)/|b − a|, нормаль (−d.y, d.x), текст идёт вдоль оси слева направо, «вверх» от текста — (t.y, −t.x),
+  // число стоит над линией с зазором 1,5 мм; ширина числа — число знаков × 0,6 × кегль (значение — целые см)
   const expectedBounds = (w: Wall) => {
     const len = Math.hypot(w.b.x - w.a.x, w.b.y - w.a.y)
     const d = { x: (w.b.x - w.a.x) / len, y: (w.b.y - w.a.y) / len }
@@ -127,15 +160,20 @@ describe("габариты страницы демонтажа", () => {
     const textDir = { x: flip * d.x, y: flip * d.y }
     const up = { x: textDir.y, y: -textDir.x }
     const at = (t: number, lateral: number) => ({ x: w.a.x + d.x * t + normal.x * lateral, y: w.a.y + d.y * t + normal.y * lateral })
-    const lineLateral = 10 + OFF_CM
     const lift = (1.5 + LABEL_MM / 2) * CM_PER_MM
-    const base = at(145, lineLateral)
-    const center = { x: base.x + up.x * lift, y: base.y + up.y * lift }
-    const hw = (2 * 0.6 * LABEL_MM * CM_PER_MM) / 2
     const hh = (LABEL_MM * CM_PER_MM) / 2
-    const pts = [at(100, lineLateral + OVERSHOOT_CM), at(190, lineLateral + OVERSHOOT_CM)]
-    for (const sa of [-1, 1])
-      for (const sb of [-1, 1]) pts.push({ x: center.x + sa * textDir.x * hw + sb * up.x * hh, y: center.y + sa * textDir.y * hw + sb * up.y * hh })
+    const segments: [number, number][] = [[0, 100], [100, 190], [190, len]]
+    const pts: { x: number; y: number }[] = []
+    for (const s of [1, -1]) {
+      for (const t of [0, 100, 190, len]) pts.push(at(t, s * (10 + OFF_CM + OVERSHOOT_CM)))
+      for (const [t0, t1] of segments) {
+        const base = at((t0 + t1) / 2, s * (10 + OFF_CM))
+        const center = { x: base.x + up.x * lift, y: base.y + up.y * lift }
+        const hw = (`${Math.round(t1 - t0)}`.length * 0.6 * LABEL_MM * CM_PER_MM) / 2
+        for (const sa of [-1, 1])
+          for (const sb of [-1, 1]) pts.push({ x: center.x + sa * textDir.x * hw + sb * up.x * hh, y: center.y + sa * textDir.y * hw + sb * up.y * hh })
+      }
+    }
     const walls = pageBounds(pageOf([w], []), SCALE)
     return {
       minX: Math.min(walls.minX + PAD_CM, ...pts.map((p) => p.x)) - PAD_CM,
@@ -144,7 +182,6 @@ describe("габариты страницы демонтажа", () => {
       maxY: Math.max(walls.maxY - PAD_CM, ...pts.map((p) => p.y)) + PAD_CM,
     }
   }
-
   it.each([
     ["диагональ 45° (300,300)→(0,0), число снаружи", wall(300, 300, 0, 0, "d")],
     ["крутая диагональ (100,300)→(0,0)", wall(100, 300, 0, 0, "d")],
@@ -152,7 +189,7 @@ describe("габариты страницы демонтажа", () => {
     ["пологая диагональ (300,100)→(0,0)", wall(300, 100, 0, 0, "d")],
     ["диагональ вниз (0,0)→(300,300), число внутрь", wall(0, 0, 300, 300, "d")],
     ["крутая диагональ вниз (0,0)→(100,300)", wall(0, 0, 100, 300, "d")],
-  ])("DC-26: %s: габариты по независимому расчёту углов числа и концов выносных линий", (_name, w) => {
+  ])("CD-15: %s: габариты по независимому расчёту углов чисел и концов выносных линий цепочки обеих граней", (_name, w) => {
     const b = pageBounds(pageOf([w], [mark("m", "d", 100, 190)]), SCALE)
     const want = expectedBounds(w)
     expect(b.minX).toBeCloseTo(want.minX, 5)
@@ -161,9 +198,19 @@ describe("габариты страницы демонтажа", () => {
     expect(b.maxY).toBeCloseTo(want.maxY, 5)
   })
 
-  it("DC-23: размер лежит внутри габаритов стен (замкнутая комната, нормаль внутрь): габариты не меняются", () => {
+  it("CD-17: цепочка обеих граней лежит внутри габаритов стен (перегородка внутри замкнутой комнаты): габариты не меняются", () => {
+    const room = [wall(0, 0, 500, 0, "w1"), wall(500, 0, 500, 400, "r"), wall(500, 400, 0, 400, "b"), wall(0, 400, 0, 0, "l"), wall(250, 100, 250, 300, "p")]
+    expect(pageBounds(pageOf(room, [mark("p1", "p", 40, 120)]), SCALE)).toEqual(pageBounds(pageOf(room, []), SCALE))
+  })
+
+  it("CD-15: пометка на стене комнаты расширяет габариты только наружу: наружная грань даёт minY = −10 − 42 − число 50 − поле 50, остальные стороны не меняются", () => {
     const room = [wall(0, 0, 500, 0, "w1"), wall(500, 0, 500, 400, "r"), wall(500, 400, 0, 400, "b"), wall(0, 400, 0, 0, "l")]
-    expect(pageBounds(pageOf(room, [M1]), SCALE)).toEqual(pageBounds(pageOf(room, []), SCALE))
+    const without = pageBounds(pageOf(room, []), SCALE)
+    const withMark = pageBounds(pageOf(room, [M1]), SCALE)
+    expect(withMark.minY).toBeCloseTo(-10 - OFF_CM - (1.5 + LABEL_MM) * CM_PER_MM - PAD_CM, 6)
+    expect(withMark.maxY).toBeCloseTo(without.maxY, 6)
+    expect(withMark.minX).toBeCloseTo(without.minX, 6)
+    expect(withMark.maxX).toBeCloseTo(without.maxX, 6)
   })
 
   it("DC-23: пометки на железобетонной или отсутствующей стене не действуют и габариты не меняют", () => {

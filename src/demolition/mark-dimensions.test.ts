@@ -11,8 +11,8 @@ import type { MarkSpan } from "./mark-model"
 import { markNumberAt } from "./mark-numbers"
 
 // change demolition-dimension-chains: раскладка размеров пометок (spec demolition-plan «Размерные линии пометок»;
-// design D2). TCR-2 (change demolition-doorway-sizes): markDimensions(r, walls, mode, …) — режим «chain» даёт шесть
-// размеров (грани +1 и −1), «width» — один (ширина на грани +1); оракулы свободной стены прежние: стена W от (0,0)
+// design D2). TCR-4 (change demolition-corner-dimensions): режим «width» удалён, нулевые размеры опускаются целиком
+// (design D1–D2, D5); markDimensions(r, walls, "chain", …) — до шести размеров (грани +1 и −1); оракулы свободной стены прежние: стена W от (0,0)
 // до (500,0), толщина 20, нормаль (0,1), грань y = 10, линия размера на 1,2·кегль от грани. Тесты раскладки чисел
 // NU-08…NU-13 (change demolition-plan) перенесены сюда с теми же оракулами для грани +1 и дополнены гранью −1.
 
@@ -26,55 +26,14 @@ const near = (p: Point, x: number, y: number, tol = 1e-6): void => {
 }
 const span = (from: number, to: number, wallOf: Wall = W()): MarkSpan => ({ wall: wallOf, from, to })
 
-function dims(r: MarkSpan, mode: "chain" | "width", unit: Unit = "cm", k = K, label = LABEL): MarkDimension[] {
-  return markDimensions(r, [r.wall], mode, unit, k, label)
+function dims(r: MarkSpan, unit: Unit = "cm", k = K, label = LABEL): MarkDimension[] {
+  return markDimensions(r, [r.wall], "chain", unit, k, label)
 }
-const chain = (r: MarkSpan, unit: Unit = "cm"): MarkDimension[] => dims(r, "chain", unit)
+const chain = (r: MarkSpan, unit: Unit = "cm"): MarkDimension[] => dims(r, unit)
 const side = (list: MarkDimension[], s: 1 | -1): MarkDimension[] => list.filter((d) => d.side === s)
-
-describe("размеры пометки: ширина (режим width)", () => {
-  it("DC-01: пометка 100–190 — один размер ширины на грани +1: точки на грани y = 10, линия сдвинута на 1,2·кегль в сторону нормали", () => {
-    const list = dims(span(100, 190), "width")
-    expect(list).toHaveLength(1)
-    const [d] = list
-    expect(d?.side).toBe(1)
-    expect(d?.target).toBe("width")
-    expect(d?.text).toBe("90")
-    const g = d?.geom
-    expect(g).not.toBeNull()
-    if (!g) return
-    near(g.a, 100, 10)
-    near(g.b, 190, 10)
-    near(g.p1, 100, 10 + OFF)
-    near(g.p2, 190, 10 + OFF)
-    expect(g.nx).toBeCloseTo(0, 9)
-    expect(g.ny).toBeCloseTo(1, 9)
-  })
-
-  it("DC-02: ширина в режиме width совпадает с шириной грани +1 в режиме chain (границы и число)", () => {
-    const inChain = chain(span(100, 190)).find((d) => d.side === 1 && d.target === "width")
-    const alone = dims(span(100, 190), "width")[0]
-    expect(inChain?.text).toBe(alone?.text)
-    expect(inChain?.geom).toEqual(alone?.geom)
-  })
-
-  it("DC-03: пометка на всю стену в режиме width: один размер ширины 500 с геометрией", () => {
-    const list = dims(span(0, 500), "width")
-    expect(list).toHaveLength(1)
-    expect(list[0]?.text).toBe("500")
-    const g = list[0]?.geom
-    if (!g) throw new Error("ширина должна иметь геометрию")
-    near(g.a, 0, 10)
-    near(g.b, 500, 10)
-  })
-
-  it("DC-05: единицы меняют только текст: 90 см = «0,9» м = «900» мм, геометрия не меняется", () => {
-    const [cm, m, mm] = (["cm", "m", "mm"] as const).map((u) => dims(span(100, 190), "width", u)[0])
-    expect([cm?.text, m?.text, mm?.text]).toEqual(["90", "0,9", "900"])
-    expect(m?.geom).toEqual(cm?.geom)
-    expect(mm?.geom).toEqual(cm?.geom)
-  })
-})
+// ширина участка на грани +1 (прежний режим width удалён: change demolition-corner-dimensions, TCR-4)
+const widthOf = (r: MarkSpan, unit: Unit = "cm", k = K, label = LABEL): MarkDimension | undefined =>
+  dims(r, unit, k, label).find((d) => d.side === 1 && d.target === "width")
 
 describe("размеры пометки: цепочка из шести размеров (режим chain)", () => {
   it("DC-02: свободная стена, 100–190: порядок — грань +1 (gapA, width, gapB), затем грань −1; числа 100, 90, 310 на каждой", () => {
@@ -118,24 +77,35 @@ describe("размеры пометки: цепочка из шести разм
     })
   })
 
-  it("DC-03: нулевой отступ от конца a — gapA на обеих гранях без геометрии и с числом «0»; остальные размеры с геометрией", () => {
+  it("DC-03: нулевой отступ от конца a опущен на обеих гранях целиком: остаются ширина и gapB", () => {
     const list = chain(span(0, 190))
-    expect(list.map((d) => d.text)).toEqual(["0", "190", "310", "0", "190", "310"])
-    expect(list.map((d) => d.geom === null)).toEqual([true, false, false, true, false, false])
+    expect(list.map((d) => [d.side, d.target, d.text])).toEqual([
+      [1, "width", "190"],
+      [1, "gapB", "310"],
+      [-1, "width", "190"],
+      [-1, "gapB", "310"],
+    ])
+    for (const d of list) expect(d.geom).not.toBeNull()
   })
 
-  it("DC-03: нулевой отступ до конца b — gapB на обеих гранях без геометрии", () => {
+  it("DC-03: нулевой отступ до конца b опущен на обеих гранях: остаются gapA и ширина", () => {
     const list = chain(span(300, 500))
-    expect(list.map((d) => d.text)).toEqual(["300", "200", "0", "300", "200", "0"])
-    expect(list.map((d) => d.geom === null)).toEqual([false, false, true, false, false, true])
+    expect(list.map((d) => [d.side, d.target, d.text])).toEqual([
+      [1, "gapA", "300"],
+      [1, "width", "200"],
+      [-1, "gapA", "300"],
+      [-1, "width", "200"],
+    ])
   })
 
-  it("DC-03: пометка на всю стену — оба отступа нулевые, ширина 500 с геометрией", () => {
+  it("DC-03: пометка на всю стену на свободной стене — на каждой грани один размер ширины 500 с геометрией", () => {
     const list = chain(span(0, 500))
-    expect(list.map((d) => d.text)).toEqual(["0", "500", "0", "0", "500", "0"])
-    expect(list.map((d) => d.geom === null)).toEqual([true, false, true, true, false, true])
+    expect(list.map((d) => [d.side, d.target, d.text])).toEqual([
+      [1, "width", "500"],
+      [-1, "width", "500"],
+    ])
+    for (const d of list) expect(d.geom).not.toBeNull()
   })
-
   it("DC-03: малый отступ 3 см — ненулевой размер с геометрией и числом «3»", () => {
     const [d] = chain(span(3, 190))
     expect(d?.text).toBe("3")
@@ -161,13 +131,15 @@ describe("размеры пометки: цепочка из шести разм
     expect(side(list, -1).map((d) => [d.fromCm, d.toCm])).toEqual([[-10, 100], [100, 190], [190, 510]])
   })
 
-  it("DC-08: комната, пометка на всю стену: на гранях 0, 480, 0 и 0, 520, 0; ширина в режиме width — 480 (грань +1 между стыками)", () => {
+  it("DC-08: комната, пометка на всю стену: нулевые отступы опущены — на грани +1 только 480 между стыками 10 и 490, на грани −1 только 520", () => {
     const ws = [wall(0, 0, 500, 0, "W"), wall(500, 0, 500, 400, "R"), wall(500, 400, 0, 400, "B"), wall(0, 400, 0, 0, "L")]
     const r: MarkSpan = { wall: ws[0] as Wall, from: 0, to: 500 }
-    expect(markDimensions(r, ws, "chain", "cm", K, LABEL).map((d) => d.text)).toEqual(["0", "480", "0", "0", "520", "0"])
-    const [width] = markDimensions(r, ws, "width", "cm", K, LABEL)
-    expect(width?.text).toBe("480")
-    const g = width?.geom
+    const list = markDimensions(r, ws, "chain", "cm", K, LABEL)
+    expect(list.map((d) => [d.side, d.target, d.text])).toEqual([
+      [1, "width", "480"],
+      [-1, "width", "520"],
+    ])
+    const g = list[0]?.geom
     if (!g) throw new Error("ожидалась геометрия")
     near(g.a, 10, 10)
     near(g.b, 490, 10)
@@ -176,13 +148,12 @@ describe("размеры пометки: цепочка из шести разм
   it("DC-08: стена без граней (вырожденная) — пустой список", () => {
     const z = wall(10, 10, 10, 10, "Z")
     expect(markDimensions({ wall: z, from: 0, to: 5 }, [z], "chain", "cm", K, LABEL)).toEqual([])
-    expect(markDimensions({ wall: z, from: 0, to: 5 }, [z], "width", "cm", K, LABEL)).toEqual([])
   })
 })
 
 describe("размеры пометки: сторона нормали и направление стены", () => {
   it("DC-04: стена в обратном направлении (500,0)→(0,0): грань +1 — нормаль (0,−1), y = −10, участок 100–190 от конца a даёт x = 400…310", () => {
-    const g = dims(span(100, 190, wall(500, 0, 0, 0, "R")), "width")[0]?.geom
+    const g = widthOf(span(100, 190, wall(500, 0, 0, 0, "R")))?.geom
     if (!g) throw new Error("ожидалась геометрия")
     near(g.a, 400, -10)
     near(g.b, 310, -10)
@@ -191,7 +162,7 @@ describe("размеры пометки: сторона нормали и нап
   })
 
   it("DC-04: вертикальная стена (0,0)→(0,300): грань +1 — нормаль (−1,0), x = −10, линия левее", () => {
-    const g = dims(span(100, 190, wall(0, 0, 0, 300, "V")), "width")[0]?.geom
+    const g = widthOf(span(100, 190, wall(0, 0, 0, 300, "V")))?.geom
     if (!g) throw new Error("ожидалась геометрия")
     near(g.a, -10, 100)
     near(g.b, -10, 190)
@@ -201,7 +172,7 @@ describe("размеры пометки: сторона нормали и нап
 
   it("DC-04: диагональная стена (0,0)→(300,300): точки на грани и линия на 1,2·кегль по нормали (−√½, √½)", () => {
     const s = Math.SQRT1_2
-    const g = dims(span(100, 190, wall(0, 0, 300, 300, "D")), "width")[0]?.geom
+    const g = widthOf(span(100, 190, wall(0, 0, 300, 300, "D")))?.geom
     if (!g) throw new Error("ожидалась геометрия")
     near(g.a, 100 * s - 10 * s, 100 * s + 10 * s)
     near(g.b, 190 * s - 10 * s, 190 * s + 10 * s)
@@ -210,14 +181,14 @@ describe("размеры пометки: сторона нормали и нап
   })
 
   it("DC-04: толщина стены задаёт положение грани: стена 40 см — грань y = 20", () => {
-    const g = dims(span(100, 190, wall(0, 0, 500, 0, "T", "brick", 40)), "width")[0]?.geom
+    const g = widthOf(span(100, 190, wall(0, 0, 500, 0, "T", "brick", 40)))?.geom
     if (!g) throw new Error("ожидалась геометрия")
     near(g.a, 100, 20)
     near(g.p1, 100, 20 + OFF)
   })
 
   it("DC-04: смещение линии зависит от масштаба экрана и кегля: k = 4 и кегль 7 дают 1,2·7/4 см", () => {
-    const g = dims(span(100, 190), "width", "cm", 4, 7)[0]?.geom
+    const g = widthOf(span(100, 190), "cm", 4, 7)?.geom
     if (!g) throw new Error("ожидалась геометрия")
     near(g.p1, 100, 10 + (1.2 * 7) / 4)
   })
@@ -277,26 +248,11 @@ describe("раскладка чисел размеров", () => {
     for (const d of chain(span(100, 190, wall(500, 0, 0, 0, "W")))) expect(d.spot.dir.x).toBeGreaterThan(0.99)
   })
 
-  it("NU-11: нулевой отступ — число над точкой: dir = (1, 0), подъём — половина кегля, текст «0»", () => {
-    const [zero] = chain(span(0, 190))
-    expect(zero?.text).toBe("0")
-    expect(zero?.spot.dir).toEqual({ x: 1, y: 0 })
-    expect(zero?.spot.center.x).toBeCloseTo(0, 9)
-    expect(zero?.spot.center.y).toBeCloseTo(10 + OFF - LABEL / 2 / K, 9)
+  it("NU-11: нулевое расстояние не даёт числа: на гранях нет ни одного spot с текстом «0» и целью gapA", () => {
+    const zero = chain(span(0, 190))
+    expect(zero.filter((d) => d.target === "gapA")).toEqual([])
+    expect(zero.some((d) => d.spot.text === "0")).toBe(false)
   })
-
-  it("NU-11: нулевое число грани −1 стоит над точкой на линии y = −10 − OFF", () => {
-    const zero = chain(span(0, 190)).find((d) => d.side === -1 && d.target === "gapA")
-    expect(zero?.spot.center.x).toBeCloseTo(0, 9)
-    expect(zero?.spot.center.y).toBeCloseTo(-10 - OFF - LABEL / 2 / K, 9)
-  })
-
-  it("NU-13: spot ширины в режиме width совпадает со spot ширины грани +1 из цепочки", () => {
-    const width = dims(span(100, 190), "width")[0]
-    expect(width?.spot).toEqual(list.find((d) => d.side === 1 && d.target === "width")?.spot)
-    expect(width?.spot.text).toBe("90")
-  })
-
   it("DC-06: размерные линии не правятся: точка на линии размера между числами и на выносной линии не попадает ни в одно число", () => {
     const spots = list.map((d) => d.spot)
     expect(markNumberAt({ x: 110, y: 10 + OFF }, spots, 1 / K)).toBeNull()
@@ -314,7 +270,7 @@ describe("раскладка чисел размеров", () => {
   })
 })
 
-describe("габариты размера пометки для страницы", () => {
+describe("габариты размеров пометки для страницы", () => {
   const box = (pts: Point[]) => ({
     minX: Math.min(...pts.map((p) => p.x)),
     maxX: Math.max(...pts.map((p) => p.x)),
@@ -322,59 +278,76 @@ describe("габариты размера пометки для страницы
     maxY: Math.max(...pts.map((p) => p.y)),
   })
   const extent = (r: MarkSpan, k = K, ws: Wall[] = [r.wall]): Point[] => markDimensionExtent(r, ws, k, SCREEN_METRICS)
+  const OVER = SCREEN_METRICS.dimOvershootPx / K
+  const has = (pts: Point[], x: number, y: number): boolean => pts.some((p) => Math.abs(p.x - x) < 1e-6 && Math.abs(p.y - y) < 1e-6)
 
-  it("DC-07: габариты включают концы выносных линий за размерной линией: x = 100 и 190, y = 10 + 1,2·кегль/k + выступ/k", () => {
+  it("CD-15: габариты включают концы выносных линий за размерной линией всей цепочки на обеих гранях: x = 0, 100, 190, 500", () => {
     const pts = extent(span(100, 190))
-    const b = box(pts)
-    const far = 10 + OFF + SCREEN_METRICS.dimOvershootPx / K
-    expect(b.maxY).toBeGreaterThanOrEqual(far - 1e-6)
-    expect(b.minX).toBeLessThanOrEqual(100 + 1e-6)
-    expect(b.maxX).toBeGreaterThanOrEqual(190 - 1e-6)
-    expect(pts.some((p) => Math.abs(p.x - 100) < 1e-6 && Math.abs(p.y - far) < 1e-6)).toBe(true)
-    expect(pts.some((p) => Math.abs(p.x - 190) < 1e-6 && Math.abs(p.y - far) < 1e-6)).toBe(true)
+    for (const x of [0, 100, 190, 500]) {
+      expect(has(pts, x, 10 + OFF + OVER), `+1 x=${x}`).toBe(true)
+      expect(has(pts, x, -10 - OFF - OVER), `−1 x=${x}`).toBe(true)
+    }
   })
 
-  it("DC-07: габариты включают прямоугольник числа ширины (все четыре угла)", () => {
+  it("CD-15: габариты включают прямоугольники всех шести чисел цепочки (все четыре угла каждого)", () => {
     const r = span(100, 190)
-    const spot = dims(r, "width")[0]?.spot
-    if (!spot) throw new Error("ожидался spot")
     const b = box(extent(r))
-    const hw = spot.widthCm / 2
-    const hh = spot.heightCm / 2
-    for (const sx of [-1, 1])
-      for (const sy of [-1, 1]) {
-        const cx = spot.center.x + sx * spot.dir.x * hw - sy * spot.dir.y * hh
-        const cy = spot.center.y + sx * spot.dir.y * hw + sy * spot.dir.x * hh
-        expect(cx).toBeGreaterThanOrEqual(b.minX - 1e-6)
-        expect(cx).toBeLessThanOrEqual(b.maxX + 1e-6)
-        expect(cy).toBeGreaterThanOrEqual(b.minY - 1e-6)
-        expect(cy).toBeLessThanOrEqual(b.maxY + 1e-6)
-      }
+    for (const d of chain(r)) {
+      const { spot } = d
+      const hw = spot.widthCm / 2
+      const hh = spot.heightCm / 2
+      for (const sx of [-1, 1])
+        for (const sy of [-1, 1]) {
+          const cx = spot.center.x + sx * spot.dir.x * hw - sy * spot.dir.y * hh
+          const cy = spot.center.y + sx * spot.dir.y * hw + sy * spot.dir.x * hh
+          expect(cx, `${d.side}/${d.target} x`).toBeGreaterThanOrEqual(b.minX - 1e-6)
+          expect(cx, `${d.side}/${d.target} x`).toBeLessThanOrEqual(b.maxX + 1e-6)
+          expect(cy, `${d.side}/${d.target} y`).toBeGreaterThanOrEqual(b.minY - 1e-6)
+          expect(cy, `${d.side}/${d.target} y`).toBeLessThanOrEqual(b.maxY + 1e-6)
+        }
+    }
   })
 
-  it("DC-07: у обратной стены габариты уходят в сторону её нормали (y < −10)", () => {
+  it("CD-15: габариты охватывают обе грани: по y от −10 − OFF − выступ и ниже до 10 + OFF + выступ и выше", () => {
+    const b = box(extent(span(100, 190)))
+    expect(b.maxY).toBeGreaterThanOrEqual(10 + OFF + OVER - 1e-6)
+    expect(b.minY).toBeLessThanOrEqual(-10 - OFF - OVER + 1e-6)
+  })
+
+  it("CD-15: крайние выносные линии цепочки — x = 0 и 500 — входят в габариты (габариты не сужены до ширины участка)", () => {
+    const b = box(extent(span(100, 190)))
+    expect(b.minX).toBeLessThanOrEqual(1e-6)
+    expect(b.maxX).toBeGreaterThanOrEqual(500 - 1e-6)
+  })
+
+  it("CD-15: у обратной стены цепочка грани +1 уходит в сторону её нормали (y < −10), грани −1 — в противоположную", () => {
     const b = box(extent(span(100, 190, wall(500, 0, 0, 0, "R"))))
-    expect(b.minY).toBeLessThanOrEqual(-10 - OFF - SCREEN_METRICS.dimOvershootPx / K + 1e-6)
-    expect(b.maxY).toBeLessThan(0)
+    expect(b.minY).toBeLessThanOrEqual(-10 - OFF - OVER + 1e-6)
+    expect(b.maxY).toBeGreaterThanOrEqual(10 + OFF + OVER - 1e-6)
   })
 
-  it("DC-07: масштаб k переводит пиксели метрик в сантиметры: при k = 2·K отступы вдвое меньше", () => {
+  it("CD-15: масштаб k переводит пиксели метрик в сантиметры: при k = 2·K отступы вдвое меньше", () => {
     const a = box(extent(span(100, 190)))
     const c = box(extent(span(100, 190), 2 * K))
     expect(c.maxY - 10).toBeLessThan((a.maxY - 10) * 0.75)
     expect(c.maxY).toBeGreaterThan(10)
   })
 
-  it("DC-07: габариты берутся по ширине на грани +1 между стыками: комната, пометка на всю стену — выносные линии в x = 10 и 490", () => {
+  it("CD-15: комната, пометка на всю стену: выносные линии в x = 10 и 490 на грани +1 и x = −10 и 510 на грани −1", () => {
     const ws = [wall(0, 0, 500, 0, "W"), wall(500, 0, 500, 400, "R"), wall(500, 400, 0, 400, "B"), wall(0, 400, 0, 0, "L")]
     const r: MarkSpan = { wall: ws[0] as Wall, from: 0, to: 500 }
     const pts = extent(r, K, ws)
-    const far = 10 + OFF + SCREEN_METRICS.dimOvershootPx / K
-    expect(pts.some((p) => Math.abs(p.x - 10) < 1e-6 && Math.abs(p.y - far) < 1e-6)).toBe(true)
-    expect(pts.some((p) => Math.abs(p.x - 490) < 1e-6 && Math.abs(p.y - far) < 1e-6)).toBe(true)
+    expect(has(pts, 10, 10 + OFF + OVER)).toBe(true)
+    expect(has(pts, 490, 10 + OFF + OVER)).toBe(true)
+    expect(has(pts, -10, -10 - OFF - OVER)).toBe(true)
+    expect(has(pts, 510, -10 - OFF - OVER)).toBe(true)
   })
 
-  it("DC-07: вырожденная стена — пустой список точек", () => {
+  it("CD-15: нулевой отступ не расширяет габариты числом «0»: у пометки 0–190 на свободной стене ничто не выступает левее x = 0", () => {
+    expect(box(extent(span(0, 190))).minX).toBeGreaterThanOrEqual(-1e-6)
+  })
+
+  it("CD-22: вырожденная стена — пустой список точек", () => {
     const z = wall(10, 10, 10, 10, "Z")
     expect(extent({ wall: z, from: 0, to: 5 })).toEqual([])
   })

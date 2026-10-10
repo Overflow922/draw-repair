@@ -15,8 +15,8 @@ import { effectiveMarks } from "./marks"
 // пометок»; design D1–D3). Операции канваса фиксирует записывающий контекст; координаты — экранные.
 // Эталоны: стена W (0,0)-(500,0), толщина 20, грань y = 10, линия размера на 1,2·кегль от грани, выносные линии
 // от грани до линии плюс выступ метрик.
-// TCR-3 (change demolition-doorway-sizes): на экране размеры только у выделенной пометки и у превью (цепочки на двух
-// гранях — тесты SZ-50…SZ-59 в demolition-sizes-render.test.ts); ширина невыделенной пометки — в режиме PDF (widths).
+// TCR-4 (change demolition-corner-dimensions): цепочка на двух гранях у каждой пометки; режим widths удалён; в этом файле
+// ширина невыделенной пометки в составе цепочки (остальное — SZ-50…SZ-59 и CD-* в demolition-sizes-render.test.ts).
 // Здесь остались проверки ширины в режиме widths с теми же оракулами и проверка малого отступа; тесты цепочек
 // DC-11, DC-12, DC-13, DC-15 и DC-04 перенесены в demolition-sizes-render.test.ts (SZ-50…SZ-59).
 
@@ -32,7 +32,7 @@ const walls = [W()]
 
 function render(
   scene: Partial<DemolitionScene> & { walls?: readonly Wall[] },
-  opts: { color?: string; metrics?: RenderMetrics; widths?: boolean } = {},
+  opts: { color?: string; metrics?: RenderMetrics } = {},
   unit: "cm" | "m" | "mm" = "cm",
 ): Op[] {
   const { ctx, ops } = recorder()
@@ -73,49 +73,46 @@ const arrows = (ops: Op[], color = RED) => ops.filter((o): o is Extract<Op, { ki
 const FACE = 10
 const LINE = FACE + (1.2 * SCREEN_METRICS.labelPx) / K
 
-describe("ширина пометки в режиме PDF (widths)", () => {
+describe("ширина невыделенной пометки в цепочке", () => {
   it("DC-10: пометка 100–190: выносные линии в x = 100 и x = 190 от грани y = 10 за линию размера", () => {
-    const ops = render({ marks: marks() }, { widths: true })
+    const ops = render({ marks: marks() })
     expect(extensionAt(ops, 100, FACE, LINE)).toBe(true)
     expect(extensionAt(ops, 190, FACE, LINE)).toBe(true)
   })
 
   it("DC-10: размерная линия от x = 100 до x = 190 на расстоянии 1,2·кегль от грани", () => {
-    const ops = render({ marks: marks() }, { widths: true })
+    const ops = render({ marks: marks() })
     expect(lineCovers(ops, LINE, 100, 190)).toBe(true)
-    // линия не продолжается за границы участка
-    const horiz = thin(ops, RED).filter((s) => horizontal(s) && Math.abs(s[0].y - sy(LINE)) < TOL)
-    expect(Math.min(...horiz.flatMap((s) => [s[0].x, s[1].x]))).toBeCloseTo(sx(100), 3)
-    expect(Math.max(...horiz.flatMap((s) => [s[0].x, s[1].x]))).toBeCloseTo(sx(190), 3)
+    expect(lineCovers(ops, LINE, 0, 500)).toBe(true)
   })
 
-  it("DC-10: на концах линии две красные стрелки (треугольники), острия в x = 100 и x = 190", () => {
-    const tris = arrows(render({ marks: marks() }, { widths: true }))
-    expect(tris).toHaveLength(2)
+  it("DC-10: у ширины две красные стрелки (треугольники), острия в x = 100 и x = 190; всего в цепочке двенадцать", () => {
+    const tris = arrows(render({ marks: marks() }))
+    expect(tris).toHaveLength(12)
     const tips = tris.map((t) => t.subpaths[0]?.[0])
     for (const x of [100, 190]) {
       expect(tips.some((p) => p && Math.abs(p.x - sx(x)) < TOL && Math.abs(p.y - sy(LINE)) < TOL)).toBe(true)
     }
   })
 
-  it("DC-10: число 90 стоит над размерной линией: по центру участка, на кегль-зазор выше линии", () => {
-    const [t, ...rest] = texts(render({ marks: marks() }, { widths: true }))
-    expect(rest).toEqual([])
-    expect(t?.text).toBe("90")
+  it("DC-10: число 90 стоит над размерной линией грани +1: по центру участка, на кегль-зазор выше линии", () => {
+    const list = texts(render({ marks: marks() }))
+    expect(list).toHaveLength(6)
+    const t = list.find((x) => x.text === "90" && Math.abs(x.at.y - (sy(LINE) - SCREEN_METRICS.dimTextGapPx)) < TOL)
     expect(Math.abs((t?.at.x ?? 0) - sx(145))).toBeLessThan(TOL)
     expect(Math.abs((t?.at.y ?? 0) - (sy(LINE) - SCREEN_METRICS.dimTextGapPx))).toBeLessThan(TOL)
   })
 
   it("DC-10: единицы: в метрах «0,9», в миллиметрах «900»; линии не меняются", () => {
     for (const [unit, text] of [["m", "0,9"], ["mm", "900"]] as const) {
-      const ops = render({ marks: marks() }, { widths: true }, unit)
-      expect(texts(ops).map((t) => t.text)).toEqual([text])
+      const ops = render({ marks: marks() }, {}, unit)
+      expect(texts(ops).map((t) => t.text)).toContain(text)
       expect(extensionAt(ops, 100, FACE, LINE)).toBe(true)
     }
   })
 
   it("DC-10: без пометок на плане — ни выносных линий, ни стрелок, ни красного", () => {
-    const ops = render({ marks: [] }, { widths: true })
+    const ops = render({ marks: [] })
     expect(arrows(ops)).toEqual([])
     expect(thin(ops, RED)).toEqual([])
   })
@@ -132,10 +129,10 @@ describe("малые размеры", () => {
 
 describe("цвет и метрики", () => {
   it("DC-14: цвет из параметров: выносные линии, линия и стрелки зелёные, красного нет", () => {
-    const ops = render({ marks: marks() }, { color: "#00aa00", widths: true })
+    const ops = render({ marks: marks() }, { color: "#00aa00" })
     expect(extensionAt(ops, 100, FACE, LINE, SCREEN_METRICS, "#00aa00")).toBe(true)
     expect(lineCovers(ops, LINE, 100, 190, SCREEN_METRICS, "#00aa00")).toBe(true)
-    expect(arrows(ops, "#00aa00")).toHaveLength(2)
+    expect(arrows(ops, "#00aa00")).toHaveLength(12)
     expect(thin(ops, RED)).toEqual([])
     expect(arrows(ops, RED)).toEqual([])
   })
@@ -143,7 +140,7 @@ describe("цвет и метрики", () => {
   it("DC-14: метрики PDF: выносные и размерная линии толщиной PDF_METRICS.hatchPx, выступ и отступ линии по метрикам PDF", () => {
     const m = PDF_METRICS
     const line = FACE + (1.2 * m.labelPx) / K
-    const ops = render({ marks: marks() }, { metrics: m, widths: true })
+    const ops = render({ marks: marks() }, { metrics: m })
     expect(extensionAt(ops, 100, FACE, line, m)).toBe(true)
     expect(extensionAt(ops, 190, FACE, line, m)).toBe(true)
     expect(lineCovers(ops, line, 100, 190, m)).toBe(true)
@@ -151,14 +148,14 @@ describe("цвет и метрики", () => {
 
   it("DC-14: цвет сноса светлой темы красный, тёмной — светлее; размеры берут цвет из параметров", () => {
     const dark = demolitionColor("dark")
-    const ops = render({ marks: marks() }, { color: dark, widths: true })
+    const ops = render({ marks: marks() }, { color: dark })
     expect(extensionAt(ops, 100, FACE, LINE, SCREEN_METRICS, dark)).toBe(true)
   })
 
-  it("DC-14: цвет и метрики PDF у цепочки выделенной пометки: выносные линии с выступом метрик PDF на обеих гранях", () => {
+  it("DC-14: цвет и метрики PDF у цепочки пометки: выносные линии с выступом метрик PDF на обеих гранях, выделена она или нет", () => {
     const m = PDF_METRICS
     const off = (1.2 * m.labelPx) / K
-    const ops = render({ marks: marks(), selectedId: "m" }, { metrics: m })
+    const ops = render({ marks: marks() }, { metrics: m })
     expect(extensionAt(ops, 100, FACE, FACE + off, m)).toBe(true)
     expect(extensionAt(ops, 100, -FACE, -FACE - off, m)).toBe(true)
   })

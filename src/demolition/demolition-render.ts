@@ -6,7 +6,6 @@ import type { Palette, Theme } from "../theme"
 import { PX_PER_CM } from "../types"
 import type { Point, Unit, View, Wall, WallElement } from "../types"
 import { markDimensions } from "./mark-dimensions"
-import type { MarkNumberSpot } from "./mark-numbers"
 import type { MarkSpan, ResolvedMark } from "./mark-model"
 import { markRegion } from "./mark-region"
 
@@ -29,14 +28,11 @@ export interface DemolitionOptions {
   grid?: boolean
   metrics?: RenderMetrics
   palette?: Palette
-  widths?: boolean // ширина каждой действующей пометки одним размером (страница PDF); на экране размеры — только у выделенной и у превью
 }
 
 export const demolitionColor = (theme: Theme): string => (theme === "dark" ? "#ff5252" : "#d32f2f")
 
 const GHOST_DASH = [6, 4]
-const UNDERLINE_DASH = [3, 2]
-const UNDERLINE_GAP_PX = 2
 
 export function drawDemolitionScene(
   ctx: CanvasRenderingContext2D,
@@ -64,40 +60,11 @@ export function drawDemolitionScene(
     underlay: true,
   })
 
-  // число в системе текста: начало — центр числа, ось x — направление текста
-  const drawNumber = (spot: MarkNumberSpot, underline: boolean): void => {
-    const at = toScreen(spot.center)
-    ctx.save()
-    ctx.translate(at.x, at.y)
-    ctx.rotate(Math.atan2(spot.dir.y, spot.dir.x))
-    ctx.fillStyle = opts.color
-    ctx.font = `${m.labelPx}px ${m.font}`
-    ctx.textAlign = "center"
-    ctx.textBaseline = "middle"
-    ctx.fillText(spot.text, 0, 0)
-    if (underline) {
-      const half = (spot.widthCm * k) / 2
-      const y = m.labelPx / 2 + UNDERLINE_GAP_PX
-      ctx.strokeStyle = opts.color
-      ctx.lineWidth = m.hatchPx
-      ctx.setLineDash(UNDERLINE_DASH)
-      ctx.beginPath()
-      ctx.moveTo(-half, y)
-      ctx.lineTo(half, y)
-      ctx.stroke()
-    }
-    ctx.restore()
+  // цепочка размеров пометки как у проёма (changes demolition-doorway-sizes, demolition-corner-dimensions): размеры чертежа
+  // с выносными линиями, нулевые опущены; underline — правимые числа выделенной пометки
+  const drawDimensions = (span: MarkSpan, underline: boolean): void => {
+    for (const d of markDimensions(span, scene.walls, "chain", unit, k, m.labelPx)) drawDimensionGeom(ctx, d.geom, d.text, opts.color, view, m, palette, false, underline)
   }
-
-  // размеры пометки как у проёма: размер чертежа с выносными линиями; нулевой — только число (change
-  // demolition-doorway-sizes); underline — правимые числа выделенной пометки
-  const drawDimensions = (span: MarkSpan, mode: "chain" | "width", underline: boolean): void => {
-    for (const d of markDimensions(span, scene.walls, mode, unit, k, m.labelPx)) {
-      if (d.geom) drawDimensionGeom(ctx, d.geom, d.text, opts.color, view, m, palette, false, underline)
-      else drawNumber(d.spot, underline)
-    }
-  }
-
   // штриховка линиями 135°: линия проходит через точку при y − x = const, фаза — от начала координат экрана
   const origin = toScreen({ x: 0, y: 0 })
   const hatchAnchor = origin.y - origin.x
@@ -127,8 +94,7 @@ export function drawDemolitionScene(
         ctx.stroke()
       }
     }
-    if (scene.selectedId === r.mark.id) drawDimensions(r, "chain", true)
-    else if (opts.widths) drawDimensions(r, "width", false)
+    drawDimensions(r, scene.selectedId === r.mark.id)
   }
 
   // элементы стен не скрываются сносом и рисуются поверх закраски области (change demolition-show-elements)
@@ -147,7 +113,7 @@ export function drawDemolitionScene(
       ctx.stroke()
     }
     ctx.restore()
-    drawDimensions(span, "chain", false)
+    drawDimensions(span, false)
   }
 }
 

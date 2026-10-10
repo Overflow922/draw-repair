@@ -254,18 +254,18 @@ describe("область сноса", () => {
     expect(stylesOf(ops).has(RED)).toBe(false)
   })
 
-  it("RN-03: ширина участка числом: «90» в сантиметрах, «0,9» в метрах, «900» в миллиметрах", () => {
+  it("RN-03: ширина участка числом в цепочке: «90» в сантиметрах, «0,9» в метрах, «900» в миллиметрах (по одному на каждой из двух граней)", () => {
+    // TCR-4 (change demolition-corner-dimensions): цепочка есть у каждой пометки, выделена она или нет
     for (const [unit, text] of [["cm", "90"], ["m", "0,9"], ["mm", "900"]] as const) {
-      // TCR-4 (change demolition-doorway-sizes): на экране невыделенная пометка без размеров — ширина в режиме PDF (widths)
-      const ops = render({ marks: marksOn() }, { widths: true }, unit)
-      expect(texts(ops).map((t) => t.text)).toEqual([text])
+      const ops = render({ marks: marksOn() }, {}, unit)
+      expect(texts(ops).map((t) => t.text).filter((x) => x === text)).toHaveLength(2)
     }
   })
 
   it("RN-03: подпись ширины стоит у участка: x по центру участка, ниже верха стены на стороне нормали", () => {
     const [r] = marksOn()
-    const spot = markDimensions(r!, walls, "width", "cm", K, SCREEN_METRICS.labelPx)[0]!.spot
-    const [t] = texts(render({ marks: marksOn() }, { widths: true }))
+    const spot = markDimensions(r!, walls, "chain", "cm", K, SCREEN_METRICS.labelPx).find((d) => d.side === 1 && d.target === "width")!.spot
+    const t = texts(render({ marks: marksOn() })).find((x) => x.text === "90" && Math.abs(x.at.y - toScreen(spot.center).y) < SCREEN_METRICS.labelPx)
     expect(Math.abs(t!.at.x - toScreen(spot.center).x)).toBeLessThan(1)
     expect(Math.abs(t!.at.y - toScreen(spot.center).y)).toBeLessThan(SCREEN_METRICS.labelPx)
     expect(t!.at.x).toBeCloseTo(toScreen({ x: 145, y: 0 }).x, 0)
@@ -286,17 +286,18 @@ describe("область сноса", () => {
     }
   })
 
-  it("RN-06: у выделенной пометки шесть чисел (100, 90, 310 на каждой из двух граней), у невыделенной на экране чисел нет, в режиме PDF — только ширина", () => {
+  it("RN-06: шесть чисел (100, 90, 310 на каждой из двух граней) у пометки — и выделенной, и невыделенной", () => {
     const [r] = marksOn()
     expect(texts(render({ marks: marksOn(), selectedId: "m" })).map((t) => t.text).sort()).toEqual(["100", "100", "310", "310", "90", "90"])
-    expect(texts(render({ marks: marksOn(), selectedId: "other" })).map((t) => t.text)).toEqual([])
-    expect(texts(render({ marks: marksOn(), selectedId: "other" }, { widths: true })).map((t) => t.text)).toEqual(["90"])
+    expect(texts(render({ marks: marksOn(), selectedId: "other" })).map((t) => t.text).sort()).toEqual(["100", "100", "310", "310", "90", "90"])
+    expect(texts(render({ marks: marksOn() })).map((t) => t.text).sort()).toEqual(["100", "100", "310", "310", "90", "90"])
     expect(markDimensions(r!, walls, "chain", "cm", K, SCREEN_METRICS.labelPx)).toHaveLength(6)
   })
 
-  it("RN-06: несколько пометок в режиме PDF — по подписи ширины у каждой", () => {
+  it("RN-06: несколько пометок — цепочка у каждой: ширины 50 и 120 по два (две грани), расстояния 50, 300 и 80 до стыков", () => {
     const list = marksOn([mk("m1", "W", "a", 50, 100), mk("m2", "W", "a", 300, 420)])
-    expect(texts(render({ marks: list }, { widths: true })).map((t) => t.text).sort()).toEqual(["120", "50"])
+    const all = texts(render({ marks: list })).map((t) => t.text).sort()
+    expect(all).toEqual(["120", "120", "300", "300", "50", "50", "50", "50", "400", "400", "80", "80"].sort())
   })
 
   it("RN-07: превью протяжки — красные линии и размеры (100, 90, 310 на каждой грани) без закраски бумагой", () => {

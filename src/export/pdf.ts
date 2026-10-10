@@ -201,7 +201,7 @@ function drawPage(doc: jsPDF, page: PlanPage, unit: Unit, scale: number, format:
   drawSheet(doc, format, page.title === undefined ? { name, scale, date } : { name, scale, date, pageName: page.title })
   if (page.demolition !== undefined) {
     const scene = { walls: page.walls, doorways: page.doorways, marks: page.demolition }
-    drawDemolitionScene(ctx, w, h, scene, unit, view, { color: demolitionColor("light"), grid: false, metrics: PDF_METRICS, palette: LIGHT_PALETTE, widths: true })
+    drawDemolitionScene(ctx, w, h, scene, unit, view, { color: demolitionColor("light"), grid: false, metrics: PDF_METRICS, palette: LIGHT_PALETTE })
     return
   }
   drawScene(ctx, w, h, page.walls, null, unit, view, [], { grid: false, metrics: PDF_METRICS, dimensions: page.dimensions, doorways: page.doorways })

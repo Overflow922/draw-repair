@@ -34,7 +34,6 @@ interface Extra {
   color?: string
   metrics?: RenderMetrics
   palette?: Palette
-  widths?: boolean
 }
 
 function render(scene: Partial<DemolitionScene>, extra: Extra = {}, unit: "cm" | "m" | "mm" = "cm"): Op[] {
@@ -45,7 +44,6 @@ function render(scene: Partial<DemolitionScene>, extra: Extra = {}, unit: "cm" |
     grid: false,
     palette: extra.palette ?? LIGHT_PALETTE,
     metrics: extra.metrics,
-    widths: extra.widths,
   })
   return ops
 }
@@ -146,30 +144,28 @@ describe("цепочки выделенной пометки на обеих г�
     }
   })
 
-  it("SZ-52: пометка 0–190 на свободной стене: у расстояния до a на обеих гранях только число «0»; стрелок восемь (ширина и расстояние до b на двух гранях)", () => {
+  it("CD-05: пометка 0–190 на свободной стене: расстояние до a опущено целиком — чисел «0» нет, стрелок восемь (ширина и расстояние до b на двух гранях)", () => {
     const ops = render({ marks: marksOn(free, [mk("m", "W", "a", 0, 190)]), selectedId: "m" })
-    expect(sortedTexts(ops)).toEqual(["0", "0", "190", "190", "310", "310"])
+    expect(sortedTexts(ops)).toEqual(["190", "190", "310", "310"])
     expect(arrows(ops)).toHaveLength(8)
-    for (const t of texts(ops).filter((x) => x.text === "0")) expect(Math.abs(t.at.x - sx(0))).toBeLessThan(1)
   })
 
-  it("SZ-52: нулевое число подчёркнуто (штрих шириной числа «0» по центру в x = 0) на каждой грани", () => {
+  it("CD-05: у опущенного нулевого размера нет и подчёркивания: штриха шириной числа «0» в x = 0 нет", () => {
     const ops = render({ marks: marksOn(free, [mk("m", "W", "a", 0, 190)]), selectedId: "m" })
     const underline = thin(ops, RED).filter((s) => horizontal(s) && Math.abs((s[0].x + s[1].x) / 2 - sx(0)) < 1e-3 && Math.abs(Math.abs(s[1].x - s[0].x) - 0.6 * SCREEN_METRICS.labelPx) < 1e-3)
-    expect(underline.length).toBeGreaterThanOrEqual(2)
+    expect(underline).toEqual([])
   })
 
-  it("SZ-52: пометка на всю стену в комнате: числа 0, 480, 0 на внутренней и 0, 520, 0 на наружной; стрелок четыре", () => {
+  it("CD-07: пометка на всю стену в комнате: на внутренней грани только 480, на наружной только 520; стрелок четыре; выносные линии в x = 10, 490 и −10, 510", () => {
     const ws = room()
     const ops = render({ walls: ws, marks: marksOn(ws, [mk("m", "W", "a", 0, 500)]), selectedId: "m" }, { walls: ws })
-    expect(sortedTexts(ops)).toEqual(["0", "0", "0", "0", "480", "520"])
+    expect(sortedTexts(ops)).toEqual(["480", "520"])
     expect(arrows(ops)).toHaveLength(4)
     expect(extensionAt(ops, 10, 10, LINE_P)).toBe(true)
     expect(extensionAt(ops, 490, 10, LINE_P)).toBe(true)
     expect(extensionAt(ops, -10, -10, LINE_M)).toBe(true)
     expect(extensionAt(ops, 510, -10, LINE_M)).toBe(true)
   })
-
   it("SZ-51: единицы: в метрах числа «1», «0,9», «3,1»", () => {
     const ops = render({ marks: marksOn(free), selectedId: "m" }, {}, "m")
     expect(sortedTexts(ops)).toEqual(["0,9", "0,9", "1", "1", "3,1", "3,1"])
@@ -220,80 +216,88 @@ describe("превью протяжки", () => {
   })
 })
 
-describe("невыделенные пометки на экране и ширины в PDF", () => {
-  it("SZ-55: невыделенная пометка на экране — без размеров: ни выносных линий, ни стрелок, ни чисел", () => {
+describe("невыделенные пометки: та же цепочка без подчёркивания", () => {
+  it("CD-03: невыделенная пометка 100–190 на экране — полная цепочка на обеих гранях: числа 100, 90, 310 по два, двенадцать стрелок, выносные линии в x = 0, 100, 190, 500", () => {
     const ops = render({ marks: marksOn(free) })
-    expect(arrows(ops)).toEqual([])
-    expect(texts(ops)).toEqual([])
-    expect(thin(ops, RED).filter((s) => vertical(s) || horizontal(s))).toEqual([])
+    expect(sortedTexts(ops)).toEqual(["100", "100", "310", "310", "90", "90"])
+    expect(arrows(ops)).toHaveLength(12)
+    for (const x of [0, 100, 190, 500]) {
+      expect(extensionAt(ops, x, 10, LINE_P), `+1 x=${x}`).toBe(true)
+      expect(extensionAt(ops, x, -10, LINE_M), `−1 x=${x}`).toBe(true)
+    }
   })
 
-  it("SZ-55: выделена другая пометка: у невыделенной по-прежнему нет размеров", () => {
+  it("CD-03: у невыделенной пометки подчёркивания нет: по одному сплошному штриху на линии размера (три на грань)", () => {
+    const ops = render({ marks: marksOn(free) })
+    expect(onLine(ops, LINE_P)).toHaveLength(3)
+    expect(onLine(ops, LINE_M)).toHaveLength(3)
+  })
+
+  it("CD-09: выделение только добавляет подчёркивание: состав чисел и стрелок у выделенной и невыделенной пометки один и тот же", () => {
+    const plain = render({ marks: marksOn(free) })
+    const picked = render({ marks: marksOn(free), selectedId: "m" })
+    expect(sortedTexts(picked)).toEqual(sortedTexts(plain))
+    expect(arrows(picked)).toHaveLength(arrows(plain).length)
+    expect(onLine(picked, LINE_P)).toHaveLength(9)
+    expect(onLine(plain, LINE_P)).toHaveLength(3)
+  })
+
+  it("CD-09: на W две пометки, выделена одна: у обеих цепочки на обеих гранях, подчёркивание только у выделенной", () => {
     const list = [mk("m", "W", "a", 100, 190), mk("n", "W", "a", 300, 350)]
     const ops = render({ marks: marksOn(free, list), selectedId: "m" })
+    expect(sortedTexts(ops)).toEqual(["100", "100", "310", "310", "90", "90", "300", "300", "50", "50", "150", "150"].sort())
+    expect(extensionAt(ops, 300, 10, LINE_P)).toBe(true)
+    expect(extensionAt(ops, 350, -10, LINE_M)).toBe(true)
+    // подчёркивание выделенной: штриховой отрезок под числом 90 (по центру 145); у невыделенной под числом 50 (центр 325) его нет
+    const textWidth90 = 2 * 0.6 * SCREEN_METRICS.labelPx
+    const textWidth50 = 2 * 0.6 * SCREEN_METRICS.labelPx
+    const underAt = (cx: number, w: number, line: number): boolean => onLine(ops, line).some((s) => Math.abs((s[0].x + s[1].x) / 2 - sx(cx)) < TOL && Math.abs(Math.abs(s[1].x - s[0].x) - w) < 1e-3)
+    expect(underAt(145, textWidth90, LINE_P)).toBe(true)
+    expect(underAt(325, textWidth50, LINE_P)).toBe(false)
+  })
+
+  it("CD-09: выделение чужого идентификатора не убирает размеры и не добавляет подчёркивания", () => {
+    const ops = render({ marks: marksOn(free), selectedId: "other" })
     expect(sortedTexts(ops)).toEqual(["100", "100", "310", "310", "90", "90"])
-    expect(extensionAt(ops, 300, 10, LINE_P)).toBe(false)
-    expect(extensionAt(ops, 350, 10, LINE_P)).toBe(false)
+    expect(onLine(ops, LINE_P)).toHaveLength(3)
   })
 
-  it("SZ-55: выделение чужого идентификатора ничего не показывает", () => {
-    expect(texts(render({ marks: marksOn(free), selectedId: "other" }))).toEqual([])
+  it("CD-10: две пометки одной стены 100–200 и 250–300: цепочки независимы — 100, 100, 300 и 250, 50, 200 на каждой грани", () => {
+    const list = [mk("m", "W", "a", 100, 200), mk("n", "W", "a", 250, 300)]
+    const ops = render({ marks: marksOn(free, list) })
+    expect(sortedTexts(ops)).toEqual(["100", "100", "100", "100", "300", "300", "250", "250", "50", "50", "200", "200"].sort())
+    for (const x of [0, 100, 200, 250, 300, 500]) expect(extensionAt(ops, x, 10, LINE_P), `+1 x=${x}`).toBe(true)
+    // расстояние 200→250 (зазор между пометками) не рисуется: размерная линия не покрывает его без числа 50 у второй пометки
+    expect(sortedTexts(ops).filter((x) => x === "50")).toHaveLength(2)
   })
 
-  it("SZ-56: режим PDF (widths): ширина пометки 100–190 одним размером на грани y = 10: выносные в x = 100 и 190, число 90, две стрелки", () => {
-    const ops = render({ marks: marksOn(free) }, { widths: true })
-    expect(extensionAt(ops, 100, 10, LINE_P)).toBe(true)
-    expect(extensionAt(ops, 190, 10, LINE_P)).toBe(true)
-    expect(lineCovers(ops, LINE_P, 100, 190)).toBe(true)
-    expect(sortedTexts(ops)).toEqual(["90"])
-    expect(arrows(ops)).toHaveLength(2)
-  })
-
-  it("SZ-56: режим PDF: размерная линия сплошная — один горизонтальный штрих (без подчёркивания)", () => {
-    const ops = render({ marks: marksOn(free) }, { widths: true })
-    expect(onLine(ops, LINE_P)).toHaveLength(1)
-  })
-
-  it("SZ-08: пометка на железобетонной стене не действует: даже выделенной размеров нет", () => {
+  it("CD-21: пометка на железобетонной стене не действует: даже выделенной размеров нет", () => {
     const reinforced = [W("reinforced")]
     const ops = render({ walls: reinforced, marks: marksOn(reinforced), selectedId: "m" }, { walls: reinforced })
     expect(texts(ops)).toEqual([])
     expect(arrows(ops)).toEqual([])
   })
 
-  it("SZ-56: режим PDF: на грани y = −10 размеров нет", () => {
-    const ops = render({ marks: marksOn(free) }, { widths: true })
-    expect(extensionAt(ops, 100, -10, LINE_M)).toBe(false)
-    expect(onLine(ops, LINE_M)).toEqual([])
+  it("CD-23: без пометок размеров нет: ни стрелок, ни чисел, ни красных линий", () => {
+    const ops = render({ marks: [] })
+    expect(arrows(ops)).toEqual([])
+    expect(texts(ops)).toEqual([])
+    expect(thin(ops, RED).filter((s) => vertical(s) || horizontal(s))).toEqual([])
   })
 
-  it("SZ-56: режим PDF: у каждой пометки своя ширина", () => {
-    const list = [mk("m", "W", "a", 100, 190), mk("n", "W", "a", 300, 420)]
-    const ops = render({ marks: marksOn(free, list) }, { widths: true })
-    expect(sortedTexts(ops)).toEqual(["120", "90"])
-    expect(arrows(ops)).toHaveLength(4)
-  })
-
-  it("SZ-57: режим PDF, пометка на всю стену в комнате: ширина по грани между стыками 10 и 490 — число 480, выносные линии в x = 10 и 490", () => {
-    const ws = room()
-    const ops = render({ walls: ws, marks: marksOn(ws, [mk("m", "W", "a", 0, 500)]) }, { walls: ws, widths: true })
-    expect(sortedTexts(ops)).toEqual(["480"])
-    expect(extensionAt(ops, 10, 10, LINE_P)).toBe(true)
-    expect(extensionAt(ops, 490, 10, LINE_P)).toBe(true)
-  })
-
-  it("SZ-56: режим PDF: у выделенной пометки вместе с widths рисуется цепочка (выделение главнее)", () => {
-    const ops = render({ marks: marksOn(free), selectedId: "m" }, { widths: true })
-    expect(sortedTexts(ops)).toEqual(["100", "100", "310", "310", "90", "90"])
-  })
-
-  it("SZ-56: цвет из параметров", () => {
-    const ops = render({ marks: marksOn(free) }, { widths: true, color: "#00aa00" })
+  it("CD-03: цвет из параметров: цепочка невыделенной пометки рисуется цветом параметра, красного нет", () => {
+    const ops = render({ marks: marksOn(free) }, { color: "#00aa00" })
     expect(extensionAt(ops, 100, 10, LINE_P, SCREEN_METRICS, "#00aa00")).toBe(true)
+    expect(extensionAt(ops, 100, -10, LINE_M, SCREEN_METRICS, "#00aa00")).toBe(true)
     expect(thin(ops, RED)).toEqual([])
   })
-})
 
+  it("CD-06: невыделенная пометка 0–190: расстояние до a опущено и на экране (нет «0» и выносной линии без ширины), ширина и расстояние до b есть", () => {
+    const ops = render({ marks: marksOn(free, [mk("m", "W", "a", 0, 190)]) })
+    expect(sortedTexts(ops)).toEqual(["190", "190", "310", "310"])
+    expect(arrows(ops)).toHaveLength(8)
+  })
+})
 describe("подсветка ластика", () => {
   const erasing = (id: string | null | undefined, palette: Palette = LIGHT_PALETTE, list = [mk("m", "W", "a", 100, 190), mk("n", "W", "a", 300, 400)]): Op[] =>
     render({ marks: marksOn(free, list), erasing: id }, { palette })
@@ -332,9 +336,11 @@ describe("подсветка ластика", () => {
     expect(strokes(ops).some((o) => o.strokeStyle === DARK_PALETTE.erase)).toBe(true)
   })
 
-  it("SZ-61: подсветка ластика не рисует размеров и не выделяет", () => {
-    const ops = erasing("m")
-    expect(texts(ops)).toEqual([])
-    expect(arrows(ops)).toEqual([])
+  it("SZ-61: подсветка ластика не выделяет: числа и стрелки те же, что без неё, подчёркиваний нет", () => {
+    const lit = erasing("m")
+    const plain = erasing(null)
+    expect(sortedTexts(lit)).toEqual(sortedTexts(plain))
+    expect(arrows(lit)).toHaveLength(arrows(plain).length)
+    expect(onLine(lit, LINE_P)).toHaveLength(onLine(plain, LINE_P).length)
   })
 })
