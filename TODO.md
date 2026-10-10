@@ -391,6 +391,17 @@ Follow-ups from the change `auto-wall-dimensions` (model of visible face pieces,
 - Dimensions, room areas and element labels on the demolition plan; eraser and selection of underlay walls; partial demolition of a wall element (user decision, 2026-10-09).
 - Page name in the title block (graph 5) is still empty, now on both pages (see `drawing-plans` above).
 
+## demolition-no-window-walls (2026-10-10)
+
+### Tests
+
+- [ ] Подключение `doorways` в `main.ts` (`drawDemolitionPlan`) проверяется только вручную.
+- [ ] `editNumber` и `addMark` не знают об элементах (скрытую пометку под окном UI выбрать не даёт, но функции уровня домена приняли бы её); спецификация сценария не требует.
+
+### Out of scope
+
+- [ ] Запрет ставить окно на помеченную стену на обмерочном плане; различие наружных и внутренних дверей.
+
 ## demolition-doorway-sizes (2026-10-10)
 
 ### Tests

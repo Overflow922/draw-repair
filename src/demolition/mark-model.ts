@@ -1,4 +1,5 @@
-import type { DemolitionMark, Wall } from "../types"
+import { isWindow } from "../types"
+import type { DemolitionMark, Wall, WallElement } from "../types"
 import { degenerate, dist } from "../wall-geometry"
 
 // Модель пометки сноса (change demolition-plan, design D2): участок оси стены обмерочного плана. Хранится от конца
@@ -28,16 +29,18 @@ export function span(mark: DemolitionMark, wall: Wall): [number, number] {
   return mark.anchor === "a" ? [mark.fromCm, mark.toCm] : [len - mark.toCm, len - mark.fromCm]
 }
 
-// железобетон не сносится (несущая стена); вырожденная стена не имеет оси
-export const canDemolish = (wall: Wall): boolean => wall.type !== "reinforced" && !degenerate(wall)
+// железобетон не сносится (несущая стена), стена с окном — внешняя стена здания, тоже; вырожденная стена не имеет оси.
+// Проёмы и двери демонтажу не мешают (change demolition-no-window-walls, design D1).
+export const canDemolish = (wall: Wall, elements: readonly WallElement[] = []): boolean =>
+  wall.type !== "reinforced" && !degenerate(wall) && !elements.some((e) => isWindow(e) && e.wallId === wall.id)
 
 // Пометки, которые действуют: стена есть, её можно сносить, а участок, обрезанный по стене, длиннее EPS_CM.
 // Недействующие остаются в хранилище и снова действуют, когда условия выполнены (spec «Что сносится и что нет»).
-export function effectiveMarks(marks: readonly DemolitionMark[], walls: readonly Wall[]): ResolvedMark[] {
+export function effectiveMarks(marks: readonly DemolitionMark[], walls: readonly Wall[], elements: readonly WallElement[] = []): ResolvedMark[] {
   const resolved: ResolvedMark[] = []
   for (const mark of marks) {
     const wall = walls.find((w) => w.id === mark.wallId)
-    if (!wall || !canDemolish(wall)) continue
+    if (!wall || !canDemolish(wall, elements)) continue
     const [start, end] = span(mark, wall)
     const from = Math.max(0, start)
     const to = Math.min(lengthOf(wall), end)

@@ -524,7 +524,7 @@ function redraw(): void {
 
 // план «Демонтаж»: подложка из стен обмерочного плана без сносимых элементов, область сноса, выделение и превью
 function drawDemolitionPlan(): void {
-  const marks = effectiveMarks(demolitionHost.marks(), walls)
+  const marks = effectiveMarks(demolitionHost.marks(), walls, doorways)
   renderDemolition(
     canvas,
     {

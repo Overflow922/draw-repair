@@ -133,7 +133,7 @@ export interface PlanPage {
 // чертежа (design D1), страница демонтажа — подложка из тех же стен без размеров, видимые элементы и пометки
 export function pagesOf(drawing: Drawing): PlanPage[] {
   const doorways = drawing.doorways ?? []
-  const marks = effectiveMarks(drawing.demolition ?? [], drawing.walls)
+  const marks = effectiveMarks(drawing.demolition ?? [], drawing.walls, doorways)
   return PLANS.map(
     (plan): PlanPage =>
       plan.id === "demolition"

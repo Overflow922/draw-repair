@@ -5,6 +5,7 @@ import { alongNodes, snapAlong } from "./mark-snap"
 import { markDimensions } from "./mark-dimensions"
 import { editNumber, markNumberAt } from "./mark-numbers"
 import type { MarkNumberSpot, NumberRef } from "./mark-numbers"
+import { canDemolish } from "./mark-model"
 import { EPS_CM, MIN_WIDTH_CM, addMark, effectiveMarks, markAt, removeMark, sameMarks, span } from "./marks"
 
 // Инструмент «Демонтаж», выделение пометки и правка чисел на месте (change demolition-plan, design D10): состояние
@@ -106,12 +107,13 @@ export function createDemolitionTool(host: DemolitionToolHost): DemolitionTool {
     ghost = null
   }
 
-  const selectedMark = () => effectiveMarks(host.marks(), host.walls()).find((r) => r.mark.id === selected)
+  const selectedMark = () => effectiveMarks(host.marks(), host.walls(), host.elements()).find((r) => r.mark.id === selected)
 
   return {
     down(p, px) {
+      // стена из железобетона или с окном не сносится: нажатие на неё жеста не начинает
       const wall = wallNearBody(p, host.walls(), host.radiusCm())
-      press = wall ? { wall, p, px } : null
+      press = wall && canDemolish(wall, host.elements()) ? { wall, p, px } : null
       dragging = false
       ghost = null
     },
@@ -138,7 +140,7 @@ export function createDemolitionTool(host: DemolitionToolHost): DemolitionTool {
         placed = place(pr.wall, from, to)
       } else {
         // клик: по неснесённой части — пометить стену целиком; по снесённой области ничего не меняется (снимает ластик)
-        const hit = markAt(pr.p, effectiveMarks(marks, walls), walls)
+        const hit = markAt(pr.p, effectiveMarks(marks, walls, host.elements()), walls)
         if (!hit) placed = place(pr.wall, 0, dist(pr.wall.a, pr.wall.b))
       }
       host.redraw()
@@ -151,7 +153,7 @@ export function createDemolitionTool(host: DemolitionToolHost): DemolitionTool {
     dragging: () => dragging,
     ghost: () => ghost,
     select(p) {
-      const hit = markAt(p, effectiveMarks(host.marks(), host.walls()), host.walls())
+      const hit = markAt(p, effectiveMarks(host.marks(), host.walls(), host.elements()), host.walls())
       selected = hit ? hit.mark.id : null
       host.redraw()
       return hit !== null
@@ -172,12 +174,12 @@ export function createDemolitionTool(host: DemolitionToolHost): DemolitionTool {
       return r ? markNumberAt(p, markDimensions(r, host.walls(), "chain", unit, k, labelPx).map((d) => d.spot), tolCm) : null
     },
     erase(p) {
-      const hit = markAt(p, effectiveMarks(host.marks(), host.walls()), host.walls())
+      const hit = markAt(p, effectiveMarks(host.marks(), host.walls(), host.elements()), host.walls())
       if (!hit) return false
       if (hit.mark.id === selected) selected = null
       return commit(removeMark(host.marks(), hit.mark.id))
     },
-    eraseTarget: (p) => markAt(p, effectiveMarks(host.marks(), host.walls()), host.walls())?.mark.id ?? null,
+    eraseTarget: (p) => markAt(p, effectiveMarks(host.marks(), host.walls(), host.elements()), host.walls())?.mark.id ?? null,
     applyNumber(ref, valueCm) {
       if (selected === null) return false
       const edited = editNumber(host.marks(), host.walls(), selected, ref.target, ref.side, valueCm)
