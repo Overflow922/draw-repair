@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest"
 import { effectiveMarks } from "../demolition/marks"
 import type { DemolitionMark, Drawing, Wall } from "../types"
 import { colorSegments, isRed, parseColoredStrokes } from "./pdf-colors.test-utils"
+import { legendWidthMm } from "./legend"
 import { availableFormatsForPages, buildPdfPages, pageBounds, pagesOf } from "./pdf"
 import type { PlanPage } from "./pdf"
 import { drawingArea } from "./sheet-layout"
@@ -233,11 +234,12 @@ describe("габариты страницы демонтажа", () => {
 
 describe("форматы с учётом размеров пометок", () => {
   it("DC-24: размер пометки, выступающий за габариты, исключает формат, на который помещалась бы страница без него", () => {
-    const area = drawingArea("A4")
+    // TCR-4 (change pdf-legend): область A4 сужена на столбец легенды; берём столбец страницы с пометкой (он шире)
+    const vertical = wall(0, 0, 0, 300, "v") // нормаль (−1, 0): размер уходит влево, наружу
+    const area = drawingArea("A4", legendWidthMm([pageOf([vertical], [mark("m", "v", 100, 190)])]))
     const widthCm = area.w * CM_PER_MM
     // горизонтальная стена подбирает ширину так, чтобы без пометки страница помещалась на A4 с запасом 10 см
     const long = wall(0, 0, widthCm - 2 * PAD_CM - 20 - 10, 0, "h")
-    const vertical = wall(0, 0, 0, 300, "v") // нормаль (−1, 0): размер уходит влево, наружу
     const without = pageOf([long, vertical], [])
     const withMark = pageOf([long, vertical], [mark("m", "v", 100, 190)])
     expect(availableFormatsForPages([without], SCALE)).toContain("A4")
@@ -255,9 +257,10 @@ describe("форматы с учётом размеров пометок", () =>
 
 describe("размещение размеров на листе", () => {
   it("DC-25: страница, которая помещается на A4 только с учётом размеров пометки, размещается так, что все красные штрихи лежат в области чертежа", () => {
-    const area = drawingArea("A4")
     const vertical = wall(0, 0, 0, 300, "v") // нормаль (−1, 0): размер уходит влево, наружу
     const m = [mark("m", "v", 100, 190)]
+    // TCR-4 (change pdf-legend): область чертежа сужена на столбец легенды; красные линии образца легенды лежат в столбце
+    const area = drawingArea("A4", legendWidthMm([pageOf([vertical], m)]))
     const widthOf = (long: Wall): number => {
       const b = pageBounds(pageOf([long, vertical], m), SCALE)
       return b.maxX - b.minX
@@ -268,7 +271,7 @@ describe("размещение размеров на листе", () => {
     const page = pageOf([long, vertical], m)
     expect(availableFormatsForPages([page], SCALE)).toContain("A4")
     const doc = buildPdfPages([page], "cm", SCALE, "A4", font, "Чертёж 1", SEP)
-    const red = parseColoredStrokes(doc, 1).filter((s) => isRed(s.color))
+    const red = parseColoredStrokes(doc, 1).filter((s) => isRed(s.color) && Math.min(...s.subpaths.flat().map((p) => p.x)) >= area.x - 1e-6)
     const pts = red.flatMap((s) => s.subpaths.flat())
     expect(pts.length).toBeGreaterThan(0)
     // чертёж центрирован в области по габаритам с учётом размеров: крайняя красная линия — конец выносной линии

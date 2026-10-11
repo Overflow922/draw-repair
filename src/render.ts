@@ -135,6 +135,18 @@ export function drawElementsLayer(ctx: CanvasRenderingContext2D, walls: Wall[], 
   drawDoorways(ctx, walls, findRooms(walls), unit, view, m, p, opts, false)
 }
 
+// Образец материала в легенде (change pdf-legend, design D4): одна горизонтальная стена, нарисованная тем же drawWall,
+// что и чертёж. Единицы здесь — мм листа (1 см чертежа = 1 мм), origin — левый конец оси стены, он же середина образца
+// по высоте, мм листа.
+export const SAMPLE_LENGTH_MM = 16
+export const SAMPLE_THICKNESS_MM = 8
+
+export function drawLegendSample(ctx: CanvasRenderingContext2D, material: Material, origin: Point, m: RenderMetrics, p: Palette): void {
+  const wall: Wall = { id: "legend-wall", a: { x: 0, y: 0 }, b: { x: SAMPLE_LENGTH_MM, y: 0 }, thicknessCm: SAMPLE_THICKNESS_MM, type: material }
+  const toScreen = (q: Point): Point => ({ x: q.x + origin.x, y: q.y + origin.y })
+  drawWall(ctx, wall, [wall], 1, toScreen, 1, origin.x + origin.y, m, p.ink, [])
+}
+
 export function drawScene(
   ctx: CanvasRenderingContext2D,
   w: number,

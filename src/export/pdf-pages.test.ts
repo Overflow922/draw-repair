@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs"
 import type { jsPDF, jsPDFOptions } from "jspdf"
 import { afterEach, describe, expect, it, vi } from "vitest"
 import type { Dimension, Doorway, Drawing, Wall, WallDoor, WallElement } from "../types"
+import { legendWidthMm } from "./legend"
 import type { PageFormat, PlanPage } from "./pdf"
 import { insideRect, parsePaths, pathsBBox, rectEdgesDrawn, strokeSegments } from "./pdf-ops.test-utils"
 import type { Rect } from "./pdf-ops.test-utils"
@@ -93,15 +94,23 @@ const DOOR_B: Doorway = { id: "db", wallId: "wb", anchor: "a", offsetCm: 100, wi
 const PAGE_A = page([WA], [DOOR_A])
 const PAGE_B = page([WB], [DOOR_B])
 
+// TCR-4 (change pdf-legend): слева от чертежа стоит столбец легенды общей для документа ширины; линии легенды той же
+// толщины, что контуры стен, поэтому габариты чертежа измеряются правее столбца
+let columnMm = 0
+
 function build(pages: PlanPage[], scale = 100, format: PageFormat = "A4", name = "Чертёж 1"): jsPDF {
   texts.length = 0
+  columnMm = legendWidthMm(pages)
   return buildPdfPages(pages, "cm", scale, format, font, name, SEP)
 }
 
 // габариты контуров стен на странице (линия 0,6 мм); рамка и надпись рисуются другими толщинами
 const CONTOUR_MM = 0.6
 const ink = (doc: jsPDF, pageNumber: number): Rect => {
-  const paths = parsePaths(doc, pageNumber).filter((p) => p.paint === "stroke" && Math.abs(p.widthMm - CONTOUR_MM) < 0.005)
+  const chartLeft = drawingArea("A4", columnMm).x
+  const paths = parsePaths(doc, pageNumber).filter(
+    (p) => p.paint === "stroke" && Math.abs(p.widthMm - CONTOUR_MM) < 0.005 && (pathsBBox([p])?.x ?? 0) >= chartLeft - 1e-6,
+  )
   const box = pathsBBox(paths)
   if (!box) throw new Error(`на странице ${pageNumber} контуры стен не нарисованы`)
   return box
@@ -280,8 +289,8 @@ describe("buildPdfPages: рамка, надпись и размещение на
 
   it("PG-05: каждая страница размещается по габаритам своего плана — центр чертежа в центре области чертежа", () => {
     // страницы без проёмов: подписи высоты входят в габариты размещения, а здесь измеряются только контуры стен
-    const area = drawingArea("A4")
     const doc = build([page([WA]), page([WB])])
+    const area = drawingArea("A4", columnMm)
     for (const n of [1, 2]) {
       const box = ink(doc, n)
       expect(insideRect(box, area), `страница ${n} внутри области`).toBe(true)
@@ -455,14 +464,17 @@ describe("availableFormatsForPages", () => {
     expect(availableFormatsForPages([horizontal(100), horizontal(400)], 10)).toEqual(["A2", "A1", "A0"])
   })
 
-  it("PG-11: граница по ширине на второй странице: ровно 272 мм — A4 доступен, +0,1 мм — нет", () => {
-    expect(availableFormatsForPages([horizontal(100), horizontal(242)], 10)).toEqual(ALL)
-    expect(availableFormatsForPages([horizontal(100), horizontal(242.1)], 10)).toEqual(NOT_A4)
+  // TCR-4 (change pdf-legend): область A4 по ширине — 272 мм за вычетом столбца легенды документа
+  const FIT_LEN = 242 - legendWidthMm([horizontal(100)])
+
+  it("PG-11: граница по ширине на второй странице: ровно (272 − ширина легенды) мм — A4 доступен, +0,1 мм — нет", () => {
+    expect(availableFormatsForPages([horizontal(100), horizontal(FIT_LEN)], 10)).toEqual(ALL)
+    expect(availableFormatsForPages([horizontal(100), horizontal(FIT_LEN + 0.1)], 10)).toEqual(NOT_A4)
   })
 
   it("PG-11: граница по ширине на первой странице: результат тот же при обратном порядке", () => {
-    expect(availableFormatsForPages([horizontal(242), horizontal(100)], 10)).toEqual(ALL)
-    expect(availableFormatsForPages([horizontal(242.1), horizontal(100)], 10)).toEqual(NOT_A4)
+    expect(availableFormatsForPages([horizontal(FIT_LEN), horizontal(100)], 10)).toEqual(ALL)
+    expect(availableFormatsForPages([horizontal(FIT_LEN + 0.1), horizontal(100)], 10)).toEqual(NOT_A4)
   })
 
   it("PG-11: граница по высоте на второй странице: ровно 145 мм — A4 доступен, +0,1 мм — нет", () => {

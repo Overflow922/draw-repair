@@ -5,6 +5,7 @@ import { effectiveMarks } from "../demolition/marks"
 import { demolitionColor } from "../demolition/demolition-render"
 import { LIGHT_PALETTE } from "../theme"
 import type { DemolitionMark, Dimension, Doorway, Drawing, Wall, WallDoor } from "../types"
+import { legendWidthMm } from "./legend"
 import type { PageFormat, PlanPage } from "./pdf"
 import { colorSegments, hexToRgb01, isGray, isRed, parseColoredStrokes, sameColor } from "./pdf-colors.test-utils"
 import { insideRect, parsePaths, pathsBBox, rectEdgesDrawn, strokeSegments } from "./pdf-ops.test-utils"
@@ -69,8 +70,15 @@ const drawing = (extra: Partial<Drawing> = {}): Drawing => ({
   ...extra,
 })
 
+// TCR-4 (change pdf-legend): слева от чертежа стоит столбец легенды общей ширины; его контуры той же толщины и цветов,
+// что контуры чертежа, поэтому чертёж измеряется правее столбца
+let columnMm = 0
+const rightOfLegend = (s: { subpaths: readonly (readonly { x: number }[])[] }): boolean =>
+  Math.min(...s.subpaths.flat().map((p) => p.x)) >= drawingArea("A4", columnMm).x - 1e-6
+
 function build(d: Drawing, scale = 100, format: PageFormat = "A4"): jsPDF {
   texts.length = 0
+  columnMm = legendWidthMm(pagesOf(d))
   return buildPdfPages(pagesOf(d), "cm", scale, format, font, d.name, SEP)
 }
 
@@ -162,7 +170,7 @@ describe("страница демонтажа в документе PDF", () => 
 
   it("PG-03: красный контур участка 0,6 мм: участок 90 см при 1:100 — ширина 9 мм на листе, высота 2 мм", () => {
     const doc = build(drawing())
-    const contour = redOn(doc, 2).filter((s) => Math.abs(s.widthMm - CONTOUR_MM) < 0.005)
+    const contour = redOn(doc, 2).filter((s) => Math.abs(s.widthMm - CONTOUR_MM) < 0.005 && rightOfLegend(s))
     const box = pathsBBox(contour.map((s) => ({ points: s.subpaths.flat(), closed: false, paint: "stroke" as const, widthMm: s.widthMm })))
     expect(box?.w).toBeCloseTo(9, 1)
     expect(box?.h).toBeCloseTo(2, 1)
@@ -226,7 +234,9 @@ describe("страница демонтажа в документе PDF", () => 
   })
 
   it("PG-06: первая страница содержит обмерочный план так же, как до введения плана «Демонтаж»: те же операторы, что у buildPdf, и ни одной красной линии", () => {
-    const d = drawing({ doorways: [DOOR], dimensions: [dimension] })
+    // TCR-4 (change pdf-legend): без пометок легенда страницы демонтажа не прибавляет записи «Демонтируемая стена», ширина
+    // столбца общая и совпадает со столбцом одностраничного buildPdf; сравнение операторов остаётся точным
+    const d = drawing({ doorways: [DOOR], dimensions: [dimension], demolition: [] })
     const doc = build(d)
     const old = buildPdf(d.walls, d.dimensions, "cm", 100, "A4", font, d.doorways ?? [], d.name, SEP)
     expect(parsePaths(doc, 1)).toEqual(parsePaths(old, 1))
@@ -268,9 +278,9 @@ describe("страница демонтажа в документе PDF", () => 
   })
 
   it("PG-17: страница демонтажа лежит в области чертежа и центрирована по габаритам подложки в масштабе чертежа (стена 5 м — 50 мм)", () => {
-    const area: Rect = drawingArea("A4")
     const doc = build(drawing({ demolition: [] }))
-    const wallStrokes = parseColoredStrokes(doc, 2).filter((s) => Math.abs(s.widthMm - CONTOUR_MM) < 0.005)
+    const area: Rect = drawingArea("A4", columnMm)
+    const wallStrokes = parseColoredStrokes(doc, 2).filter((s) => Math.abs(s.widthMm - CONTOUR_MM) < 0.005 && rightOfLegend(s))
     const box = pathsBBox(wallStrokes.map((s) => ({ points: s.subpaths.flat(), closed: false, paint: "stroke" as const, widthMm: s.widthMm })))
     expect(box).not.toBeNull()
     expect(box!.w).toBeCloseTo(50, 0)
@@ -282,7 +292,7 @@ describe("страница демонтажа в документе PDF", () => 
     const d = drawing({ demolition: [] })
     const doc = build(d)
     const boxOf = (n: number) => {
-      const s = parseColoredStrokes(doc, n).filter((x) => Math.abs(x.widthMm - CONTOUR_MM) < 0.005)
+      const s = parseColoredStrokes(doc, n).filter((x) => Math.abs(x.widthMm - CONTOUR_MM) < 0.005 && rightOfLegend(x))
       return pathsBBox(s.map((x) => ({ points: x.subpaths.flat(), closed: false, paint: "stroke" as const, widthMm: x.widthMm })))
     }
     const a = boxOf(1)
@@ -299,7 +309,7 @@ describe("подложка из нескольких стен: габариты 
   const short = wall(0, 0, 100, 0, "w1")
   const two = (): Drawing => drawing({ walls: [short, w2], demolition: [{ id: "m1", wallId: "w1", anchor: "a", fromCm: 20, toCm: 60 }] })
   const inkBox = (doc: jsPDF, n: number) => {
-    const s = parseColoredStrokes(doc, n).filter((x) => Math.abs(x.widthMm - CONTOUR_MM) < 0.005 && isGray(x.color))
+    const s = parseColoredStrokes(doc, n).filter((x) => Math.abs(x.widthMm - CONTOUR_MM) < 0.005 && isGray(x.color) && rightOfLegend(x))
     return pathsBBox(s.map((x) => ({ points: x.subpaths.flat(), closed: false, paint: "stroke" as const, widthMm: x.widthMm })))
   }
 
@@ -316,9 +326,9 @@ describe("подложка из нескольких стен: габариты 
   // TCR-4 (change demolition-corner-dimensions): габариты страницы включают цепочку пометки на обеих гранях, поэтому центрируются
   // габариты стен вместе с размерами (pageBounds), а не один серый контур: контур смещён от центра области на (центр стен − центр габаритов)
   it("PG-18: габариты и центрирование страницы — по всем стенам и размерам: серый контур охватывает обе стены (ширина 30 мм, высота 22 мм при 1:100) и смещён от центра области ровно на разницу центров стен и габаритов страницы", () => {
-    const area: Rect = drawingArea("A4")
     const d = two()
     const box = inkBox(build(d), 2)
+    const area: Rect = drawingArea("A4", columnMm)
     const b = pageBounds(pagesOf(d)[1] as PlanPage, 100)
     expect(box).not.toBeNull()
     expect(box!.w).toBeCloseTo(30, 0)
@@ -366,9 +376,12 @@ describe("форматы и доступность экспорта", () => {
     expect(availableFormatsForPages([second], 10)).toEqual(availableFormatsForPages([pagesOf(marked)[0] as PlanPage], 10))
   })
 
-  it("PG-07: габариты страницы демонтажа — по стенам подложки: стена 242 см при 1:10 помещается на A4, 243 — нет", () => {
-    expect(availableFormatsForPages(pagesOf(tight(242)), 10)).toContain("A4")
-    expect(availableFormatsForPages(pagesOf(tight(243)), 10)).not.toContain("A4")
+  // TCR-4 (change pdf-legend): ширина области A4 — 272 мм за вычетом столбца легенды документа; без пометок столбец
+  // зависит только от материала стены
+  it("PG-07: габариты страницы демонтажа — по стенам подложки: стена, дающая ровно (272 − ширина легенды) мм при 1:10, помещается на A4, +1 см — нет", () => {
+    const fit = Math.floor(242 - legendWidthMm(pagesOf(tight(100)))) // целые см: решение не зависит от погрешности на границе
+    expect(availableFormatsForPages(pagesOf(tight(fit)), 10)).toContain("A4")
+    expect(availableFormatsForPages(pagesOf(tight(fit + 1)), 10)).not.toContain("A4")
   })
 
   it("PG-07: список форматов по двум страницам равен списку по стенам (размеров нет)", () => {

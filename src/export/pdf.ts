@@ -17,8 +17,10 @@ import type { Dimension, Drawing, Point, Unit, Wall, WallElement } from "../type
 import { FONT_B64 } from "./font"
 import { PAGE_FORMATS_MM } from "./page-format"
 import type { PageFormat } from "./page-format"
+import { drawLegend } from "./legend-draw"
+import { legendWidthMm } from "./legend"
 import { drawSheet } from "./sheet-draw"
-import { drawingArea, sheetSizeMm } from "./sheet-layout"
+import { drawingArea, legendArea, sheetSizeMm } from "./sheet-layout"
 
 export { PAGE_FORMATS_MM }
 export type { PageFormat }
@@ -115,9 +117,9 @@ export function wallsBBox(
   return { minX: minX - padCm, minY: minY - padCm, maxX: maxX + padCm, maxY: maxY + padCm }
 }
 
-export function fitsFormat(b: BBox, scale: number, format: PageFormat): boolean {
+export function fitsFormat(b: BBox, scale: number, format: PageFormat, legendMm = 0): boolean {
   const mmPerCm = 10 / scale
-  const area = drawingArea(format)
+  const area = drawingArea(format, legendMm)
   return (b.maxX - b.minX) * mmPerCm <= area.w && (b.maxY - b.minY) * mmPerCm <= area.h
 }
 
@@ -161,15 +163,17 @@ export function pageBounds(page: PlanPage, scale: number): BBox {
 }
 
 // форматы, на которые страница помещается по своим габаритам; пустая страница ничего не ограничивает
-function pageFormats(page: PlanPage, scale: number): PageFormat[] {
+function pageFormats(page: PlanPage, scale: number, legendMm: number): PageFormat[] {
   if (page.walls.length === 0) return ALL_FORMATS
   const b = pageBounds(page, scale)
-  return ALL_FORMATS.filter((f) => fitsFormat(b, scale, f))
+  return ALL_FORMATS.filter((f) => fitsFormat(b, scale, f, legendMm))
 }
 
-// форматы, на которые помещаются все страницы (spec pdf-export «Форматы учитывают все страницы»)
+// форматы, на которые помещаются все страницы (spec pdf-export «Форматы учитывают все страницы»);
+// область чертежа сужена на общий столбец легенды документа
 export function availableFormatsForPages(pages: PlanPage[], scale: number): PageFormat[] {
-  const perPage = pages.map((p) => pageFormats(p, scale))
+  const legendMm = legendWidthMm(pages)
+  const perPage = pages.map((p) => pageFormats(p, scale, legendMm))
   return ALL_FORMATS.filter((f) => perPage.every((formats) => formats.includes(f)))
 }
 
@@ -177,11 +181,11 @@ export function availableFormats(walls: Wall[], dimensions: Dimension[] = [], sc
   return availableFormatsForPages([{ walls, dimensions, doorways }], scale)
 }
 
-export function placeOnPage(b: BBox, scale: number, format: PageFormat): Placement {
+export function placeOnPage(b: BBox, scale: number, format: PageFormat, legendMm = 0): Placement {
   const mmPerCm = 10 / scale
   const dw = (b.maxX - b.minX) * mmPerCm
   const dh = (b.maxY - b.minY) * mmPerCm
-  const area = drawingArea(format)
+  const area = drawingArea(format, legendMm)
   return {
     landscape: true,
     mmPerCm,
@@ -197,8 +201,8 @@ export function pdfFileName(name: string, now: Date): string {
 }
 
 // рамка, основная надпись и чертёж одной страницы на текущей странице документа
-function drawPage(doc: jsPDF, page: PlanPage, unit: Unit, scale: number, format: PageFormat, name: string, date: Date): void {
-  const placement = placeOnPage(pageBounds(page, scale), scale, format)
+function drawPage(doc: jsPDF, page: PlanPage, unit: Unit, scale: number, format: PageFormat, legendMm: number, name: string, date: Date): void {
+  const placement = placeOnPage(pageBounds(page, scale), scale, format, legendMm)
   const { w, h } = sheetSizeMm(format)
   const ctx = doc.context2d as unknown as CanvasRenderingContext2D
   const view = {
@@ -206,6 +210,7 @@ function drawPage(doc: jsPDF, page: PlanPage, unit: Unit, scale: number, format:
     pan: { x: -placement.offsetX / placement.mmPerCm, y: -placement.offsetY / placement.mmPerCm },
   }
   drawSheet(doc, format, page.title === undefined ? { name, scale, date } : { name, scale, date, pageName: page.title })
+  drawLegend(doc, ctx, page, legendArea(format, legendMm))
   if (page.demolition !== undefined) {
     const scene = { walls: page.walls, doorways: page.doorways, marks: page.demolition }
     drawDemolitionScene(ctx, w, h, scene, unit, view, { color: demolitionColor("light"), grid: false, metrics: PDF_METRICS, palette: LIGHT_PALETTE })
@@ -228,9 +233,10 @@ export function buildPdfPages(
   const doc = new jsPDF({ unit: "mm", format: [pw, ph], orientation: "landscape" })
   doc.addFileToVFS("PTSans.ttf", fontB64)
   doc.addFont("PTSans.ttf", "PTSans", "normal")
+  const legendMm = legendWidthMm(pages)
   pages.forEach((page, i) => {
     if (i > 0) doc.addPage([pw, ph], "landscape")
-    drawPage(doc, page, unit, scale, format, name, date)
+    drawPage(doc, page, unit, scale, format, legendMm, name, date)
   })
   return doc
 }

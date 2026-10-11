@@ -46,10 +46,16 @@ export function titleBlockRect(format: PageFormat): Rect {
   }
 }
 
-// внутренность рамки над основной надписью, на всю ширину рамки
-export function drawingArea(format: PageFormat): Rect {
+// внутренность рамки над основной надписью за вычетом столбца легенды шириной legendMm (0 — на всю ширину рамки)
+export function drawingArea(format: PageFormat, legendMm = 0): Rect {
   const frame = frameRect(format)
-  return { x: frame.x, y: frame.y, w: frame.w, h: titleBlockRect(format).y - frame.y }
+  return { x: frame.x + legendMm, y: frame.y, w: frame.w - legendMm, h: titleBlockRect(format).y - frame.y }
+}
+
+// столбец легенды: левая часть области над основной надписью шириной legendMm, на всю высоту области
+export function legendArea(format: PageFormat, legendMm: number): Rect {
+  const frame = frameRect(format)
+  return { x: frame.x, y: frame.y, w: legendMm, h: titleBlockRect(format).y - frame.y }
 }
 
 // Графа основной надписи в координатах надписи (начало — её левый верхний угол). label — печатная подпись графы.

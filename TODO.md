@@ -470,3 +470,16 @@ Follow-ups from change `mounting-plan` (exploration and tests, 2026-10-10).
 - [ ] Not checked by hand: arrow-key nudge of an own wall T-attached to a remnant, and dragging an own wall's end onto a remnant. The neighbour-follow rules in `wall-edit` may move the remnant while the gesture runs; `restoreRemnants` (`src/main.ts`) puts remnants back on every redraw, so the remnant is never changed, but the own wall may be bounded by it.
 - [ ] `EPS_CM` tolerance at the boundary of an own element in `mountingScene` has no test: an element sticking out of its remnant by 0.005 cm should still be visible (validation survivors `own-left-eps0`, `own-right-eps0`, `test-validation.md` of `mounting-plan`).
 - [ ] `remnantWalls` with a sliver between two unmerged marks of one wall (gap up to `EPS_CM`) and with overlapping unmerged marks is untested; unreachable while marks are merged on add and on load (survivors `rem-gap-zero`, `rem-cursor-to`).
+
+
+Follow-ups from `pdf-legend` (2026-10-11). Non-blocking.
+
+## Tests
+
+- [ ] LG-13 (no legend on the canvas) has no automated test; checked by diff review and `grep` (legend modules are imported only from `src/export/pdf.ts`, no control in `main.ts` / `index.html`).
+- [ ] Surviving low-severity mutants (`openspec/changes/pdf-legend/test-validation.md`): legend label font 4.6 mm still fits the column, column content shifted 1 mm, label gap +1.5 mm, right padding +1 mm (tests use `legendWidthMm` itself).
+- [ ] Surviving low-severity mutants of revision 2 (`openspec/changes/pdf-legend/test-validation.md`): wrap limit 28 -> 30 mm (a long label like "Дерево (вдоль)" stays on one line), row pitch 14 -> 10 mm, right padding 5 -> 0 mm, first row 4 mm lower; the spec fixes none of these numbers.
+
+## Out of scope (decided, revisit if needed)
+
+- [ ] Legend sizes and style (sample length, row pitch, label font, italic label as in `img.png`) were left "decide later"; the label is currently drawn in the regular PT Sans.

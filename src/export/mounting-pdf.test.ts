@@ -4,6 +4,7 @@ import { describe, expect, it, vi } from "vitest"
 import { deepFreeze, dimension, drawing, mark, opening, wall } from "../mounting/mounting.test-utils"
 import type { DrawingParts } from "../mounting/mounting.test-utils"
 import type { Drawing } from "../types"
+import { legendWidthMm } from "./legend"
 import type { PageFormat } from "./pdf"
 import { isRed, parseColoredStrokes } from "./pdf-colors.test-utils"
 import { parsePaths, strokeSegments } from "./pdf-ops.test-utils"
@@ -195,9 +196,12 @@ describe("третья страница в документе PDF", () => {
 describe("форматы учитывают страницу «Монтаж»", () => {
   const long = (len: number): Drawing => drawing({ walls: [wall("W", 0, 0, 242, 0)], mounting: { walls: [wall("N", 0, 100, len, 100)], dimensions: [] } })
 
-  it("MP-90: собственная стена 242 см при 1:10 помещается на A4, 243 — нет (габариты третьей страницы)", () => {
-    expect(availableFormatsForPages(pagesOf(long(242)), 10)).toContain("A4")
-    expect(availableFormatsForPages(pagesOf(long(243)), 10)).not.toContain("A4")
+  // TCR-4 (change pdf-legend): ширина области A4 — 272 мм за вычетом столбца легенды документа
+  it("MP-90: собственная стена на границе (272 − ширина легенды) мм при 1:10 помещается на A4, +1 см — нет (габариты третьей страницы)", () => {
+    const fit = Math.floor(242 - legendWidthMm(pagesOf(long(100)))) // целые см: решение не зависит от погрешности на границе
+    const mountingOnly = (len: number): Drawing => drawing({ walls: [wall("W", 0, 0, 100, 0)], mounting: { walls: [wall("N", 0, 100, len, 100)], dimensions: [] } })
+    expect(availableFormatsForPages(pagesOf(mountingOnly(fit)), 10)).toContain("A4")
+    expect(availableFormatsForPages(pagesOf(mountingOnly(fit + 1)), 10)).not.toContain("A4")
   })
 
   it("MP-90: снесённая и потому не показанная часть стены габариты не раздувает", () => {

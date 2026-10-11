@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs"
 import type { jsPDF, jsPDFOptions } from "jspdf"
 import { afterEach, describe, expect, it, vi } from "vitest"
 import type { Dimension, Doorway, Wall } from "../types"
+import { legendWidthMm } from "./legend"
 import type { PageFormat } from "./pdf"
 import { covers, insideRect, parsePaths, pathsBBox, rectEdgesDrawn, strokeSegments } from "./pdf-ops.test-utils"
 import type { Rect, Seg } from "./pdf-ops.test-utils"
@@ -90,8 +91,13 @@ function build(
   dimensions: Dimension[] = [],
 ): jsPDF {
   texts.length = 0
+  columnMm = legendWidthMm([{ walls, dimensions, doorways }])
   return buildPdf(walls, dimensions, "cm", scale, format, font, doorways, name, SEP)
 }
+
+// TCR-4 (change pdf-legend): слева от чертежа стоит столбец легенды; его линии той же толщины, что контуры стен,
+// поэтому габариты чертежа измеряются правее столбца
+let columnMm = 0
 
 const local = (format: PageFormat, x: number, y: number): { x: number; y: number } => {
   const tb = titleBlockRect(format)
@@ -440,22 +446,25 @@ describe("размещение чертежа в PDF", () => {
   // учёта клипа и выходит за стену, рамка и надпись рисуются линиями 0,8 и 0,25 мм.
   const CONTOUR_MM = 0.6
   const ink = (doc: jsPDF): Rect => {
-    const paths = parsePaths(doc).filter((p) => p.paint === "stroke" && Math.abs(p.widthMm - CONTOUR_MM) < 0.005)
+    const chartLeft = drawingArea("A4", columnMm).x
+    const paths = parsePaths(doc).filter(
+      (p) => p.paint === "stroke" && Math.abs(p.widthMm - CONTOUR_MM) < 0.005 && (pathsBBox([p])?.x ?? 0) >= chartLeft - 1e-6,
+    )
     const box = pathsBBox(paths)
     if (!box) throw new Error("контуры стен не нарисованы")
     return box
   }
 
   it("PL-5: стена 5 м при 1:100 имеет на листе длину 50 мм и лежит внутри области чертежа", () => {
-    const area = drawingArea("A4")
     const box = ink(build([W5], 100, "A4"))
+    const area = drawingArea("A4", columnMm)
     expect(box.w).toBeCloseTo(50, 0)
     expect(insideRect(box, area)).toBe(true)
   })
 
   it("PL-2: чертёж центрирован в области чертежа, а не на странице", () => {
-    const area = drawingArea("A4")
     const box = ink(build([W5], 100, "A4"))
+    const area = drawingArea("A4", columnMm)
     expect(box.x + box.w / 2).toBeCloseTo(area.x + area.w / 2, 0)
     expect(box.y + box.h / 2).toBeCloseTo(area.y + area.h / 2, 0)
   })
@@ -463,13 +472,13 @@ describe("размещение чертежа в PDF", () => {
   it("PL-5: чертёж на A3 лежит внутри области A3 и не заходит на основную надпись", () => {
     const f: PageFormat = "A3"
     const box = ink(build([wall(0, 0, 2500, 0), wall(2500, 0, 2500, 1500)], 100, f))
-    expect(insideRect(box, drawingArea(f))).toBe(true)
+    expect(insideRect(box, drawingArea(f, columnMm))).toBe(true)
     expect(box.y + box.h).toBeLessThanOrEqual(titleBlockRect(f).y + 0.01)
   })
 
-  it("PL-5: крупный чертёж 25×12 м при 1:100 на A4 (около 262×132 мм с запасом) остаётся внутри области", () => {
-    const area = drawingArea("A4")
-    const box = ink(build([wall(0, 0, 2500, 0), wall(2500, 0, 2500, 1200)], 100, "A4"))
+  it("PL-5: крупный чертёж 21×12 м при 1:100 на A4 (около 222×132 мм с запасом) остаётся внутри области за вычетом легенды", () => {
+    const box = ink(build([wall(0, 0, 2100, 0), wall(2100, 0, 2100, 1200)], 100, "A4"))
+    const area = drawingArea("A4", columnMm)
     expect(insideRect(box, area)).toBe(true)
   })
 
