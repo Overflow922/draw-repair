@@ -22,6 +22,7 @@ import type { DemolitionToolHost } from "./demolition/demolition-tool"
 import { findRooms } from "./room-area"
 import { rulerReading } from "./ruler"
 import { availableFormatsForPages, exportPages, pagesOf, PAGE_FORMATS_MM } from "./export/pdf"
+import { chooseFormat } from "./export/page-format"
 import type { PageFormat } from "./export/pdf"
 import { PLANS, activePlanOf, defaultToolOf, isPlanId, toolsOf } from "./plans"
 import type { PlanId } from "./plans"
@@ -718,8 +719,9 @@ function syncFormats(): void {
   const available = availableFormatsForPages(pages, current().scale)
   const all = Object.keys(PAGE_FORMATS_MM) as PageFormat[]
   const unavailable = all.filter((f) => !available.includes(f))
+  const selected = all.find((f) => f === pdfFormat.value) ?? null
   pdfFormat.replaceChildren(...available.map((f) => new Option(f, f)))
-  if (!available.includes(pdfFormat.value as PageFormat)) pdfFormat.value = available[0] ?? ""
+  pdfFormat.value = chooseFormat(selected, available) ?? ""
   pdfFormat.disabled = available.length === 0
   pdfExportBtn.disabled = pages.every((p) => p.walls.length === 0) || available.length === 0
   if (unavailableFormats !== null && unavailable.length > unavailableFormats.length) showFitPopup(unavailable)
