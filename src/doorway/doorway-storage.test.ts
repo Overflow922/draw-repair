@@ -14,7 +14,7 @@ const W: Wall = { id: "W", a: { x: 0, y: 0 }, b: { x: 500, y: 0 }, thicknessCm: 
 const d: Doorway = { id: "d0", wallId: "W", anchor: "b", offsetCm: 241, widthCm: 90, heightCm: 200 }
 
 const drawing = (doorways?: unknown[]): Drawing => {
-  const base: Drawing = { id: "a", name: "Чертёж 1", walls: [W], dimensions: [], view: { zoom: 1, pan: { x: 0, y: 0 } }, scale: 100 }
+  const base: Drawing = { id: "a", name: "Чертёж 1", walls: [W], dimensions: [], view: { zoom: 1, pan: { x: 0, y: 0 } } }
   return doorways === undefined ? base : ({ ...base, doorways } as Drawing)
 }
 const store = (dr: Drawing): DrawingStore => ({ version: 3, activeId: dr.id, drawings: [dr] })

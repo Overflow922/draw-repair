@@ -43,7 +43,7 @@ const { titleBlockRect } = await import("./sheet-layout")
 const font = readFileSync(new URL("../assets/pt-sans-regular.ttf", import.meta.url)).toString("base64")
 const SEP = new Date(2026, 8, 5, 14, 32, 7)
 const wall = (id: string): Wall => ({ id, a: { x: 0, y: 0 }, b: { x: 500, y: 0 }, thicknessCm: 20, type: "brick" })
-const drawing = (): Drawing => ({ id: "a", name: "Чертёж 1", walls: [wall("w1")], dimensions: [], view: { zoom: 1, pan: { x: 0, y: 0 } }, scale: 100 })
+const drawing = (): Drawing => ({ id: "a", name: "Чертёж 1", walls: [wall("w1")], dimensions: [], view: { zoom: 1, pan: { x: 0, y: 0 } } })
 
 // координаты графы основной надписи в мм листа
 const cell = (x: number, y: number, w: number, h: number) => {

@@ -429,10 +429,10 @@ describe("инварианты", () => {
     const raw = serializeStore({
       version: 3,
       activeId: "d1",
-      drawings: [{ id: "d1", name: "План", walls, dimensions: [], view: { zoom: 1, pan: { x: 0, y: 0 } }, scale: 100 }],
+      drawings: [{ id: "d1", name: "План", walls, dimensions: [], view: { zoom: 1, pan: { x: 0, y: 0 } } }],
     })
     const drawing = objectAt(listAt(objectAt(JSON.parse(raw)).drawings)[0])
-    expect(Object.keys(drawing).sort()).toEqual(["dimensions", "id", "name", "scale", "view", "walls"])
+    expect(Object.keys(drawing).sort()).toEqual(["dimensions", "id", "name", "view", "walls"])
     for (const w of listAt(drawing.walls)) expect(Object.keys(objectAt(w)).sort()).toEqual(["a", "b", "id", "thicknessCm", "type"])
   })
 })

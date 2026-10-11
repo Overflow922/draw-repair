@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest"
-import type { Dimension, Wall } from "../types"
-import { availableFormats, fitsFormat, placeOnPage } from "./pdf"
+import { fitsFormat, placeOnPage } from "./pdf"
 import type { BBox, PageFormat } from "./pdf"
 import { drawingArea } from "./sheet-layout"
 
@@ -10,20 +9,6 @@ import { drawingArea } from "./sheet-layout"
 
 const FORMATS: PageFormat[] = ["A4", "A3", "A2", "A1", "A0"]
 const box = (w: number, h: number): BBox => ({ minX: 0, minY: 0, maxX: w, maxY: h })
-
-const wall = (ax: number, ay: number, bx: number, by: number, id = "w"): Wall => ({
-  id,
-  a: { x: ax, y: ay },
-  b: { x: bx, y: by },
-  thicknessCm: 20,
-  type: "brick",
-})
-
-const dim = (wallId: string, offset: number): Dimension => ({
-  from: { a: { wallId, edge: 2 }, b: { wallId, edge: 1 } },
-  to: { a: { wallId, edge: 3 }, b: { wallId, edge: 1 } },
-  offset,
-})
 
 describe("граница области чертежа на A4 (272×145 мм)", () => {
   it("DA-5: чертёж ровно 272×145 мм помещается на A4", () => {
@@ -75,50 +60,6 @@ describe("страница всегда альбомная", () => {
   it("FM-5: чертёж 180×170 мм не помещается на A4 (в книжной области 185×232 поместился бы, но она не поддерживается)", () => {
     expect(fitsFormat(box(180, 170), 10, "A4")).toBe(false)
     expect(fitsFormat(box(180, 170), 10, "A3")).toBe(true)
-  })
-})
-
-describe("availableFormats", () => {
-  it("пустой чертёж — все форматы", () => {
-    expect(availableFormats([], [], 100)).toEqual(FORMATS)
-  })
-
-  it("FM-2: стена 20 м при 1:50 (404 мм с толщиной) не помещается на A3 (область 395 мм), список A2, A1, A0", () => {
-    expect(availableFormats([wall(0, 0, 2000, 0)], [], 50)).toEqual(["A2", "A1", "A0"])
-  })
-
-  it("FM-4: стена 28 м при 1:100 (около 292 мм с запасом, шире 272) — первым и выбранным по умолчанию идёт A3", () => {
-    const list = availableFormats([wall(0, 0, 2800, 0)], [], 100)
-    expect(list[0]).toBe("A3")
-    expect(list).toEqual(["A3", "A2", "A1", "A0"])
-  })
-
-  it("FM-1: размер, вынесенный за габарит, убирает A4 из списка; без него A4 есть", () => {
-    const w = wall(0, 0, 1500, 0)
-    expect(availableFormats([w], [], 100)).toContain("A4")
-    const withDim = availableFormats([w], [dim("w", 2000)], 100)
-    expect(withDim).not.toContain("A4")
-    expect(withDim[0]).toBe("A3")
-  })
-
-  it("FM-3: список только сужается по мере роста стены — сначала уходит A4, затем A3 и так далее", () => {
-    const lists = [1000, 2500, 3500, 6000, 9000, 12000].map((len) => availableFormats([wall(0, 0, len, 0)], [], 100))
-    const lengths = lists.map((l) => l.length)
-    for (let i = 1; i < lengths.length; i++) expect(lengths[i]).toBeLessThanOrEqual(lengths[i - 1] ?? Infinity)
-    expect(lists[0]).toEqual(FORMATS)
-    expect(lists[lists.length - 1]).toEqual([])
-  })
-
-  it("смена масштаба расширяет список: 20 м при 1:200 снова помещаются на A4", () => {
-    expect(availableFormats([wall(0, 0, 2000, 0)], [], 200)).toEqual(FORMATS)
-  })
-
-  it("переполнение A0 — пустой список", () => {
-    expect(availableFormats([wall(0, 0, 6000, 0)], [], 50)).toEqual([])
-  })
-
-  it("высокая стена 12 м при 1:50 (240 мм по высоте) не помещается на A4 и A3 в альбомной области, список A2, A1, A0", () => {
-    expect(availableFormats([wall(0, 0, 0, 1200)], [], 50)).toEqual(["A2", "A1", "A0"])
   })
 })
 

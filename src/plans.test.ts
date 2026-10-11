@@ -6,7 +6,7 @@ import type { Drawing } from "./types"
 // (spec drawing-plans «Каталог планов», «Активный план чертежа»; design D2).
 
 const drawing = (extra: Record<string, unknown> = {}): Drawing =>
-  ({ id: "a", name: "Чертёж 1", walls: [], dimensions: [], view: { zoom: 1, pan: { x: 0, y: 0 } }, scale: 100, ...extra }) as Drawing
+  ({ id: "a", name: "Чертёж 1", walls: [], dimensions: [], view: { zoom: 1, pan: { x: 0, y: 0 } }, ...extra }) as Drawing
 
 describe("каталог планов", () => {
   // TCR-1 (change demolition-plan): каталог содержит два плана; прежнее ожидание — единственный план measure

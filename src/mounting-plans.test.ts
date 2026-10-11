@@ -6,7 +6,7 @@ import type { Drawing } from "./types"
 // «Переключатель планов»; design D4–D6).
 
 const drawing = (extra: Record<string, unknown> = {}): Drawing =>
-  ({ id: "a", name: "Чертёж 1", walls: [], dimensions: [], view: { zoom: 1, pan: { x: 0, y: 0 } }, scale: 100, ...extra }) as Drawing
+  ({ id: "a", name: "Чертёж 1", walls: [], dimensions: [], view: { zoom: 1, pan: { x: 0, y: 0 } }, ...extra }) as Drawing
 
 describe("каталог планов с планом «Монтаж»", () => {
   it("MP-50: «Монтаж» (mounting) — третий и последний план каталога", () => {

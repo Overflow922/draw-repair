@@ -16,7 +16,7 @@ const doorway: Doorway = { id: "d1", wallId: "w1", anchor: "a", offsetCm: 50, wi
 const view: View = { zoom: 1.5, pan: { x: -10, y: 20 } }
 
 const drawing = (id: string, extra: Record<string, unknown> = {}): Drawing =>
-  ({ id, name: `Чертёж ${id}`, walls: [wall], dimensions: [dimension], doorways: [doorway], view, scale: 100, ...extra }) as Drawing
+  ({ id, name: `Чертёж ${id}`, walls: [wall], dimensions: [dimension], doorways: [doorway], view, ...extra }) as Drawing
 
 const doc = (drawings: Drawing[]): string => JSON.stringify({ version: 3, activeId: drawings[0]?.id ?? "", drawings })
 
@@ -57,7 +57,7 @@ describe("активный план в документе", () => {
     expect(d?.dimensions).toEqual([dimension])
     expect(d?.doorways).toEqual([doorway])
     expect(d?.view).toEqual(view)
-    expect(d?.scale).toBe(100)
+    expect(d !== undefined && "scale" in d).toBe(false)
     expect(activePlanOf(d as Drawing)).toBe("measure")
     // design D3: недопустимое поле отбрасывается, а не сохраняется как есть
     expect("activePlan" in (d as Drawing)).toBe(false)
@@ -90,13 +90,13 @@ describe("активный план в документе", () => {
     expect(d?.doorways).toEqual([doorway])
     expect(d?.name).toBe("Чертёж a")
     expect(d?.view).toEqual(view)
-    expect(d?.scale).toBe(100)
+    expect(d !== undefined && "scale" in d).toBe(false)
   })
 
   it("ST-04: запись не переносит объекты в новые поля — в JSON нет ключа plans", () => {
     const store: DrawingStore = { version: 3, activeId: "a", drawings: [drawing("a", { activePlan: "measure" })] }
     const json = JSON.parse(serializeStore(store)) as { drawings: Record<string, unknown>[] }
-    expect(Object.keys(json.drawings[0] ?? {}).sort()).toEqual(["activePlan", "dimensions", "doorways", "id", "name", "scale", "view", "walls"])
+    expect(Object.keys(json.drawings[0] ?? {}).sort()).toEqual(["activePlan", "dimensions", "doorways", "id", "name", "view", "walls"])
   })
 
   it("ST-05: версия документа остаётся 3 при чтении и записи", () => {

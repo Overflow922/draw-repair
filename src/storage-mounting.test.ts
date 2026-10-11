@@ -17,7 +17,7 @@ const opening: Doorway = { id: "p1", wallId: "w1", anchor: "a", offsetCm: 50, wi
 const view: View = { zoom: 1.5, pan: { x: -10, y: 20 } }
 
 const drawing = (extra: Record<string, unknown> = {}): Drawing =>
-  ({ id: "a", name: "Чертёж 1", walls: [wallW], dimensions: [], view, scale: 100, ...extra }) as Drawing
+  ({ id: "a", name: "Чертёж 1", walls: [wallW], dimensions: [], view, ...extra }) as Drawing
 
 const doc = (drawings: Drawing[]): string => JSON.stringify({ version: 3, activeId: drawings[0]?.id ?? "", drawings })
 

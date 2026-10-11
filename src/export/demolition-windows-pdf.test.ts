@@ -17,7 +17,6 @@ const drawing = (walls: Wall[], doorways: WallElement[], demolition: DemolitionM
   dimensions: [],
   doorways,
   view: { zoom: 1, pan: { x: 0, y: 0 } },
-  scale: 100,
   demolition,
 })
 

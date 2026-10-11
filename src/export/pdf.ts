@@ -12,7 +12,7 @@ import { PLANS } from "../plans"
 import { findRooms } from "../room-area"
 import { LIGHT_PALETTE } from "../theme"
 import { cross, dot, sub } from "../wall-geometry"
-import { DEFAULT_SCALE, PX_PER_CM, isDoor, isWindow } from "../types"
+import { PX_PER_CM, isDoor, isWindow } from "../types"
 import type { Dimension, Drawing, Point, Unit, Wall, WallElement } from "../types"
 import { FONT_B64 } from "./font"
 import { PAGE_FORMATS_MM } from "./page-format"
@@ -39,13 +39,16 @@ export interface Placement {
   offsetY: number
 }
 
+// масштаб, в котором считаются подписи окон, если вызывающий его не указал (размер подписей задан в мм на бумаге)
+const BBOX_DEFAULT_SCALE = 100
+
 // doorways: подписи высоты выходят за стену со своей стороны (change add-doorway, design D10)
 export function wallsBBox(
   walls: Wall[],
   dimensions: Dimension[] = [],
   padCm = 0,
   doorways: WallElement[] = [],
-  scale: number = DEFAULT_SCALE,
+  scale: number = BBOX_DEFAULT_SCALE,
   extra: readonly Point[] = [],
 ): BBox {
   let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity
@@ -152,33 +155,12 @@ export function pagesOf(drawing: Drawing): PlanPage[] {
   })
 }
 
-const ALL_FORMATS = Object.keys(PAGE_FORMATS_MM) as PageFormat[]
-
 // габариты страницы с запасом: стены, размеры и элементы (страница демонтажа — без размеров, но с элементами)
 // страница демонтажа дополнительно — размеры пометок (change demolition-dimension-chains, design D4): k — px листа на см чертежа
 export function pageBounds(page: PlanPage, scale: number): BBox {
   const k = 10 / scale
   const extra = (page.demolition ?? []).flatMap((r) => markDimensionExtent(r, page.walls, k, PDF_METRICS))
   return wallsBBox(page.walls, page.dimensions, 0.5 * scale, page.doorways, scale, extra)
-}
-
-// форматы, на которые страница помещается по своим габаритам; пустая страница ничего не ограничивает
-function pageFormats(page: PlanPage, scale: number, legendMm: number): PageFormat[] {
-  if (page.walls.length === 0) return ALL_FORMATS
-  const b = pageBounds(page, scale)
-  return ALL_FORMATS.filter((f) => fitsFormat(b, scale, f, legendMm))
-}
-
-// форматы, на которые помещаются все страницы (spec pdf-export «Форматы учитывают все страницы»);
-// область чертежа сужена на общий столбец легенды документа
-export function availableFormatsForPages(pages: PlanPage[], scale: number): PageFormat[] {
-  const legendMm = legendWidthMm(pages)
-  const perPage = pages.map((p) => pageFormats(p, scale, legendMm))
-  return ALL_FORMATS.filter((f) => perPage.every((formats) => formats.includes(f)))
-}
-
-export function availableFormats(walls: Wall[], dimensions: Dimension[] = [], scale: number = 100, doorways: WallElement[] = []): PageFormat[] {
-  return availableFormatsForPages([{ walls, dimensions, doorways }], scale)
 }
 
 export function placeOnPage(b: BBox, scale: number, format: PageFormat, legendMm = 0): Placement {

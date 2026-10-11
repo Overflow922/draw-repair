@@ -395,7 +395,7 @@ describe("метка auto: хранение и история", () => {
     auto: "w1",
   }
   const plain: Dimension = { from: marked.from, to: marked.to, offset: marked.offset }
-  const drawing = (dims: Dimension[]): Drawing => ({ id: "a", name: "t", walls: [wall], dimensions: dims, view: { zoom: 1, pan: { x: 0, y: 0 } }, scale: 100 })
+  const drawing = (dims: Dimension[]): Drawing => ({ id: "a", name: "t", walls: [wall], dimensions: dims, view: { zoom: 1, pan: { x: 0, y: 0 } } })
   const storeOf = (dims: Dimension[]): DrawingStore => ({ version: 3, activeId: "a", drawings: [drawing(dims)] })
 
   it("AD-24: сохранение и загрузка сохраняют поле auto у тех же размеров и не добавляют его остальным", () => {
@@ -491,7 +491,7 @@ describe("AD-31: некорректное поле auto отклоняет то�
     auto: "w1",
   }
   const plain: Dimension = { from: marked.from, to: marked.to, offset: 50 }
-  const drawing = (dims: unknown[]): unknown => ({ id: "a", name: "t", walls: [wall], dimensions: dims, view: { zoom: 1, pan: { x: 0, y: 0 } }, scale: 100 })
+  const drawing = (dims: unknown[]): unknown => ({ id: "a", name: "t", walls: [wall], dimensions: dims, view: { zoom: 1, pan: { x: 0, y: 0 } } })
   it("чертёж, стены и остальные размеры загружаются", () => {
     const loaded = parseStore(JSON.stringify({ version: 3, activeId: "a", drawings: [drawing([plain, { ...marked, auto: 5 }, marked])] }))
     expect(loaded).not.toBeNull()

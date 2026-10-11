@@ -8,9 +8,3 @@ export const PAGE_FORMATS_MM: Record<PageFormat, [number, number]> = {
   A1: [594, 841],
   A0: [841, 1189],
 }
-
-// выбор после пересборки списка: текущий формат, пока он доступен, иначе наименьший доступный (список упорядочен от A4)
-export function chooseFormat(current: PageFormat | null, available: PageFormat[]): PageFormat | null {
-  if (current !== null && available.includes(current)) return current
-  return available[0] ?? null
-}

@@ -10,7 +10,7 @@ const dimension: Dimension = {
 }
 const view: View = { zoom: 1.5, pan: { x: -10, y: 20 } }
 
-const drawing = (id: string, name: string): Drawing => ({ id, name, walls: [wall], dimensions: [dimension], view, scale: 100 })
+const drawing = (id: string, name: string): Drawing => ({ id, name, walls: [wall], dimensions: [dimension], view })
 
 const store: DrawingStore = {
   version: 3,
@@ -35,12 +35,12 @@ describe("serializeStore/parseStore", () => {
     expect(rest).toEqual({ a: { x: 0, y: 0 }, b: { x: 300, y: 0 }, thicknessCm: 20, type: "brick" })
     expect(parsed?.store.drawings[0].dimensions).toEqual([])
     expect(parsed?.store.drawings[0].view).toEqual(view)
-    expect(parsed?.store.drawings[0].scale).toBe(100)
+    expect("scale" in (parsed?.store.drawings[0] ?? {})).toBe(false)
     expect(parsed?.store.activeId).toBe(parsed?.store.drawings[0].id)
   })
 
-  it("конверт версии 1 мигрирует: масштаб 1:100, остальное без изменений", () => {
-    const v1 = JSON.stringify({ version: 1, activeId: "a", drawings: [drawing("a", "Чертёж 1"), { ...drawing("b", "Чертёж 2"), scale: undefined }] })
+  it("конверт версии 1 мигрирует: остальное без изменений, масштаб не добавляется", () => {
+    const v1 = JSON.stringify({ version: 1, activeId: "a", drawings: [drawing("a", "Чертёж 1"), drawing("b", "Чертёж 2")] })
     const parsed = parseStore(v1)
     expect(parsed?.readOnly).toBe(false)
     expect(parsed?.store.version).toBe(3)
@@ -51,7 +51,7 @@ describe("serializeStore/parseStore", () => {
     expect(parsed?.store.activeId).toBe("a")
   })
 
-  it("конверт версии 2 мигрирует: id стенам, пустые размеры, масштаб сохранён", () => {
+  it("конверт версии 2 мигрирует: id стенам, пустые размеры, прежний масштаб игнорируется", () => {
     const v2 = JSON.stringify({
       version: 2,
       activeId: "a",
@@ -60,7 +60,7 @@ describe("serializeStore/parseStore", () => {
     const parsed = parseStore(v2)
     expect(parsed?.readOnly).toBe(false)
     expect(parsed?.store.version).toBe(3)
-    expect(parsed?.store.drawings[0].scale).toBe(200)
+    expect("scale" in (parsed?.store.drawings[0] ?? {})).toBe(false)
     expect(parsed?.store.drawings[0].walls[0].id).toBeTruthy()
     expect(parsed?.store.drawings[0].walls[0].a).toEqual({ x: 0, y: 0 })
     expect(parsed?.store.drawings[0].dimensions).toEqual([])
@@ -111,7 +111,7 @@ describe("serializeStore/parseStore", () => {
     expect(parseStore(JSON.stringify({ version: 1, activeId: "x", drawings: [drawing("a", "Чертёж 1")] }))).toBeNull()
     expect(parseStore(JSON.stringify({ version: 1, activeId: "a", drawings: [{ id: "a", walls: [], view }] }))).toBeNull()
     expect(parseStore(JSON.stringify({ version: 1, walls: "не массив", view }))).toBeNull()
-    expect(parseStore(JSON.stringify({ version: 3, activeId: "a", drawings: [{ id: "a", name: "x", walls: [wall], view, scale: 100 }] }))).toBeNull()
+    expect(parseStore(JSON.stringify({ version: 3, activeId: "a", drawings: [{ id: "a", name: "x", walls: [wall], view }] }))).toBeNull()
   })
 
   it("битые и устаревшие размеры отбрасываются, стены сохраняются", () => {
@@ -134,11 +134,11 @@ describe("serializeStore/parseStore", () => {
     expect(parsed?.store.drawings[0].dimensions[0].offset).toBe(30)
   })
 
-  it("битый масштаб в v3 — повреждённые данные", () => {
+  it("масштаб в v3 не влияет на чтение: значение вне ряда и отсутствие поля не считаются повреждёнными данными", () => {
     const badScale = JSON.stringify({ version: 3, activeId: "a", drawings: [{ ...drawing("a", "Чертёж 1"), scale: 77 }] })
-    expect(parseStore(badScale)).toBeNull()
+    expect(parseStore(badScale)?.store.drawings).toHaveLength(1)
     const noScale = JSON.stringify({ version: 3, activeId: "a", drawings: [{ id: "a", name: "Чертёж 1", walls: [wall], dimensions: [], view }] })
-    expect(parseStore(noScale)).toBeNull()
+    expect(parseStore(noScale)?.store.drawings).toHaveLength(1)
   })
 
   it("будущая версия даёт пустое хранилище в режиме только чтение", () => {
@@ -149,6 +149,6 @@ describe("serializeStore/parseStore", () => {
     expect(parsed?.store.drawings[0].walls.length).toBe(0)
     expect(parsed?.store.drawings[0].dimensions.length).toBe(0)
     expect(parsed?.store.drawings[0].view).toEqual({ zoom: 1, pan: { x: 0, y: 0 } })
-    expect(parsed?.store.drawings[0].scale).toBe(100)
+    expect("scale" in (parsed?.store.drawings[0] ?? {})).toBe(false)
   })
 })

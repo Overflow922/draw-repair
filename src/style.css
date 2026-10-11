@@ -247,7 +247,6 @@ body {
 }
 
 #render-style,
-#pdf-scale,
 #pdf-format {
   height: 28px;
   padding: 0 4px;
@@ -259,26 +258,9 @@ body {
   cursor: pointer;
 }
 
-#pdf-scale:disabled,
 #pdf-format:disabled {
   opacity: 0.35;
   cursor: default;
-}
-
-#fit-popup {
-  position: absolute;
-  top: 60px;
-  left: 50%;
-  transform: translateX(-50%);
-  z-index: 20;
-  max-width: calc(100% - 24px);
-  padding: 8px 14px;
-  font-size: 13px;
-  color: var(--popup-text);
-  background: var(--popup-bg);
-  border-color: var(--popup-border);
-  cursor: pointer;
-  user-select: none;
 }
 
 #pdf-export {
@@ -406,7 +388,8 @@ body {
 }
 
 #length-label,
-#angle-label {
+#angle-label,
+#scale-label {
   font-size: 13px;
   color: var(--text-strong);
   display: flex;

@@ -21,8 +21,8 @@ import { createDemolitionTool } from "./demolition/demolition-tool"
 import type { DemolitionToolHost } from "./demolition/demolition-tool"
 import { findRooms } from "./room-area"
 import { rulerReading } from "./ruler"
-import { availableFormatsForPages, exportPages, pagesOf, PAGE_FORMATS_MM } from "./export/pdf"
-import { chooseFormat } from "./export/page-format"
+import { exportPages, pagesOf } from "./export/pdf"
+import { fitScale, scaleLabel } from "./export/fit-scale"
 import type { PageFormat } from "./export/pdf"
 import { PLANS, activePlanOf, defaultToolOf, isPlanId, toolsOf } from "./plans"
 import type { PlanId } from "./plans"
@@ -67,7 +67,7 @@ const toolRulerBtn = document.querySelector<HTMLButtonElement>("#tool-ruler")!
 const toolDemolitionBtn = document.querySelector<HTMLButtonElement>("#tool-demolition")!
 const toolbar = document.querySelector<HTMLElement>("#toolbar")!
 const wallPanel = document.querySelector<HTMLElement>("#wall-panel")!
-const pdfScale = document.querySelector<HTMLSelectElement>("#pdf-scale")!
+const scaleLabelEl = document.querySelector<HTMLElement>("#scale-label")!
 const pdfFormat = document.querySelector<HTMLSelectElement>("#pdf-format")!
 const pdfExportBtn = document.querySelector<HTMLButtonElement>("#pdf-export")!
 const toolOpeningsBtn = document.querySelector<HTMLButtonElement>("#tool-openings")!
@@ -599,7 +599,7 @@ function redraw(): void {
   updateLengthBox()
   updateAngleBox()
   syncHistoryButtons()
-  syncFormats()
+  syncScale()
   if (dirty) {
     dirty = false
     if (!readOnly) saveStore(store)
@@ -698,41 +698,12 @@ function draftRubber(end: Point): [Point, Point] | null {
   return ea ? [ea, end] : null
 }
 
-let unavailableFormats: PageFormat[] | null = null
-
-function hideFitPopup(): void {
-  document.querySelector("#fit-popup")?.remove()
-}
-
-function showFitPopup(unavailable: PageFormat[]): void {
-  hideFitPopup()
-  const el = document.createElement("div")
-  el.id = "fit-popup"
-  el.className = "panel"
-  el.textContent = `Невозможно экспортировать в ${unavailable.join(", ")} — чертёж не влезает`
-  el.addEventListener("click", hideFitPopup)
-  canvasWrap.append(el)
-}
-
-function syncFormats(): void {
+// подпись подобранного масштаба и доступность экспорта (spec drawing-scale «Показ подобранного масштаба»)
+function syncScale(): void {
   const pages = pagesOf(current())
-  const available = availableFormatsForPages(pages, current().scale)
-  const all = Object.keys(PAGE_FORMATS_MM) as PageFormat[]
-  const unavailable = all.filter((f) => !available.includes(f))
-  const selected = all.find((f) => f === pdfFormat.value) ?? null
-  pdfFormat.replaceChildren(...available.map((f) => new Option(f, f)))
-  pdfFormat.value = chooseFormat(selected, available) ?? ""
-  pdfFormat.disabled = available.length === 0
-  pdfExportBtn.disabled = pages.every((p) => p.walls.length === 0) || available.length === 0
-  if (unavailableFormats !== null && unavailable.length > unavailableFormats.length) showFitPopup(unavailable)
-  else if (unavailableFormats !== null && unavailable.length < unavailableFormats.length) hideFitPopup()
-  unavailableFormats = unavailable
+  scaleLabelEl.textContent = scaleLabel(pages, pdfFormat.value as PageFormat)
+  pdfExportBtn.disabled = pages.every((p) => p.walls.length === 0)
 }
-
-function syncScaleSelector(): void {
-  pdfScale.value = String(current().scale)
-}
-
 function toWorld(e: MouseEvent): Point {
   const r = canvas.getBoundingClientRect()
   const k = PX_PER_CM * view.zoom
@@ -1523,7 +1494,7 @@ function nextName(): string {
 }
 
 function newDrawing(): void {
-  const drawing: Drawing = { id: crypto.randomUUID(), name: nextName(), walls: [], dimensions: [], view: { zoom: 1, pan: { x: 0, y: 0 } }, scale: 100 }
+  const drawing: Drawing = { id: crypto.randomUUID(), name: nextName(), walls: [], dimensions: [], view: { zoom: 1, pan: { x: 0, y: 0 } } }
   store.drawings.push(drawing)
   dirty = true
   activate(drawing.id)
@@ -1553,9 +1524,6 @@ function activate(id: string): void {
   marqueeHits = null
   marqueePending = null
   nudgeBurst = false
-  unavailableFormats = null
-  hideFitPopup()
-  syncScaleSelector()
   dirty = true
   renderTabs()
   renderPlanSwitch()
@@ -1676,13 +1644,16 @@ redoBtn.addEventListener("click", redo)
 
 pdfExportBtn.addEventListener("click", () => {
   const drawing = current()
-  exportPages(pagesOf(drawing), unit, drawing.scale, pdfFormat.value as PageFormat, drawing.name)
+  const pages = pagesOf(drawing)
+  const format = pdfFormat.value as PageFormat
+  const scale = fitScale(pages, format)
+  if (scale === null) return
+  exportPages(pages, unit, scale, format, drawing.name)
 })
 
-pdfScale.addEventListener("change", () => {
-  current().scale = Number(pdfScale.value) as Drawing["scale"]
-  dirty = true
-  redraw()
+// масштаб зависит от формата: подпись пересчитывается при его смене
+pdfFormat.addEventListener("change", () => {
+  syncScale()
 })
 
 tabsEl.addEventListener("click", (e) => {

@@ -18,7 +18,6 @@ const drawing = (doorways: WallElement[], demolition: DemolitionMark[]): Drawing
   dimensions: [],
   doorways,
   view: { zoom: 1, pan: { x: 0, y: 0 } },
-  scale: 100,
   demolition,
 })
 

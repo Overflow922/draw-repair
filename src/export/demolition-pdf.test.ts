@@ -47,7 +47,15 @@ vi.mock("jspdf", async (importOriginal) => {
   return { ...mod, jsPDF: RecordingPdf }
 })
 
-const { availableFormats, availableFormatsForPages, buildPdf, buildPdfPages, pageBounds, pagesOf } = await import("./pdf")
+const { buildPdf, buildPdfPages, pageBounds, pagesOf } = await import("./pdf")
+const { fitScale } = await import("./fit-scale")
+// форматы, на которые страницы помещаются при масштабе scale: подобранный масштаб не мельче scale
+// (change auto-fit-scale: список доступных форматов заменён подбором масштаба); без страниц со стенами — все форматы
+const formatsAt = (pages: Parameters<typeof fitScale>[0], scale: number): PageFormat[] =>
+  (["A4", "A3", "A2", "A1", "A0"] as const).filter((f) => {
+    const fitted = fitScale(pages, f)
+    return fitted === null || fitted <= scale
+  })
 const { drawingArea, frameRect, titleBlockRect, FRAME_LINE_MM } = await import("./sheet-layout")
 
 const font = readFileSync(new URL("../assets/pt-sans-regular.ttf", import.meta.url)).toString("base64")
@@ -65,7 +73,6 @@ const drawing = (extra: Partial<Drawing> = {}): Drawing => ({
   walls: [W1],
   dimensions: [],
   view: { zoom: 1, pan: { x: 0, y: 0 } },
-  scale: 100,
   demolition: [M1],
   ...extra,
 })
@@ -319,8 +326,8 @@ describe("подложка из нескольких стен: габариты 
 
   it("PG-18: формат ограничен стеной, на которой пометок нет: при 1:10 стена 300 см (330 мм с запасом) не помещается на A4, хотя помеченная стена 100 см помещается", () => {
     const d = two()
-    expect(availableFormatsForPages(pagesOf(d), 10)).not.toContain("A4")
-    expect(availableFormatsForPages([{ walls: [short], dimensions: [], doorways: [] }], 10)).toContain("A4")
+    expect(formatsAt(pagesOf(d), 10)).not.toContain("A4")
+    expect(formatsAt([{ walls: [short], dimensions: [], doorways: [] }], 10)).toContain("A4")
   })
 
   // TCR-4 (change demolition-corner-dimensions): габариты страницы включают цепочку пометки на обеих гранях, поэтому центрируются
@@ -362,9 +369,9 @@ describe("форматы и доступность экспорта", () => {
     const withDoor = drawing({ walls: [wall(0, 0, 150, 0, "w1")], doorways: [door], demolition: [] })
     const without = drawing({ walls: [wall(0, 0, 150, 0, "w1")], demolition: [] })
     const second = (d: Drawing): PlanPage => pagesOf(d)[1] as PlanPage
-    expect(availableFormatsForPages([second(without)], 10)).toContain("A4")
-    expect(availableFormatsForPages([second(withDoor)], 10)).not.toContain("A4")
-    expect(availableFormatsForPages([second(withDoor)], 10)).toEqual(availableFormatsForPages([pagesOf(withDoor)[0] as PlanPage], 10))
+    expect(formatsAt([second(without)], 10)).toContain("A4")
+    expect(formatsAt([second(withDoor)], 10)).not.toContain("A4")
+    expect(formatsAt([second(withDoor)], 10)).toEqual(formatsAt([pagesOf(withDoor)[0] as PlanPage], 10))
   })
 
   it("PG-23: пометка на стене с дверью габариты не меняет: полотно двери по-прежнему исключает A4", () => {
@@ -372,34 +379,34 @@ describe("форматы и доступность экспорта", () => {
     const marked = drawing({ walls: [wall(0, 0, 150, 0, "w1")], doorways: [door], demolition: [{ id: "m", wallId: "w1", anchor: "a", fromCm: 0, toCm: 150 }] })
     const second = pagesOf(marked)[1] as PlanPage
     expect(second.demolition?.length).toBe(1)
-    expect(availableFormatsForPages([second], 10)).not.toContain("A4")
-    expect(availableFormatsForPages([second], 10)).toEqual(availableFormatsForPages([pagesOf(marked)[0] as PlanPage], 10))
+    expect(formatsAt([second], 10)).not.toContain("A4")
+    expect(formatsAt([second], 10)).toEqual(formatsAt([pagesOf(marked)[0] as PlanPage], 10))
   })
 
   // TCR-4 (change pdf-legend): ширина области A4 — 272 мм за вычетом столбца легенды документа; без пометок столбец
   // зависит только от материала стены
   it("PG-07: габариты страницы демонтажа — по стенам подложки: стена, дающая ровно (272 − ширина легенды) мм при 1:10, помещается на A4, +1 см — нет", () => {
     const fit = Math.floor(242 - legendWidthMm(pagesOf(tight(100)))) // целые см: решение не зависит от погрешности на границе
-    expect(availableFormatsForPages(pagesOf(tight(fit)), 10)).toContain("A4")
-    expect(availableFormatsForPages(pagesOf(tight(fit + 1)), 10)).not.toContain("A4")
+    expect(formatsAt(pagesOf(tight(fit)), 10)).toContain("A4")
+    expect(formatsAt(pagesOf(tight(fit + 1)), 10)).not.toContain("A4")
   })
 
   it("PG-07: список форматов по двум страницам равен списку по стенам (размеров нет)", () => {
     const d = tight(300)
-    expect(availableFormatsForPages(pagesOf(d), 10)).toEqual(availableFormats(d.walls, [], 10, []))
+    expect(formatsAt(pagesOf(d), 10)).toEqual(formatsAt([{ walls: d.walls, dimensions: [], doorways: [] }], 10))
   })
 
   it("PG-08: размер на обмерочной странице ограничивает форматы, страница демонтажа его не добавляет", () => {
     const d = drawing({ walls: [wall(0, 0, 100, 0, "w1")], dimensions: [{ ...dimension, offset: 200 }], demolition: [] })
     const pages = pagesOf(d)
-    expect(availableFormatsForPages([pages[1] as PlanPage], 10)).toContain("A4")
-    expect(availableFormatsForPages(pages, 10)).not.toContain("A4")
+    expect(formatsAt([pages[1] as PlanPage], 10)).toContain("A4")
+    expect(formatsAt(pages, 10)).not.toContain("A4")
   })
 
   it("PG-08: пометки не влияют на габариты: чертёж с пометкой и без неё допускает те же форматы", () => {
     const withMark = drawing({ walls: [wall(0, 0, 242, 0, "w1")], demolition: [{ ...M1, toCm: 240 }] })
     const without = drawing({ walls: [wall(0, 0, 242, 0, "w1")], demolition: [] })
-    expect(availableFormatsForPages(pagesOf(withMark), 10)).toEqual(availableFormatsForPages(pagesOf(without), 10))
+    expect(formatsAt(pagesOf(withMark), 10)).toEqual(formatsAt(pagesOf(without), 10))
   })
 
   // TCR-5 (change mounting-plan): страниц три — пусты все три, остаются в документе

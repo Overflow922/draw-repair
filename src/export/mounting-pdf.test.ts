@@ -41,7 +41,15 @@ vi.mock("jspdf", async (importOriginal) => {
   return { ...mod, jsPDF: RecordingPdf }
 })
 
-const { availableFormatsForPages, buildPdfPages, pagesOf } = await import("./pdf")
+const { buildPdfPages, pagesOf } = await import("./pdf")
+const { fitScale } = await import("./fit-scale")
+// форматы, на которые страницы помещаются при масштабе scale: подобранный масштаб не мельче scale
+// (change auto-fit-scale: список доступных форматов заменён подбором масштаба); без страниц со стенами — все форматы
+const formatsAt = (pages: Parameters<typeof fitScale>[0], scale: number): PageFormat[] =>
+  (["A4", "A3", "A2", "A1", "A0"] as const).filter((f) => {
+    const fitted = fitScale(pages, f)
+    return fitted === null || fitted <= scale
+  })
 
 const font = readFileSync(new URL("../assets/pt-sans-regular.ttf", import.meta.url)).toString("base64")
 const SEP = new Date(2026, 8, 5, 14, 32, 7)
@@ -200,23 +208,23 @@ describe("форматы учитывают страницу «Монтаж»", 
   it("MP-90: собственная стена на границе (272 − ширина легенды) мм при 1:10 помещается на A4, +1 см — нет (габариты третьей страницы)", () => {
     const fit = Math.floor(242 - legendWidthMm(pagesOf(long(100)))) // целые см: решение не зависит от погрешности на границе
     const mountingOnly = (len: number): Drawing => drawing({ walls: [wall("W", 0, 0, 100, 0)], mounting: { walls: [wall("N", 0, 100, len, 100)], dimensions: [] } })
-    expect(availableFormatsForPages(pagesOf(mountingOnly(fit)), 10)).toContain("A4")
-    expect(availableFormatsForPages(pagesOf(mountingOnly(fit + 1)), 10)).not.toContain("A4")
+    expect(formatsAt(pagesOf(mountingOnly(fit)), 10)).toContain("A4")
+    expect(formatsAt(pagesOf(mountingOnly(fit + 1)), 10)).not.toContain("A4")
   })
 
   it("MP-90: снесённая и потому не показанная часть стены габариты не раздувает", () => {
     const d = drawing({ walls: [wall("W", 0, 0, 243, 0)], demolition: [mark("m", "W", "a", 100, 243)] })
     const [measure, , mounting] = pagesOf(d)
     if (!measure || !mounting) throw new Error("нет страниц")
-    expect(availableFormatsForPages([measure], 10)).not.toContain("A4")
-    expect(availableFormatsForPages([mounting], 10)).toContain("A4")
+    expect(formatsAt([measure], 10)).not.toContain("A4")
+    expect(formatsAt([mounting], 10)).toContain("A4")
   })
 
   it("MP-90: собственные размеры третьей страницы входят в габариты", () => {
     const far = dimension(["N", 2], ["N", 1], ["N", 3], ["N", 1], 3000)
     const near = dimension(["N", 2], ["N", 1], ["N", 3], ["N", 1], 30)
     const base = (dim: typeof far): Drawing => drawing({ walls: [wall("W", 0, 0, 100, 0)], mounting: { walls: [wall("N", 0, 100, 100, 100)], dimensions: [dim] } })
-    expect(availableFormatsForPages(pagesOf(base(near)), 10)).toContain("A4")
-    expect(availableFormatsForPages(pagesOf(base(far)), 10)).not.toContain("A4")
+    expect(formatsAt(pagesOf(base(near)), 10)).toContain("A4")
+    expect(formatsAt(pagesOf(base(far)), 10)).not.toContain("A4")
   })
 })

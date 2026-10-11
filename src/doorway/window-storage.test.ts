@@ -12,7 +12,7 @@ const d: Doorway = { id: "d0", wallId: "W", anchor: "b", offsetCm: 241, widthCm:
 const x: WallWindow = { kind: "window", id: "w0", wallId: "W", anchor: "a", offsetCm: 100, widthCm: 120, heightCm: 150, sillCm: 85 }
 
 const drawing = (doorways: unknown[]): Drawing =>
-  ({ id: "a", name: "Чертёж 1", walls: [W], dimensions: [], view: { zoom: 1, pan: { x: 0, y: 0 } }, scale: 100, doorways }) as Drawing
+  ({ id: "a", name: "Чертёж 1", walls: [W], dimensions: [], view: { zoom: 1, pan: { x: 0, y: 0 } }, doorways }) as Drawing
 const store = (dr: Drawing): DrawingStore => ({ version: 3, activeId: dr.id, drawings: [dr] })
 const loaded = (doorways: unknown[]): WallElement[] | undefined => {
   const parsed = parseStore(JSON.stringify(store(drawing(doorways))))

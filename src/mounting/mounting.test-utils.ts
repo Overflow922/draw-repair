@@ -62,7 +62,6 @@ export const drawing = (parts: DrawingParts = {}): Drawing => ({
   ...(parts.mounting !== undefined ? { mounting: parts.mounting } : null),
   ...(parts.activePlan !== undefined ? { activePlan: parts.activePlan } : null),
   view: { zoom: 1, pan: { x: 0, y: 0 } },
-  scale: 100,
 })
 
 export function deepFreeze<T>(value: T): T {

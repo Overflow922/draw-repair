@@ -134,7 +134,6 @@ describe("легенда: снос", () => {
       walls: [W1],
       dimensions: [],
       view: { zoom: 1, pan: { x: 0, y: 0 } },
-      scale: 100,
       demolition: [mark("m1", 100, 190)],
     }
     const pages = pagesOf(d)

@@ -6,7 +6,7 @@ import type { Drawing } from "./types"
 // (spec drawing-plans «Инструменты плана», «Каталог планов»; design D1).
 
 const drawing = (extra: Record<string, unknown> = {}): Drawing =>
-  ({ id: "a", name: "Чертёж 1", walls: [], dimensions: [], view: { zoom: 1, pan: { x: 0, y: 0 } }, scale: 100, ...extra }) as Drawing
+  ({ id: "a", name: "Чертёж 1", walls: [], dimensions: [], view: { zoom: 1, pan: { x: 0, y: 0 } }, ...extra }) as Drawing
 
 const sorted = (xs: readonly string[]): string[] => [...xs].sort()
 

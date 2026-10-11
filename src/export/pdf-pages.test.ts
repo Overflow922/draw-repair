@@ -62,7 +62,15 @@ vi.mock("jspdf", async (importOriginal) => {
   return { ...mod, jsPDF: RecordingPdf }
 })
 
-const { availableFormats, availableFormatsForPages, buildPdf, buildPdfPages, exportPages, pagesOf, pdfFileName } = await import("./pdf")
+const { buildPdf, buildPdfPages, exportPages, pagesOf, pdfFileName } = await import("./pdf")
+const { fitScale } = await import("./fit-scale")
+// форматы, на которые страницы помещаются при масштабе scale: подобранный масштаб не мельче scale
+// (change auto-fit-scale: список доступных форматов заменён подбором масштаба); без страниц со стенами — все форматы
+const formatsAt = (pages: Parameters<typeof fitScale>[0], scale: number): PageFormat[] =>
+  (["A4", "A3", "A2", "A1", "A0"] as const).filter((f) => {
+    const fitted = fitScale(pages, f)
+    return fitted === null || fitted <= scale
+  })
 const { drawingArea, frameRect, titleBlockRect, FRAME_LINE_MM } = await import("./sheet-layout")
 
 const font = readFileSync(new URL("../assets/pt-sans-regular.ttf", import.meta.url)).toString("base64")
@@ -130,7 +138,6 @@ describe("pagesOf", () => {
     walls: [WA],
     dimensions: [],
     view: { zoom: 1, pan: { x: 0, y: 0 } },
-    scale: 100,
     ...extra,
   })
 
@@ -430,7 +437,7 @@ describe("buildPdfPages: прочие свойства", () => {
   })
 })
 
-describe("availableFormatsForPages", () => {
+describe("форматы, на которые помещаются все страницы (formatsAt)", () => {
   // Масштаб 1:10: 1 см = 1 мм листа; запас 0,5 масштаба на сторону прибавляет 10 мм, толщина стены 20 мм по осям,
   // поэтому горизонтальная стена длиной L занимает (L + 30)×30 мм, область A4 — 272×145, A3 — 395×232.
   const horizontal = (lengthCm: number): PlanPage => page([wall(0, 0, lengthCm, 0, "h")])
@@ -439,94 +446,91 @@ describe("availableFormatsForPages", () => {
   const NOT_A4: PageFormat[] = ["A3", "A2", "A1", "A0"]
 
   it("PG-10: формат ограничен самой крупной страницей: малая + крупная (A3) — без A4", () => {
-    expect(availableFormatsForPages([horizontal(100), horizontal(300)], 10)).toEqual(NOT_A4)
+    expect(formatsAt([horizontal(100), horizontal(300)], 10)).toEqual(NOT_A4)
   })
 
   it("PG-10: порядок страниц не влияет на результат", () => {
-    expect(availableFormatsForPages([horizontal(300), horizontal(100)], 10)).toEqual(NOT_A4)
+    expect(formatsAt([horizontal(300), horizontal(100)], 10)).toEqual(NOT_A4)
   })
 
-  it("PG-10: для одной страницы результат совпадает с availableFormats этой страницы", () => {
+  it("PG-10: для одной страницы подобранные форматы определяются её собственными габаритами", () => {
     const p = horizontal(300)
-    expect(availableFormatsForPages([p], 10)).toEqual(availableFormats(p.walls, p.dimensions, 10, p.doorways))
-    expect(availableFormatsForPages([p], 10)).toEqual(NOT_A4)
+    expect(formatsAt([p], 10)).toEqual(NOT_A4)
   })
 
   it("PG-10: страницы считаются каждая по своим габаритам, а не по общему габариту всех: далеко расположенные малые планы дают A4", () => {
-    expect(availableFormatsForPages([horizontal(100), far(100)], 10)).toEqual(ALL)
+    expect(formatsAt([horizontal(100), far(100)], 10)).toEqual(ALL)
   })
 
   it("PG-10: результат — пересечение: крупная по ширине и крупная по высоте страницы вместе исключают A4 и оставляют A3", () => {
-    expect(availableFormatsForPages([horizontal(300), vertical(200)], 10)).toEqual(NOT_A4)
+    expect(formatsAt([horizontal(300), vertical(200)], 10)).toEqual(NOT_A4)
   })
 
   it("PG-10: страница, не помещающаяся на A3, исключает A3 и A4", () => {
-    expect(availableFormatsForPages([horizontal(100), horizontal(400)], 10)).toEqual(["A2", "A1", "A0"])
+    expect(formatsAt([horizontal(100), horizontal(400)], 10)).toEqual(["A2", "A1", "A0"])
   })
 
   // TCR-4 (change pdf-legend): область A4 по ширине — 272 мм за вычетом столбца легенды документа
   const FIT_LEN = 242 - legendWidthMm([horizontal(100)])
 
   it("PG-11: граница по ширине на второй странице: ровно (272 − ширина легенды) мм — A4 доступен, +0,1 мм — нет", () => {
-    expect(availableFormatsForPages([horizontal(100), horizontal(FIT_LEN)], 10)).toEqual(ALL)
-    expect(availableFormatsForPages([horizontal(100), horizontal(FIT_LEN + 0.1)], 10)).toEqual(NOT_A4)
+    expect(formatsAt([horizontal(100), horizontal(FIT_LEN)], 10)).toEqual(ALL)
+    expect(formatsAt([horizontal(100), horizontal(FIT_LEN + 0.1)], 10)).toEqual(NOT_A4)
   })
 
   it("PG-11: граница по ширине на первой странице: результат тот же при обратном порядке", () => {
-    expect(availableFormatsForPages([horizontal(FIT_LEN), horizontal(100)], 10)).toEqual(ALL)
-    expect(availableFormatsForPages([horizontal(FIT_LEN + 0.1), horizontal(100)], 10)).toEqual(NOT_A4)
+    expect(formatsAt([horizontal(FIT_LEN), horizontal(100)], 10)).toEqual(ALL)
+    expect(formatsAt([horizontal(FIT_LEN + 0.1), horizontal(100)], 10)).toEqual(NOT_A4)
   })
 
   it("PG-11: граница по высоте на второй странице: ровно 145 мм — A4 доступен, +0,1 мм — нет", () => {
-    expect(availableFormatsForPages([horizontal(100), vertical(115)], 10)).toEqual(ALL)
-    expect(availableFormatsForPages([horizontal(100), vertical(115.1)], 10)).toEqual(NOT_A4)
+    expect(formatsAt([horizontal(100), vertical(115)], 10)).toEqual(ALL)
+    expect(formatsAt([horizontal(100), vertical(115.1)], 10)).toEqual(NOT_A4)
   })
 
   it("PG-12: страница без объектов не ограничивает форматы: [крупная, пустая] как [крупная]", () => {
-    expect(availableFormatsForPages([horizontal(300), EMPTY], 10)).toEqual(NOT_A4)
-    expect(availableFormatsForPages([EMPTY, horizontal(300)], 10)).toEqual(NOT_A4)
+    expect(formatsAt([horizontal(300), EMPTY], 10)).toEqual(NOT_A4)
+    expect(formatsAt([EMPTY, horizontal(300)], 10)).toEqual(NOT_A4)
   })
 
   it("PG-12: [малая, пустая] даёт все форматы", () => {
-    expect(availableFormatsForPages([horizontal(100), EMPTY], 10)).toEqual(ALL)
+    expect(formatsAt([horizontal(100), EMPTY], 10)).toEqual(ALL)
   })
 
   it("PG-12: только пустые страницы и пустой список дают все форматы", () => {
-    expect(availableFormatsForPages([EMPTY, EMPTY], 10)).toEqual(ALL)
-    expect(availableFormatsForPages([], 10)).toEqual(ALL)
+    expect(formatsAt([EMPTY, EMPTY], 10)).toEqual(ALL)
+    expect(formatsAt([], 10)).toEqual(ALL)
   })
 
   it("PG-18: размер, вынесенный далеко от стены, ограничивает форматы страницы: сама стена влезает на A4, с размером — нет", () => {
     const wallOnly = page([wall(0, 0, 100, 0, "h")])
     const withDim = page([wall(0, 0, 100, 0, "h")], [], [dim("h", 200)])
-    expect(availableFormatsForPages([wallOnly], 10)).toEqual(ALL)
-    const formats = availableFormatsForPages([withDim], 10)
+    expect(formatsAt([wallOnly], 10)).toEqual(ALL)
+    const formats = formatsAt([withDim], 10)
     expect(formats).not.toContain("A4")
     expect(formats).toContain("A0")
-    expect(formats).toEqual(availableFormats(withDim.walls, withDim.dimensions, 10, withDim.doorways))
-    expect(availableFormatsForPages([wallOnly, withDim], 10)).toEqual(formats)
-    expect(availableFormatsForPages([withDim, wallOnly], 10)).toEqual(formats)
+    expect(formatsAt([wallOnly, withDim], 10)).toEqual(formats)
+    expect(formatsAt([withDim, wallOnly], 10)).toEqual(formats)
   })
 
   it("PG-18: размер на второй странице ограничивает форматы так же, как на единственной", () => {
     const withDim = page([wall(0, 0, 100, 0, "h")], [], [dim("h", 200)])
-    expect(availableFormatsForPages([horizontal(100), withDim], 10)).toEqual(availableFormatsForPages([withDim], 10))
+    expect(formatsAt([horizontal(100), withDim], 10)).toEqual(formatsAt([withDim], 10))
   })
 
   it("PG-19: открывающаяся дверь выходит за стену и ограничивает форматы страницы: стена влезает на A4, с дверью — нет", () => {
     const door: WallDoor = { kind: "door", id: "d", wallId: "h", anchor: "a", offsetCm: 5, widthCm: 140, heightCm: 210, hinge: "a", swing: "left" }
     const wallOnly = page([wall(0, 0, 150, 0, "h")])
     const withDoor = page([wall(0, 0, 150, 0, "h")], [door])
-    expect(availableFormatsForPages([wallOnly], 10)).toEqual(ALL)
-    const formats = availableFormatsForPages([withDoor], 10)
+    expect(formatsAt([wallOnly], 10)).toEqual(ALL)
+    const formats = formatsAt([withDoor], 10)
     expect(formats).not.toContain("A4")
-    expect(formats).toEqual(availableFormats(withDoor.walls, withDoor.dimensions, 10, withDoor.doorways))
-    expect(availableFormatsForPages([wallOnly, withDoor], 10)).toEqual(formats)
+    expect(formatsAt([wallOnly, withDoor], 10)).toEqual(formats)
   })
 
   it("PG-10: учитывает масштаб чертежа: стена 3 м влезает на A4 при 1:100 и не влезает при 1:5", () => {
     const p = horizontal(300)
-    expect(availableFormatsForPages([p], 100)).toEqual(ALL)
-    expect(availableFormatsForPages([p], 5)).not.toContain("A4")
+    expect(formatsAt([p], 100)).toEqual(ALL)
+    expect(formatsAt([p], 5)).not.toContain("A4")
   })
 })

@@ -18,7 +18,7 @@ const doorway: Doorway = { id: "d1", wallId: "w1", anchor: "a", offsetCm: 50, wi
 const view: View = { zoom: 1.5, pan: { x: -10, y: 20 } }
 
 const drawing = (id: string, extra: Record<string, unknown> = {}): Drawing =>
-  ({ id, name: `Чертёж ${id}`, walls: [wall, reinforced], dimensions: [dimension], doorways: [doorway], view, scale: 100, ...extra }) as Drawing
+  ({ id, name: `Чертёж ${id}`, walls: [wall, reinforced], dimensions: [dimension], doorways: [doorway], view, ...extra }) as Drawing
 
 const doc = (drawings: Drawing[], version = 3): string => JSON.stringify({ version, activeId: drawings[0]?.id ?? "", drawings })
 
@@ -143,13 +143,13 @@ describe("битые и лишние пометки", () => {
 })
 
 describe("прочие поля документа", () => {
-  it("ST-06: стены, размеры, проёмы, вид, масштаб и имя читаются из прежних полей без изменений", () => {
+  it("ST-06: стены, размеры, проёмы, вид и имя читаются из прежних полей без изменений", () => {
     const [d] = parsedDrawings(doc([drawing("a", { demolition: [mk("m1", "w1", "a", 100, 190)] })]))
     expect(d?.walls).toEqual([wall, reinforced])
     expect(d?.dimensions).toEqual([dimension])
     expect(d?.doorways).toEqual([doorway])
     expect(d?.view).toEqual(view)
-    expect(d?.scale).toBe(100)
+    expect(d !== undefined && "scale" in d).toBe(false)
     expect(d?.name).toBe("Чертёж a")
   })
 
@@ -176,7 +176,7 @@ describe("прочие поля документа", () => {
   })
 
   it("ST-10: документ версии 2 открывается без пометок", () => {
-    const v2 = JSON.stringify({ version: 2, activeId: "a", drawings: [{ id: "a", name: "Чертёж", walls: [{ a: { x: 0, y: 0 }, b: { x: 300, y: 0 }, thicknessCm: 20, type: "brick" }], view, scale: 100 }] })
+    const v2 = JSON.stringify({ version: 2, activeId: "a", drawings: [{ id: "a", name: "Чертёж", walls: [{ a: { x: 0, y: 0 }, b: { x: 300, y: 0 }, thicknessCm: 20, type: "brick" }], view }] })
     const [d] = parsedDrawings(v2)
     expect("demolition" in (d as Drawing)).toBe(false)
   })

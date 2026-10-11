@@ -1,5 +1,6 @@
 import { PAGE_FORMATS_MM } from "./page-format"
 import type { PageFormat } from "./page-format"
+import { formatScale } from "./scale-series"
 
 // Рамка листа, основная надпись и область чертежа. Все размеры — абсолютные миллиметры на бумаге
 // (спецификация pdf-export; форма «Основная надпись на чертежах строительных изделий (первый лист)», ГОСТ Р 21.1101).
@@ -158,7 +159,7 @@ export function titleBlockTexts(content: TitleBlockContent): TitleBlockText[] {
   if (name !== "") texts.push({ cellId: "1", text: name })
   if (pageName !== undefined && pageName !== "") texts.push({ cellId: "5", text: pageName })
   texts.push({ cellId: "6", text: "Р" })
-  texts.push({ cellId: "25", text: `1:${scale}` })
+  texts.push({ cellId: "25", text: formatScale(scale) })
   texts.push({ cellId: "13", text: `${pad2(date.getMonth() + 1)}.${pad2(date.getFullYear() % 100)}` })
   return texts
 }

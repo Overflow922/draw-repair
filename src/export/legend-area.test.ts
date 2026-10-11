@@ -1,13 +1,14 @@
 import { describe, expect, it } from "vitest"
 import { effectiveMarks } from "../demolition/marks"
 import type { Wall } from "../types"
-import { availableFormatsForPages, fitsFormat, placeOnPage } from "./pdf"
+import { fitScale } from "./fit-scale"
+import { fitsFormat, placeOnPage } from "./pdf"
 import type { BBox, PageFormat, PlanPage } from "./pdf"
 import { legendWidthMm } from "./legend"
 import { drawingArea, frameRect, legendArea, titleBlockRect } from "./sheet-layout"
 
 // change pdf-legend: область чертежа без столбца легенды, вместимость форматов и размещение с учётом легенды
-// (spec pdf-export «Область чертежа внутри рамки», «Формат страницы выбирает пользователь»; design D3;
+// (spec pdf-export «Область чертежа внутри рамки»; change auto-fit-scale: подбор масштаба вместо списка форматов; design D3;
 // test-plan AR-1…AR-6, FM-1…FM-4). Масштаб 1:10 даёт 1 см мира = 1 мм листа.
 
 const FORMATS: PageFormat[] = ["A4", "A3", "A2", "A1", "A0"]
@@ -141,33 +142,33 @@ describe("размещение с легендой", () => {
   })
 })
 
-describe("доступные форматы с легендой", () => {
+describe("подбор масштаба с легендой", () => {
   const FIT_272 = 2600 // стена: габариты со стеной толщиной 20 см и запасом 0,5·масштаб с каждой стороны = 272 мм при 1:100
 
-  it("FM-1: габариты по ширине 272 мм при наличии стен — A4 отсутствует, A3 первым", () => {
-    const list = availableFormatsForPages([pageOf(wall(FIT_272))], 100)
-    expect(list).toEqual(["A3", "A2", "A1", "A0"])
+  it("FM-1: габариты по ширине 272 мм при наличии стен не помещаются на A4 при 1:100 (легенда сужает область), подбирается 1:200; на A3 помещаются при 1:100", () => {
+    expect(fitScale([pageOf(wall(FIT_272))], "A4")).toBe(200)
+    expect(fitScale([pageOf(wall(FIT_272))], "A3")).toBe(100)
   })
 
   it("FM-1: пустая страница рядом со страницей без вместимости ничего не меняет", () => {
-    expect(availableFormatsForPages([pageOf(wall(FIT_272)), EMPTY], 100)).toEqual(["A3", "A2", "A1", "A0"])
+    expect(fitScale([pageOf(wall(FIT_272)), EMPTY], "A4")).toBe(200)
   })
 
-  it("FM-1: чуть короче стена (запас на колонку) — A4 снова доступен", () => {
+  it("FM-1: чуть короче стена (запас на колонку) — на A4 снова 1:100", () => {
     const len = Math.floor((272 - W) * 10 - 120) - 1
-    expect(availableFormatsForPages([pageOf(wall(len))], 100)[0]).toBe("A4")
+    expect(fitScale([pageOf(wall(len))], "A4")).toBe(100)
   })
 
-  it("FM-1: пустой документ — все форматы", () => {
-    expect(availableFormatsForPages([EMPTY], 100)).toEqual(FORMATS)
-    expect(availableFormatsForPages([], 100)).toEqual(FORMATS)
+  it("FM-1: пустой документ — масштаб не подбирается", () => {
+    expect(fitScale([EMPTY], "A4")).toBeNull()
+    expect(fitScale([], "A4")).toBeNull()
   })
 
-  it("FM-2: высота 172 мм — A4 нет (по высоте), A3 есть: ширины A3 после вычета колонки хватает", () => {
+  it("FM-2: высота 172 мм не помещается на A4 при 1:100 (по высоте), подбирается 1:200; на A3 помещается и при 1:75 (226 мм из 232)", () => {
     const tall: Wall = { id: "t", a: { x: 0, y: 0 }, b: { x: 0, y: 1600 }, thicknessCm: 20, type: "brick" }
-    const list = availableFormatsForPages([{ walls: [tall], dimensions: [], doorways: [] }], 100)
-    expect(list).not.toContain("A4")
-    expect(list[0]).toBe("A3")
+    const pages: PlanPage[] = [{ walls: [tall], dimensions: [], doorways: [] }]
+    expect(fitScale(pages, "A4")).toBe(200)
+    expect(fitScale(pages, "A3")).toBe(75)
   })
 
   it("FM-3: габариты 180×170 мм — A4 нет, выбирается A3", () => {
@@ -177,11 +178,11 @@ describe("доступные форматы с легендой", () => {
     expect(fitsFormat(box(180, 170), 10, "A3", W)).toBe(true)
   })
 
-  it("FM-4: формат ограничен самой крупной страницей, колонка общая", () => {
+  it("FM-4: масштаб ограничен самой крупной страницей, колонка общая", () => {
     const small = pageOf(wall(500))
     const large = pageOf(wall(FIT_272))
-    expect(availableFormatsForPages([small, large], 100)).toEqual(["A3", "A2", "A1", "A0"])
-    expect(availableFormatsForPages([large, small], 100)).toEqual(["A3", "A2", "A1", "A0"])
+    expect(fitScale([small, large], "A4")).toBe(200)
+    expect(fitScale([large, small], "A4")).toBe(200)
   })
 
   it("FM-4: колонка по самой длинной подписи любой страницы сужает область и для страницы с короткими подписями", () => {
@@ -194,13 +195,13 @@ describe("доступные форматы с легендой", () => {
     // стена, которая помещалась в узкую колонку впритык, перестаёт помещаться из-за широкой колонки другой страницы
     // стена короче границы на 1 см: решение не зависит от погрешности плавающей точки на самой границе
     const len = Math.floor((272 - without) * 10 - 120) - 1
-    expect(availableFormatsForPages([pageOf(wall(len))], 100)[0]).toBe("A4")
-    expect(availableFormatsForPages([pageOf(wall(len)), marked], 100)).not.toContain("A4")
+    expect(fitScale([pageOf(wall(len))], "A4")).toBe(100)
+    expect(fitScale([pageOf(wall(len)), marked], "A4")).toBe(200)
   })
 
-  it("FM-1: список по-прежнему только сужается по мере роста стены", () => {
-    const lists = [1000, 2000, 2600, 3500, 6000, 9000, 12000].map((len) => availableFormatsForPages([pageOf(wall(len))], 100))
-    for (let i = 1; i < lists.length; i++) expect(lists[i]?.length ?? 0).toBeLessThanOrEqual(lists[i - 1]?.length ?? Infinity)
-    expect(lists[lists.length - 1]).toEqual([])
+  it("FM-1: масштаб по-прежнему только мельчает по мере роста стены", () => {
+    const scales = [1000, 2000, 2600, 3500, 6000, 9000, 12000].map((len) => fitScale([pageOf(wall(len))], "A4") ?? 0)
+    for (let i = 1; i < scales.length; i++) expect(scales[i] ?? 0).toBeGreaterThanOrEqual(scales[i - 1] ?? Infinity)
+    expect(scales[scales.length - 1]).toBeGreaterThan(scales[0] ?? Infinity)
   })
 })

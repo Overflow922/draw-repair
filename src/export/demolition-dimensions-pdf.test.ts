@@ -4,8 +4,9 @@ import { effectiveMarks } from "../demolition/marks"
 import type { DemolitionMark, Drawing, Wall } from "../types"
 import { colorSegments, isRed, parseColoredStrokes } from "./pdf-colors.test-utils"
 import { legendWidthMm } from "./legend"
-import { availableFormatsForPages, buildPdfPages, pageBounds, pagesOf } from "./pdf"
-import type { PlanPage } from "./pdf"
+import { fitScale } from "./fit-scale"
+import { buildPdfPages, pageBounds, pagesOf } from "./pdf"
+import type { PageFormat, PlanPage } from "./pdf"
 import { drawingArea } from "./sheet-layout"
 
 // change demolition-dimension-chains: размеры пометок на странице демонтажа PDF и габариты страницы (spec pdf-export
@@ -15,6 +16,13 @@ import { drawingArea } from "./sheet-layout"
 const font = readFileSync(new URL("../assets/pt-sans-regular.ttf", import.meta.url)).toString("base64")
 const SEP = new Date(2026, 8, 5, 14, 32, 7)
 const SCALE = 100
+// форматы, на которые страницы помещаются при масштабе scale: подобранный масштаб не мельче scale
+// (change auto-fit-scale: список доступных форматов заменён подбором масштаба); без страниц со стенами — все форматы
+const formatsAt = (pages: Parameters<typeof fitScale>[0], scale: number): PageFormat[] =>
+  (["A4", "A3", "A2", "A1", "A0"] as const).filter((f) => {
+    const fitted = fitScale(pages, f)
+    return fitted === null || fitted <= scale
+  })
 const CM_PER_MM = SCALE / 10
 const LABEL_MM = 3.5
 const OFF_CM = 1.2 * LABEL_MM * CM_PER_MM // 42 см — смещение линии размера от грани
@@ -31,7 +39,6 @@ const drawing = (walls: Wall[], demolition: DemolitionMark[]): Drawing => ({
   walls,
   dimensions: [],
   view: { zoom: 1, pan: { x: 0, y: 0 } },
-  scale: SCALE,
   demolition,
 })
 
@@ -242,15 +249,15 @@ describe("форматы с учётом размеров пометок", () =>
     const long = wall(0, 0, widthCm - 2 * PAD_CM - 20 - 10, 0, "h")
     const without = pageOf([long, vertical], [])
     const withMark = pageOf([long, vertical], [mark("m", "v", 100, 190)])
-    expect(availableFormatsForPages([without], SCALE)).toContain("A4")
-    expect(availableFormatsForPages([withMark], SCALE)).not.toContain("A4")
+    expect(formatsAt([without], SCALE)).toContain("A4")
+    expect(formatsAt([withMark], SCALE)).not.toContain("A4")
   })
 
   it("DC-24: список форматов с пометкой — подмножество списка без неё", () => {
     const wide = [wall(0, 0, 2000, 0, "h"), wall(0, 0, 0, 300, "v")]
     const marks = [mark("m", "v", 100, 190)]
-    const withMark = availableFormatsForPages([pageOf(wide, marks)], SCALE)
-    const without = availableFormatsForPages([pageOf(wide, [])], SCALE)
+    const withMark = formatsAt([pageOf(wide, marks)], SCALE)
+    const without = formatsAt([pageOf(wide, [])], SCALE)
     for (const f of withMark) expect(without).toContain(f)
   })
 })
@@ -269,7 +276,7 @@ describe("размещение размеров на листе", () => {
     const base = widthOf(wall(0, 0, 1000, 0, "h"))
     const long = wall(0, 0, 1000 + area.w * CM_PER_MM - 2 - base, 0, "h")
     const page = pageOf([long, vertical], m)
-    expect(availableFormatsForPages([page], SCALE)).toContain("A4")
+    expect(formatsAt([page], SCALE)).toContain("A4")
     const doc = buildPdfPages([page], "cm", SCALE, "A4", font, "Чертёж 1", SEP)
     const red = parseColoredStrokes(doc, 1).filter((s) => isRed(s.color) && Math.min(...s.subpaths.flat().map((p) => p.x)) >= area.x - 1e-6)
     const pts = red.flatMap((s) => s.subpaths.flat())

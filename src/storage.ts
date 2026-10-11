@@ -1,6 +1,6 @@
 import { mergeAll } from "./demolition/marks"
 import { isPlanId } from "./plans"
-import { isDoor, isScale, isWindow, DEFAULT_SCALE, normalizeMaterial } from "./types"
+import { isDoor, isWindow, normalizeMaterial } from "./types"
 import type { DemolitionMark, Dimension, DimPoint, Doorway, Drawing, DrawingStore, EdgeRef, MountingContent, Point, View, Wall, WallDoor, WallElement, WallWindow } from "./types"
 
 const KEY = "draw-repair:drawing"
@@ -104,7 +104,7 @@ export const isDrawing = (d: unknown, version: number = 3): d is Drawing =>
   typeof (d as Drawing).name === "string" && Array.isArray((d as Drawing).walls) &&
   (d as Drawing).walls.every(version >= 3 ? isWall : isWallBase) &&
   (version < 3 || Array.isArray((d as Drawing).dimensions)) &&
-  isView((d as Drawing).view) && (version < 2 || isScale((d as Drawing).scale))
+  isView((d as Drawing).view)
 
 const assignIds = (walls: Wall[]): Wall[] =>
   walls.map((w) => ({ ...w, id: w.id || crypto.randomUUID(), type: normalizeMaterial(w.type) }))
@@ -134,7 +134,6 @@ const emptyDrawing = (name: string): Drawing => ({
   walls: [],
   dimensions: [],
   view: { zoom: 1, pan: { x: 0, y: 0 } },
-  scale: DEFAULT_SCALE,
 })
 
 const emptyStore = (): DrawingStore => {
@@ -163,8 +162,11 @@ export function parseStore(raw: string): LoadedStore | null {
       typeof d.activeId === "string" && d.drawings.every((x) => isDrawing(x, version)) &&
       d.drawings.some((x) => (x as Drawing).id === d.activeId)
     ) {
-      const drawings = (d.drawings as Drawing[]).map(({ activePlan, demolition, mounting, ...dr }) => ({
-        ...dr,
+      const drawings = (d.drawings as Drawing[]).map(({ activePlan, demolition, mounting, ...dr }): Drawing => ({
+        // поля чертежа перечислены явно: масштаб, записанный прежними версиями, в модель не попадает (drawing-storage)
+        id: dr.id,
+        name: dr.name,
+        view: dr.view,
         // активный план — необязательное поле: допустимое сохраняется, остальное отбрасывается (drawing-plans design D3)
         ...(isPlanId(activePlan) ? { activePlan } : null),
         walls: assignIds(dr.walls),
@@ -172,7 +174,6 @@ export function parseStore(raw: string): LoadedStore | null {
         ...loadMounting(mounting),
         ...loadDoorways(dr.doorways, dr.walls),
         dimensions: (Array.isArray(dr.dimensions) ? dr.dimensions : []).filter(isDimension).map(copyDimension),
-        ...(version === 1 ? { scale: DEFAULT_SCALE } : null),
       }))
       return { store: { version: 3, activeId: d.activeId, drawings }, readOnly: false }
     }
@@ -185,7 +186,6 @@ export function parseStore(raw: string): LoadedStore | null {
       walls: assignIds(d.walls as Wall[]),
       dimensions: [],
       view: d.view,
-      scale: DEFAULT_SCALE,
     }
     return { store: { version: 3, activeId: drawing.id, drawings: [drawing] }, readOnly: false }
   }

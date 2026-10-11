@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs"
 import { describe, expect, it } from "vitest"
 import type { Dimension, Wall } from "../types"
-import { availableFormats, buildPdf, pdfFileName, placeOnPage, wallsBBox } from "./pdf"
+import { buildPdf, pdfFileName, placeOnPage, wallsBBox } from "./pdf"
 
 const wall = (ax: number, ay: number, bx: number, by: number, id = "w"): Wall => ({
   id,
@@ -55,35 +55,6 @@ describe("placeOnPage", () => {
     expect(left(shifted.offsetX, -2000)).toBeCloseTo(131, 9)
     expect(292 - left(base.offsetX, 500)).toBeCloseTo(111, 9)
     expect(292 - left(shifted.offsetX, -1500)).toBeCloseTo(111, 9)
-  })
-})
-
-describe("availableFormats", () => {
-  it("пустой чертёж — все форматы", () => {
-    expect(availableFormats([], [], 100)).toEqual(["A4", "A3", "A2", "A1", "A0"])
-  })
-
-  it("стена 5 м при 1:100 вмещается в A4", () => {
-    expect(availableFormats([wall(0, 0, 500, 0)], [], 100)).toEqual(["A4", "A3", "A2", "A1", "A0"])
-  })
-
-  it("стена 20 м при 1:50 не вмещается в A4 и A3", () => {
-    expect(availableFormats([wall(0, 0, 2000, 0)], [], 50)).toEqual(["A2", "A1", "A0"])
-  })
-
-  it("переполнение A0 — пустой список", () => {
-    expect(availableFormats([wall(0, 0, 6000, 0)], [], 50)).toEqual([])
-  })
-
-  it("смена масштаба расширяет список", () => {
-    expect(availableFormats([wall(0, 0, 2000, 0)], [], 200)).toEqual(["A4", "A3", "A2", "A1", "A0"])
-  })
-
-  it("размер за габаритом стен сужает список форматов", () => {
-    const w = wall(0, 0, 2000, 0, "w")
-    expect(availableFormats([w], [], 100)).toContain("A4")
-    expect(availableFormats([w], [dim("w", 2000)], 100)).not.toContain("A4")
-    expect(availableFormats([w], [dim("w", 2000)], 100)).toEqual(["A3", "A2", "A1", "A0"])
   })
 })
 
