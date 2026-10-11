@@ -489,17 +489,6 @@ Follow-ups from `pdf-legend` (2026-10-11). Non-blocking.
 
 Follow-ups from `auto-fit-scale` (apply, 2026-10-11).
 
-## Out of scope (decided, revisit if needed)
-
-- [ ] **Plan name strip on the PDF page** (planned change `plan-title-strip`, parameters agreed with the user). The plan name
-  («Обмерочный план», «Демонтаж», «Монтаж») goes in the top-left corner of the sheet frame as its own strip: height 10 mm,
-  font 5 mm, 3 mm left padding, on every page including pages without walls; a name that does not fit the width shrinks
-  in font size like the drawing name in graph 1. The legend column and the drawing area both start below the strip, at the
-  same level. Effects: the drawing area becomes 10 mm lower on every format (`drawingArea` in `src/export/sheet-layout.ts`),
-  so the auto-fitted scale of some drawings gets coarser; specs `pdf-export` «Область чертежа внутри рамки» and «Легенда на
-  странице PDF» change; tests on the area size (`sheet-fit`, `sheet-layout`, `legend-area`, `fit-scale*`) need review.
-  Start after `auto-fit-scale` is archived.
-
 ## Docs
 
 - [ ] (auto-fit-scale, 2026-10-11) Specs `wall-joints` (line ~370) and `wall-types` (line ~46) say «изменяет масштаб чертежа» but mean the on-screen zoom; since `auto-fit-scale` «масштаб чертежа» is the print scale (`drawing-scale`), so the wording is now ambiguous. Replace with «масштаб вида (зум)». `demolition-plan` line ~346 («вид и масштаб чертежа общие») already means both and is fine.

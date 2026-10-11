@@ -26,6 +26,10 @@ const FRAME_LEFT_MM = 20
 const FRAME_OTHER_MM = 5
 const TITLE_BLOCK_W_MM = 185
 const TITLE_BLOCK_H_MM = 55
+// полоса названия плана в левом верхнем углу рамки (spec pdf-export «Полоса названия плана»)
+export const PLAN_STRIP_H_MM = 10
+export const PLAN_TITLE_FONT_MM = 5
+export const PLAN_TITLE_PAD_MM = 3
 
 export function sheetSizeMm(format: PageFormat): { w: number; h: number } {
   const [pw, ph] = PAGE_FORMATS_MM[format]
@@ -35,6 +39,12 @@ export function sheetSizeMm(format: PageFormat): { w: number; h: number } {
 export function frameRect(format: PageFormat): Rect {
   const { w, h } = sheetSizeMm(format)
   return { x: FRAME_LEFT_MM, y: FRAME_OTHER_MM, w: w - FRAME_LEFT_MM - FRAME_OTHER_MM, h: h - 2 * FRAME_OTHER_MM }
+}
+
+// полоса названия плана: верх рамки, вся её ширина; линиями не рисуется
+export function planStripRect(format: PageFormat): Rect {
+  const frame = frameRect(format)
+  return { x: frame.x, y: frame.y, w: frame.w, h: PLAN_STRIP_H_MM }
 }
 
 export function titleBlockRect(format: PageFormat): Rect {
@@ -47,16 +57,19 @@ export function titleBlockRect(format: PageFormat): Rect {
   }
 }
 
-// внутренность рамки над основной надписью за вычетом столбца легенды шириной legendMm (0 — на всю ширину рамки)
+// внутренность рамки между полосой названия плана и основной надписью за вычетом столбца легенды шириной legendMm
+// (0 — на всю ширину рамки)
 export function drawingArea(format: PageFormat, legendMm = 0): Rect {
   const frame = frameRect(format)
-  return { x: frame.x + legendMm, y: frame.y, w: frame.w - legendMm, h: titleBlockRect(format).y - frame.y }
+  const top = frame.y + PLAN_STRIP_H_MM
+  return { x: frame.x + legendMm, y: top, w: frame.w - legendMm, h: titleBlockRect(format).y - top }
 }
 
-// столбец легенды: левая часть области над основной надписью шириной legendMm, на всю высоту области
+// столбец легенды: левая часть области под полосой названия плана шириной legendMm, на всю высоту области
 export function legendArea(format: PageFormat, legendMm: number): Rect {
   const frame = frameRect(format)
-  return { x: frame.x, y: frame.y, w: legendMm, h: titleBlockRect(format).y - frame.y }
+  const top = frame.y + PLAN_STRIP_H_MM
+  return { x: frame.x, y: top, w: legendMm, h: titleBlockRect(format).y - top }
 }
 
 // Графа основной надписи в координатах надписи (начало — её левый верхний угол). label — печатная подпись графы.

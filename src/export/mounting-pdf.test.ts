@@ -222,8 +222,9 @@ describe("форматы учитывают страницу «Монтаж»", 
 
   it("MP-90: собственные размеры третьей страницы входят в габариты", () => {
     const far = dimension(["N", 2], ["N", 1], ["N", 3], ["N", 1], 3000)
+    // стены ближе друг к другу, чем раньше (50 см вместо 100): область по высоте стала на 10 мм ниже (полоса названия плана)
     const near = dimension(["N", 2], ["N", 1], ["N", 3], ["N", 1], 30)
-    const base = (dim: typeof far): Drawing => drawing({ walls: [wall("W", 0, 0, 100, 0)], mounting: { walls: [wall("N", 0, 100, 100, 100)], dimensions: [dim] } })
+    const base = (dim: typeof far): Drawing => drawing({ walls: [wall("W", 0, 0, 100, 0)], mounting: { walls: [wall("N", 0, 50, 100, 50)], dimensions: [dim] } })
     expect(formatsAt(pagesOf(base(near)), 10)).toContain("A4")
     expect(formatsAt(pagesOf(base(far)), 10)).not.toContain("A4")
   })

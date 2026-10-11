@@ -62,14 +62,14 @@ describe("основная надпись: положение и размер", 
 })
 
 describe("область чертежа", () => {
-  it("DA-1: A4 — x 20, y 5, 272×145 мм", () => {
-    expect(drawingArea("A4")).toEqual({ x: 20, y: 5, w: 272, h: 145 })
+  it("DA-1: A4 — x 20, y 15 (под полосой названия плана), 272×135 мм", () => {
+    expect(drawingArea("A4")).toEqual({ x: 20, y: 15, w: 272, h: 135 })
   })
 
-  it.each(["A3", "A2", "A1", "A0"] as const)("DA-2: %s — ширина W−25, высота H−65, низ области = верх надписи", (f) => {
+  it.each(["A3", "A2", "A1", "A0"] as const)("DA-2: %s — ширина W−25, высота H−75, низ области = верх надписи", (f) => {
     const { w, h } = LANDSCAPE[f]
     const area = drawingArea(f)
-    expect(area).toEqual({ x: 20, y: 5, w: w - 25, h: h - 65 })
+    expect(area).toEqual({ x: 20, y: 15, w: w - 25, h: h - 75 })
     expect(area.y + area.h).toBe(titleBlockRect(f).y)
     expect(area.x + area.w).toBe(frameRect(f).x + frameRect(f).w)
   })

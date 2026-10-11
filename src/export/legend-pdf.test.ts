@@ -103,11 +103,11 @@ const areaOf = (format: PageFormat = "A4"): Rect => drawingArea(format, columnMm
 
 const textsOn = (n: number): TextCall[] => texts.filter((t) => t.page === n)
 const labelsOn = (n: number): string[] => textsOn(n).map((t) => t.text)
-// подписи легенды: тексты столбца над основной надписью, по порядку вывода
+// подписи легенды: тексты столбца под полосой названия плана и над основной надписью, по порядку вывода
 const legendTextsOn = (n: number, format: PageFormat = "A4"): TextCall[] => {
   const col = colOf(format)
   const area = areaOf(format)
-  return textsOn(n).filter((t) => t.x >= col.x - TOL && t.x < area.x && t.y <= col.y + col.h)
+  return textsOn(n).filter((t) => t.x >= col.x - TOL && t.x < area.x && t.y >= col.y - TOL && t.y <= col.y + col.h)
 }
 const legendLinesOn = (n: number, format: PageFormat = "A4"): string[] => legendTextsOn(n, format).map((t) => t.text)
 

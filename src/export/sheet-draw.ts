@@ -1,6 +1,6 @@
 import type { jsPDF } from "jspdf"
 import type { PageFormat } from "./page-format"
-import { FRAME_LINE_MM, GRID_LINE_MM, frameRect, titleBlockCells, titleBlockGrid, titleBlockRect, titleBlockTexts } from "./sheet-layout"
+import { FRAME_LINE_MM, GRID_LINE_MM, PLAN_TITLE_FONT_MM, PLAN_TITLE_PAD_MM, frameRect, planStripRect, titleBlockCells, titleBlockGrid, titleBlockRect, titleBlockTexts } from "./sheet-layout"
 import type { Rect, TitleBlockContent } from "./sheet-layout"
 
 // Рисование рамки листа и основной надписи на странице jsPDF (мм). Геометрия — в sheet-layout.
@@ -49,6 +49,14 @@ function drawCentered(doc: jsPDF, text: string, box: Rect, standardMm: number): 
   doc.text(fitted.text, box.x + box.w / 2, box.y + box.h / 2 + 0.35 * fitted.fontMm, { align: "center" })
 }
 
+// название плана в полосе: по левому краю с отступом, по центру полосы по высоте; слишком длинное уменьшается по кеглю
+function drawPlanTitle(doc: jsPDF, format: PageFormat, title: string): void {
+  const strip = planStripRect(format)
+  const fitted = fitText(doc, title, strip.w - 2 * PLAN_TITLE_PAD_MM + 2 * TEXT_PAD_MM, PLAN_TITLE_FONT_MM)
+  doc.setFontSize(fitted.fontMm * doc.internal.scaleFactor)
+  doc.text(fitted.text, strip.x + PLAN_TITLE_PAD_MM, strip.y + strip.h / 2 + 0.35 * fitted.fontMm, { align: "left" })
+}
+
 export function drawSheet(doc: jsPDF, format: PageFormat, content: TitleBlockContent): void {
   const frame = frameRect(format)
   const block = titleBlockRect(format)
@@ -56,6 +64,8 @@ export function drawSheet(doc: jsPDF, format: PageFormat, content: TitleBlockCon
   doc.setDrawColor(0, 0, 0)
   doc.setTextColor(0, 0, 0)
   doc.setFont(FONT, "normal")
+
+  if (content.pageName !== undefined && content.pageName !== "") drawPlanTitle(doc, format, content.pageName)
 
   doc.setLineWidth(FRAME_LINE_MM)
   doc.rect(frame.x, frame.y, frame.w, frame.h, "S")

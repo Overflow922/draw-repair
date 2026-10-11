@@ -439,7 +439,7 @@ describe("buildPdfPages: прочие свойства", () => {
 
 describe("форматы, на которые помещаются все страницы (formatsAt)", () => {
   // Масштаб 1:10: 1 см = 1 мм листа; запас 0,5 масштаба на сторону прибавляет 10 мм, толщина стены 20 мм по осям,
-  // поэтому горизонтальная стена длиной L занимает (L + 30)×30 мм, область A4 — 272×145, A3 — 395×232.
+  // поэтому горизонтальная стена длиной L занимает (L + 30)×30 мм, область A4 — 272×135, A3 — 395×222.
   const horizontal = (lengthCm: number): PlanPage => page([wall(0, 0, lengthCm, 0, "h")])
   const vertical = (lengthCm: number): PlanPage => page([wall(0, 0, 0, lengthCm, "v")])
   const far = (lengthCm: number): PlanPage => page([wall(9000, 9000, 9000 + lengthCm, 9000, "f")])
@@ -463,7 +463,7 @@ describe("форматы, на которые помещаются все стр
   })
 
   it("PG-10: результат — пересечение: крупная по ширине и крупная по высоте страницы вместе исключают A4 и оставляют A3", () => {
-    expect(formatsAt([horizontal(300), vertical(200)], 10)).toEqual(NOT_A4)
+    expect(formatsAt([horizontal(300), vertical(190)], 10)).toEqual(NOT_A4)
   })
 
   it("PG-10: страница, не помещающаяся на A3, исключает A3 и A4", () => {
@@ -483,9 +483,9 @@ describe("форматы, на которые помещаются все стр
     expect(formatsAt([horizontal(FIT_LEN + 0.1), horizontal(100)], 10)).toEqual(NOT_A4)
   })
 
-  it("PG-11: граница по высоте на второй странице: ровно 145 мм — A4 доступен, +0,1 мм — нет", () => {
-    expect(formatsAt([horizontal(100), vertical(115)], 10)).toEqual(ALL)
-    expect(formatsAt([horizontal(100), vertical(115.1)], 10)).toEqual(NOT_A4)
+  it("PG-11: граница по высоте на второй странице: ровно 135 мм — A4 доступен, +0,1 мм — нет", () => {
+    expect(formatsAt([horizontal(100), vertical(105)], 10)).toEqual(ALL)
+    expect(formatsAt([horizontal(100), vertical(105.1)], 10)).toEqual(NOT_A4)
   })
 
   it("PG-12: страница без объектов не ограничивает форматы: [крупная, пустая] как [крупная]", () => {

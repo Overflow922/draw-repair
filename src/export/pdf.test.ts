@@ -43,7 +43,7 @@ describe("placeOnPage", () => {
     const p = placeOnPage({ minX: 0, minY: 0, maxX: 500, maxY: 250 }, 100, "A4")
     expect(p.landscape).toBe(true)
     expect(p.offsetX).toBeCloseTo(20 + (272 - 50) / 2, 9)
-    expect(p.offsetY).toBeCloseTo(5 + (145 - 25) / 2, 9)
+    expect(p.offsetY).toBeCloseTo(15 + (135 - 25) / 2, 9)
   })
 
   it("центрирование инвариантно к сдвигу координат", () => {

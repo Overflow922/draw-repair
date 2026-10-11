@@ -22,9 +22,9 @@ const EMPTY: PlanPage = { walls: [], dimensions: [], doorways: [] }
 const W = legendWidthMm([pageOf(wall(500))])
 
 describe("область чертежа без легенды", () => {
-  it("AR-1: A4 без легенды — 272×145 мм с началом (20; 5)", () => {
-    expect(drawingArea("A4")).toEqual({ x: 20, y: 5, w: 272, h: 145 })
-    expect(drawingArea("A4", 0)).toEqual({ x: 20, y: 5, w: 272, h: 145 })
+  it("AR-1: A4 без легенды — 272×135 мм с началом (20; 15)", () => {
+    expect(drawingArea("A4")).toEqual({ x: 20, y: 15, w: 272, h: 135 })
+    expect(drawingArea("A4", 0)).toEqual({ x: 20, y: 15, w: 272, h: 135 })
   })
 
   it("AR-3: в документе без стен область полная на всех форматах", () => {
@@ -34,12 +34,12 @@ describe("область чертежа без легенды", () => {
 })
 
 describe("область чертежа с легендой", () => {
-  it("AR-2: A4 с колонкой W — (272 − W)×145 от x = 20 + W, y = 5", () => {
+  it("AR-2: A4 с колонкой W — (272 − W)×135 от x = 20 + W, y = 15", () => {
     const a = drawingArea("A4", W)
     expect(a.x).toBeCloseTo(20 + W, 9)
-    expect(a.y).toBe(5)
+    expect(a.y).toBe(15)
     expect(a.w).toBeCloseTo(272 - W, 9)
-    expect(a.h).toBe(145)
+    expect(a.h).toBe(135)
   })
 
   it("AR-2: на каждом формате сужается только ширина, высота и правый край прежние", () => {
@@ -95,11 +95,11 @@ describe("область чертежа с легендой", () => {
 })
 
 describe("граница области чертежа с легендой", () => {
-  it("AR-5: габариты (272 − W)×145 на A4 помещаются, +0,1 мм по ширине или по высоте — нет", () => {
+  it("AR-5: габариты (272 − W)×135 на A4 помещаются, +0,1 мм по ширине или по высоте — нет", () => {
     const a = drawingArea("A4", W)
-    expect(fitsFormat(box(a.w, 145), 10, "A4", W)).toBe(true)
-    expect(fitsFormat(box(a.w + 0.1, 145), 10, "A4", W)).toBe(false)
-    expect(fitsFormat(box(a.w, 145.1), 10, "A4", W)).toBe(false)
+    expect(fitsFormat(box(a.w, 135), 10, "A4", W)).toBe(true)
+    expect(fitsFormat(box(a.w + 0.1, 135), 10, "A4", W)).toBe(false)
+    expect(fitsFormat(box(a.w, 135.1), 10, "A4", W)).toBe(false)
   })
 
   it.each(["A3", "A2", "A1", "A0"] as const)("AR-5: %s — граница области с легендой включительно", (f) => {
@@ -110,9 +110,9 @@ describe("граница области чертежа с легендой", () 
   })
 
   it("AR-5: прежняя граница 272 мм при легенде уже не годится, при нулевой колонке — годится", () => {
-    expect(fitsFormat(box(272, 145), 10, "A4", W)).toBe(false)
-    expect(fitsFormat(box(272, 145), 10, "A4", 0)).toBe(true)
-    expect(fitsFormat(box(272, 145), 10, "A4")).toBe(true)
+    expect(fitsFormat(box(272, 135), 10, "A4", W)).toBe(false)
+    expect(fitsFormat(box(272, 135), 10, "A4", 0)).toBe(true)
+    expect(fitsFormat(box(272, 135), 10, "A4")).toBe(true)
   })
 })
 
@@ -121,7 +121,7 @@ describe("размещение с легендой", () => {
     const p = placeOnPage(box(500, 250), 100, "A4", W)
     expect(p.mmPerCm).toBe(0.1)
     expect(p.offsetX).toBeCloseTo(20 + W + (272 - W - 50) / 2, 9)
-    expect(p.offsetY).toBeCloseTo(5 + (145 - 25) / 2, 9)
+    expect(p.offsetY).toBeCloseTo(15 + (135 - 25) / 2, 9)
     expect(p.offsetX).toBeGreaterThan(20 + W)
   })
 
@@ -164,11 +164,11 @@ describe("подбор масштаба с легендой", () => {
     expect(fitScale([], "A4")).toBeNull()
   })
 
-  it("FM-2: высота 172 мм не помещается на A4 при 1:100 (по высоте), подбирается 1:200; на A3 помещается и при 1:75 (226 мм из 232)", () => {
+  it("FM-2: высота 172 мм не помещается на A4 при 1:100 (по высоте), подбирается 1:200; на A3 помещается при 1:100, а при 1:75 нет (226 мм при области 222 мм)", () => {
     const tall: Wall = { id: "t", a: { x: 0, y: 0 }, b: { x: 0, y: 1600 }, thicknessCm: 20, type: "brick" }
     const pages: PlanPage[] = [{ walls: [tall], dimensions: [], doorways: [] }]
     expect(fitScale(pages, "A4")).toBe(200)
-    expect(fitScale(pages, "A3")).toBe(75)
+    expect(fitScale(pages, "A3")).toBe(100)
   })
 
   it("FM-3: габариты 180×170 мм — A4 нет, выбирается A3", () => {
