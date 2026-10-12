@@ -16,8 +16,8 @@ describe("canDemolish", () => {
     expect(canDemolish(W())).toBe(true)
   })
 
-  it("NW-06: железобетон не сносится; вырожденная стена — тоже", () => {
-    expect(canDemolish(W("reinforced"))).toBe(false)
+  it("NW-06: бетон не сносится; вырожденная стена — тоже", () => {
+    expect(canDemolish(W("concrete"))).toBe(false)
     expect(canDemolish(wall(10, 10, 10, 10, "Z"))).toBe(false)
   })
 })
@@ -56,9 +56,9 @@ describe("действующие пометки с элементами", () => 
     expect(out.map((r) => r.mark.id)).toEqual(["m"])
   })
 
-  it("NW-06: железобетон без окна и с проёмом — пометка не действует", () => {
-    expect(effectiveMarks([m], [W("reinforced")], [])).toEqual([])
-    expect(effectiveMarks([m], [W("reinforced")], [door("W", "a", 100, 90, 210, "p")])).toEqual([])
+  it("NW-06: бетон без окна и с проёмом — пометка не действует", () => {
+    expect(effectiveMarks([m], [W("concrete")], [])).toEqual([])
+    expect(effectiveMarks([m], [W("concrete")], [door("W", "a", 100, 90, 210, "p")])).toEqual([])
   })
 
   it("NW-07: окно с неизвестной стеной ничего не скрывает", () => {

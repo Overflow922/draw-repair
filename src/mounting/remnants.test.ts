@@ -99,8 +99,8 @@ describe("remnantWalls: стена снесена, недействующие п
     expect(idsOf(out)).toEqual(["V~0"])
   })
 
-  it("MP-05: пометка на железобетонной стене не вычитается", () => {
-    const out = remnants([W("reinforced")], [mark("m", "W", "a", 100, 190)])
+  it("MP-05: пометка на бетонной стене не вычитается", () => {
+    const out = remnants([W("concrete")], [mark("m", "W", "a", 100, 190)])
     expect(idsOf(out)).toEqual(["W~0"])
     expect(out.map(axisOf)).toEqual([[0, 0, 500, 0]])
   })

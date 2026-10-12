@@ -397,7 +397,7 @@ describe("Слияние стен одного материала: подсве�
     const [A, B] = T("brick")
     const seam = (scene: Wall[]): number => coveredOnLine(allContour(scene), { x: 0, y: 10 }, X_AXIS, 90.1, 109.9)
     expect(seam([A, B])).toBeLessThan(1e-6)
-    expect(seam([A, withType(B, "reinforced")])).toBeCloseTo(19.8, 6)
+    expect(seam([A, withType(B, "concrete")])).toBeCloseTo(19.8, 6)
     expect(seam([A, withType(B, "brick")])).toBeLessThan(1e-6)
   })
 

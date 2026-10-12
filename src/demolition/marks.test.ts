@@ -21,12 +21,12 @@ describe("span и canDemolish", () => {
     expect(span(mk("m", "W", "a", 400, 700), W())).toEqual([400, 700])
   })
 
-  it.each(["brick", "concrete", "wood-long"] as const)("DM-27: стена из материала %s сносится", (type) => {
+  it.each(["blocks", "brick", "gkl", "wood-long"] as const)("DM-27: стена из материала %s сносится", (type) => {
     expect(canDemolish(W(type))).toBe(true)
   })
 
-  it("DM-27: железобетон не сносится", () => {
-    expect(canDemolish(W("reinforced"))).toBe(false)
+  it("DM-27: бетон не сносится", () => {
+    expect(canDemolish(W("concrete"))).toBe(false)
   })
 
   it("DM-27: вырожденная стена не сносится", () => {
@@ -93,9 +93,9 @@ describe("addMark: создание и якорь", () => {
 })
 
 describe("addMark: отказы", () => {
-  it("DM-06: железобетон не помечается — возвращается тот же массив", () => {
+  it("DM-06: бетон не помечается — возвращается тот же массив", () => {
     const empty: DemolitionMark[] = []
-    expect(addMark(empty, [W("reinforced")], "W", 0, 500, idGen())).toBe(empty)
+    expect(addMark(empty, [W("concrete")], "W", 0, 500, idGen())).toBe(empty)
   })
 
   it("DM-18: отсутствующая стена — тот же массив", () => {
@@ -234,9 +234,9 @@ describe("mergeAll", () => {
     expect(mergeAll([mk("m1", "W", "a", 100, 200), mk("m2", "W", "a", 200, 300)], walls)).toEqual([mk("m1", "W", "a", 100, 300)])
   })
 
-  it("DM-28: пометки на железобетоне сливаются так же (они хранятся)", () => {
+  it("DM-28: пометки на бетоне сливаются так же (они хранятся)", () => {
     const list = [mk("m1", "W", "a", 100, 200), mk("m2", "W", "a", 150, 300)]
-    expect(mergeAll(list, [W("reinforced")])).toEqual([mk("m1", "W", "a", 100, 300)])
+    expect(mergeAll(list, [W("concrete")])).toEqual([mk("m1", "W", "a", 100, 300)])
   })
 
   it("DM-28: пометки на отсутствующие стены остаются без изменений и в прежнем порядке", () => {
@@ -274,16 +274,16 @@ describe("effectiveMarks", () => {
     expect([r?.from, r?.to]).toEqual([360, 450])
   })
 
-  it("DM-07: пометка на железобетонной стене не действует, список не меняется", () => {
+  it("DM-07: пометка на бетонной стене не действует, список не меняется", () => {
     const list = [mk("m", "W", "a", 100, 200)]
     const before = structuredClone(list)
-    expect(effectiveMarks(list, [W("reinforced")])).toEqual([])
+    expect(effectiveMarks(list, [W("concrete")])).toEqual([])
     expect(list).toEqual(before)
   })
 
   it("DM-08: после возврата материала пометка снова действует с прежним участком", () => {
     const list = [mk("m", "W", "a", 100, 200)]
-    expect(effectiveMarks(list, [W("reinforced")])).toEqual([])
+    expect(effectiveMarks(list, [W("concrete")])).toEqual([])
     const [r] = effectiveMarks(list, [W("brick")])
     expect([r?.from, r?.to]).toEqual([100, 200])
   })

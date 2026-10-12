@@ -142,8 +142,8 @@ describe("недопустимый ввод и вход", () => {
     expect(editNumber(base(), room(), "zzz", "gapA", 1, 150)).toBeNull()
   })
 
-  it("SZ-25: пометка на железобетонной стене → null", () => {
-    expect(edit([W("reinforced")], "gapA", 1, 150)).toBeNull()
+  it("SZ-25: пометка на бетонной стене → null", () => {
+    expect(edit([W("concrete")], "gapA", 1, 150)).toBeNull()
   })
 
   it("SZ-25: вход не мутируется ни при успехе, ни при отказе", () => {

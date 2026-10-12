@@ -6,8 +6,8 @@ import { degenerate, dist } from "../wall-geometry"
 // Участки стены, где можно и нельзя сносить (change demolition-window-sections, design D1): окно блокирует снос не всей
 // стены, а своего участка между ближайшими разрывами граней (Т-примыкания перегородок); остальное — чистые участки.
 
-// железобетон не сносится (несущая стена); вырожденная стена не имеет оси
-export const canDemolish = (wall: Wall): boolean => wall.type !== "reinforced" && !degenerate(wall)
+// бетон не сносится (несущая стена; старый «Железобетон» читается как бетон); вырожденная стена не имеет оси
+export const canDemolish = (wall: Wall): boolean => wall.type !== "concrete" && !degenerate(wall)
 
 type Range = [number, number]
 
@@ -51,7 +51,7 @@ export function windowBlocks(wall: Wall, walls: readonly Wall[], elements: reado
   )
 }
 
-// чистые участки: вся стена без участков окон; у железобетонной и вырожденной стены — пусто
+// чистые участки: вся стена без участков окон; у бетонной и вырожденной стены — пусто
 export function cleanRanges(wall: Wall, walls: readonly Wall[], elements: readonly WallElement[]): Range[] {
   if (!canDemolish(wall)) return []
   const out: Range[] = []

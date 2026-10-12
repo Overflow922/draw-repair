@@ -16,6 +16,7 @@ import type { Seg } from "./wall-geometry"
 import { GRID_STEP_CM, PX_PER_CM, isDoor, isWindow, normalizeMaterial } from "./types"
 import type { Dimension, Material, Point, Unit, View, Wall, WallDoor, WallElement } from "./types"
 import type { TrackLine } from "./wall-tracking"
+import { HATCHES, strokeHatchSeries, strokeHatchTile } from "./wall-hatch"
 
 const OUTLINE_PX = 4
 const HANDLE_PX = 5
@@ -29,8 +30,6 @@ export interface RenderMetrics {
   mmPx: number
   contourPx: number
   hatchPx: number
-  dashdot: number[]
-  dashdotSmall: number[]
   labelPx: number
   dimOvershootPx: number
   dimArrowPx: number
@@ -42,8 +41,6 @@ export const SCREEN_METRICS: RenderMetrics = {
   mmPx: MM,
   contourPx: 2,
   hatchPx: 1,
-  dashdot: [3.5 * MM, 1.2 * MM, 0.3 * MM, 1.2 * MM],
-  dashdotSmall: [2.5 * MM, 1 * MM, 0.3 * MM, 1 * MM],
   labelPx: 14,
   dimOvershootPx: 4,
   dimArrowPx: 9,
@@ -55,8 +52,6 @@ export const PDF_METRICS: RenderMetrics = {
   mmPx: 1,
   contourPx: 0.6,
   hatchPx: 0.25,
-  dashdot: [3.5, 1.2, 0.3, 1.2],
-  dashdotSmall: [2.5, 1, 0.3, 1],
   labelPx: 3.5,
   dimOvershootPx: 1.5,
   dimArrowPx: 2.5,
@@ -144,7 +139,7 @@ export const SAMPLE_THICKNESS_MM = 8
 export function drawLegendSample(ctx: CanvasRenderingContext2D, material: Material, origin: Point, m: RenderMetrics, p: Palette): void {
   const wall: Wall = { id: "legend-wall", a: { x: 0, y: 0 }, b: { x: SAMPLE_LENGTH_MM, y: 0 }, thicknessCm: SAMPLE_THICKNESS_MM, type: material }
   const toScreen = (q: Point): Point => ({ x: q.x + origin.x, y: q.y + origin.y })
-  drawWall(ctx, wall, [wall], 1, toScreen, 1, origin.x + origin.y, m, p.ink, [])
+  drawWall(ctx, wall, [wall], 1, toScreen, origin, m, p, [])
 }
 
 export function drawScene(
@@ -194,10 +189,9 @@ export function drawScene(
     if (!selectedWalls.includes(wall)) drawOutline(ctx, wall, sceneWalls, toScreen, p.marqueeWall)
   if (opts.hover && !selectedWalls.includes(opts.hover)) drawOutline(ctx, opts.hover, sceneWalls, toScreen, p.erase)
   const o = toScreen({ x: 0, y: 0 })
-  const anchorC = o.x + o.y
   const doorways = opts.doorways ?? []
-  for (const wall of walls) drawWall(ctx, wall, sceneWalls, 1, toScreen, k, anchorC, m, p.ink, doorways)
-  if (preview) drawWall(ctx, preview, sceneWalls, 0.4, toScreen, k, anchorC, m, p.ink, [])
+  for (const wall of walls) drawWall(ctx, wall, sceneWalls, 1, toScreen, o, m, p, doorways)
+  if (preview) drawWall(ctx, preview, sceneWalls, 0.4, toScreen, o, m, p, [])
   if (singleWalls) drawHandles(ctx, selectedWalls[0], toScreen, p)
   if (opts.square) {
     const corners = opts.square.map(toScreen)
@@ -589,103 +583,23 @@ export function tracePolygons(ctx: CanvasRenderingContext2D, polys: Point[][]): 
   }
 }
 
-function polyBounds(poly: Point[]): [number, number, number, number] {
-  const xs = poly.map((p) => p.x)
-  const ys = poly.map((p) => p.y)
-  return [Math.min(...xs), Math.min(...ys), Math.max(...xs), Math.max(...ys)]
-}
-
-function mod(x: number, m: number): number {
-  return ((x % m) + m) % m
-}
-
-function strokeHatch45(
-  ctx: CanvasRenderingContext2D,
-  poly: Point[],
-  dash: number[],
-  phase: number,
-  stride: number,
-  anchorC: number,
-  m: RenderMetrics,
-): void {
-  const [minX, minY, maxX, maxY] = polyBounds(poly)
-  const step = 3 * m.mmPx * Math.SQRT2 * stride
-  const minC = minX + minY
-  ctx.setLineDash(dash)
-  ctx.beginPath()
-  for (let c = minC - mod(minC - anchorC - phase * 3 * m.mmPx * Math.SQRT2, step); c <= maxX + maxY; c += step) {
-    ctx.moveTo(minX, c - minX)
-    ctx.lineTo(maxX, c - maxX)
-  }
-  ctx.stroke()
-  ctx.setLineDash([])
-}
-
-// штриховка сноса: линии под 135° к осям (направление экрана (1, 1), перпендикулярно штриховке «Кирпича»)
-// с шагом и фазой strokeHatch45 (change demolition-plan, design D8)
-export function strokeHatch135(ctx: CanvasRenderingContext2D, poly: Point[], anchorC: number, m: RenderMetrics): void {
-  const [minX, minY, maxX, maxY] = polyBounds(poly)
-  const step = 3 * m.mmPx * Math.SQRT2
-  const minC = minY - maxX
-  ctx.setLineDash([])
-  ctx.beginPath()
-  for (let c = minC - mod(minC - anchorC, step); c <= maxY - minX; c += step) {
-    ctx.moveTo(minX, minX + c)
-    ctx.lineTo(maxX, maxX + c)
-  }
-  ctx.stroke()
-}
-
-function woodLong(ctx: CanvasRenderingContext2D, a: Point, b: Point, thicknessPx: number, m: RenderMetrics): void {
-  const len = Math.hypot(b.x - a.x, b.y - a.y)
-  if (!len) return
-  const ux = (b.x - a.x) / len
-  const uy = (b.y - a.y) / len
-  const nx = -uy
-  const ny = ux
-  const amp = 0.6 * m.mmPx
-  const wave = 8 * m.mmPx
-  const margin = thicknessPx * 2
-  ctx.beginPath()
-  for (let off = -thicknessPx / 2 + 3 * m.mmPx / 2; off <= thicknessPx / 2; off += 3 * m.mmPx) {
-    let first = true
-    for (let t = -margin; t <= len + margin; t += 2 * m.mmPx) {
-      const lateral = off + amp * Math.sin((t / wave) * Math.PI * 2)
-      const px = a.x + ux * t + nx * lateral
-      const py = a.y + uy * t + ny * lateral
-      if (first) {
-        ctx.moveTo(px, py)
-        first = false
-      } else ctx.lineTo(px, py)
-    }
-  }
-  ctx.stroke()
-}
-
-function drawMaterial(
-  ctx: CanvasRenderingContext2D,
-  mat: Material,
-  polys: Point[][],
-  a: Point,
-  b: Point,
-  thicknessPx: number,
-  anchorC: number,
-  m: RenderMetrics,
-): void {
+// Штриховка материала по таблице HATCHES (change new-wall-materials, design D2): клип по полигонам стены, затем заливка
+// («Бетон»), затем линии или тайл. origin — точка начала координат чертежа в координатах контекста: от неё считается фаза.
+function drawMaterial(ctx: CanvasRenderingContext2D, mat: Material, polys: Point[][], origin: Point, m: RenderMetrics, p: Palette): void {
+  const spec = HATCHES[mat]
+  const bounds = polys.flat()
   ctx.save()
   tracePolygons(ctx, polys)
   ctx.clip()
-  ctx.lineWidth = m.hatchPx
-  const bounds = polys.flat()
-  if (mat === "brick") strokeHatch45(ctx, bounds, [], 0, 1, anchorC, m)
-  else if (mat === "concrete") strokeHatch45(ctx, bounds, m.dashdot, 0, 1, anchorC, m)
-  else if (mat === "reinforced") {
-    strokeHatch45(ctx, bounds, [], 0, 2, anchorC, m)
-    strokeHatch45(ctx, bounds, m.dashdotSmall, 1, 2, anchorC, m)
-  } else woodLong(ctx, a, b, thicknessPx, m)
+  if (spec.kind === "fill-lines") {
+    ctx.fillStyle = p[spec.fill]
+    tracePolygons(ctx, polys)
+    ctx.fill()
+  }
+  if (spec.kind === "tile") strokeHatchTile(ctx, bounds, spec.tile, spec.widthK, origin, m)
+  else for (const series of spec.series) strokeHatchSeries(ctx, bounds, series, origin, m)
   ctx.restore()
 }
-
 function strokeContour(ctx: CanvasRenderingContext2D, segs: Seg[], toScreen: (p: Point) => Point): void {
   ctx.lineCap = "square"
   ctx.beginPath()
@@ -705,18 +619,16 @@ function drawWall(
   walls: Wall[],
   alpha: number,
   toScreen: (p: Point) => Point,
-  k: number,
-  anchorC: number,
+  origin: Point,
   m: RenderMetrics,
-  ink: string,
+  p: Palette,
   doorways: readonly WallElement[],
 ): void {
   const mat = normalizeMaterial(wall.type)
   const polys = cutPieces(wall, displayPolygons(wall, walls), walls, doorways).map((poly) => poly.map(toScreen))
   ctx.globalAlpha = alpha
-  ctx.strokeStyle = ink
-  ctx.lineWidth = 1
-  drawMaterial(ctx, mat, polys, toScreen(wall.a), toScreen(wall.b), wall.thicknessCm * k, anchorC, m)
+  ctx.strokeStyle = p.ink
+  drawMaterial(ctx, mat, polys, origin, m, p)
   ctx.lineWidth = m.contourPx
   strokeContour(ctx, cutContour(wall, contourSegments(wall, walls), walls, doorways), toScreen)
   ctx.globalAlpha = 1
@@ -736,7 +648,7 @@ export function drawPatternPreview(canvas: HTMLCanvasElement, material: Material
     { x: w - 1, y: h - 1 },
     { x: 1, y: h - 1 },
   ]
-  drawMaterial(ctx, material, [poly], { x: 1, y: h / 2 }, { x: w - 1, y: h / 2 }, h - 2, 0, SCREEN_METRICS)
+  drawMaterial(ctx, material, [poly], { x: 0, y: 0 }, SCREEN_METRICS, palette)
 }
 
 function drawOutline(

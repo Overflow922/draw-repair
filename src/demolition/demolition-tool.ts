@@ -72,7 +72,7 @@ export function createDemolitionTool(host: DemolitionToolHost): DemolitionTool {
     return true
   }
 
-  // нажатие на стену: жест начинается, только если точка лежит на чистом участке (не железобетон и не участок окна)
+  // нажатие на стену: жест начинается, только если точка лежит на чистом участке (не бетон и не участок окна)
   const pressOn = (wall: Wall, p: Point, px: Point): Press | null => {
     const t = Math.min(Math.max(dot(sub(p, wall.a), unitVector(wall.a, wall.b)), 0), dist(wall.a, wall.b))
     const range = cleanRanges(wall, host.walls(), host.elements()).find(([lo, hi]) => t >= lo - EPS_CM && t <= hi + EPS_CM)
@@ -125,7 +125,7 @@ export function createDemolitionTool(host: DemolitionToolHost): DemolitionTool {
 
   return {
     down(p, px) {
-      // железобетон и участок окна не сносятся: нажатие на них жеста не начинает
+      // бетон и участок окна не сносятся: нажатие на них жеста не начинает
       const wall = wallNearBody(p, host.walls(), host.radiusCm())
       press = wall ? pressOn(wall, p, px) : null
       dragging = false

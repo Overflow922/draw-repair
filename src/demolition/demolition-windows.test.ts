@@ -84,8 +84,8 @@ describe("стена с окном не помечается", () => {
     expect(s.marks()).toEqual([])
   })
 
-  it("NW-15: железобетонная стена по-прежнему не помечается", () => {
-    const s = setup({ walls: [W("reinforced")] })
+  it("NW-15: бетонная стена по-прежнему не помечается", () => {
+    const s = setup({ walls: [W("concrete")] })
     expect(click(s, { x: 250, y: 0 })).toBeNull()
     expect(s.marks()).toEqual([])
   })

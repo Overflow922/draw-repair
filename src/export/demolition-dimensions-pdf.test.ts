@@ -221,9 +221,9 @@ describe("габариты страницы демонтажа", () => {
     expect(withMark.maxX).toBeCloseTo(without.maxX, 6)
   })
 
-  it("DC-23: пометки на железобетонной или отсутствующей стене не действуют и габариты не меняют", () => {
-    const reinforced: Wall = { ...W1, type: "reinforced" }
-    expect(pageBounds(pageOf([reinforced], [M1]), SCALE)).toEqual(pageBounds(pageOf([reinforced], []), SCALE))
+  it("DC-23: пометки на бетонной или отсутствующей стене не действуют и габариты не меняют", () => {
+    const concrete: Wall = { ...W1, type: "concrete" }
+    expect(pageBounds(pageOf([concrete], [M1]), SCALE)).toEqual(pageBounds(pageOf([concrete], []), SCALE))
     expect(pageBounds(pageOf([W1], [mark("x", "gone", 100, 190)]), SCALE)).toEqual(pageBounds(pageOf([W1], []), SCALE))
   })
 

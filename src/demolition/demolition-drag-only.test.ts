@@ -96,9 +96,9 @@ describe("клик ничего не помечает", () => {
     expect(s.log.record).toBe(0)
   })
 
-  it("DO-02: клик по железобетонной стене и мимо стены — null, ничего не меняется", () => {
-    const reinforced = setup({ walls: [W("reinforced")] })
-    expect(click(reinforced, { x: 250, y: 0 })).toBeNull()
+  it("DO-02: клик по бетонной стене и мимо стены — null, ничего не меняется", () => {
+    const concrete = setup({ walls: [W("concrete")] })
+    expect(click(concrete, { x: 250, y: 0 })).toBeNull()
     expect(click(setup(), { x: 250, y: 200 })).toBeNull()
   })
 })

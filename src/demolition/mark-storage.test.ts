@@ -8,7 +8,7 @@ import { mk } from "./demolition.test-utils"
 // design D7). Все расстояния — в сантиметрах; стена w1 — (0,0)-(500,0), кирпич, 20 см.
 
 const wall: Wall = { id: "w1", a: { x: 0, y: 0 }, b: { x: 500, y: 0 }, thicknessCm: 20, type: "brick" }
-const reinforced: Wall = { id: "w2", a: { x: 0, y: 200 }, b: { x: 500, y: 200 }, thicknessCm: 20, type: "reinforced" }
+const concrete: Wall = { id: "w2", a: { x: 0, y: 200 }, b: { x: 500, y: 200 }, thicknessCm: 20, type: "concrete" }
 const dimension: Dimension = {
   from: { a: { wallId: "w1", edge: 2 }, b: { wallId: "w1", edge: 0 } },
   to: { a: { wallId: "w1", edge: 3 }, b: { wallId: "w1", edge: 0 } },
@@ -18,7 +18,7 @@ const doorway: Doorway = { id: "d1", wallId: "w1", anchor: "a", offsetCm: 50, wi
 const view: View = { zoom: 1.5, pan: { x: -10, y: 20 } }
 
 const drawing = (id: string, extra: Record<string, unknown> = {}): Drawing =>
-  ({ id, name: `Чертёж ${id}`, walls: [wall, reinforced], dimensions: [dimension], doorways: [doorway], view, ...extra }) as Drawing
+  ({ id, name: `Чертёж ${id}`, walls: [wall, concrete], dimensions: [dimension], doorways: [doorway], view, ...extra }) as Drawing
 
 const doc = (drawings: Drawing[], version = 3): string => JSON.stringify({ version, activeId: drawings[0]?.id ?? "", drawings })
 
@@ -70,7 +70,7 @@ describe("сохранение и чтение пометок", () => {
   ])("ST-08: поле demolition не массив (%s) читается как отсутствующее", (_name, value) => {
     const [d] = parsedDrawings(doc([drawing("a", { demolition: value })]))
     expect("demolition" in (d as Drawing)).toBe(false)
-    expect(d?.walls).toEqual([wall, reinforced])
+    expect(d?.walls).toEqual([wall, concrete])
   })
 })
 
@@ -94,7 +94,7 @@ describe("битые и лишние пометки", () => {
   it("ST-03: некорректные пометки отбрасываются, корректная восстанавливается, остальные данные чертежа целы", () => {
     const [d] = parsedDrawings(doc([drawing("a", { demolition: [...bad, good] })]))
     expect(d?.demolition).toEqual([good])
-    expect(d?.walls).toEqual([wall, reinforced])
+    expect(d?.walls).toEqual([wall, concrete])
     expect(d?.dimensions).toEqual([dimension])
     expect(d?.doorways).toEqual([doorway])
     expect(d?.view).toEqual(view)
@@ -129,7 +129,7 @@ describe("битые и лишние пометки", () => {
     expect(marksOf(doc([drawing("a", { demolition: marks })]))).toEqual(marks)
   })
 
-  it("ST-05: пометка на стене из железобетона сохраняется (она не действует, но хранится)", () => {
+  it("ST-05: пометка на стене из бетона сохраняется (она не действует, но хранится)", () => {
     const marks = [mk("r", "w2", "a", 100, 200)]
     expect(marksOf(doc([drawing("a", { demolition: marks })]))).toEqual(marks)
   })
@@ -145,7 +145,7 @@ describe("битые и лишние пометки", () => {
 describe("прочие поля документа", () => {
   it("ST-06: стены, размеры, проёмы, вид и имя читаются из прежних полей без изменений", () => {
     const [d] = parsedDrawings(doc([drawing("a", { demolition: [mk("m1", "w1", "a", 100, 190)] })]))
-    expect(d?.walls).toEqual([wall, reinforced])
+    expect(d?.walls).toEqual([wall, concrete])
     expect(d?.dimensions).toEqual([dimension])
     expect(d?.doorways).toEqual([doorway])
     expect(d?.view).toEqual(view)

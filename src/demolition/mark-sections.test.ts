@@ -99,9 +99,9 @@ describe("участки окон и чистые участки", () => {
     expect(clean(tee(), [window_("P", "a", 100, 90, "wp")])).toEqual([[0, 500]])
   })
 
-  it("SW-07: железобетон и вырожденная стена — чистых участков нет, с окном и без", () => {
-    expect(cleanRanges(W("reinforced"), [W("reinforced")], [])).toEqual([])
-    expect(cleanRanges(W("reinforced"), [W("reinforced")], [left])).toEqual([])
+  it("SW-07: бетон и вырожденная стена — чистых участков нет, с окном и без", () => {
+    expect(cleanRanges(W("concrete"), [W("concrete")], [])).toEqual([])
+    expect(cleanRanges(W("concrete"), [W("concrete")], [left])).toEqual([])
     const z = wall(10, 10, 10, 10, "Z")
     expect(cleanRanges(z, [z], [])).toEqual([])
   })
@@ -151,8 +151,8 @@ describe("действующие пометки и участки окон", () 
     expect(shown([mk("a", "W", "a", 50, 150), mk("b", "W", "a", 320, 420)])).toEqual(["b"])
   })
 
-  it("SW-14: пометка на железобетонной стене не действует при любых элементах", () => {
-    expect(effectiveMarks([mk("a", "W", "a", 300, 450)], [W("reinforced")], [])).toEqual([])
+  it("SW-14: пометка на бетонной стене не действует при любых элементах", () => {
+    expect(effectiveMarks([mk("a", "W", "a", 300, 450)], [W("concrete")], [])).toEqual([])
   })
 
   it("SW-14: проём и дверь пометку не скрывают", () => {

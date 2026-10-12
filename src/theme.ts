@@ -17,6 +17,7 @@ export interface Palette {
   erase: string // подсветка ластика
   snap: string // точка привязки размера
   sill: string // «H под.» в подписи окна
+  concreteFill: string // заливка стены из бетона под штрихами: темнее бумаги, штрихи ink на ней читаются
 }
 
 export const LIGHT_PALETTE: Palette = {
@@ -36,6 +37,7 @@ export const LIGHT_PALETTE: Palette = {
   erase: "rgba(220, 38, 38, 0.5)",
   snap: "#dc2626",
   sill: "#2b7fd4",
+  concreteFill: "#cfcfcf",
 }
 
 export const DARK_PALETTE: Palette = {
@@ -55,6 +57,7 @@ export const DARK_PALETTE: Palette = {
   erase: "rgba(248, 113, 113, 0.6)",
   snap: "#f87171",
   sill: "#60a5fa",
+  concreteFill: "#4a4b50",
 }
 
 export const paletteOf = (theme: Theme): Palette => (theme === "dark" ? DARK_PALETTE : LIGHT_PALETTE)

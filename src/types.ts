@@ -5,16 +5,20 @@ export interface Point {
   y: number
 }
 
+// порядок каталога — порядок образцов в панели, переключения стрелками и записей легенды PDF
 export const MATERIALS = [
+  { id: "blocks", label: "Блоки" },
   { id: "brick", label: "Кирпич" },
   { id: "concrete", label: "Бетон" },
-  { id: "reinforced", label: "Железобетон" },
-  { id: "wood-long", label: "Дерево (вдоль)" },
+  { id: "gkl", label: "ГКЛ" },
+  { id: "wood-long", label: "Дерево" }, // id остался от «Дерево (вдоль)»: сохранённые чертежи читаются без миграции
 ] as const
 
 export type Material = (typeof MATERIALS)[number]["id"]
 
+// «Железобетон» убран из каталога: сохранённые такие стены читаются как «Бетон»; остальные неизвестные типы — как «Кирпич»
 export function normalizeMaterial(type: string): Material {
+  if (type === "reinforced") return "concrete"
   return (MATERIALS.some((m) => m.id === type) ? type : "brick") as Material
 }
 

@@ -502,3 +502,20 @@ Follow-ups from `fix-diagonal-corner-block-snap-and-dimensions` (2026-10-12).
   and B's right face get no auto length dimension. Cause: `anchorAt` (`src/auto-dimensions.ts`) →
   `nearestEdgeIntersection` cannot find the block contour vertices. By the spec reading B's left face should be 120 cm
   and A's bottom face 120 cm (currently 100). Out of scope of the change (length dimensions were not touched).
+---
+
+Follow-ups from `new-wall-materials` (2026-10-12).
+
+## Bugs
+
+- [ ] The `Дерево` hatch (`src/wood-tile.ts`) does not look like the customer's sample (`img_4.png`, bottom pattern): wavy lines are fine, the lens shapes are too small and the overall texture is much sparser/regular. Accepted as is for now (user, 2026-10-12); redo the tile (trace the sample into polyline data, keep it seamless and anchored to the drawing) or switch to another procedural pattern (design D4).
+
+## Tests
+
+- [ ] Wood tile: no test for the pan ≈ 1e6 px boundary (precision of the tile phase remainder), nor for the tile continuity across a joint in the PDF page (only on the canvas, `src/wall-materials-render.test.ts` WM-J6).
+- [ ] Ghost (preview) wall of concrete: the fill is drawn under `globalAlpha` 0.4 together with the hatching; no test pins this (the spec has no scenario for it).
+- [ ] `src/main.ts` swatch click / arrow keys / selected-wall material change have no automated test (no DOM environment); checked by hand (`new-wall-materials` tasks section 7). Add tests when a DOM environment appears.
+
+## Docs
+
+- [ ] `openspec/specs/wall-types`: "Штриховка стены по материалу" says a selected wall changes material "by swatch or arrows", while "Выбор типа стены" forbids arrows from switching the material when something is selected (inherited inconsistency, found by test validation round 2).

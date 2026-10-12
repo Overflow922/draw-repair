@@ -311,9 +311,9 @@ describe("область и легенда под полосой в PDF", () => 
   })
 
   it("S-18: легенда с максимумом материалов помещается по высоте в область на всех форматах", () => {
-    const all = page([wall(0, 0, 100, 0, "a", "brick"), wall(0, 50, 100, 50, "b", "concrete"), wall(0, 100, 100, 100, "c", "reinforced"), wall(0, 150, 100, 150, "d", "wood-long")], "Обмерочный план")
+    const all = page([wall(0, 0, 100, 0, "a", "brick"), wall(0, 50, 100, 50, "b", "concrete"), wall(0, 100, 100, 100, "c", "gkl"), wall(0, 150, 100, 150, "d", "wood-long"), wall(0, 200, 100, 200, "e", "blocks")], "Обмерочный план")
     const rows = legendEntries(all).length
-    expect(rows).toBe(4)
+    expect(rows).toBe(5)
     for (const format of FORMATS) expect(rows * 14, format).toBeLessThanOrEqual(legendArea(format, 40).h)
   })
 

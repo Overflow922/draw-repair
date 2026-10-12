@@ -271,9 +271,9 @@ describe("невыделенные пометки: та же цепочка бе
     expect(sortedTexts(ops).filter((x) => x === "50")).toHaveLength(2)
   })
 
-  it("CD-21: пометка на железобетонной стене не действует: даже выделенной размеров нет", () => {
-    const reinforced = [W("reinforced")]
-    const ops = render({ walls: reinforced, marks: marksOn(reinforced), selectedId: "m" }, { walls: reinforced })
+  it("CD-21: пометка на бетонной стене не действует: даже выделенной размеров нет", () => {
+    const concrete = [W("concrete")]
+    const ops = render({ walls: concrete, marks: marksOn(concrete), selectedId: "m" }, { walls: concrete })
     expect(texts(ops)).toEqual([])
     expect(arrows(ops)).toEqual([])
   })

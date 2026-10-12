@@ -121,7 +121,8 @@ function extentOf(doc: jsPDF, t: TextCall): { left: number; right: number } {
   return { left: t.x, right: t.x + w }
 }
 
-const isHatchWidth = (s: StyledStroke): boolean => Math.abs(s.widthMm - HATCH_MM) < TOL
+// штриховка — линии тоньше или равные толщине штриховки «Кирпича» (штриховка «Блоков» и «ГКЛ» тоньше, change new-wall-materials)
+const isHatchWidth = (s: StyledStroke): boolean => s.widthMm > 0.05 && s.widthMm <= HATCH_MM + TOL
 const isSolid = (s: StyledStroke): boolean => s.widthMm > HATCH_MM + 0.05
 const segmentsOf = (s: StyledStroke): { a: StyledPoint; b: StyledPoint }[] =>
   s.subpaths.flatMap((sp) => sp.slice(1).map((q, i) => ({ a: sp[i] as StyledPoint, b: q })))
@@ -129,9 +130,15 @@ const isDiagonal = (g: { a: StyledPoint; b: StyledPoint }): boolean => Math.abs(
 const allPoints = (s: StyledStroke): StyledPoint[] => s.subpaths.flat()
 
 // штрихи столбца легенды (левее области чертежа) и чертёжной части страницы (правее столбца, над основной надписью)
-const inColumn = (strokes: StyledStroke[], area: Rect): StyledStroke[] => strokes.filter((s) => allPoints(s).every((p) => p.x <= area.x + TOL))
+// принадлежность столбцу или чертежу — по середине штриха по x: штриховка с запасом за образец или стену (её обрезает клиппинг)
+// не должна менять, к чему относится штрих (change new-wall-materials)
+const centerX = (s: StyledStroke): number => {
+  const xs = allPoints(s).map((p) => p.x)
+  return (Math.min(...xs) + Math.max(...xs)) / 2
+}
+const inColumn = (strokes: StyledStroke[], area: Rect): StyledStroke[] => strokes.filter((s) => centerX(s) <= area.x + TOL)
 const inChart = (strokes: StyledStroke[], area: Rect): StyledStroke[] =>
-  strokes.filter((s) => allPoints(s).every((p) => p.x >= area.x - TOL && p.y <= area.y + area.h + TOL))
+  strokes.filter((s) => centerX(s) >= area.x - TOL && allPoints(s).every((p) => p.y <= area.y + area.h + TOL))
 
 const bboxOf = (strokes: StyledStroke[]): Rect | null => {
   const pts = strokes.flatMap(allPoints)
@@ -210,7 +217,7 @@ describe("состав записей на листах документа", () 
 
   it("LG-2: на листах нет лишних записей материалов и сноса", () => {
     build([MEASURE, MOUNTING])
-    for (const absent of ["Железобетон", "Дерево", "Демонтируемая"]) expect(legendLinesOn(1)).not.toContain(absent)
+    for (const absent of ["Блоки", "ГКЛ", "Дерево", "Железобетон", "Дерево (вдоль)", "Демонтируемая"]) expect(legendLinesOn(1)).not.toContain(absent)
     for (const absent of ["Кирпич", "Демонтируемая"]) expect(legendLinesOn(2)).not.toContain(absent)
   })
 
@@ -416,17 +423,17 @@ describe("положение легенды на листе", () => {
     }
   })
 
-  it("LG-11: легенда с максимумом записей (4 материала и снос) не выходит за столбец ни на одном формате", () => {
-    const walls = [wall("w1", "brick", 0), wall("w2", "concrete", 300), wall("w3", "reinforced", 600), wall("w4", "wood-long", 900)]
+  it("LG-11, WM-L5: легенда с максимумом записей (5 материалов и снос) не выходит за столбец ни на одном формате", () => {
+    const walls = [wall("w1", "blocks", 0), wall("w2", "brick", 300), wall("w3", "concrete", 600), wall("w4", "gkl", 900), wall("w5", "wood-long", 1200)]
     const full = page(walls, [], effectiveMarks([MARK], walls, []), "Демонтаж")
     expect(full.demolition?.length).toBe(1)
     for (const format of ["A4", "A3", "A2", "A1", "A0"] as const) {
       const doc = build([full], 200, format)
       const column = colOf(format)
       const drawn = areaOf(format)
-      // перенос «Дерево (вдоль)» спекой не задан: строки, склеенные пробелом, дают подписи в порядке записей
-      expect(legendLinesOn(1, format).join(" "), format).toBe("Кирпич Бетон Железобетон Дерево (вдоль) Демонтируемая стена")
-      expect(legendLinesOn(1, format)[0], format).toBe("Кирпич")
+      // строки, склеенные пробелом, дают подписи в порядке записей каталога, затем снос
+      expect(legendLinesOn(1, format).join(" "), format).toBe("Блоки Кирпич Бетон ГКЛ Дерево Демонтируемая стена")
+      expect(legendLinesOn(1, format)[0], format).toBe("Блоки")
       expect(legendLinesOn(1, format).slice(-2), format).toEqual(["Демонтируемая", "стена"])
       for (const t of legendTextsOn(1, format)) {
         const { left, right } = extentOf(doc, t)
@@ -436,7 +443,7 @@ describe("положение легенды на листе", () => {
         expect(t.y, `${format} ${t.text}`).toBeLessThanOrEqual(column.y + column.h)
       }
       const rows = sampleRows(doc, 1, format)
-      expect(rows.length, format).toBe(5)
+      expect(rows.length, format).toBe(6)
       for (const r of rows) expect(insideRect(r, column), format).toBe(true)
     }
   })
@@ -453,8 +460,8 @@ describe("положение легенды на листе", () => {
   })
 
   it("LG-9: ширина столбца общая: чертёж одинаковой геометрии стоит одинаково на листах с разной по ширине легендой", () => {
-    const narrow = page([wall("w1", "brick", 0)])
-    const wide = page([wall("w1", "reinforced", 0)])
+    const narrow = page([wall("w1", "gkl", 0)])
+    const wide = page([wall("w1", "brick", 0)])
     const doc = build([narrow, wide])
     const drawn = areaOf()
     const boxes = [1, 2].map((n) => bboxOf(inChart(parseStyledStrokes(doc, n), drawn).filter(isSolid).filter((s) => !isFrameLike(s))))
@@ -529,10 +536,10 @@ describe("инварианты легенды", () => {
 
 describe("образцы легенды", () => {
   const MATERIAL_WALLS: [string, Wall["type"]][] = [
+    ["Блоки", "blocks"],
     ["Кирпич", "brick"],
     ["Бетон", "concrete"],
-    ["Железобетон", "reinforced"],
-    ["Дерево (вдоль)", "wood-long"],
+    ["Дерево", "wood-long"],
   ]
   // рисунок образца и рисунок того же материала на чертеже одной и той же страницы
   function looksOf(type: Wall["type"]): { sample: MaterialLook; chart: MaterialLook } {

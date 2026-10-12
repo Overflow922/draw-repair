@@ -147,8 +147,8 @@ describe("ластик плана «Демонтаж»: erase", () => {
     expect(s.log).toMatchObject({ record: 0, set: 0 })
   })
 
-  it("SZ-43: пометка на железобетонной стене не действует и не удаляется (нет области)", () => {
-    const s = setup({ walls: [W("reinforced")], marks: [m1] })
+  it("SZ-43: пометка на бетонной стене не действует и не удаляется (нет области)", () => {
+    const s = setup({ walls: [W("concrete")], marks: [m1] })
     expect(s.tool.erase({ x: 150, y: 0 })).toBe(false)
     expect(s.marks()).toEqual([m1])
   })

@@ -293,13 +293,28 @@ describe("превью штриховок материалов", () => {
     const { canvas, ops } = previewCanvas()
     drawPatternPreview(canvas, mat, DARK_PALETTE)
     expect(ops.length).toBeGreaterThan(0)
-    for (const o of ops) expect(o.style).toBe(DARK_PALETTE.ink)
+    // штрихи — цветом линий; заливка «Бетона» (change new-wall-materials) — отдельным цветом схемы, не бумагой
+    for (const o of ops.filter((p) => p.kind !== "fill")) expect(o.style).toBe(DARK_PALETTE.ink)
+    const fills = ops.filter((p) => p.kind === "fill")
+    if (mat === "concrete") expect(fills.length).toBeGreaterThan(0)
+    else expect(fills).toEqual([])
+    for (const f of fills) {
+      expect(f.style).not.toBe(DARK_PALETTE.ink)
+      expect(f.style).not.toBe(DARK_PALETTE.paper)
+    }
   })
 
   it.each(materials)("PATTERN-LIGHT-1: %s без палитры — прежним цветом «#333»", (mat) => {
     const { canvas, ops } = previewCanvas()
     drawPatternPreview(canvas, mat)
     expect(ops.length).toBeGreaterThan(0)
-    for (const o of ops) expect(o.style).toBe("#333")
+    for (const o of ops.filter((p) => p.kind !== "fill")) expect(o.style).toBe("#333")
+    const fills = ops.filter((p) => p.kind === "fill")
+    if (mat === "concrete") expect(fills.length).toBeGreaterThan(0)
+    else expect(fills).toEqual([])
+    for (const f of fills) {
+      expect(f.style).not.toBe("#333")
+      expect(f.style).not.toBe("#fff")
+    }
   })
 })

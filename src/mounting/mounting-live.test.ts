@@ -37,15 +37,16 @@ describe("правки обмера и демонтажа отражаются �
   })
 
   it("MP-31: смена материала и толщины стены обмера видна в остатках", () => {
-    const out = marked([wall("W", 0, 0, 500, 0, 30, "concrete")]).remnants
+    // сносимый материал: «Бетон» не сносится (demolition-plan), поэтому смена материала и толщины видна на дереве
+    const out = marked([wall("W", 0, 0, 500, 0, 30, "wood-long")]).remnants
     expect(out.map((r) => [r.thicknessCm, r.type])).toEqual([
-      [30, "concrete"],
-      [30, "concrete"],
+      [30, "wood-long"],
+      [30, "wood-long"],
     ])
   })
 
-  it("MP-31: смена материала на железобетон возвращает стену целиком (пометка не действует)", () => {
-    const out = marked([W("reinforced")]).remnants
+  it("MP-31: смена материала на бетон возвращает стену целиком (пометка не действует)", () => {
+    const out = marked([W("concrete")]).remnants
     expect(idsOf(out)).toEqual(["W~0"])
   })
 

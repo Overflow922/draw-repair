@@ -143,8 +143,8 @@ describe("видимость старых окон и дверей", () => {
     expect(sceneWith([mark("m", "W", "a", 100, 190)], [door]).doorways).toEqual([{ ...door, wallId: "W~1900", offsetCm: 210 }])
   })
 
-  it("MP-44: элемент на стене из железобетона (снос недействителен) виден", () => {
-    const d = drawing({ walls: [W("reinforced")], doorways: [O], demolition: [mark("m", "W", "a", 100, 400)] })
+  it("MP-44: элемент на стене из бетона (снос недействителен) виден", () => {
+    const d = drawing({ walls: [W("concrete")], doorways: [O], demolition: [mark("m", "W", "a", 100, 400)] })
     expect(mountingScene(d).doorways).toEqual([{ ...O, wallId: "W~0", offsetCm: 200 }])
   })
 

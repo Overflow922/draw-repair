@@ -33,9 +33,28 @@ describe("легенда: материалы страницы", () => {
     expect(labels(page([wall("w2", "concrete", 300), wall("w1", "brick")]))).toEqual(["Кирпич", "Бетон"])
   })
 
-  it("LG-1: все четыре материала — в порядке каталога материалов", () => {
-    const walls = [wall("a", "wood-long", 0), wall("b", "reinforced", 100), wall("c", "concrete", 200), wall("d", "brick", 300)]
-    expect(labels(page(walls))).toEqual(["Кирпич", "Бетон", "Железобетон", "Дерево (вдоль)"])
+  it("LG-1: все пять материалов — в порядке каталога материалов", () => {
+    const walls = [wall("a", "wood-long", 0), wall("b", "gkl", 100), wall("c", "concrete", 200), wall("d", "brick", 300), wall("e", "blocks", 400)]
+    expect(labels(page(walls))).toEqual(["Блоки", "Кирпич", "Бетон", "ГКЛ", "Дерево"])
+  })
+
+  it("WM-L2: блоки, ГКЛ и дерево — в порядке каталога, а не порядка стен", () => {
+    const walls = [wall("a", "wood-long", 0), wall("b", "gkl", 100), wall("c", "blocks", 200)]
+    expect(labels(page(walls))).toEqual(["Блоки", "ГКЛ", "Дерево"])
+  })
+
+  it("WM-L4: стена, сохранённая как reinforced (после загрузки — бетон), даёт запись «Бетон», а не «Железобетон»", () => {
+    const legacy: Wall = JSON.parse('{"id":"w1","a":{"x":0,"y":0},"b":{"x":500,"y":0},"thicknessCm":20,"type":"reinforced"}')
+    expect(labels(page([legacy]))).toEqual(["Бетон"])
+  })
+
+  it("WM-L4: стена reinforced и стена concrete вместе — одна запись «Бетон»", () => {
+    const legacy: Wall = JSON.parse('{"id":"w2","a":{"x":0,"y":300},"b":{"x":500,"y":300},"thicknessCm":20,"type":"reinforced"}')
+    expect(labels(page([wall("w1", "concrete"), legacy]))).toEqual(["Бетон"])
+  })
+
+  it("WM-L4: стена wood-long даёт запись «Дерево», а не «Дерево (вдоль)»", () => {
+    expect(labels(page([wall("w1", "wood-long")]))).toEqual(["Дерево"])
   })
 
   it("LG-2: только кирпич без элементов — единственная запись «Кирпич»", () => {
@@ -86,9 +105,11 @@ describe("легенда: элементы стены в неё не входя�
     expect(legendWidthMm([full])).toBe(legendWidthMm([bare]))
   })
 
-  it("LG-2: на странице из одной железобетонной стены лишних записей нет", () => {
-    const all = labels(page([wall("w1", "reinforced")]))
-    for (const absent of ["Проём", "Дверь", "Окно", "Кирпич", "Бетон", "Дерево (вдоль)", "Демонтируемая стена"]) expect(all).not.toContain(absent)
+  it("LG-2, WM-L3: на странице из одной стены ГКЛ лишних записей нет", () => {
+    const all = labels(page([wall("w1", "gkl")]))
+    expect(all).toEqual(["ГКЛ"])
+    for (const absent of ["Проём", "Дверь", "Окно", "Блоки", "Кирпич", "Бетон", "Дерево", "Железобетон", "Дерево (вдоль)", "Демонтируемая стена"])
+      expect(all).not.toContain(absent)
   })
 })
 
@@ -109,11 +130,11 @@ describe("легенда: снос", () => {
     expect(labels(page([W1], [], []))).toEqual(["Кирпич"])
   })
 
-  it("LG-5: пометка на железобетоне недействующая — «Демонтируемая стена» нет, «Железобетон» есть", () => {
-    const rc = wall("w1", "reinforced")
+  it("LG-5, WM-D4: пометка на бетоне недействующая — «Демонтируемая стена» нет, «Бетон» есть", () => {
+    const rc = wall("w1", "concrete")
     const marks = effectiveMarks([mark("m1", 100, 190)], [rc], [])
     expect(marks).toEqual([])
-    expect(labels(page([rc], [], marks))).toEqual(["Железобетон"])
+    expect(labels(page([rc], [], marks))).toEqual(["Бетон"])
   })
 
   it("LG-5: пометка на несуществующую стену недействующая — записи нет", () => {
@@ -141,11 +162,11 @@ describe("легенда: снос", () => {
     expect(labels(pages[1] as PlanPage)).toEqual(["Кирпич", "Демонтируемая стена"])
   })
 
-  it("LG-4: максимум записей — четыре материала и снос (5)", () => {
-    const walls = [wall("w1", "brick", 0), wall("w2", "concrete", 100), wall("w3", "reinforced", 200), wall("w4", "wood-long", 300)]
+  it("LG-4, WM-L5: максимум записей — пять материалов и снос (6)", () => {
+    const walls = [wall("w1", "brick", 0), wall("w2", "concrete", 100), wall("w3", "gkl", 200), wall("w4", "wood-long", 300), wall("w5", "blocks", 400)]
     const marks = effectiveMarks([mark("m1", 100, 190)], walls, [])
     expect(marks.length).toBe(1)
-    expect(labels(page(walls, [DOORWAY, DOOR, WINDOW], marks))).toEqual(["Кирпич", "Бетон", "Железобетон", "Дерево (вдоль)", "Демонтируемая стена"])
+    expect(labels(page(walls, [DOORWAY, DOOR, WINDOW], marks))).toEqual(["Блоки", "Кирпич", "Бетон", "ГКЛ", "Дерево", "Демонтируемая стена"])
   })
 })
 
@@ -159,7 +180,7 @@ describe("легенда: страница без стен и запрещённ
   })
 
   it("LG-2: ни в какой комбинации нет записей для объектов, которых нет в приложении", () => {
-    const walls = [wall("w1", "brick", 0), wall("w2", "concrete", 100), wall("w3", "reinforced", 200), wall("w4", "wood-long", 300)]
+    const walls = [wall("w1", "brick", 0), wall("w2", "concrete", 100), wall("w3", "gkl", 200), wall("w4", "wood-long", 300)]
     const all = labels(page(walls, [DOORWAY, DOOR, WINDOW], effectiveMarks([mark("m1", 100, 190)], walls, [])))
     for (const absent of ["Газобетон", "Вентканал", "Канализационные коммуникации", "Радиатор"]) expect(all).not.toContain(absent)
   })
@@ -206,27 +227,26 @@ describe("легенда: ширина столбца документа", () =>
     expect(legendWidthMm([brickOnly, demolitionPage])).toBe(widest)
   })
 
-  it("LG-9: более длинная подпись даёт более широкую колонку («Железобетон» шире «Кирпич»)", () => {
-    expect(legendWidthMm([page([wall("w1", "reinforced")])])).toBeGreaterThan(legendWidthMm([brickOnly]))
+  it("LG-9: более длинная подпись даёт более широкую колонку («Кирпич» шире «ГКЛ»)", () => {
+    expect(legendWidthMm([page([wall("w1", "gkl")])])).toBeLessThan(legendWidthMm([brickOnly]))
   })
 
   it("LG-9: число записей на ширину не влияет, только самая длинная подпись", () => {
-    const many = page([wall("a", "brick", 0), wall("b", "concrete", 100), wall("c", "wood-long", 200)])
-    const single = page([wall("a", "wood-long", 0)])
-    // самая длинная подпись у обеих — «Дерево (вдоль)»
-    expect(legendWidthMm([many])).toBe(legendWidthMm([single]))
+    const many = page([wall("a", "blocks", 0), wall("b", "brick", 100), wall("c", "gkl", 200)])
+    // самая длинная подпись у обеих — «Кирпич»
+    expect(legendWidthMm([many])).toBe(legendWidthMm([brickOnly]))
   })
 
   it("LG-6: ширина столбца одна для всего документа — страницы с разным составом дают общий результат", () => {
     expect(legendWidthMm([brickOnly, concreteOnly])).toBe(legendWidthMm([concreteOnly, brickOnly]))
   })
 
-  it("LG-9, LG-15: ширина — по самой широкой строке после переноса: «Демонтируемая стена» шире «Железобетон» лишь на разницу слов «Демонтируемая» и «Железобетон»", () => {
-    const reinforced = legendWidthMm([page([wall("w1", "reinforced")])])
+  it("LG-9, LG-15: ширина — по самой широкой строке после переноса: «Демонтируемая стена» шире «Кирпич» лишь на разницу слов «Демонтируемая» и «Кирпич»", () => {
+    const brick = legendWidthMm([brickOnly])
     const demolition = legendWidthMm([demolitionPage])
-    // «Демонтируемая» (13 знаков) шире «Железобетон» (11) на 2 знака; без переноса «Демонтируемая стена» (19) была бы шире на 8
-    expect(demolition).toBeGreaterThan(reinforced)
-    expect(demolition - reinforced).toBeLessThan(8 * 0.6 * 3.5 * 0.9)
+    // «Демонтируемая» (13 знаков) шире «Кирпич» (6) на 7 знаков; без переноса «Демонтируемая стена» (19) была бы шире на 13
+    expect(demolition).toBeGreaterThan(brick)
+    expect(demolition - brick).toBeLessThan(10 * 0.6 * 3.5)
   })
 })
 
@@ -235,12 +255,12 @@ describe("легенда: перенос подписи", () => {
     expect(wrapLabel("Демонтируемая стена")).toEqual(["Демонтируемая", "стена"])
   })
 
-  it.each(["Кирпич", "Бетон", "Железобетон"])("LG-15: короткая подпись «%s» — одна строка", (label) => {
+  it.each(["Блоки", "Кирпич", "Бетон", "ГКЛ", "Дерево"])("LG-15: короткая подпись «%s» — одна строка", (label) => {
     expect(wrapLabel(label)).toEqual([label])
   })
 
   it("LG-15: строки, склеенные пробелом, дают исходную подпись; пустых строк нет; слов не разрывает", () => {
-    for (const label of ["Демонтируемая стена", "Дерево (вдоль)", "Кирпич", "один два три четыре пять шесть семь восемь"]) {
+    for (const label of ["Демонтируемая стена", "Дерево", "Кирпич", "один два три четыре пять шесть семь восемь"]) {
       const lines = wrapLabel(label)
       expect(lines.join(" "), label).toBe(label)
       for (const line of lines) expect(line.length, label).toBeGreaterThan(0)

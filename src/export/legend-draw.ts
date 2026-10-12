@@ -1,9 +1,10 @@
 import type { jsPDF } from "jspdf"
 import { demolitionColor } from "../demolition/demolition-render"
-import { PDF_METRICS, SAMPLE_LENGTH_MM, SAMPLE_THICKNESS_MM, drawLegendSample, strokeHatch135, tracePolygons } from "../render"
+import { PDF_METRICS, SAMPLE_LENGTH_MM, SAMPLE_THICKNESS_MM, drawLegendSample, tracePolygons } from "../render"
 import { LIGHT_PALETTE } from "../theme"
 import type { Palette } from "../theme"
 import type { Point } from "../types"
+import { DEMOLITION_HATCH, strokeHatchSeries } from "../wall-hatch"
 import { LEGEND_FONT_MM, LEGEND_GAP_MM, LEGEND_LINE_PITCH_MM, LEGEND_PAD_LEFT_MM, LEGEND_ROW_PITCH_MM, legendEntries, wrapLabel } from "./legend"
 import type { LegendEntry } from "./legend"
 import type { PlanPage } from "./pdf"
@@ -29,8 +30,7 @@ function drawDemolitionSample(ctx: CanvasRenderingContext2D, origin: Point): voi
   ctx.fill()
   ctx.clip()
   ctx.strokeStyle = color
-  ctx.lineWidth = m.hatchPx
-  strokeHatch135(ctx, poly, 0, m)
+  strokeHatchSeries(ctx, poly, DEMOLITION_HATCH, { x: 0, y: 0 }, m)
   ctx.restore()
   ctx.strokeStyle = color
   ctx.lineWidth = m.contourPx

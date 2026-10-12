@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest"
+import { effectiveMarks } from "../demolition/marks"
 import type { Dimension, Wall } from "../types"
 import { legendWidthMm } from "./legend"
 import { fitScale, formatScale, scaleLabel, SCALE_SERIES } from "./fit-scale"
@@ -357,7 +358,10 @@ describe("fitScale: столбец легенды общий для докуме
 
   it("T-12: легенда считается по всем страницам: страница с более длинной подписью материала сужает область для остальных", () => {
     const first = tightBrick(100, "a")
-    const second = page([wall(0, 0, 50, 0, "b", "reinforced")])
+    // самая длинная подпись легенды — «Демонтируемая стена» (страница со сносом), она длиннее подписей всех материалов
+    const secondWall = wall(0, 0, 50, 0, "b")
+    const second: PlanPage = { ...page([secondWall]), demolition: effectiveMarks([{ id: "m", wallId: "b", anchor: "a", fromCm: 0, toCm: 10 }], [secondWall]) }
+    expect(second.demolition?.length).toBe(1)
     expect(legendWidthMm([second])).toBeGreaterThan(legendWidthMm([first]))
     expect(fitScale([first], "A4")).toBe(100)
     expect(fitScale([first, second], "A4")).toBe(200)

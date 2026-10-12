@@ -117,8 +117,8 @@ describe("pagesOf: страница демонтажа", () => {
     expect(second?.demolition).toEqual([])
   })
 
-  it("PG-10: пометка на железобетоне и пометка на отсутствующую стену на странице не действуют", () => {
-    const d = drawing({ walls: [wall(0, 0, 500, 0, "w1", "reinforced")], demolition: [M1, { ...M1, id: "m2", wallId: "gone" }] })
+  it("PG-10: пометка на бетоне и пометка на отсутствующую стену на странице не действуют", () => {
+    const d = drawing({ walls: [wall(0, 0, 500, 0, "w1", "concrete")], demolition: [M1, { ...M1, id: "m2", wallId: "gone" }] })
     expect(pagesOf(d)[1]?.demolition).toEqual([])
   })
 

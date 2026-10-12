@@ -141,15 +141,15 @@ describe("клик и протяжка от конца до конца: поме
     expect(s.log.record).toBe(0)
   })
 
-  it("TL-09: железобетонная стена не помечается кликом: ничего не меняется, шага нет", () => {
-    const s = setup({ walls: [W("reinforced")] })
+  it("TL-09: бетонная стена не помечается кликом: ничего не меняется, шага нет", () => {
+    const s = setup({ walls: [W("concrete")] })
     click(s, { x: 250, y: 0 })
     expect(s.marks()).toEqual([])
     expect(s.log).toMatchObject({ record: 0, set: 0 })
   })
 
-  it("TL-09: железобетонная стена не помечается протяжкой", () => {
-    const s = setup({ walls: [W("reinforced")] })
+  it("TL-09: бетонная стена не помечается протяжкой", () => {
+    const s = setup({ walls: [W("concrete")] })
     drag(s, { x: 100, y: 0 }, { x: 190, y: 0 })
     expect(s.marks()).toEqual([])
     expect(s.log).toMatchObject({ record: 0, set: 0 })
@@ -461,8 +461,8 @@ describe("выделение без инструмента", () => {
     expect(s.tool.selectedId()).toBe("m2")
   })
 
-  it("TL-14: пометка на железобетоне (не действует) не выделяется", () => {
-    const s = setup({ walls: [W("reinforced")], marks: [mk("m", "W", "a", 100, 190)] })
+  it("TL-14: пометка на бетоне (не действует) не выделяется", () => {
+    const s = setup({ walls: [W("concrete")], marks: [mk("m", "W", "a", 100, 190)] })
     expect(s.tool.select({ x: 150, y: 0 })).toBe(false)
   })
 })
@@ -661,10 +661,10 @@ describe("после постановки пометка выделена (chang
     expect(s.marks()).toHaveLength(2)
   })
 
-  it("TL-25: железобетон, клик мимо стены и отсутствие нажатия — null, выделение не меняется", () => {
-    const reinforced = setup({ walls: [W("reinforced")] })
-    expect(clickUp(reinforced, { x: 250, y: 0 })).toBeNull()
-    expect(reinforced.tool.selectedId()).toBeNull()
+  it("TL-25: бетон, клик мимо стены и отсутствие нажатия — null, выделение не меняется", () => {
+    const concrete = setup({ walls: [W("concrete")] })
+    expect(clickUp(concrete, { x: 250, y: 0 })).toBeNull()
+    expect(concrete.tool.selectedId()).toBeNull()
     const off = setup({ marks: [mk("m1", "W", "a", 100, 190)] })
     off.tool.select({ x: 150, y: 0 })
     expect(clickUp(off, { x: 250, y: 200 })).toBeNull()

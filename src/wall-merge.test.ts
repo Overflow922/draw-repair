@@ -1,4 +1,4 @@
-﻿import { describe, expect, it } from "vitest"
+import { describe, expect, it } from "vitest"
 import type { Scene } from "./history"
 import { drawingHistory, emptyHistory, record, undoEntry } from "./history"
 import { dimPointPoint, wallShape } from "./geometry"
@@ -232,7 +232,8 @@ describe("слияние: отказы", () => {
     const scene = sceneOf([E()])
     expect(mergeContinuation(scene, { ...N(510, 0, 900, 0), type: "concrete" }).kind).toBe("none")
     expect(mergeContinuation(scene, { ...N(510, 0, 900, 0), type: "wood-long" }).kind).toBe("none")
-    expect(mergeContinuation(scene, { ...N(510, 0, 900, 0), type: "reinforced" }).kind).toBe("none")
+    expect(mergeContinuation(scene, { ...N(510, 0, 900, 0), type: "gkl" }).kind).toBe("none")
+    expect(mergeContinuation(scene, { ...N(510, 0, 900, 0), type: "blocks" }).kind).toBe("none")
     expect(mergeContinuation(scene, { ...N(510, 0, 900, 0), type: "brick" }).kind).toBe("merged")
   })
 

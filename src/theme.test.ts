@@ -34,6 +34,7 @@ const KEYS: (keyof Palette)[] = [
   "erase",
   "snap",
   "sill",
+  "concreteFill", // заливка «Бетона» (change new-wall-materials, design D5)
 ]
 
 describe("parseTheme", () => {
@@ -137,8 +138,10 @@ describe("запоминание выбора", () => {
 })
 
 describe("палитры", () => {
-  it("LIGHT-EXACT-1: светлая палитра — прежние цвета отрисовки", () => {
-    expect(LIGHT_PALETTE).toEqual({
+  it("LIGHT-EXACT-1: светлая палитра — прежние цвета отрисовки (и новый цвет заливки «Бетона», change new-wall-materials)", () => {
+    const { concreteFill, ...rest } = LIGHT_PALETTE
+    expect(concreteFill).toMatch(/^(#[0-9a-f]{3,6}|rgba?\(.+\))$/i)
+    expect(rest).toEqual({
       paper: "#fff",
       grid: "#e0e0e0",
       ink: "#333",

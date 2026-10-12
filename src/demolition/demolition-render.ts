@@ -1,9 +1,10 @@
-import { drawDimensionGeom, drawElementsLayer, drawScene, prepareCanvas, SCREEN_METRICS, strokeHatch135, tracePolygons } from "../render"
+import { drawDimensionGeom, drawElementsLayer, drawScene, prepareCanvas, SCREEN_METRICS, tracePolygons } from "../render"
 import type { RenderMetrics } from "../render"
 import type { RulerReading } from "../ruler"
 import { LIGHT_PALETTE } from "../theme"
 import type { Palette, Theme } from "../theme"
 import { PX_PER_CM } from "../types"
+import { DEMOLITION_HATCH, strokeHatchSeries } from "../wall-hatch"
 import type { Point, Unit, View, Wall, WallElement } from "../types"
 import { markDimensions } from "./mark-dimensions"
 import type { MarkSpan, ResolvedMark } from "./mark-model"
@@ -65,9 +66,8 @@ export function drawDemolitionScene(
   const drawDimensions = (span: MarkSpan, underline: boolean): void => {
     for (const d of markDimensions(span, scene.walls, "chain", unit, k, m.labelPx)) drawDimensionGeom(ctx, d.geom, d.text, opts.color, view, m, palette, false, underline)
   }
-  // штриховка линиями 135°: линия проходит через точку при y − x = const, фаза — от начала координат экрана
+  // штриховка линиями 135° (общий генератор линий wall-hatch): фаза — от начала координат экрана
   const origin = toScreen({ x: 0, y: 0 })
-  const hatchAnchor = origin.y - origin.x
   for (const r of scene.marks) {
     const polygons = markRegion(r, walls).map((poly) => poly.map(toScreen))
     ctx.save()
@@ -76,8 +76,7 @@ export function drawDemolitionScene(
     ctx.fill()
     ctx.clip()
     ctx.strokeStyle = opts.color
-    ctx.lineWidth = m.hatchPx
-    strokeHatch135(ctx, polygons.flat(), hatchAnchor, m)
+    strokeHatchSeries(ctx, polygons.flat(), DEMOLITION_HATCH, origin, m)
     ctx.restore()
     ctx.strokeStyle = opts.color
     ctx.lineWidth = m.contourPx

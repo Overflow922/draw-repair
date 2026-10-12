@@ -78,8 +78,8 @@ describe("editNumber: недопустимый ввод", () => {
     expect(editNumber(base(), walls, "zzz", "gapA", 1, 150)).toBeNull()
   })
 
-  it("NU-06: пометка на железобетонной стене (не действует) → null", () => {
-    expect(result(base(), "gapA", 150, [W("reinforced")])).toBeNull()
+  it("NU-06: пометка на бетонной стене (не действует) → null", () => {
+    expect(result(base(), "gapA", 150, [W("concrete")])).toBeNull()
   })
 
   it("NU-06: пометка на отсутствующую стену → null", () => {
