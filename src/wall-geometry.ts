@@ -251,6 +251,30 @@ function capExtension(w: Wall, E: Point, uIn: Point, target: FaceLine): Point[] 
 // за концом каждой стены на полутолщине соседа (допуск 1 см на каждое расстояние, в обе стороны).
 const DIAGONAL_MARGIN_CM = 1
 
+// Конец продолжения (change fix-diagonal-corner-block-snap-and-dimensions, design D4): конец стены t в центре F
+// дальней стороны блока, идущей от блока прочь вдоль продолжения оси (допуск 1 см по каждой оси, RIGHT_SIN)
+const continuesFrom = (F: Point, dir: Point, t: Wall, q: Point): boolean => {
+  const tol = DIAGONAL_MARGIN_CM + SLICE
+  const u = inward(t, q)
+  return Math.abs(q.x - F.x) <= tol && Math.abs(q.y - F.y) <= tol && dot(u, dir) > 0 && Math.abs(cross(u, dir)) <= RIGHT_SIN
+}
+
+// единственный конец продолжения в F: два конца неоднозначны и заливку отменяют
+function continuationEnds(F: Point, dir: Point, scene: readonly Wall[], skip: readonly Wall[]): { t: Wall; q: Point }[] {
+  const found: { t: Wall; q: Point }[] = []
+  for (const t of scene) {
+    if (degenerate(t) || skip.includes(t)) continue
+    for (const q of [t.a, t.b]) if (continuesFrom(F, dir, t, q)) found.push({ t, q })
+  }
+  return found.length === 1 ? found : []
+}
+
+// конец (c, v) продолжает ось соседа пары match за блоком стены wall
+function isContinuationOf(match: { c: Wall; v: Point }, wall: Wall, c: Wall, v: Point): boolean {
+  const outM = neg(inward(match.c, match.v))
+  return continuesFrom(add(match.v, mul(outM, wall.thicknessCm)), outM, c, v)
+}
+
 // Блок угла — торец стены, продолженный наружу на толщину соседа; принадлежит поздней стене пары
 // (превью — позднейшая). null — стык не диагональный, либо блок принадлежит соседу.
 function diagonalCornerBlock(wall: Wall, E: Point, uIn: Point, walls: Wall[], iWall: number, isLatest: boolean): Point[] | null {
@@ -270,17 +294,26 @@ function diagonalCornerBlock(wall: Wall, E: Point, uIn: Point, walls: Wall[], iW
       const t = cross(d, outW) / k // от конца v до I вдоль outC
       const within = (x: number, h: number): boolean => x > EPS && Math.abs(x - h) <= DIAGONAL_MARGIN_CM + SLICE
       if (!within(s, hC) || !within(t, hW) || dist(E, v) <= jointTol(wall, c) + SLICE) continue
+      // конец следующей стены в продолжении оси соседа — не второй сосед: пара по порядку в массиве (design D6)
+      if (match && isContinuationOf(match, wall, c, v)) continue
       if (match) return null // два соседа: неоднозначно
       match = { c, v }
     }
   }
   if (!match) return null
   const { c, v } = match
+  // концы продолжения осей за блоком не отменяют заливку; продолжение оси стены из более ранней стены
+  // отдаёт блок её паре
+  const outC = neg(inward(c, v))
+  const ownCont = continuationEnds(add(E, mul(outW, c.thicknessCm)), outW, scene, [wall, c])
+  if (ownCont.some(({ t }) => scene.indexOf(t) < scene.indexOf(wall))) return null
+  const continuation = [...ownCont, ...continuationEnds(add(v, mul(outC, wall.thicknessCm)), outC, scene, [wall, c])]
   // других концов в пороге углового стыка нет — ни у конца E, ни у конца v
   const reach = Math.hypot(c.thicknessCm / 2 + DIAGONAL_MARGIN_CM, hW + DIAGONAL_MARGIN_CM)
   for (const t of scene) {
     if (degenerate(t)) continue
     for (const q of [t.a, t.b]) {
+      if (continuation.some((e) => e.t === t && e.q === q)) continue
       if (t !== wall && q !== v && dist(q, E) <= reach) return null
       if (t !== c && q !== E && dist(q, v) <= reach) return null
     }

@@ -1,4 +1,5 @@
 import { dimPointPoint, nearestEdgeIntersection, pointsEqual, wallEndOccupied } from "./geometry"
+import { displayPolygons, pointInPolygon } from "./wall-geometry"
 import { violatesDoorways } from "./doorway/doorway-guard"
 import { faceRuns, hostPoint } from "./doorway/doorway-faces"
 import type { Side } from "./doorway/doorway-faces"
@@ -17,6 +18,8 @@ const ANCHOR_RADIUS_CM = 1
 const RUN_JOIN_CM = 1e-4
 const MIN_LENGTH_CM = 1e-6
 const KEY_SCALE = 1e6
+// смещение пробной точки за торец, см
+const COVER_PROBE_CM = 0.01
 
 const anchorAt = (p: Point, walls: Wall[]): DimPoint | null => {
   const hit = nearestEdgeIntersection(p, walls, ANCHOR_RADIUS_CM)
@@ -49,9 +52,18 @@ function lengthDimensions(wall: Wall, walls: Wall[], side: Side): Dimension[] {
   return out
 }
 
+// торец закрыт отображаемым телом сцены, в том числе блоком диагонального стыка (change
+// fix-diagonal-corner-block-snap-and-dimensions, design D3): точка сразу за концом оси лежит внутри куска
+function endCoveredByBody(wall: Wall, end: "a" | "b", walls: Wall[]): boolean {
+  const [from, to] = end === "a" ? [wall.b, wall.a] : [wall.a, wall.b]
+  const len = Math.hypot(to.x - from.x, to.y - from.y)
+  const probe = { x: to.x + ((to.x - from.x) / len) * COVER_PROBE_CM, y: to.y + ((to.y - from.y) / len) * COVER_PROBE_CM }
+  return walls.some((w) => displayPolygons(w, walls).some((poly) => pointInPolygon(probe, poly)))
+}
+
 // толщина на свободном торце: линия лежит за торцом
 function thicknessDimension(wall: Wall, walls: Wall[], end: "a" | "b"): Dimension[] {
-  if (wallEndOccupied(wall, end, walls)) return []
+  if (wallEndOccupied(wall, end, walls) || endCoveredByBody(wall, end, walls)) return []
   const edge = end === "a" ? 2 : 3
   return [
     {

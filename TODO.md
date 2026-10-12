@@ -492,3 +492,13 @@ Follow-ups from `auto-fit-scale` (apply, 2026-10-11).
 ## Docs
 
 - [ ] (auto-fit-scale, 2026-10-11) Specs `wall-joints` (line ~370) and `wall-types` (line ~46) say «изменяет масштаб чертежа» but mean the on-screen zoom; since `auto-fit-scale` «масштаб чертежа» is the print scale (`drawing-scale`), so the wording is now ambiguous. Replace with «масштаб вида (зум)». `demolition-plan` line ~346 («вид и масштаб чертежа общие») already means both and is fine.
+
+Follow-ups from `fix-diagonal-corner-block-snap-and-dimensions` (2026-10-12).
+
+## Bugs
+
+- [ ] **No length dimensions on the outer faces at a diagonal corner block until a third wall is placed.** Scene
+  A `(-100,0)→(0,0)`, B `(10,10)→(10,110)`, t=20: the block fills `x∈[0,20], y∈[-10,10]`, but A's bottom face
+  and B's right face get no auto length dimension. Cause: `anchorAt` (`src/auto-dimensions.ts`) →
+  `nearestEdgeIntersection` cannot find the block contour vertices. By the spec reading B's left face should be 120 cm
+  and A's bottom face 120 cm (currently 100). Out of scope of the change (length dimensions were not touched).

@@ -188,6 +188,20 @@ function faceCandidate(scene: SceneContour, w: Wall, side: number, p: Point, new
   return { point, base: point, normal: line.normal, target: "face" }
 }
 
+// Протяжённость грани side стены w вдоль оси: длина стены, расширенная открытыми участками грани за её концами
+function faceSpan(scene: SceneContour, w: Wall, side: number): [number, number] {
+  const u = unit(w.a, w.b)
+  const n = perp(u)
+  const line: TargetLine = { origin: add(w.a, mul(n, side * (w.thicknessCm / 2))), u, normal: mul(n, side) }
+  let lo = 0
+  let hi = dist(w.a, w.b)
+  for (const [a, b] of openIntervals(scene, line, hi)) {
+    lo = Math.min(lo, a)
+    hi = Math.max(hi, b)
+  }
+  return [lo, hi]
+}
+
 // свободный торец: плоскость торца не закрыта ни на одном участке телами сцены
 function freeCap(scene: SceneContour, w: Wall, end: Point, out: Point): boolean {
   const n = mul(perp(out), w.thicknessCm / 2)
@@ -381,7 +395,11 @@ function wallCandidates(
     if (accept(cornerCandidate(scene(), w, atB ? w.b : w.a, atB ? u : mul(u, -1), side, newHalf))) return
   }
   // вне полосы — только грань: радиус привязки или край приставленного квадрата
-  if (Math.abs(lat) - hW <= reach && s >= -reach && s <= len + reach) accept(faceCandidate(scene(), w, side, p, newHalf))
+  // зона вдоль грани — от края открытого участка, продолженного блоком диагонального стыка, а не от оси стены
+  // (change fix-diagonal-corner-block-snap-and-dimensions, design D1)
+  if (Math.abs(lat) - hW > reach) return
+  const [lo, hi] = faceSpan(scene(), w, side)
+  if (s >= lo - reach && s <= hi + reach) accept(faceCandidate(scene(), w, side, p, newHalf))
 }
 
 // ближайший по точке приставления квадрата (design D3: сдвиг вершины торца не меняет выбор);
