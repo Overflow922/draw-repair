@@ -1,7 +1,7 @@
 import { historyKey } from "./plans"
 import type { PlanId } from "./plans"
-import { isDemolitionMark, isDimension, isDrawing, isWall, isWallElement } from "./storage"
-import type { DemolitionMark, Dimension, Drawing, Wall, WallElement } from "./types"
+import { isCommunication, isDemolitionMark, isDimension, isDrawing, isWall, isWallElement } from "./storage"
+import type { Communication, DemolitionMark, Dimension, Drawing, Wall, WallElement } from "./types"
 
 const KEY = "draw-repair:history"
 export const HISTORY_LIMIT = 50
@@ -11,10 +11,12 @@ export interface Scene {
   walls: Wall[]
   dimensions: Dimension[]
   doorways?: WallElement[]
+  // коммуникации: запись без поля при отмене и повторе список не меняет (change add-communications, design D11)
+  communications?: Communication[]
 }
 
 export type HistoryEntry =
-  | { kind: "walls"; walls: Wall[]; dimensions: Dimension[]; doorways?: WallElement[] }
+  | { kind: "walls"; walls: Wall[]; dimensions: Dimension[]; doorways?: WallElement[]; communications?: Communication[] }
   | { kind: "close"; index: number; drawingId: string }
   // шаг плана «Демонтаж» (change demolition-plan, design D7): список пометок чертежа до операции
   | { kind: "demolition"; marks: DemolitionMark[] }
@@ -59,6 +61,7 @@ export function cloneScene(scene: Scene): Scene {
       ...(d.auto !== undefined ? { auto: d.auto } : null),
     })),
     ...(scene.doorways ? { doorways: scene.doorways.map((d) => ({ ...d })) } : null),
+    ...(scene.communications ? { communications: scene.communications.map((c) => ({ ...c })) } : null),
   }
 }
 
@@ -123,7 +126,8 @@ const isHistoryEntry = (e: unknown): e is HistoryEntry => {
   if (x.kind === "walls")
     return Array.isArray(x.walls) && x.walls.every(isWall) &&
       Array.isArray(x.dimensions) && x.dimensions.every(isDimension) &&
-      (x.doorways === undefined || (Array.isArray(x.doorways) && x.doorways.every(isWallElement)))
+      (x.doorways === undefined || (Array.isArray(x.doorways) && x.doorways.every(isWallElement))) &&
+      (x.communications === undefined || (Array.isArray(x.communications) && x.communications.every(isCommunication)))
   if (x.kind === "demolition") return Array.isArray(x.marks) && x.marks.every(isDemolitionMark)
   return x.kind === "close" && typeof x.drawingId === "string" &&
     typeof x.index === "number" && Number.isInteger(x.index) && x.index >= 0

@@ -1,7 +1,7 @@
 import { mergeAll } from "./demolition/marks"
 import { isPlanId } from "./plans"
 import { isDoor, isWindow, normalizeMaterial } from "./types"
-import type { DemolitionMark, Dimension, DimPoint, Doorway, Drawing, DrawingStore, EdgeRef, MountingContent, Point, View, Wall, WallDoor, WallElement, WallWindow } from "./types"
+import type { Communication, DemolitionMark, Dimension, DimPoint, Doorway, Drawing, DrawingStore, EdgeRef, MountingContent, Point, View, Wall, WallDoor, WallElement, WallWindow } from "./types"
 
 const KEY = "draw-repair:drawing"
 
@@ -67,6 +67,27 @@ export const isWallDoor = (d: unknown): d is WallDoor => {
 }
 
 export const isWallElement = (d: unknown): d is WallElement => isDoorway(d) || isWallWindow(d) || isWallDoor(d)
+
+// коммуникация: стояк с диаметром или воздуховод с шириной и глубиной (change add-communications, design D11)
+export const isCommunication = (c: unknown): c is Communication => {
+  if (typeof c !== "object" || c === null) return false
+  const x = c as Record<string, unknown>
+  if (typeof x.id !== "string" || x.id === "" || !num(x.x) || !num(x.y)) return false
+  if (x.kind === "riser") return num(x.diameterCm) && x.diameterCm > 0
+  return x.kind === "duct" && num(x.widthCm) && x.widthCm > 0 && num(x.depthCm) && x.depthCm > 0
+}
+
+// копия коммуникации только с полями её вида
+const copyCommunication = (c: Communication): Communication =>
+  c.kind === "riser"
+    ? { kind: "riser", id: c.id, x: c.x, y: c.y, diameterCm: c.diameterCm }
+    : { kind: "duct", id: c.id, x: c.x, y: c.y, widthCm: c.widthCm, depthCm: c.depthCm }
+
+// коммуникации чертежа при загрузке: корректные по одному; поле, не являющееся списком, читается как отсутствующее
+function loadCommunications(raw: unknown): { communications?: Communication[] } {
+  if (!Array.isArray(raw)) return {}
+  return { communications: raw.filter(isCommunication).map(copyCommunication) }
+}
 
 // пометка сноса (change demolition-plan, design D7): идентификаторы, конец привязки и 0 ≤ fromCm < toCm
 export const isDemolitionMark = (m: unknown): m is DemolitionMark => {
@@ -173,6 +194,7 @@ export function parseStore(raw: string): LoadedStore | null {
         ...loadDemolition(demolition, dr.walls),
         ...loadMounting(mounting),
         ...loadDoorways(dr.doorways, dr.walls),
+        ...loadCommunications(dr.communications),
         dimensions: (Array.isArray(dr.dimensions) ? dr.dimensions : []).filter(isDimension).map(copyDimension),
       }))
       return { store: { version: 3, activeId: d.activeId, drawings }, readOnly: false }

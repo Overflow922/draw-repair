@@ -1,5 +1,6 @@
 import { PX_PER_CM, SNAP_RADIUS_PX } from "./types"
-import type { Point, Wall, WallElement } from "./types"
+import type { Communication, Point, Wall, WallElement } from "./types"
+import { violatesCommunications } from "./communications/guard"
 import { violatesDoorways } from "./doorway/doorway-guard"
 import { orthoDirection } from "./wall-angle"
 import {
@@ -270,7 +271,8 @@ function overlapsBodies(square: Point[], pieces: Point[][]): boolean {
 }
 
 // corners — диагональное прилипание к углу свободного торца (change diagonal-corner-snap): для начальной
-// вершины включено; вторая вершина цепочки (wall-chain) отключает его — там действуют прежние правила
+// вершины включено; вторая вершина цепочки (wall-chain) отключает его — там действуют прежние правила.
+// communications — квадрат установки не налагается на коммуникации (change add-communications, design D6)
 export function snapVertex(
   p: Point,
   walls: Wall[],
@@ -280,18 +282,19 @@ export function snapVertex(
   orthoFrom?: Point,
   doorways: readonly WallElement[] = [],
   corners = true,
+  communications: readonly Communication[] = [],
 ): VertexSnap {
   // орто по осям экрана от свободного начала: сработало — конец на луче (design D4)
   if (orthoFrom) {
     const dir = orthoDirection(null, sub(p, orthoFrom))
-    if (dir) return snapOnRay(p, walls, radiusCm, gridStepCm, newWallThicknessCm, orthoFrom, dir, doorways)
+    if (dir) return snapOnRay(p, walls, radiusCm, gridStepCm, newWallThicknessCm, orthoFrom, dir, doorways, communications)
   }
   const newHalf = newWallThicknessCm / 2
   const reach = Math.max(radiusCm, newHalf)
   const scene = lazyScene(walls)
   // принятые кандидаты в порядке стен массива; квадрат не налагается на тела (design D5)
   const accepted: Candidate[] = []
-  const accept = acceptor(scene, newWallThicknessCm, accepted, doorwayBlock(walls, doorways, newWallThicknessCm))
+  const accept = acceptor(scene, newWallThicknessCm, accepted, candidateBlock(walls, doorways, communications, newWallThicknessCm))
   for (const w of walls) if (!degenerate(w)) wallCandidates(w, p, scene, newHalf, reach, corners, accept)
   const best = nearest(p, accepted)
   if (best) return wallSnap(best)
@@ -309,15 +312,16 @@ export function snapStartVertex(
   gridStepCm: number,
   newWallThicknessCm: number,
   doorways: readonly WallElement[] = [],
+  communications: readonly Communication[] = [],
 ): VertexSnap {
-  const base = snapVertex(p, walls, radiusCm, gridStepCm, newWallThicknessCm, undefined, doorways)
+  const base = snapVertex(p, walls, radiusCm, gridStepCm, newWallThicknessCm, undefined, doorways, true, communications)
   if (base.source === "wall") return base
   const square = placementSquare(base, newWallThicknessCm)
   const touched = walls.filter((w) => !degenerate(w) && displayPolygons(w, walls).some((pc) => touchesConvex(square, pc)))
   if (touched.length === 0) return base
   const scene = lazyScene(walls)
   const accepted: Candidate[] = []
-  const accept = acceptor(scene, newWallThicknessCm, accepted, doorwayBlock(walls, doorways, newWallThicknessCm))
+  const accept = acceptor(scene, newWallThicknessCm, accepted, candidateBlock(walls, doorways, communications, newWallThicknessCm))
   // угол предлагается и здесь: Infinity — только для граней и торцов касаемых стен
   for (const w of touched) wallCandidates(w, p, scene, newWallThicknessCm / 2, Infinity, true, accept)
   const best = nearest(p, accepted)
@@ -330,12 +334,19 @@ const lazyScene = (walls: Wall[]): (() => SceneContour) => {
 }
 
 // кандидат, чей квадрат установки (блок новой стены у грани или торца) нарушил бы проём
-// (change add-doorway, design D6); null — проёмов рядом нет
-function doorwayBlock(walls: Wall[], doorways: readonly WallElement[], sizeCm: number): ((c: Candidate) => boolean) | null {
-  if (!doorways.length) return null
+// (change add-doorway, design D6) или налагался бы на коммуникацию (change add-communications, design D6);
+// null — проёмов и коммуникаций нет
+function candidateBlock(
+  walls: Wall[],
+  doorways: readonly WallElement[],
+  communications: readonly Communication[],
+  sizeCm: number,
+): ((c: Candidate) => boolean) | null {
+  if (!doorways.length && !communications.length) return null
   return (c) => {
     const probe: Wall = { id: "", a: c.base, b: add(c.base, mul(c.normal, sizeCm)), thicknessCm: sizeCm, type: "brick" }
-    return violatesDoorways(walls, [...walls, probe], doorways)
+    const after = [...walls, probe]
+    return violatesDoorways(walls, after, doorways) || violatesCommunications(walls, after, communications)
   }
 }
 
@@ -492,9 +503,10 @@ export function snapOnRay(
   start: Point,
   dir: Point,
   doorways: readonly WallElement[] = [],
+  communications: readonly Communication[] = [],
 ): VertexSnap {
   const reach = Math.max(radiusCm, newWallThicknessCm / 2)
-  const blocked = doorwayBlock(walls, doorways, newWallThicknessCm)
+  const blocked = candidateBlock(walls, doorways, communications, newWallThicknessCm)
   let contour: SceneContour | null = null
   const scene = (): SceneContour => (contour ??= sceneContour(walls))
   let best: Candidate | null = null

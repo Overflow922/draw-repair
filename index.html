@@ -63,6 +63,23 @@
                 <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round"><rect x="5" y="3" width="14" height="15"/><path d="M5 8h14M12 8v10"/><path d="M3 20.5h18" stroke-width="2.2"/></svg>
               </button>
             </div>
+            <div class="tool-anchor" data-tools="riser duct">
+              <button id="tool-communications" class="tool" title="Коммуникации" type="button">
+                <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><circle cx="7.5" cy="7.5" r="3.5"/><rect x="12" y="12" width="9" height="8"/><path d="M12 12l9 8"/></svg>
+              </button>
+              <div id="communications-panel" class="panel tool-panel">
+                <div class="group-tools" aria-label="Инструменты группы «Коммуникации»">
+                  <button id="tool-riser" class="group-tool active" title="Стояк" type="button">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="7"/></svg>
+                    <span>Стояк</span>
+                  </button>
+                  <button id="tool-duct" class="group-tool" title="Воздуховод" type="button">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><rect x="4" y="6" width="16" height="12"/><path d="M4 6l16 12"/></svg>
+                    <span>Воздуховод</span>
+                  </button>
+                </div>
+              </div>
+            </div>
             <hr class="tool-separator" data-plan="measure mounting" />
             <div class="tool-anchor" data-tools="dimension">
               <button id="tool-dimension" class="tool" title="Размер" type="button">

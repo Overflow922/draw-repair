@@ -96,6 +96,27 @@ export type WallElement = Doorway | WallWindow | WallDoor
 export const isWindow = (e: WallElement): e is WallWindow => e.kind === "window"
 export const isDoor = (e: WallElement): e is WallDoor => e.kind === "door"
 
+// Коммуникации — вертикальные трубы, общие для всех планов чертежа (change add-communications, design D1):
+// положение — центр в координатах чертежа, к стенам не привязаны; воздуховод — прямоугольник по осям без поворота
+export interface Riser {
+  kind: "riser"
+  id: string
+  x: number
+  y: number
+  diameterCm: number
+}
+
+export interface Duct {
+  kind: "duct"
+  id: string
+  x: number
+  y: number
+  widthCm: number // по оси X
+  depthCm: number // по оси Y
+}
+
+export type Communication = Riser | Duct
+
 export interface View {
   zoom: number
   pan: Point
@@ -136,6 +157,9 @@ export interface Drawing {
   // элементы стены (проёмы и окна); отсутствие — пустой список, при загрузке не дописывается
   // (add-doorway design D9); JSON-ключ прежний (add-window design D1)
   doorways?: WallElement[]
+  // коммуникации: общие для всех планов, правятся на обмерочном плане; отсутствие — пустой список, при загрузке не
+  // дописывается (add-communications design D1)
+  communications?: Communication[]
   // активный план; отсутствие или неизвестное значение читается как план по умолчанию (drawing-plans design D3)
   activePlan?: PlanId
   // пометки сноса плана "demolition"; отсутствие — пустой список (design D7)

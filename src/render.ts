@@ -1,3 +1,6 @@
+import { strokeCommunications } from "./communications/communications-render"
+import { diameterLeader } from "./communications/diameter-leader"
+import { OUTSET_PX, communicationNumbers } from "./communications/edit"
 import { cutContour, cutPieces, dimensionChains, doorLeaf, doorZones, openingLines, windowLines } from "./doorway/doorway-layout"
 import type { DoorDirection } from "./doorway/doorway-layout"
 import { CHAIN_BAND_EM, CHAIN_OFFSET_EM, DIM_TEXT_GAP_PX, editableNumbers } from "./doorway/editable-numbers"
@@ -14,7 +17,7 @@ import type { Palette } from "./theme"
 import { contourSegments, cross, displayPolygons, dot, outlineSegments, sub } from "./wall-geometry"
 import type { Seg } from "./wall-geometry"
 import { GRID_STEP_CM, PX_PER_CM, isDoor, isWindow, normalizeMaterial } from "./types"
-import type { Dimension, Material, Point, Unit, View, Wall, WallDoor, WallElement } from "./types"
+import type { Communication, Dimension, Material, Point, Riser, Unit, View, Wall, WallDoor, WallElement } from "./types"
 import type { TrackLine } from "./wall-tracking"
 import { HATCHES, strokeHatchSeries, strokeHatchTile } from "./wall-hatch"
 
@@ -77,6 +80,11 @@ export interface RenderOptions {
   doorwayGhost?: WallElement | null
   hoverDoorway?: WallElement | null // подсветка ластика
   hoverDoorDirection?: DoorDirection | null // направление выделенной двери под курсором — рисуется сплошным
+  // коммуникации (change add-communications, design D10): контуры всех, числа — у одиночного выделения без призрака
+  communications?: readonly Communication[]
+  selectedCommunications?: readonly Communication[]
+  communicationGhost?: Communication | null
+  hoverCommunication?: Communication | null // подсветка ластика
   square?: Point[] | null // вершины квадрата установки в мировых координатах
   // угол к стене примыкания у начала превью: дуга от луча отсчёта from к направлению to
   angle?: { at: Point; from: Point; to: Point; deg: number } | null
@@ -210,6 +218,7 @@ export function drawScene(
   ctx.textAlign = "center"
   ctx.textBaseline = "bottom"
   if (!opts.underlay) drawDoorways(ctx, walls, rooms, unit, view, m, p, opts, selectedWalls.length > 0 || selectedDims.length > 0)
+  drawCommunicationLayer(ctx, walls, unit, view, m, p, opts)
   for (const dim of opts.dimensions ?? []) drawDimension(ctx, dim, walls, unit, p.ink, view, m, p)
   for (const dim of opts.marqueeHits?.dims ?? [])
     if (!selectedDims.includes(dim)) drawDimension(ctx, dim, walls, unit, p.marqueeDim, view, m, p)
@@ -420,6 +429,82 @@ function drawDoorways(
     ctx.fillText("0", s.x, s.y)
     if (underlineChain) drawUnderline(ctx, { x: s.x, y: s.y + UNDERLINE_GAP_PX }, { x: 1, y: 0 }, m.labelPx * CHAR_WIDTH, p.ink, m)
   }
+}
+
+// слой коммуникаций (change add-communications, design D10): подсветки под контуром, контуры, призрак установки;
+// числа и размерные линии — у одиночно выделенной коммуникации на экране (в PDF их нет)
+function drawCommunicationLayer(
+  ctx: CanvasRenderingContext2D,
+  walls: Wall[],
+  unit: Unit,
+  view: View,
+  m: RenderMetrics,
+  p: Palette,
+  opts: RenderOptions,
+): void {
+  const selected = opts.selectedCommunications ?? []
+  const ghost = opts.communicationGhost ?? null
+  strokeCommunications(ctx, selected, view, p.selection, OUTLINE_PX)
+  if (opts.hoverCommunication) strokeCommunications(ctx, [opts.hoverCommunication], view, p.erase, OUTLINE_PX)
+  strokeCommunications(ctx, opts.communications ?? [], view, p.ink, m.contourPx, p.concreteFill)
+  if (ghost) strokeCommunications(ctx, [ghost], view, p.muted, m.contourPx)
+  if (selected.length !== 1 || ghost || m === PDF_METRICS) return
+  const k = PX_PER_CM * view.zoom
+  const toScreen = (q: Point): Point => ({ x: (q.x - view.pan.x) * k, y: (q.y - view.pan.y) * k })
+  for (const n of communicationNumbers(selected[0], walls)) {
+    const value = formatLength(n.valueCm, unit)
+    const flat = n.span ? dimGeometry(n.span.from, n.span.to, 0) : null
+    // размер воздуховода — размерная линия, вынесенная наружу от грани, число не лежит на контуре
+    const side = flat && n.outward ? Math.sign(flat.nx * n.outward.x + flat.ny * n.outward.y) : 0
+    const geom = n.span && flat && side !== 0 ? dimGeometry(n.span.from, n.span.to, (side * OUTSET_PX) / k) : flat
+    if (geom) {
+      drawDimensionGeom(ctx, geom, value, p.ink, view, m, p, false, true)
+      continue
+    }
+    if (n.field.kind === "diameter" && selected[0].kind === "riser") {
+      drawDiameterLeader(ctx, selected[0], `⌀${value}`, toScreen(selected[0]), k, p.ink, m)
+      continue
+    }
+    // размер и нулевое расстояние — число у своей точки, подчёркнутое как все правимые числа
+    const text = n.field.kind === "diameter" ? `⌀${value}` : value
+    const s = toScreen(n.at)
+    ctx.fillStyle = p.ink
+    ctx.fillText(text, s.x, s.y)
+    drawUnderline(ctx, { x: s.x, y: s.y + UNDERLINE_GAP_PX }, { x: 1, y: 0 }, text.length * m.labelPx * CHAR_WIDTH, p.ink, m)
+  }
+}
+
+// выноска диаметра по ГОСТ: линия под 45° через центр со стрелками на окружности, полка с числом; полка штриховая как
+// подчёркивание правимых чисел
+function drawDiameterLeader(ctx: CanvasRenderingContext2D, riser: Riser, text: string, center: Point, k: number, color: string, m: RenderMetrics): void {
+  const g = diameterLeader(center, (riser.diameterCm / 2) * k, text.length * m.labelPx * CHAR_WIDTH, m.labelPx)
+  ctx.save()
+  ctx.strokeStyle = color
+  ctx.fillStyle = color
+  ctx.lineWidth = m.hatchPx
+  ctx.beginPath()
+  ctx.moveTo(g.tail.x, g.tail.y)
+  ctx.lineTo(g.elbow.x, g.elbow.y)
+  ctx.stroke()
+  for (const [tip, sign] of [[g.farTip, 1], [g.nearTip, -1]] as const) {
+    // стрелка снаружи окружности остриём к ней
+    const base = { x: tip.x + g.dir.x * sign * m.dimArrowPx, y: tip.y + g.dir.y * sign * m.dimArrowPx }
+    const side = { x: -g.dir.y * (m.dimArrowPx / 3), y: g.dir.x * (m.dimArrowPx / 3) }
+    ctx.beginPath()
+    ctx.moveTo(tip.x, tip.y)
+    ctx.lineTo(base.x + side.x, base.y + side.y)
+    ctx.lineTo(base.x - side.x, base.y - side.y)
+    ctx.closePath()
+    ctx.fill()
+  }
+  ctx.setLineDash(UNDERLINE_DASH)
+  ctx.beginPath()
+  ctx.moveTo(g.elbow.x, g.elbow.y)
+  ctx.lineTo(g.shelfEnd.x, g.shelfEnd.y)
+  ctx.stroke()
+  ctx.setLineDash([])
+  ctx.fillText(text, g.textCenter.x, g.textCenter.y)
+  ctx.restore()
 }
 
 // штриховое подчёркивание правимого числа: отрезок шириной widthPx, центр — center, вдоль dir (экранные px)

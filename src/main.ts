@@ -32,6 +32,12 @@ import { mergeContinuation } from "./wall-merge"
 import { openWorkspace, storedContent } from "./mounting/mounting-workspace"
 import type { Workspace } from "./mounting/mounting-workspace"
 import { thicknessAllowed } from "./doorway/doorway-guard"
+import { createCommunicationTool } from "./communications/communications-tool"
+import type { CommunicationToolHost } from "./communications/communications-tool"
+import { afterPlaceCommunication, groupButtonActive as communicationsGroupActive, groupButtonClick as communicationsGroupClick, groupPick as communicationsGroupPick } from "./communications/communications-group"
+import type { CommunicationTool, GroupState as CommunicationsGroupState } from "./communications/communications-group"
+import { limitNewWall, squareAllowed, thicknessAllowedForCommunications } from "./communications/guard"
+import { hitCommunication } from "./communications/pick"
 import { deleteObjects, doorwaysInRect, erasePick, pressPick, wallsInRect } from "./doorway/doorway-scene"
 import { createElementTool, createSelectionEditing, openNumberEditor } from "./doorway/doorway-tool"
 import type { NumberEditor } from "./doorway/doorway-tool"
@@ -43,7 +49,7 @@ import { afterPlace, escapeAction, resumesAfterSelectionCleared, selectionAllowe
 import { loadThemeChoice, paletteOf, resolveTheme, saveThemeChoice, themeToggleTitle, toggledTheme } from "./theme"
 import type { Theme } from "./theme"
 import { GRID_STEP_CM, MATERIALS, PX_PER_CM } from "./types"
-import type { DemolitionMark, Dimension, DimPoint, Drawing, Material, Point, Unit, View, Wall, WallElement } from "./types"
+import type { Communication, DemolitionMark, Dimension, DimPoint, Drawing, Material, Point, Unit, View, Wall, WallElement } from "./types"
 
 const canvas = document.querySelector<HTMLCanvasElement>("#canvas")!
 const canvasWrap = document.querySelector<HTMLElement>("#canvas-wrap")!
@@ -75,6 +81,10 @@ const openingsPanel = document.querySelector<HTMLElement>("#openings-panel")!
 const toolDoorwayBtn = document.querySelector<HTMLButtonElement>("#tool-doorway")!
 const toolDoorBtn = document.querySelector<HTMLButtonElement>("#tool-door")!
 const toolWindowBtn = document.querySelector<HTMLButtonElement>("#tool-window")!
+const toolCommunicationsBtn = document.querySelector<HTMLButtonElement>("#tool-communications")!
+const communicationsPanel = document.querySelector<HTMLElement>("#communications-panel")!
+const toolRiserBtn = document.querySelector<HTMLButtonElement>("#tool-riser")!
+const toolDuctBtn = document.querySelector<HTMLButtonElement>("#tool-duct")!
 
 const loaded = loadStore()
 const readOnly = loaded.readOnly
@@ -93,6 +103,8 @@ let doorways: WallElement[] = current().doorways ?? []
 let workspace: Workspace | null = null
 let remnantHome = new Map<string, { a: Point; b: Point }>() // исходные концы остатков: остатки не двигаются
 let selectedDoorways: WallElement[] = []
+// выделенная коммуникация (change add-communications): выделяется только на обмерочном плане, ровно одна
+let selectedCommunication: Communication | null = null
 // параметры новых проёмов, дверей и окон (change popups-buttons-only): общие для вкладок, в чертёж не входят
 let newParams = initialParams()
 let chainStart: Point | null = null
@@ -102,6 +114,7 @@ let chainRef: StartRef | null = null // стена примыкания нача
 let segment: ChainSegment | null = null // сегмент построения: превью и фиксация
 let cursorSnap: VertexSnap | null = null // сам результат привязки: normal в нём неперечислима
 let wallCursorRaw: Point | null = null // сырая позиция курсора последней привязки — для пересчёта
+let endBlocked = false // конец стены обрезан коммуникацией до нулевой длины: второй клик стену не ставит
 let thicknessCm = 20
 let wallMaterial: Material = "brick"
 let unit: Unit = "mm"
@@ -128,6 +141,9 @@ let tool: Tool = defaultToolOf(activePlanOf(current()))
 // активный инструмент группы выводится из tool
 let openingsCurrent: GroupTool = "doorway"
 let openingsPanelOpen = false
+// группа «Коммуникации» (change add-communications, design D9): то же устройство, что у группы «Проёмы»
+let communicationsCurrent: CommunicationTool = "riser"
+let communicationsPanelOpen = false
 const systemDark = window.matchMedia("(prefers-color-scheme: dark)")
 let themeChoice: Theme | null = loadThemeChoice(localStorage) // null — следовать системной настройке
 let theme: Theme = resolveTheme(themeChoice, systemDark.matches)
@@ -138,8 +154,17 @@ const endPoint = (end: DimPoint): Point | null => dimPointPoint(end, walls)
 
 const radiusCm = (): number => snapRadiusCm(view.zoom)
 
-// текущая сцена чертежа: стены, размеры, проёмы (снимок истории — change add-doorway)
-const scene = (): Scene => ({ walls, dimensions, doorways })
+// коммуникации чертежа общие для всех планов (change add-communications, design D1): список лежит в чертеже,
+// на плане «Монтаж» и «Демонтаж» он только читается
+const NO_COMMUNICATIONS: Communication[] = []
+const communicationsOf = (): readonly Communication[] => current().communications ?? NO_COMMUNICATIONS
+
+// правятся коммуникации только на обмерочном плане (spec communications «Коммуникации на всех планах»)
+const communicationsEditable = (): boolean => activePlanOf(current()) === "measure"
+
+// текущая сцена чертежа: стены, размеры, проёмы, коммуникации (снимок истории — change add-doorway); на плане
+// «Монтаж» коммуникации в историю не попадают (historyOf)
+const scene = (): Scene => ({ walls, dimensions, doorways, communications: [...communicationsOf()] })
 
 // история активного плана активного чертежа (change drawing-plans, design D4)
 const activeHistory = () => planHistory(historyStore, store.activeId, activePlanOf(current()))
@@ -264,6 +289,88 @@ const windowTool = createElementTool("window", elementHost)
 const elementTools = [doorwayTool, doorTool, windowTool]
 const selectionEditing = createSelectionEditing(elementHost)
 
+// инструменты «Стояк» и «Воздуховод» и правка выделенной коммуникации (change add-communications, design D9)
+function setCommunications(next: Communication[]): void {
+  current().communications = next
+  if (selectedCommunication && !next.includes(selectedCommunication)) selectedCommunication = null
+}
+
+function selectCommunication(c: Communication): void {
+  closeNumberEditor()
+  selectedCommunication = c
+  selectedWalls = []
+  selectedDimensions = []
+  selectedDoorways = []
+  lengthDirty = false
+  setWallPanel(false)
+  redraw()
+}
+
+function replaceCommunication(prev: Communication, next: Communication): void {
+  // выделение переходит на новый объект до замены списка: setCommunications снимает выделение с пропавшего объекта
+  if (selectedCommunication === prev) selectedCommunication = next
+  setCommunications(communicationsOf().map((c) => (c === prev ? next : c)))
+}
+
+const communicationHost: CommunicationToolHost = {
+  walls: () => walls,
+  communications: () => communicationsOf(),
+  selected: () => selectedCommunication,
+  view: () => view,
+  unit: () => unit,
+  formatCm: (cm) => formatCm(cm, unit),
+  parseCm: (text) => parseFloat(text.replace(",", ".")) * UNIT_TO_CM[unit],
+  editorParent: canvasWrap,
+  snapshot: () => cloneScene(scene()),
+  record: () => pushRecord(),
+  recordSnapshot: (s) => pushSnapshot(s),
+  add: (c) => {
+    setCommunications([...communicationsOf(), c])
+    selectCommunication(c)
+  },
+  replace: (prev, next) => replaceCommunication(prev, next),
+  select: (c) => selectCommunication(c),
+  changed: () => {
+    dirty = true
+  },
+  redraw: () => redraw(),
+}
+const communicationTool = createCommunicationTool(communicationHost)
+
+// инструмент установки коммуникации; null — вне инструментов «Стояк» и «Воздуховод»
+const communicationKind = (): CommunicationTool | null => (tool === "riser" || tool === "duct" ? tool : null)
+
+function hoverCommunicationGhost(raw: Point): void {
+  const kind = communicationKind()
+  if (kind) communicationTool.hover(kind, raw)
+}
+
+const communicationsGroupState = (): CommunicationsGroupState => ({
+  current: communicationsCurrent,
+  active: tool === "riser" || tool === "duct" ? tool : "other",
+  panelOpen: communicationsPanelOpen,
+})
+
+function applyCommunicationsGroup(next: CommunicationsGroupState): void {
+  if (next.active !== "other" && next.active !== tool) setTool(next.active)
+  communicationsCurrent = next.current
+  communicationsPanelOpen = next.panelOpen
+  syncCommunicationsUI()
+}
+
+function syncCommunicationsUI(): void {
+  const s = communicationsGroupState()
+  communicationsPanel.classList.toggle("open", s.panelOpen)
+  toolCommunicationsBtn.classList.toggle("active", communicationsGroupActive(s))
+  toolRiserBtn.classList.toggle("active", s.current === "riser")
+  toolDuctBtn.classList.toggle("active", s.current === "duct")
+}
+
+function closeCommunicationsPanel(): void {
+  communicationsPanelOpen = false
+  syncCommunicationsUI()
+}
+
 // план «Демонтаж» (change demolition-plan, design D10): пометки чертежа лежат в current().demolition; пока их нет —
 // общий неизменяемый пустой список (тот же экземпляр: инструмент по нему узнаёт, что операция ничего не изменила)
 const onDemolition = (): boolean => activePlanOf(current()) === "demolition"
@@ -371,17 +478,21 @@ function closeOpeningsPanel(): void {
   syncOpeningsUI()
 }
 
-const closeDoorwayEditor = (): void => {
+// поле ввода числа выделенного объекта: элемента стены или коммуникации
+const closeNumberEditor = (): void => {
   selectionEditing.closeEditor()
+  communicationTool.closeEditor()
 }
 
 const resetElementTools = (): void => {
   for (const t of elementTools) t.reset()
+  communicationTool.reset()
 }
 
 function selectDoorway(d: WallElement): void {
-  closeDoorwayEditor()
+  closeNumberEditor()
   selectedDoorways = [d]
+  selectedCommunication = null
   selectedWalls = []
   selectedDimensions = []
   lengthDirty = false
@@ -400,8 +511,9 @@ function setWallPanel(open: boolean): void {
 }
 
 function selectDimension(dim: Dimension): void {
-  closeDoorwayEditor()
+  closeNumberEditor()
   selectedDimensions = [dim]
+  selectedCommunication = null
   selectedWalls = []
   selectedDoorways = []
   lengthDirty = false
@@ -416,8 +528,9 @@ function clearDimSelection(): void {
 }
 
 function selectWall(wall: Wall): void {
-  closeDoorwayEditor()
+  closeNumberEditor()
   selectedWalls = [wall]
+  selectedCommunication = null
   selectedDimensions = []
   selectedDoorways = []
   lengthDirty = false
@@ -427,7 +540,8 @@ function selectWall(wall: Wall): void {
 }
 
 function clearSelection(): void {
-  closeDoorwayEditor()
+  closeNumberEditor()
+  selectedCommunication = null
   selectedWalls = []
   selectedDimensions = []
   selectedDoorways = []
@@ -457,6 +571,7 @@ function syncToolUI(): void {
   toolWindowBtn.classList.toggle("active", tool === "window")
   toolDemolitionBtn.classList.toggle("active", tool === "demolition")
   syncOpeningsUI()
+  syncCommunicationsUI()
   syncToolbar()
   canvas.classList.toggle("tool-eraser", tool === "eraser")
 }
@@ -465,12 +580,13 @@ function setTool(next: Tool): void {
   if (tool === next) return
   tool = next
   clearChain()
-  closeDoorwayEditor()
+  closeNumberEditor()
   dimDraft = emptyDraft()
   lengthDirty = false
   selectedWalls = []
   selectedDimensions = []
   selectedDoorways = []
+  selectedCommunication = null
   resetElementTools()
   suppressClick = false
   nudgeBurst = false
@@ -481,6 +597,7 @@ function setTool(next: Tool): void {
   resetDemolition()
   setWallPanel(false)
   closeOpeningsPanel()
+  closeCommunicationsPanel()
   syncToolUI()
   syncThicknessBox()
   redraw()
@@ -493,6 +610,18 @@ function leavePlacing(group: GroupState): void {
   for (const t of elementTools) t.clearGhost()
   openingsCurrent = group.current
   openingsPanelOpen = group.panelOpen
+  syncToolUI()
+  redraw()
+}
+
+// выход из установки коммуникации без снятия выделения: поставленная коммуникация остаётся выделенной, панель группы
+// закрывается, текущий инструмент группы помнится (spec communications «Установка коммуникации»)
+function leaveCommunicationPlacing(): void {
+  tool = "none"
+  communicationTool.clearGhost()
+  const group = afterPlaceCommunication(communicationsGroupState())
+  communicationsCurrent = group.current
+  communicationsPanelOpen = group.panelOpen
   syncToolUI()
   redraw()
 }
@@ -551,7 +680,7 @@ function resizeSelected(): void {
   const len = typedLengthCm()
   if (!len || selectedWalls.length !== 1) return
   const before = cloneScene(scene())
-  const result = resizeWallBounded(walls, selectedWalls[0], len, { ortho, doorways })
+  const result = resizeWallBounded(walls, selectedWalls[0], len, { ortho, doorways, communications: communicationsOf() })
   if (result.kind === "rejected") return
   pushSnapshot(before)
   dirty = true
@@ -615,6 +744,7 @@ function drawDemolitionPlan(): void {
     {
       walls,
       doorways,
+      communications: communicationsOf(),
       marks,
       selectedId: demolitionTool.selectedId(),
       ghost: demolitionTool.ghost(),
@@ -629,7 +759,7 @@ function drawDemolitionPlan(): void {
 
 function drawMeasurePlan(): void {
   const p = chainStart && segment ? segment.end : null
-  const target = tool === "eraser" && cursor ? eraserTarget(cursor) : { wall: null, dim: null, doorway: null }
+  const target = tool === "eraser" && cursor ? eraserTarget(cursor) : { wall: null, dim: null, doorway: null, communication: null }
   const draft = dimDraftGeometry()
   const snapHit = tool === "dimension" && cursor && (!dimDraft.a || !dimDraft.b) ? nearestEdgeIntersection(cursor, walls, radiusCm()) : null
   let previewWall: Wall | null = null
@@ -653,6 +783,10 @@ function drawMeasurePlan(): void {
     selectedDoorways,
     doorwayGhost: placingTool()?.ghost() ?? null,
     hoverDoorway: target.doorway,
+    communications: communicationsOf(),
+    selectedCommunications: selectedCommunication ? [selectedCommunication] : [],
+    communicationGhost: communicationKind() ? communicationTool.ghost() : null,
+    hoverCommunication: target.communication,
     hoverDoorDirection: tool !== "eraser" && hoverWorld ? selectionEditing.hoverDirection(hoverWorld) : null,
     marquee,
     marqueeHits,
@@ -669,18 +803,21 @@ function drawMeasurePlan(): void {
 
 // нажатая кнопка мыши: рамка, перетаскивание стен или размера, протяжка пометки, сдвиг вида
 function gestureActive(): boolean {
-  return !!(marquee || marqueePending || groupMove || endpointDrag || dimDrag || doorwayTool.dragging() || demolitionTool.dragging() || panDrag)
+  return !!(marquee || marqueePending || groupMove || endpointDrag || dimDrag || doorwayTool.dragging() || communicationTool.dragging() || demolitionTool.dragging() || panDrag)
 }
 
-// ластик: размер → проём → стена (wall-deletion «Инструмент «Ластик»»)
-function eraserTarget(p: Point): { wall: Wall | null; dim: Dimension | null; doorway: WallElement | null } {
+// ластик: размер → коммуникация → проём → стена (wall-deletion «Инструмент «Ластик»», «Ластик и удаление
+// коммуникаций»); коммуникации стираются только на обмерочном плане
+function eraserTarget(p: Point): { wall: Wall | null; dim: Dimension | null; doorway: WallElement | null; communication: Communication | null } {
   const found = erasePick(p, { walls, dimensions, doorways }, radiusCm(), 2)
+  const communication = found?.kind === "dimension" || !communicationsEditable() ? null : hitCommunication(p, communicationsOf(), radiusCm())
   // остатки и старые элементы ластиком не стираются
   const pick = found && (found.kind === "doorway" ? !editableElement(found.doorway) : found.kind === "wall" && !editableWall(found.wall)) ? null : found
   return {
-    wall: pick?.kind === "wall" ? pick.wall : null,
+    wall: !communication && pick?.kind === "wall" ? pick.wall : null,
     dim: pick?.kind === "dimension" ? pick.dimension : null,
-    doorway: pick?.kind === "doorway" ? pick.doorway : null,
+    doorway: !communication && pick?.kind === "doorway" ? pick.doorway : null,
+    communication,
   }
 }
 
@@ -728,14 +865,15 @@ function snapWallCursor(raw: Point): void {
   wallCursorRaw = raw
   if (!chainStart) {
     // до первого клика — квадрат установки у грани/торца или на сетке
-    const r = snapStartVertex(raw, walls, snapRadiusCm(view.zoom), GRID_STEP_CM, thicknessCm, doorways)
+    const r = snapStartVertex(raw, walls, snapRadiusCm(view.zoom), GRID_STEP_CM, thicknessCm, doorways, communicationsOf())
     cursor = r.point
     cursorSnap = r
     segment = null
+    endBlocked = false
     return
   }
   // старт зафиксирован кликом; один расчёт сегмента для превью и фиксации (design D5)
-  segment = chainSegment({
+  const computed = chainSegment({
     start: chainStart,
     ref: chainRef,
     raw,
@@ -747,7 +885,13 @@ function snapWallCursor(raw: Point): void {
     typedAngleDeg: typedAngleDeg(),
     typedLengthCm: lengthDirty ? typedLengthCm() : null,
     doorways,
+    communications: communicationsOf(),
   })
+  // конец стены, налагающийся на коммуникацию, обрезается до касания; нулевая стена не ставится (spec wall-collision
+  // «Стены не налагаются на коммуникации»)
+  const limited = limitNewWall(chainStart, computed.end, thicknessCm, communicationsOf())
+  endBlocked = limited === null
+  segment = limited === null ? { ...computed, end: chainStart } : pointsEqual(limited, computed.end) ? computed : { ...computed, end: limited }
   cursor = segment.snap.point
   cursorSnap = segment.snap
 }
@@ -760,6 +904,9 @@ function refreshWallCursor(): void {
 function commitPoint(): void {
   if (!chainStart) {
     if (!cursor) return
+    // квадрат установки, налагающийся на коммуникацию, начала стены не фиксирует
+    const startSquare = cursorSnap ? placementSquare(cursorSnap, thicknessCm) : null
+    if (startSquare && !squareAllowed(startSquare, communicationsOf())) return
     chainStart = cursor
     chainRef = cursorSnap ? startRefOf(cursorSnap) : null
     segment = null
@@ -771,6 +918,7 @@ function commitPoint(): void {
   }
   const a = chainStart
   const end = segment?.end ?? cursor ?? chainStart
+  if (endBlocked) return
   if (!pointsEqual(a, end)) {
     const wall: Wall = { id: crypto.randomUUID(), a, b: end, thicknessCm, type: wallMaterial }
     // продолжение свободного конца стены той же толщины и материала удлиняет её (change merge-collinear-walls)
@@ -831,12 +979,18 @@ function restoreWalls(scene: Scene): void {
 // режим правки с ограничениями (change wall-move-bounds, design D8): привязка к линии оси стены
 // передаётся как snappedAxis
 function editMode(snapped: SnapResult): EditMode {
-  return snapped.axisWall ? { ortho, snappedAxis: snapped.axisWall, doorways } : { ortho, doorways }
+  const communications = communicationsOf()
+  return snapped.axisWall ? { ortho, snappedAxis: snapped.axisWall, doorways, communications } : { ortho, doorways, communications }
 }
 
 canvas.addEventListener("pointermove", (e) => {
   if (doorwayTool.dragging()) {
     doorwayTool.dragTo(toWorld(e))
+    redraw()
+    return
+  }
+  if (communicationTool.dragging()) {
+    communicationTool.dragTo(toWorld(e))
     redraw()
     return
   }
@@ -930,8 +1084,10 @@ canvas.addEventListener("pointermove", (e) => {
   else if (placingTool()) {
     cursor = toWorld(e)
     placingTool()?.hover(cursor)
-  }
-  else cursor = toSnappedPoint(e)
+  } else if (communicationKind()) {
+    cursor = toWorld(e)
+    hoverCommunicationGhost(cursor)
+  } else cursor = toSnappedPoint(e)
   hoverWorld = toWorld(e)
   redraw()
 })
@@ -990,7 +1146,7 @@ canvas.addEventListener("pointerdown", (e) => {
   // правка выделенного элемента на месте (change popups-buttons-only, design D6): правимое число, затем зона
   // направления выделенной двери — главнее любой цели нажатия
   const p = toWorld(e)
-  if (selectionEditing.pressNumber(p) || selectionEditing.pressZone(p)) {
+  if (selectionEditing.pressNumber(p) || selectionEditing.pressZone(p) || (communicationsEditable() && communicationTool.pressNumber(p))) {
     suppressClick = true
     return
   }
@@ -1004,6 +1160,13 @@ canvas.addEventListener("pointerdown", (e) => {
   })
   // остатки и старые элементы только для чтения: нажатие по ним ничего не выделяет (spec mounting-plan)
   const pick = found && (found.kind === "doorway" ? !editableElement(found.doorway) : "wall" in found && !editableWall(found.wall)) ? null : found
+  // коммуникация под курсором: главнее размера, проёма и тела стены, но не маркеров выделенной стены (spec communications
+  // «Выделение, перемещение и удаление коммуникации»); только на обмерочном плане
+  if (pick?.kind !== "end" && pick?.kind !== "middle" && communicationsEditable() && communicationTool.pressBody(p)) {
+    suppressClick = true
+    canvas.setPointerCapture(e.pointerId)
+    return
+  }
   if (pick?.kind === "end") {
     suppressClick = true
     const other = pick.wall[pick.end === "a" ? "b" : "a"]
@@ -1075,6 +1238,13 @@ canvas.addEventListener("pointerup", (e) => {
     }
     return
   }
+  if (communicationTool.dragging()) {
+    if (e.button === 0) {
+      communicationTool.endDrag()
+      redraw()
+    }
+    return
+  }
   if (endpointDrag) {
     if (e.button === 0) {
       if (!pointsEqual(endpointDrag.wall[endpointDrag.end], endpointDrag.base)) {
@@ -1131,11 +1301,12 @@ function marqueePicks(rect: { x1: number; y1: number; x2: number; y2: number }):
 function finishMarquee(rect: { x1: number; y1: number; x2: number; y2: number }, additive: boolean): void {
   const picks = marqueePicks(rect)
   marqueeHits = null
+  selectedCommunication = null // рамка коммуникации не захватывает (spec communications)
   selectedWalls = additive ? [...selectedWalls, ...picks.walls.filter((w) => !selectedWalls.includes(w))] : picks.walls
   selectedDimensions = additive ? [...selectedDimensions, ...picks.dims.filter((d) => !selectedDimensions.includes(d))] : picks.dims
   selectedDoorways = additive ? [...selectedDoorways, ...picks.doorways.filter((d) => !selectedDoorways.includes(d))] : picks.doorways
   lengthDirty = false
-  closeDoorwayEditor()
+  closeNumberEditor()
   if (!selectedDoorways.length && selectedWalls.length === 1 && !selectedDimensions.length) {
     syncThicknessBox()
     setWallMaterial(selectedWalls[0].type)
@@ -1169,10 +1340,17 @@ canvas.addEventListener("click", (e) => {
   const p = toSnappedPoint(e)
   const raw = toWorld(e)
   if (tool === "eraser") {
-    const { wall, dim, doorway } = eraserTarget(p)
+    const { wall, dim, doorway, communication } = eraserTarget(p)
     if (dim) deleteDimension(dim)
+    else if (communication) deleteCommunication(communication)
     else if (doorway) deleteDoorway(doorway)
     else if (wall) deleteWall(wall)
+    return
+  }
+  const kind = communicationKind()
+  if (kind) {
+    // установка снимает инструмент, поставленная коммуникация остаётся выделенной (spec communications «Установка»)
+    if (communicationTool.place(kind, raw)) leaveCommunicationPlacing()
     return
   }
   const placing = placingTool()
@@ -1194,6 +1372,7 @@ canvas.addEventListener("click", (e) => {
       return
     }
     selectedWalls = []
+    selectedCommunication = null
     lengthDirty = false
     clearDimSelection()
     redraw()
@@ -1202,7 +1381,7 @@ canvas.addEventListener("click", (e) => {
   // остался инструмент «Стена» (линейка не кликает): тело существующей стены стену не выделяет и не начинает,
   // прилипший квадрат рисует (change select-only-without-tool, spec wall-drawing «Квадрат при установке стены»)
   if (tool !== "wall") return
-  if (!chainStart && wallClickAction(raw, snapStartVertex(raw, walls, radiusCm(), GRID_STEP_CM, thicknessCm, doorways), walls, radiusCm()).kind === "select") return
+  if (!chainStart && wallClickAction(raw, snapStartVertex(raw, walls, radiusCm(), GRID_STEP_CM, thicknessCm, doorways, communicationsOf()), walls, radiusCm()).kind === "select") return
   updateWallCursor(e)
   commitPoint()
 })
@@ -1293,8 +1472,16 @@ function removeObjects(picked: { walls: Wall[]; dimensions: Dimension[]; doorway
 
 function deleteDoorway(d: WallElement): void {
   pushRecord()
-  closeDoorwayEditor()
+  closeNumberEditor()
   removeObjects({ walls: [], dimensions: [], doorways: [d] })
+  dirty = true
+  redraw()
+}
+
+function deleteCommunication(c: Communication): void {
+  pushRecord()
+  closeNumberEditor()
+  setCommunications(communicationsOf().filter((o) => o !== c))
   dirty = true
   redraw()
 }
@@ -1325,9 +1512,13 @@ function deleteDimension(dim: Dimension): void {
 }
 
 function deleteSelection(): void {
+  if (selectedCommunication) {
+    deleteCommunication(selectedCommunication)
+    return
+  }
   if (!selectedWalls.length && !selectedDimensions.length && !selectedDoorways.length) return
   pushRecord()
-  closeDoorwayEditor()
+  closeNumberEditor()
   removeObjects({ walls: selectedWalls, dimensions: selectedDimensions, doorways: selectedDoorways })
   selectedWalls = []
   selectedDimensions = []
@@ -1356,7 +1547,8 @@ thicknessInput.addEventListener("input", () => {
   if (
     selectedWalls.length === 1 &&
     selectedWalls[0].thicknessCm !== thicknessCm &&
-    thicknessAllowed(walls, selectedWalls[0], thicknessCm, doorways)
+    thicknessAllowed(walls, selectedWalls[0], thicknessCm, doorways) &&
+    thicknessAllowedForCommunications(walls, selectedWalls[0], thicknessCm, communicationsOf())
   ) {
     pushRecord()
     selectedWalls[0].thicknessCm = thicknessCm
@@ -1431,6 +1623,11 @@ toolEraserBtn.addEventListener("click", () => setTool("eraser"))
 toolOpeningsBtn.addEventListener("click", () => applyGroup(groupButtonClick(groupState())))
 toolDoorwayBtn.addEventListener("click", () => applyGroup(groupPick(groupState(), "doorway")))
 toolDoorBtn.addEventListener("click", () => applyGroup(groupPick(groupState(), "door")))
+
+// кнопка группы «Коммуникации» и кнопки её инструментов (spec canvas-app «Панель группы «Коммуникации»»)
+toolCommunicationsBtn.addEventListener("click", () => applyCommunicationsGroup(communicationsGroupClick(communicationsGroupState())))
+toolRiserBtn.addEventListener("click", () => applyCommunicationsGroup(communicationsGroupPick(communicationsGroupState(), "riser")))
+toolDuctBtn.addEventListener("click", () => applyCommunicationsGroup(communicationsGroupPick(communicationsGroupState(), "duct")))
 
 // у инструментов без кнопок-параметров («Окно», «Размер», «Линейка», «Ластик») панели нет: клик только активирует
 toolWindowBtn.addEventListener("click", () => setTool("window"))
@@ -1509,12 +1706,14 @@ function activate(id: string): void {
   syncToolUI()
   resetDemolition()
   clearChain()
-  closeDoorwayEditor()
+  closeNumberEditor()
   selectedWalls = []
   selectedDimensions = []
   selectedDoorways = []
+  selectedCommunication = null
   resetElementTools()
   closeOpeningsPanel()
+  closeCommunicationsPanel()
   dimDraft = emptyDraft()
   dimDrag = null
   lengthDirty = false
@@ -1557,10 +1756,11 @@ function removeDrawing(id: string, index: number): void {
 function resetEditing(): void {
   resetDemolition()
   clearChain()
-  closeDoorwayEditor()
+  closeNumberEditor()
   selectedWalls = []
   selectedDimensions = []
   selectedDoorways = []
+  selectedCommunication = null
   resetElementTools()
   dimDraft = emptyDraft()
   lengthDirty = false
@@ -1593,10 +1793,12 @@ function restoreScene(e: Scene): void {
   walls = e.walls
   dimensions = e.dimensions
   setDoorways(e.doorways ?? [])
+  // запись без поля коммуникаций (история до их введения) список не меняет (spec communications «История коммуникаций»)
+  if (e.communications) setCommunications(e.communications)
 }
 
 function undo(): void {
-  if (groupMove || endpointDrag || panDrag || dimDrag || doorwayTool.dragging() || demolitionTool.dragging()) return
+  if (groupMove || endpointDrag || panDrag || dimDrag || doorwayTool.dragging() || communicationTool.dragging() || demolitionTool.dragging()) return
   const h = activeHistory()
   if (h.past[h.past.length - 1]?.kind === "demolition") {
     stepMarks(undoMarks)
@@ -1619,7 +1821,7 @@ function undo(): void {
 }
 
 function redo(): void {
-  if (groupMove || endpointDrag || panDrag || dimDrag || doorwayTool.dragging() || demolitionTool.dragging()) return
+  if (groupMove || endpointDrag || panDrag || dimDrag || doorwayTool.dragging() || communicationTool.dragging() || demolitionTool.dragging()) return
   const h = activeHistory()
   if (h.future[h.future.length - 1]?.kind === "demolition") {
     stepMarks(redoMarks)
@@ -1723,7 +1925,7 @@ window.addEventListener("keydown", (e) => {
       }
       return
     }
-    if (groupMove || endpointDrag || panDrag || dimDrag || doorwayTool.dragging()) return
+    if (groupMove || endpointDrag || panDrag || dimDrag || doorwayTool.dragging() || communicationTool.dragging()) return
     deleteSelection()
     return
   }
@@ -1746,7 +1948,7 @@ window.addEventListener("keydown", (e) => {
       tool,
       gestureActive: !!chainStart,
       dimensionDraft: !!(dimDraft.a || dimDraft.b),
-      hasSelection: selectedDimensions.length + selectedWalls.length + selectedDoorways.length > 0,
+      hasSelection: selectedDimensions.length + selectedWalls.length + selectedDoorways.length > 0 || selectedCommunication !== null,
     })
     if (action === "end-gesture") endChain()
     else if (action === "cancel-dimension-draft") {
@@ -1759,7 +1961,9 @@ window.addEventListener("keydown", (e) => {
   if (e.target instanceof HTMLInputElement) return
   // на плане «Демонтаж» нет стен, материалов и элементов: стрелки ничего не двигают и не переключают
   if (onDemolition()) return
-  if (groupMove || endpointDrag || panDrag || dimDrag || doorwayTool.dragging()) return
+  if (groupMove || endpointDrag || panDrag || dimDrag || doorwayTool.dragging() || communicationTool.dragging()) return
+  // выделенная коммуникация стрелками не двигается и материал не переключается (spec communications)
+  if (selectedCommunication) return
   if (selectedWalls.length || selectedDimensions.length || selectedDoorways.length) {
     if (!selectedWalls.length) {
       if (!selectedDoorways.length) return
@@ -1777,7 +1981,7 @@ window.addEventListener("keydown", (e) => {
       : { x: step, y: 0 }
     // запись истории открывает только нажатие, давшее сдвиг (design D8)
     const before = cloneScene(scene())
-    const applied = moveWallsBounded(walls, selectedWalls, delta, { ortho, doorways })
+    const applied = moveWallsBounded(walls, selectedWalls, delta, { ortho, doorways, communications: communicationsOf() })
     if (applied.x === 0 && applied.y === 0) return
     if (!nudgeBurst) pushSnapshot(before)
     nudgeBurst = true

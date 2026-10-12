@@ -23,7 +23,8 @@ export const historyKey = (drawingId: string, plan: PlanId): string => (plan ===
 
 // Инструменты плана (change demolition-plan, design D1): первый в наборе — инструмент по умолчанию
 const PLAN_TOOLS: Record<PlanId, readonly [Tool, ...Tool[]]> = {
-  measure: ["wall", "doorway", "door", "window", "dimension", "ruler", "eraser"],
+  // группа «Коммуникации» (change add-communications, design D9) — только на обмерочном плане
+  measure: ["wall", "doorway", "door", "window", "riser", "duct", "dimension", "ruler", "eraser"],
   demolition: ["demolition", "ruler", "eraser"],
   // «Монтаж» (change mounting-plan, design D5): набор обмерочного плана
   mounting: ["wall", "doorway", "door", "window", "dimension", "ruler", "eraser"],

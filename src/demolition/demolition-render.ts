@@ -1,3 +1,4 @@
+import { strokeCommunications } from "../communications/communications-render"
 import { drawDimensionGeom, drawElementsLayer, drawScene, prepareCanvas, SCREEN_METRICS, tracePolygons } from "../render"
 import type { RenderMetrics } from "../render"
 import type { RulerReading } from "../ruler"
@@ -5,7 +6,7 @@ import { LIGHT_PALETTE } from "../theme"
 import type { Palette, Theme } from "../theme"
 import { PX_PER_CM } from "../types"
 import { DEMOLITION_HATCH, strokeHatchSeries } from "../wall-hatch"
-import type { Point, Unit, View, Wall, WallElement } from "../types"
+import type { Communication, Point, Unit, View, Wall, WallElement } from "../types"
 import { markDimensions } from "./mark-dimensions"
 import type { MarkSpan, ResolvedMark } from "./mark-model"
 import { markRegion } from "./mark-region"
@@ -22,6 +23,7 @@ export interface DemolitionScene {
   ghost?: { wallId: string; from: number; to: number } | null // превью протяжки, от конца a
   ruler?: RulerReading | null // замеры инструмента «Линейка» по подложке
   erasing?: string | null // пометка под курсором ластика: область обводится цветом подсветки ластика
+  communications?: readonly Communication[] // общие коммуникации чертежа: обычным цветом поверх подложки (add-communications)
 }
 
 export interface DemolitionOptions {
@@ -98,6 +100,8 @@ export function drawDemolitionScene(
 
   // элементы стен не скрываются сносом и рисуются поверх закраски области (change demolition-show-elements)
   drawElementsLayer(ctx, walls, unit, view, { metrics: m, palette: grey, doorways })
+  // коммуникации не сносятся и не серые: рисуются как на обмерочном плане (spec demolition-plan «Коммуникации…»)
+  strokeCommunications(ctx, scene.communications ?? [], view, palette.ink, m.contourPx, palette.concreteFill)
 
   const ghost = scene.ghost
   const ghostWall = ghost ? walls.find((x) => x.id === ghost.wallId) : undefined

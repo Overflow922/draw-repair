@@ -1,5 +1,6 @@
 import { dimPointPoint, nearestEdgeIntersection, pointsEqual, wallEndOccupied } from "./geometry"
 import { displayPolygons, pointInPolygon } from "./wall-geometry"
+import { violatesCommunications } from "./communications/guard"
 import { violatesDoorways } from "./doorway/doorway-guard"
 import { faceRuns, hostPoint } from "./doorway/doorway-faces"
 import type { Side } from "./doorway/doorway-faces"
@@ -128,6 +129,6 @@ export function syncAutoDimensions(scene: Scene, newWallId?: string): Scene {
 // null — стена нарушает проём и не фиксируется
 export function placeWall(scene: Scene, wall: Wall): Scene | null {
   const walls = [...scene.walls, wall]
-  if (violatesDoorways(scene.walls, walls, scene.doorways ?? [])) return null
+  if (violatesDoorways(scene.walls, walls, scene.doorways ?? []) || violatesCommunications(scene.walls, walls, scene.communications ?? [])) return null
   return syncAutoDimensions({ ...scene, walls }, wall.id)
 }

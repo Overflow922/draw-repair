@@ -1,4 +1,5 @@
 import { jsPDF } from "jspdf"
+import { communicationBox } from "../communications/geometry"
 import { doorLeaf, heightLabelAt, heightLabelSide, labelDirection } from "../doorway/doorway-layout"
 import { dimGeometry, dimPointPoint } from "../geometry"
 import { LABEL_FRAME_PAD, elementLabel, labelWidth } from "../doorway/element-label"
@@ -13,7 +14,7 @@ import { findRooms } from "../room-area"
 import { LIGHT_PALETTE } from "../theme"
 import { cross, dot, sub } from "../wall-geometry"
 import { PX_PER_CM, isDoor, isWindow } from "../types"
-import type { Dimension, Drawing, Point, Unit, Wall, WallElement } from "../types"
+import type { Communication, Dimension, Drawing, Point, Unit, Wall, WallElement } from "../types"
 import { FONT_B64 } from "./font"
 import { PAGE_FORMATS_MM } from "./page-format"
 import type { PageFormat } from "./page-format"
@@ -133,6 +134,8 @@ export interface PlanPage {
   doorways: WallElement[]
   // действующие пометки сноса: страница плана «Демонтаж» (change demolition-plan, design D9); у остальных страниц нет
   demolition?: readonly ResolvedMark[]
+  // общие коммуникации чертежа: на каждой странице каждого плана (change add-communications, design D10)
+  communications?: readonly Communication[]
   title?: string // название плана страницы — в графу 5 основной надписи (change pdf-plan-page-names)
 }
 
@@ -143,14 +146,15 @@ export function pagesOf(drawing: Drawing): PlanPage[] {
   const marks = effectiveMarks(drawing.demolition ?? [], drawing.walls, doorways)
   // страница «Монтаж» — остатки и собственные объекты плана (change mounting-plan, design D7)
   const mounting = mountingScene(drawing)
+  const shared = drawing.communications ? { communications: drawing.communications } : null
   return PLANS.map((plan): PlanPage => {
     switch (plan.id) {
       case "demolition":
-        return { walls: drawing.walls, dimensions: [], doorways, demolition: marks, title: plan.label }
+        return { walls: drawing.walls, dimensions: [], doorways, demolition: marks, ...shared, title: plan.label }
       case "mounting":
-        return { walls: mounting.walls, dimensions: mounting.dimensions, doorways: mounting.doorways, title: plan.label }
+        return { walls: mounting.walls, dimensions: mounting.dimensions, doorways: mounting.doorways, ...shared, title: plan.label }
       case "measure":
-        return { walls: drawing.walls, dimensions: drawing.dimensions, doorways, title: plan.label }
+        return { walls: drawing.walls, dimensions: drawing.dimensions, doorways, ...shared, title: plan.label }
     }
   })
 }
@@ -159,7 +163,13 @@ export function pagesOf(drawing: Drawing): PlanPage[] {
 // страница демонтажа дополнительно — размеры пометок (change demolition-dimension-chains, design D4): k — px листа на см чертежа
 export function pageBounds(page: PlanPage, scale: number): BBox {
   const k = 10 / scale
-  const extra = (page.demolition ?? []).flatMap((r) => markDimensionExtent(r, page.walls, k, PDF_METRICS))
+  const marks = (page.demolition ?? []).flatMap((r) => markDimensionExtent(r, page.walls, k, PDF_METRICS))
+  // тело коммуникации — две противоположные вершины габарита
+  const bodies = (page.communications ?? []).flatMap((c): Point[] => {
+    const [x1, y1, x2, y2] = communicationBox(c)
+    return [{ x: x1, y: y1 }, { x: x2, y: y2 }]
+  })
+  const extra = [...marks, ...bodies]
   return wallsBBox(page.walls, page.dimensions, 0.5 * scale, page.doorways, scale, extra)
 }
 
@@ -194,11 +204,17 @@ function drawPage(doc: jsPDF, page: PlanPage, unit: Unit, scale: number, format:
   drawSheet(doc, format, page.title === undefined ? { name, scale, date } : { name, scale, date, pageName: page.title })
   drawLegend(doc, ctx, page, legendArea(format, legendMm))
   if (page.demolition !== undefined) {
-    const scene = { walls: page.walls, doorways: page.doorways, marks: page.demolition }
+    const scene = { walls: page.walls, doorways: page.doorways, marks: page.demolition, communications: page.communications }
     drawDemolitionScene(ctx, w, h, scene, unit, view, { color: demolitionColor("light"), grid: false, metrics: PDF_METRICS, palette: LIGHT_PALETTE })
     return
   }
-  drawScene(ctx, w, h, page.walls, null, unit, view, [], { grid: false, metrics: PDF_METRICS, dimensions: page.dimensions, doorways: page.doorways })
+  drawScene(ctx, w, h, page.walls, null, unit, view, [], {
+    grid: false,
+    metrics: PDF_METRICS,
+    dimensions: page.dimensions,
+    doorways: page.doorways,
+    communications: page.communications,
+  })
 }
 
 // PDF из упорядоченного списка страниц: один формат, масштаб, имя и дата на всех страницах

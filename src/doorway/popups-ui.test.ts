@@ -45,8 +45,12 @@ describe("разметка панелей", () => {
     expect(count(openings, /<button/g)).toBe(2)
   })
 
-  it("PB-UI-02: панели есть только у «Стена» и группы «Проёмы»; удалённых полей и панелей нет", () => {
-    expect(count(toolbar, /class="[^"]*\btool-panel\b/g)).toBe(2)
+  // change add-communications (canvas-app «Вспомогательная панель инструмента»): третья панель — группа «Коммуникации»
+  it("PB-UI-02: панели есть только у «Стена» и групп «Проёмы» и «Коммуникации»; удалённых полей и панелей нет", () => {
+    expect(count(toolbar, /class="[^"]*\btool-panel\b/g)).toBe(3)
+    expect(panel("wall-panel").length).toBeGreaterThan(0)
+    expect(panel("openings-panel").length).toBeGreaterThan(0)
+    expect(panel("communications-panel").length).toBeGreaterThan(0)
     for (const id of [
       "window-panel",
       "dim-panel",

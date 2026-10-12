@@ -519,3 +519,36 @@ Follow-ups from `new-wall-materials` (2026-10-12).
 ## Docs
 
 - [ ] `openspec/specs/wall-types`: "Штриховка стены по материалу" says a selected wall changes material "by swatch or arrows", while "Выбор типа стены" forbids arrows from switching the material when something is selected (inherited inconsistency, found by test validation round 2).
+
+---
+
+Follow-ups from exploring `add-communications` (2026-10-12).
+
+## Out of scope (decided, revisit if needed)
+
+- Размер стояка и воздуховода и расстояния до стен не печатаются в PDF (как расстояния проёма): на бумаге видны только окружность и прямоугольник с диагональю. Вариант: подпись «Ø110» / «300×200» рядом с объектом по образцу подписи «H=…» проёма.
+- Воздуховод без поворота; привязка размеров и линейки к граням коммуникаций; вычитание площади из помещений; правка коммуникаций на планах «Демонтаж» и «Монтаж»; мультивыделение и сдвиг стрелками коммуникаций.
+- Расстояние до стены считается по телу стены целиком: проём, окно или дверь в стене расстояния не меняют.
+
+## Tests (add-communications, apply group 6, 2026-10-12)
+
+- [ ] `src/main.ts` wiring of communications has no automated test (no DOM environment): `pointerdown` order (numbers → marker → communication body → dimension/doorway/wall), the number editor and its hit area (`communications-tool.ts` `numberAt`), group buttons, eraser target (`eraserTarget`: dimension → communication → doorway → wall), Delete, Esc, arrow keys, `endBlocked` / `limitNewWall` in `snapWallCursor` and `commitPoint`, the plan filter (`communicationsEditable`). Checked by hand in Firefox on 2026-10-12 (place riser and duct, edit distances and diameter, drag stops at a wall, eraser and Delete with undo/redo, «Демонтаж» and «Монтаж» read-only, own wall on «Монтаж» stops at the riser, marquee ignores communications, arrows do not move them, dark theme, reload keeps them, PDF export runs without errors, `pagesOf` puts them on all three pages).
+- [ ] Not checked by hand: wall thickness change next to a riser through the thickness field, arrow-key nudge of a wall into a communication, dragging a wall end onto a communication, tab close/undo of tab close, the PDF page images themselves (only `pagesOf` and `drawScene` options are tested).
+
+## Bugs (add-communications, apply group 6, 2026-10-12)
+
+- [x] Size labels sit on the contour — riser diameter fixed (GOST leader, `src/communications/diameter-leader.ts`, 2026-10-12). Duct width/depth labels (`sizeNumbers`) still sit on the contour; not rechecked.
+
+## Tests (add-communications, manual mutation run 7.4, 2026-10-12)
+
+- [ ] The recognition tolerance 0.01 cm in `src/communications/placement.ts` is not pinned (mutants: tolerance 0 / 0.1 in `ghostPosition` and in `moveLimited` `recognized` survive). Add through a test-change-request: ghost next to a wall with overlap 0.009 cm stays, with 0.011 cm shifts to touch; a drag ending with overlap 0.009 cm passes, with 0.011 cm stops. Only `guard.ts` has these boundary tests (WV-02, WC-02c).
+- [ ] `communicationsEditable` (plan filter) and the `restoreScene` branch «history entry without `communications` leaves the list alone» in `src/main.ts` are protected by no automated test (mutants survive; no DOM environment). The pure part is covered (CH-04). Extract them into pure functions or cover with a DOM harness once it exists. The same for the `communications: communicationsOf()` wiring in `main.ts` (edit modes, snap, chain).
+
+## Out of scope (add-communications review, 2026-10-12)
+
+Edge cases of loaded documents where a communication already overlaps a wall (never produced by the app itself):
+
+- [ ] "Не глубже, чем было" is evaluated per communication, not per (communication, wall) pair (`src/communications/guard.ts`, `communicationGuard` / `worse`): `before` is the largest depth over all walls, so a wall that did not overlap before may then intrude up to the depth another wall already had. Per-pair baseline would be stricter; spec `wall-collision` «Стены не налагаются на коммуникации» says only that the pair's depth must not grow.
+- [ ] `slideReach` (`src/communications/shape.ts`) gives no distance in the direction away from a wall that already overlaps the body, while `design.md` D3 says overlapped walls count with distance 0. Align code or design text.
+- [ ] Duplicate communication ids in a loaded document are not rejected (`src/communications/storage` check in `src/storage.ts` `isCommunication`); the spec asks for unique ids.
+- [ ] `afterPlace` in `src/tool-mode.ts` has a `riser`/`duct` branch used only by approved tests (UI-09b); production uses `afterPlaceCommunication` (`communications-group.ts`). Drop one through a test-change-request.
