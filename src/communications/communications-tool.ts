@@ -54,6 +54,9 @@ export interface CommunicationToolAdapter {
 const HIT_TOLERANCE_PX = 4 // допуск попадания в правимое число, как у чисел проёма
 const BODY_HIT_PX = 2 // допуск попадания в тело коммуникации
 
+// допуск попадания в тело в см при масштабе k пикселей на см
+export const communicationBodyTolCm = (k: number): number => BODY_HIT_PX / k
+
 export function createCommunicationTool(host: CommunicationToolHost): CommunicationToolAdapter {
   const params: { riserDiameterCm: number; widthCm: number; depthCm: number } = { riserDiameterCm: DEFAULT_RISER_DIAMETER_CM, widthCm: DEFAULT_DUCT_CM.width, depthCm: DEFAULT_DUCT_CM.depth }
   let ghost: Communication | null = null
@@ -176,7 +179,7 @@ export function createCommunicationTool(host: CommunicationToolHost): Communicat
     pressBody(p) {
       // выбор и перетаскивание — по телу, а не по радиусу привязки (он только у ластика): иначе коммуникация вплотную
       // к стене перехватывает нажатия по стене; допуск — пара пикселей
-      const c = hitCommunication(p, host.communications(), BODY_HIT_PX / k())
+      const c = hitCommunication(p, host.communications(), communicationBodyTolCm(k()))
       if (!c) return false
       closeEditor()
       host.select(c)

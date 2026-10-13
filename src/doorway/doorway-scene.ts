@@ -1,6 +1,7 @@
 import { dimHitDistance, distanceToWall, endpointAt, hitWall, midpointAt, segmentIntersectsRect } from "../geometry"
+import { hitCommunication } from "../communications/pick"
 import type { Scene } from "../history"
-import type { Dimension, Point, Wall, WallElement } from "../types"
+import type { Communication, Dimension, Point, Wall, WallElement } from "../types"
 import { cross, degenerate, dot, sub, unit } from "../wall-geometry"
 import { hostOf, hostPoint, jambsT } from "./doorway-faces"
 
@@ -116,8 +117,17 @@ export type PressPick =
   | { kind: "end"; wall: Wall; end: "a" | "b" }
   | { kind: "middle"; wall: Wall }
   | { kind: "dimension"; dimension: Dimension }
+  | { kind: "communication"; communication: Communication }
   | { kind: "doorway"; doorway: WallElement }
   | { kind: "wall"; wall: Wall }
+
+// коммуникации — цель нажатия, если переданы (обмерочный план без инструмента); tolCm — допуск попадания по телу,
+// отдельный от радиуса привязки
+
+export interface PressCommunications {
+  items: readonly Communication[]
+  tolCm: number
+}
 
 // selectedWall — одиночная выделенная стена; остальные поля — доступность целей при текущем инструменте
 export interface PressOptions {
@@ -127,7 +137,14 @@ export interface PressOptions {
   elements: boolean
 }
 
-export function pressPick(p: Point, scene: Selection, tolCm: number, textFactor: number, options: PressOptions): PressPick | null {
+export function pressPick(
+  p: Point,
+  scene: Selection,
+  tolCm: number,
+  textFactor: number,
+  options: PressOptions,
+  communications?: PressCommunications,
+): PressPick | null {
   const sel = options.selectedWall
   if (sel) {
     const end = endpointAt(p, sel, tolCm)
@@ -138,6 +155,8 @@ export function pressPick(p: Point, scene: Selection, tolCm: number, textFactor:
     const dimension = scene.dimensions.find((d) => (dimHitDistance(p, d, scene.walls, textFactor, scene.doorways) ?? Infinity) <= tolCm)
     if (dimension) return { kind: "dimension", dimension }
   }
+  const communication = communications && hitCommunication(p, communications.items, communications.tolCm)
+  if (communication) return { kind: "communication", communication }
   if (options.elements) {
     const doorway = hitDoorway(p, scene.walls, scene.doorways, tolCm)
     if (doorway) return { kind: "doorway", doorway }

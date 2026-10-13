@@ -33,7 +33,7 @@ import { axisLengthForEdgeCm, edgeLengthCm, previewEdgeLengthCm } from "./wall-l
 import { openWorkspace, storedContent } from "./mounting/mounting-workspace"
 import type { Workspace } from "./mounting/mounting-workspace"
 import { thicknessAllowed } from "./doorway/doorway-guard"
-import { createCommunicationTool } from "./communications/communications-tool"
+import { communicationBodyTolCm, createCommunicationTool } from "./communications/communications-tool"
 import type { CommunicationToolHost } from "./communications/communications-tool"
 import { afterPlaceCommunication, groupButtonActive as communicationsGroupActive, groupButtonClick as communicationsGroupClick, groupPick as communicationsGroupPick } from "./communications/communications-group"
 import type { CommunicationTool, GroupState as CommunicationsGroupState } from "./communications/communications-group"
@@ -1161,16 +1161,9 @@ canvas.addEventListener("pointerdown", (e) => {
     middleMarker: true,
     dimensions: true,
     elements: true,
-  })
+  }, communicationsEditable() ? { items: communicationsOf(), tolCm: communicationBodyTolCm(PX_PER_CM * view.zoom) } : undefined)
   // остатки и старые элементы только для чтения: нажатие по ним ничего не выделяет (spec mounting-plan)
   const pick = found && (found.kind === "doorway" ? !editableElement(found.doorway) : "wall" in found && !editableWall(found.wall)) ? null : found
-  // коммуникация под курсором: главнее размера, проёма и тела стены, но не маркеров выделенной стены (spec communications
-  // «Выделение, перемещение и удаление коммуникации»); только на обмерочном плане
-  if (pick?.kind !== "end" && pick?.kind !== "middle" && communicationsEditable() && communicationTool.pressBody(p)) {
-    suppressClick = true
-    canvas.setPointerCapture(e.pointerId)
-    return
-  }
   if (pick?.kind === "end") {
     suppressClick = true
     const other = pick.wall[pick.end === "a" ? "b" : "a"]
@@ -1193,6 +1186,14 @@ canvas.addEventListener("pointerdown", (e) => {
       suppressClick = true
       selectDimension(pick.dimension)
       canvas.setPointerCapture(e.pointerId)
+      return
+    case "communication":
+      // коммуникация под курсором: после размера, до проёма и тела стены (spec dimension-selection «Нажатие по размеру
+      // главнее тела коммуникации»); только на обмерочном плане
+      if (communicationTool.pressBody(p)) {
+        suppressClick = true
+        canvas.setPointerCapture(e.pointerId)
+      }
       return
     case "doorway":
       // выделение и перетаскивание элемента вдоль опорной стены

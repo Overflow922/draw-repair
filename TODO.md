@@ -624,3 +624,12 @@ Follow-ups from `fix-duct-resize-against-wall` (2026-10-13).
 ## Out of scope
 
 - Mutation testing, lint and format are not configured in the project (only `tsc` and `vitest`).
+## fix-dimension-press-priority (2026-10-13)
+
+### Tests
+
+- [ ] `src/main.ts` dispatch of the press target (`case "communication"` -> `communicationTool.pressBody`, the `communicationBodyTolCm` argument, no communications on Demolition/Mounting plans) has no automated test; only `pressPick` is unit-tested (`src/doorway/press-pick-communications.test.ts`).
+
+### Out of scope
+
+- A dimension line hit uses the snap radius, a communication body only `BODY_HIT_PX`; on a small riser the dimension line can cover almost all of the body, so the riser can only be grabbed by a part away from the line (`src/doorway/doorway-scene.ts`, `src/communications/communications-tool.ts`). Revisit if it bites in practice.
