@@ -472,6 +472,7 @@ describe("AD-29/AD-30: сравнение набора при пересчёте
     const base = placeAll([A, w(0, 300, 500, 300, "B"), w(0, 600, 500, 600, "C")])
     const target = base.dimensions.find((d) => d.auto === "A" && d.offset === 15 && Math.abs(measure(d, base.walls).length - 500) < 1e-6)
     if (!target) throw new Error("нет размера")
+    if (!("a" in target.from)) throw new Error("автоматический размер задан гранями")
     const swapped: Dimension = { ...target, from: { a: target.from.b, b: target.from.a } }
     const prepared: Scene = { ...base, dimensions: base.dimensions.map((d) => (d === target ? swapped : d)) }
     const after = placeWall(prepared, w(250, 310, 250, 500, "T"))

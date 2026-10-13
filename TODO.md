@@ -570,3 +570,15 @@ Follow-ups from exploring and planning `fix-collinear-edge-to-edge-length` (2026
 - (fix-collinear-edge-to-edge-length) Typing a length for a selected wall when the movable end of `resizeWallBounded` is the end with the overhang (wall built from a free end with `b` at the joint and `a` free): movable-end choice only considers T-attachments, so the end at the joint moves; the spec does not define this case.
 - (fix-collinear-edge-to-edge-length, verify 2026-10-13) Two or more foreign ends within the joint tolerance that are not one vertex: `collinearGapCm` (`src/wall-geometry.ts`) returns 0, while `pairEnd` may still extend the body to the earliest neighbour's end, so the visible body can be longer than `edgeLengthCm`. No spec scenario describes this crowded case.
 - (fix-collinear-edge-to-edge-length) Bridge (both ends in collinear gaps) with an exact typed length: only the start overhang is accounted for on input; the end `b` is not snapped when a length is typed.
+---
+
+Follow-ups from `add-opening-dimension-anchors` (2026-10-13).
+
+## Tests
+
+- [ ] (add-opening-dimension-anchors; checked by hand in the browser 2026-10-13: dimension between two windows, vertex-vs-jamb snap, level snap to a neighbour, eraser on a window removes its dimension, undo/redo, reload, Montage plan — still no automated test) `src/main.ts` wiring has no automated test: `placeDimension` / snap mark use `nearestDimAnchor`, every reader of dimension points passes `doorways` (`endPoint`, `dimDraftGeometry`, `dimLevelSnap`, `marqueePicks`). Only the pure functions are unit-tested. A forgotten `doorways` argument in a new reader would silently hide jamb dimensions. The four-wall room drawn wall by wall was not re-checked in the browser (covered by `DA-41` on pure functions).
+
+## Out of scope (decided, revisit if needed)
+
+- (add-opening-dimension-anchors) An explicit `kind: "edges"` on a stored dimension point is not part of the format: the spec says only that a point without `kind` is read as a face pair, and `isDimension` rejects any other `kind` except `"jamb"`. `EdgePoint.kind` is typed as absent.
+- (add-opening-dimension-anchors) Element numbers shown for a selected window (its own dimensions) are separate from the user's jamb dimensions; no snapping between them.

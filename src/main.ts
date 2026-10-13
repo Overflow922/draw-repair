@@ -1,7 +1,7 @@
 import "./style.css"
 import { cloneScene, loadHistory, planHistory, record, recordMarks, recordSnapshot, redoEntry, redoMarks, saveHistory, undoEntry, undoMarks } from "./history"
 import type { Scene } from "./history"
-import { dimGeometry, dimLevelSnap, dimensionOffsetAt, hitWall, nearestEdgeIntersection, dimPointPoint, pointsEqual, segmentIntersectsRect, snap, snapOthers, snapWithSource, zoomAt } from "./geometry"
+import { dimGeometry, dimLevelSnap, dimensionOffsetAt, hitWall, nearestDimAnchor, dimPointPoint, pointsEqual, segmentIntersectsRect, snap, snapOthers, snapWithSource, zoomAt } from "./geometry"
 import type { DimGeometry, SnapResult } from "./geometry"
 import { moveEndpointBounded, moveWallsBounded, resizeWallBounded } from "./wall-edit"
 import type { EditMode } from "./wall-edit"
@@ -151,7 +151,7 @@ let theme: Theme = resolveTheme(themeChoice, systemDark.matches)
 
 const emptyDraft = (): { a: DimPoint | null; b: DimPoint | null } => ({ a: null, b: null })
 
-const endPoint = (end: DimPoint): Point | null => dimPointPoint(end, walls)
+const endPoint = (end: DimPoint): Point | null => dimPointPoint(end, walls, doorways)
 
 const radiusCm = (): number => snapRadiusCm(view.zoom)
 
@@ -765,7 +765,7 @@ function drawMeasurePlan(): void {
   const p = chainStart && segment ? segment.end : null
   const target = tool === "eraser" && cursor ? eraserTarget(cursor) : { wall: null, dim: null, doorway: null, communication: null }
   const draft = dimDraftGeometry()
-  const snapHit = tool === "dimension" && cursor && (!dimDraft.a || !dimDraft.b) ? nearestEdgeIntersection(cursor, walls, radiusCm()) : null
+  const snapHit = tool === "dimension" && cursor && (!dimDraft.a || !dimDraft.b) ? nearestDimAnchor(cursor, walls, doorways, radiusCm()) : null
   let previewWall: Wall | null = null
   if (chainStart && p) previewWall = { id: "", a: chainStart, b: p, thicknessCm, type: wallMaterial }
   let square: Point[] | null = null
@@ -831,7 +831,7 @@ function dimDraftGeometry(): DimGeometry | null {
   const eb = endPoint(dimDraft.b)
   if (!ea || !eb || pointsEqual(ea, eb)) return null
   const axis = dimGeometry(ea, eb, 0)!
-  return dimGeometry(ea, eb, dimLevelSnap(cursor, axis, dimensions, walls, radiusCm())?.offset ?? dimensionOffsetAt(cursor, axis))
+  return dimGeometry(ea, eb, dimLevelSnap(cursor, axis, dimensions, walls, radiusCm(), doorways)?.offset ?? dimensionOffsetAt(cursor, axis))
 }
 
 function draftRubber(end: Point): [Point, Point] | null {
@@ -1024,7 +1024,7 @@ canvas.addEventListener("pointermove", (e) => {
       const axis = dimGeometry(ea, eb, 0)
       if (axis) {
         const dragged = dimDrag.dim
-        const level = dimLevelSnap(p, axis, dimensions.filter((d) => d !== dragged), walls, radiusCm())
+        const level = dimLevelSnap(p, axis, dimensions.filter((d) => d !== dragged), walls, radiusCm(), doorways)
         dragged.offset = level ? level.offset : dimensionOffsetAt(p, axis)
         // передвинутый пользователем размер больше не автоматический: пересчёт его не заменяет (change auto-wall-dimensions, design D5)
         delete dragged.auto
@@ -1294,8 +1294,8 @@ function marqueePicks(rect: { x1: number; y1: number; x2: number; y2: number }):
   // ось стены на участке её проёма стену не выделяет (multi-selection «Рамка выделения»)
   const wallsPicked = wallsInRect(min, max, walls, doorways).filter(editableWall)
   const dimsPicked = dimensions.filter((d) => {
-    const a = dimPointPoint(d.from, walls)
-    const b = dimPointPoint(d.to, walls)
+    const a = dimPointPoint(d.from, walls, doorways)
+    const b = dimPointPoint(d.to, walls, doorways)
     const geom = a && b ? dimGeometry(a, b, d.offset) : null
     return !!geom && segmentIntersectsRect(geom.p1, geom.p2, min, max)
   })
@@ -1392,16 +1392,16 @@ canvas.addEventListener("click", (e) => {
 
 function placeDimension(p: Point): void {
   if (!dimDraft.a || !dimDraft.b) {
-    const hit = nearestEdgeIntersection(p, walls, radiusCm())
+    const hit = nearestDimAnchor(p, walls, doorways, radiusCm())
     if (!hit) return
-    const point: DimPoint = { a: hit.a, b: hit.b }
+    const point = hit.anchor
     if (!dimDraft.a) dimDraft.a = point
     else dimDraft.b = point
     redraw()
     return
   }
-  const ea = dimPointPoint(dimDraft.a, walls)
-  const eb = dimPointPoint(dimDraft.b, walls)
+  const ea = dimPointPoint(dimDraft.a, walls, doorways)
+  const eb = dimPointPoint(dimDraft.b, walls, doorways)
   if (!ea || !eb || pointsEqual(ea, eb)) {
     dimDraft = emptyDraft()
     redraw()
@@ -1409,7 +1409,7 @@ function placeDimension(p: Point): void {
   }
   const axis = dimGeometry(ea, eb, 0)!
   pushRecord()
-  dimensions.push({ from: dimDraft.a, to: dimDraft.b, offset: dimLevelSnap(p, axis, dimensions, walls, radiusCm())?.offset ?? dimensionOffsetAt(p, axis) })
+  dimensions.push({ from: dimDraft.a, to: dimDraft.b, offset: dimLevelSnap(p, axis, dimensions, walls, radiusCm(), doorways)?.offset ?? dimensionOffsetAt(p, axis) })
   dimDraft = emptyDraft()
   dirty = true
   redraw()

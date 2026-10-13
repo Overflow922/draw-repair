@@ -1,7 +1,7 @@
 import { historyKey } from "./plans"
 import type { PlanId } from "./plans"
 import { isCommunication, isDemolitionMark, isDimension, isDrawing, isWall, isWallElement } from "./storage"
-import type { Communication, DemolitionMark, Dimension, Drawing, Wall, WallElement } from "./types"
+import type { Communication, DemolitionMark, Dimension, DimPoint, Drawing, Wall, WallElement } from "./types"
 
 const KEY = "draw-repair:history"
 export const HISTORY_LIMIT = 50
@@ -51,12 +51,14 @@ export function planHistory(history: HistoryStore, drawingId: string, plan: Plan
   return drawingHistory(history, historyKey(drawingId, plan))
 }
 
+const cloneDimPoint = (p: DimPoint): DimPoint => (p.kind === "jamb" ? { ...p } : { a: { ...p.a }, b: { ...p.b } })
+
 export function cloneScene(scene: Scene): Scene {
   return {
     walls: scene.walls.map((w) => ({ id: w.id, a: { x: w.a.x, y: w.a.y }, b: { x: w.b.x, y: w.b.y }, thicknessCm: w.thicknessCm, type: w.type })),
     dimensions: scene.dimensions.map((d) => ({
-      from: { a: { ...d.from.a }, b: { ...d.from.b } },
-      to: { a: { ...d.to.a }, b: { ...d.to.b } },
+      from: cloneDimPoint(d.from),
+      to: cloneDimPoint(d.to),
       offset: d.offset,
       ...(d.auto !== undefined ? { auto: d.auto } : null),
     })),

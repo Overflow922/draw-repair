@@ -66,8 +66,8 @@ export function wallsBBox(
     add(w.b.x + w.thicknessCm / 2, w.b.y + w.thicknessCm / 2)
   }
   for (const dim of dimensions) {
-    const from = dimPointPoint(dim.from, walls)
-    const to = dimPointPoint(dim.to, walls)
+    const from = dimPointPoint(dim.from, walls, doorways)
+    const to = dimPointPoint(dim.to, walls, doorways)
     if (!from || !to) continue
     const g = dimGeometry(from, to, dim.offset)
     if (!g) continue

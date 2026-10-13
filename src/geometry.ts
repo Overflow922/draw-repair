@@ -1,6 +1,7 @@
 import type { Axis } from "./ortho-axis"
 import { ZOOM_MAX, ZOOM_MIN } from "./types"
-import type { Dimension, DimPoint, EdgeRef, Point, View, Wall } from "./types"
+import { hostOf, hostPoint, jambsT } from "./doorway/doorway-faces"
+import type { Dimension, DimPoint, EdgeRef, JambPoint, Point, View, Wall, WallElement } from "./types"
 import { faceCornerTol, pointInPolygon } from "./wall-geometry"
 
 // попадание курсора — канонический расчёт по отображаемой форме (design D1)
@@ -445,7 +446,18 @@ function segClamp(a: EdgeSeg, b: EdgeSeg): Point {
   return { x: a.p1.x + d1.x * s, y: a.p1.y + d1.y * s }
 }
 
-export function dimPointPoint(point: DimPoint, walls: Wall[]): Point | null {
+// позиция откоса на грани опорной стены; null — нет элемента или его опорной стены (change add-opening-dimension-anchors, design D3)
+function jambPosition(point: JambPoint, walls: Wall[], elements: readonly WallElement[]): Point | null {
+  const element = elements.find((e) => e.id === point.elementId)
+  const host = element ? hostOf(element, walls) : null
+  if (!element || !host) return null
+  const [near, far] = jambsT(element, host)
+  return hostPoint(host, point.jamb === "a" ? near : far, (point.face * host.thicknessCm) / 2)
+}
+
+// elements нужен только точкам-откосам; для граневых точек список не используется
+export function dimPointPoint(point: DimPoint, walls: Wall[], elements: readonly WallElement[] = []): Point | null {
+  if (point.kind === "jamb") return jambPosition(point, walls, elements)
   const wa = walls.find((w) => w.id === point.a.wallId)
   const wb = walls.find((w) => w.id === point.b.wallId)
   if (!wa || !wb) return null
@@ -474,6 +486,33 @@ export function nearestEdgeIntersection(p: Point, walls: Wall[], radius: number)
         bestScore = score
       }
     }
+  return best
+}
+
+export interface DimAnchorHit {
+  point: Point
+  anchor: DimPoint
+}
+
+// допуск равенства расстояний: при равенстве вершина контура выигрывает у откоса (design D5)
+const TIE_CM = 1e-9
+
+// ближайшая точка замера: вершина контура или откосный угол элемента стены (четыре на элемент)
+export function nearestDimAnchor(p: Point, walls: Wall[], elements: readonly WallElement[], radius: number): DimAnchorHit | null {
+  const vertex = nearestEdgeIntersection(p, walls, radius)
+  let best: DimAnchorHit | null = vertex ? { point: vertex.point, anchor: { a: vertex.a, b: vertex.b } } : null
+  let bestDist = vertex ? distance(p, vertex.point) : Infinity
+  for (const element of elements)
+    for (const jamb of ["a", "b"] as const)
+      for (const face of [1, -1] as const) {
+        const anchor: JambPoint = { kind: "jamb", elementId: element.id, jamb, face }
+        const point = jambPosition(anchor, walls, [element])
+        if (!point) continue
+        const d = distance(p, point)
+        if (d > radius || d >= bestDist - TIE_CM) continue
+        best = { point, anchor }
+        bestDist = d
+      }
   return best
 }
 
@@ -507,13 +546,20 @@ export function dimensionOffsetAt(p: Point, geom: DimGeometry): number {
   return (p.x - geom.a.x) * geom.nx + (p.y - geom.a.y) * geom.ny
 }
 
-export function dimLevelSnap(p: Point, axis: DimGeometry, dimensions: Dimension[], walls: Wall[], radius: number): { offset: number; point: Point } | null {
+export function dimLevelSnap(
+  p: Point,
+  axis: DimGeometry,
+  dimensions: Dimension[],
+  walls: Wall[],
+  radius: number,
+  elements: readonly WallElement[] = [],
+): { offset: number; point: Point } | null {
   const cur = dimensionOffsetAt(p, axis)
   const u = dirOf(axis.a, axis.b)
   let best: { offset: number; point: Point } | null = null
   for (const d of dimensions) {
-    const ea = dimPointPoint(d.from, walls)
-    const eb = dimPointPoint(d.to, walls)
+    const ea = dimPointPoint(d.from, walls, elements)
+    const eb = dimPointPoint(d.to, walls, elements)
     const g = ea && eb ? dimGeometry(ea, eb, d.offset) : null
     if (!g || Math.abs(cross(u, dirOf(g.a, g.b))) >= EPS) continue
     const level = dimensionOffsetAt(g.p1, axis)
@@ -523,9 +569,9 @@ export function dimLevelSnap(p: Point, axis: DimGeometry, dimensions: Dimension[
   return best
 }
 
-export function dimHitDistance(p: Point, dim: Dimension, walls: Wall[], textFactor: number): number | null {
-  const fa = dimPointPoint(dim.from, walls)
-  const ta = dimPointPoint(dim.to, walls)
+export function dimHitDistance(p: Point, dim: Dimension, walls: Wall[], textFactor: number, elements: readonly WallElement[] = []): number | null {
+  const fa = dimPointPoint(dim.from, walls, elements)
+  const ta = dimPointPoint(dim.to, walls, elements)
   if (!fa || !ta) return null
   const g = dimGeometry(fa, ta, dim.offset)
   if (!g) return null

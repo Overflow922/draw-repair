@@ -35,10 +35,23 @@ export interface EdgeRef {
   edge: number
 }
 
-export interface DimPoint {
+// Точка замера — пересечение двух граней стен или откос элемента стены (change add-opening-dimension-anchors, design D1).
+// Граневая точка записана без поля kind (формат до этого change)
+export interface EdgePoint {
+  kind?: undefined
   a: EdgeRef
   b: EdgeRef
 }
+
+// откос элемента: jamb — ближний к концу a или b оси опорной стены, face — знак нормали (−d.y, d.x) этой оси
+export interface JambPoint {
+  kind: "jamb"
+  elementId: string
+  jamb: "a" | "b"
+  face: 1 | -1
+}
+
+export type DimPoint = EdgePoint | JambPoint
 
 export interface Dimension {
   from: DimPoint

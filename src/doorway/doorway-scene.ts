@@ -97,7 +97,7 @@ export function erasePick(p: Point, scene: Selection, tolCm: number, textFactor:
   let dimension: Dimension | null = null
   let best = Infinity
   for (const d of scene.dimensions) {
-    const dd = dimHitDistance(p, d, scene.walls, textFactor)
+    const dd = dimHitDistance(p, d, scene.walls, textFactor, scene.doorways)
     if (dd !== null && dd <= tolCm && dd < best) {
       dimension = d
       best = dd
@@ -135,7 +135,7 @@ export function pressPick(p: Point, scene: Selection, tolCm: number, textFactor:
     if (options.middleMarker && midpointAt(p, sel, tolCm)) return { kind: "middle", wall: sel }
   }
   if (options.dimensions) {
-    const dimension = scene.dimensions.find((d) => (dimHitDistance(p, d, scene.walls, textFactor) ?? Infinity) <= tolCm)
+    const dimension = scene.dimensions.find((d) => (dimHitDistance(p, d, scene.walls, textFactor, scene.doorways) ?? Infinity) <= tolCm)
     if (dimension) return { kind: "dimension", dimension }
   }
   if (options.elements) {
@@ -146,15 +146,22 @@ export function pressPick(p: Point, scene: Selection, tolCm: number, textFactor:
   return wall ? { kind: "wall", wall } : null
 }
 
-const refsWall =(d: Dimension, ids: ReadonlySet<string>): boolean =>
-  ids.has(d.from.a.wallId) || ids.has(d.from.b.wallId) || ids.has(d.to.a.wallId) || ids.has(d.to.b.wallId)
+const refsWall = (d: Dimension, ids: ReadonlySet<string>): boolean =>
+  [d.from, d.to].some((p) => p.kind !== "jamb" && (ids.has(p.a.wallId) || ids.has(p.b.wallId)))
 
-// удаление выделенного с каскадом размеров и проёмов удаляемых стен (wall-deletion)
+// точка-откос на удаляемом элементе (change add-opening-dimension-anchors, design D6)
+const refsElement = (d: Dimension, ids: ReadonlySet<string>): boolean =>
+  [d.from, d.to].some((p) => p.kind === "jamb" && ids.has(p.elementId))
+
+// удаление выделенного с каскадом размеров и проёмов удаляемых стен (wall-deletion); размеры на откосах
+// удаляемых элементов уходят вместе с ними
 export function deleteObjects(scene: Scene, picked: Selection): Scene {
   const ids = new Set(picked.walls.map((w) => w.id))
+  const doorways = (scene.doorways ?? []).filter((d) => !picked.doorways.includes(d) && !ids.has(d.wallId))
+  const removed = new Set((scene.doorways ?? []).filter((d) => !doorways.includes(d)).map((d) => d.id))
   return {
     walls: scene.walls.filter((w) => !picked.walls.includes(w)),
-    dimensions: scene.dimensions.filter((d) => !picked.dimensions.includes(d) && !refsWall(d, ids)),
-    doorways: (scene.doorways ?? []).filter((d) => !picked.doorways.includes(d) && !ids.has(d.wallId)),
+    dimensions: scene.dimensions.filter((d) => !picked.dimensions.includes(d) && !refsWall(d, ids) && !refsElement(d, removed)),
+    doorways,
   }
 }

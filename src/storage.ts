@@ -1,7 +1,7 @@
 import { mergeAll } from "./demolition/marks"
 import { isPlanId } from "./plans"
 import { isDoor, isWindow, normalizeMaterial } from "./types"
-import type { Communication, DemolitionMark, Dimension, DimPoint, Doorway, Drawing, DrawingStore, EdgeRef, MountingContent, Point, View, Wall, WallDoor, WallElement, WallWindow } from "./types"
+import type { Communication, DemolitionMark, Dimension, DimPoint, Doorway, Drawing, DrawingStore, EdgePoint, EdgeRef, JambPoint, MountingContent, Point, View, Wall, WallDoor, WallElement, WallWindow } from "./types"
 
 const KEY = "draw-repair:drawing"
 
@@ -30,8 +30,17 @@ const isEdgeRef = (e: unknown): e is EdgeRef =>
   typeof (e as EdgeRef).edge === "number" && Number.isInteger((e as EdgeRef).edge) &&
   (e as EdgeRef).edge >= 0 && (e as EdgeRef).edge <= 3
 
+// точка-откос: kind "jamb", непустой идентификатор элемента, откос a/b, грань 1/-1 (change add-opening-dimension-anchors, design D7)
+const isJambPoint = (p: object): p is JambPoint => {
+  const x = p as Record<string, unknown>
+  return x.kind === "jamb" && typeof x.elementId === "string" && x.elementId !== "" &&
+    (x.jamb === "a" || x.jamb === "b") && (x.face === 1 || x.face === -1)
+}
+
+// без признака вида — пара граней (формат до этого change); любой другой вид, кроме "jamb", не принимается
 const isDimPoint = (p: unknown): p is DimPoint =>
-  typeof p === "object" && p !== null && isEdgeRef((p as DimPoint).a) && isEdgeRef((p as DimPoint).b)
+  typeof p === "object" && p !== null &&
+  ((p as DimPoint).kind === undefined ? isEdgeRef((p as EdgePoint).a) && isEdgeRef((p as EdgePoint).b) : isJambPoint(p))
 
 export const isDimension = (dim: unknown): dim is Dimension =>
   typeof dim === "object" && dim !== null && isDimPoint((dim as Dimension).from) && isDimPoint((dim as Dimension).to) &&
@@ -130,8 +139,11 @@ export const isDrawing = (d: unknown, version: number = 3): d is Drawing =>
 const assignIds = (walls: Wall[]): Wall[] =>
   walls.map((w) => ({ ...w, id: w.id || crypto.randomUUID(), type: normalizeMaterial(w.type) }))
 
+const copyDimPoint = (p: DimPoint): DimPoint =>
+  p.kind === "jamb" ? { kind: "jamb", elementId: p.elementId, jamb: p.jamb, face: p.face } : { a: { ...p.a }, b: { ...p.b } }
+
 const copyDimension = (dim: Dimension): Dimension =>
-  ({ from: { ...dim.from }, to: { ...dim.to }, offset: dim.offset, ...(dim.auto !== undefined ? { auto: dim.auto } : null) })
+  ({ from: copyDimPoint(dim.from), to: copyDimPoint(dim.to), offset: dim.offset, ...(dim.auto !== undefined ? { auto: dim.auto } : null) })
 
 // объекты плана «Монтаж» при загрузке (change mounting-plan, design D4): некорректные стены, размеры и элементы
 // отбрасываются по одному; ссылки на отсутствующие стены сохраняются (объект может вернуться); поле, не являющееся

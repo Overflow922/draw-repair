@@ -219,11 +219,11 @@ export function drawScene(
   ctx.textBaseline = "bottom"
   if (!opts.underlay) drawDoorways(ctx, walls, rooms, unit, view, m, p, opts, selectedWalls.length > 0 || selectedDims.length > 0)
   drawCommunicationLayer(ctx, walls, unit, view, m, p, opts)
-  for (const dim of opts.dimensions ?? []) drawDimension(ctx, dim, walls, unit, p.ink, view, m, p)
+  for (const dim of opts.dimensions ?? []) drawDimension(ctx, dim, walls, unit, p.ink, view, m, p, doorways)
   for (const dim of opts.marqueeHits?.dims ?? [])
-    if (!selectedDims.includes(dim)) drawDimension(ctx, dim, walls, unit, p.marqueeDim, view, m, p)
-  for (const dim of selectedDims) drawDimension(ctx, dim, walls, unit, p.selectedDim, view, m, p, singleDim)
-  if (opts.hoverDim) drawDimension(ctx, opts.hoverDim, walls, unit, p.erase, view, m, p)
+    if (!selectedDims.includes(dim)) drawDimension(ctx, dim, walls, unit, p.marqueeDim, view, m, p, doorways)
+  for (const dim of selectedDims) drawDimension(ctx, dim, walls, unit, p.selectedDim, view, m, p, doorways, singleDim)
+  if (opts.hoverDim) drawDimension(ctx, opts.hoverDim, walls, unit, p.erase, view, m, p, doorways)
   if (opts.ruler) drawRuler(ctx, opts.ruler, unit, view, toScreen, m, p)
   if (opts.marquee) {
     const { x1, y1, x2, y2 } = opts.marquee
@@ -786,10 +786,11 @@ function drawDimension(
   view: View,
   m: RenderMetrics,
   palette: Palette,
+  elements: readonly WallElement[],
   handles = false,
 ): void {
-  const from = dimPointPoint(dim.from, walls)
-  const to = dimPointPoint(dim.to, walls)
+  const from = dimPointPoint(dim.from, walls, elements)
+  const to = dimPointPoint(dim.to, walls, elements)
   if (!from || !to) return
   const geom = dimGeometry(from, to, dim.offset)
   if (!geom) return

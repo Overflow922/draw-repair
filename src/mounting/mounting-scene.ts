@@ -1,6 +1,6 @@
 import { EPS_CM, effectiveMarks, lengthOf } from "../demolition/mark-model"
 import type { ResolvedMark } from "../demolition/mark-model"
-import type { Dimension, Drawing, Wall, WallElement } from "../types"
+import type { Dimension, DimPoint, Drawing, Wall, WallElement } from "../types"
 import { remnantId, remnantSpans, remnantWalls } from "./remnants"
 
 // Сцена плана «Монтаж» (change mounting-plan, design D2, D3, D5): остатки стен обмера после сноса + собственные
@@ -64,8 +64,11 @@ export function mountingScene(drawing: Drawing): MountingScene {
     return resolved ? [resolved] : []
   })
   const mine = (drawing.mounting?.doorways ?? []).map((e) => resolveOwn(e, own, drawing.walls, marks)).filter(present)
-  const dimensions = (drawing.mounting?.dimensions ?? []).filter((d) =>
-    [d.from.a, d.from.b, d.to.a, d.to.b].every((ref) => ids.has(ref.wallId)),
-  )
-  return { remnants, own: [...own], walls, doorways: [...old, ...mine], dimensions, oldElementIds: new Set(old.map((e) => e.id)) }
+  const doorways = [...old, ...mine]
+  // точка-откос действует, пока её элемент виден в сцене, а его опорная стена есть среди стен сцены
+  const visible = new Map(doorways.map((e) => [e.id, e.wallId]))
+  const resolvable = (p: DimPoint): boolean =>
+    p.kind === "jamb" ? ids.has(visible.get(p.elementId) ?? "") : ids.has(p.a.wallId) && ids.has(p.b.wallId)
+  const dimensions = (drawing.mounting?.dimensions ?? []).filter((d) => resolvable(d.from) && resolvable(d.to))
+  return { remnants, own: [...own], walls, doorways, dimensions, oldElementIds: new Set(old.map((e) => e.id)) }
 }
