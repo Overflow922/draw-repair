@@ -2,6 +2,7 @@ import type { Communication, Point, Wall, WallElement } from "./types"
 import { angleReferenceRay, orthoDirection, typedDirection, wallAngleDeg } from "./wall-angle"
 import type { StartRef } from "./wall-angle"
 import { add, mul, sub } from "./wall-geometry"
+import { startOverhangCm } from "./wall-length"
 import { snapOnRay, snapVertex } from "./wall-snap"
 import type { VertexSnap } from "./wall-snap"
 import { trackFree, trackOnRay, trackingNodes } from "./wall-tracking"
@@ -63,7 +64,19 @@ function tracked(input: ChainInput, snap: VertexSnap, fixed: Point | null): { en
   return { end, tracks: [x, y].flatMap((hit) => (hit ? [{ from: hit.node, to: end }] : [])) }
 }
 
+// Введённая длина — от кромки до кромки (change fix-collinear-edge-to-edge-length, design D2): у коллинеарного
+// продолжения от торца ось короче введённого на выступ начала; значение не больше выступа не применяется
 export function chainSegment(input: ChainInput): ChainSegment {
+  const seg = segmentFor(input)
+  const { typedLengthCm, start, ref } = input
+  if (typedLengthCm === null || !seg.dir) return seg
+  const overhang = startOverhangCm(ref, start, seg.dir)
+  if (overhang === 0) return seg
+  if (typedLengthCm <= overhang) return segmentFor({ ...input, typedLengthCm: null })
+  return { ...seg, end: add(start, mul(seg.dir, typedLengthCm - overhang)) }
+}
+
+function segmentFor(input: ChainInput): ChainSegment {
   const { start, ref, raw, walls, radiusCm, gridStepCm, thicknessCm, typedLengthCm, doorways = [], communications = [] } = input
   const v = unitOrNull(sub(raw, start))
   const fixed = v ? constrainedDirection(input, v) : null

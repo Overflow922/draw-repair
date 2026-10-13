@@ -1,6 +1,7 @@
 import { distanceToWall } from "./geometry"
 import { findRooms } from "./room-area"
 import type { Point, Wall } from "./types"
+import { edgeLengthCm, endOverhangCm } from "./wall-length"
 import { cross, dist, dot, displayPolygons, faceCornerTol, pointInPolygon, sub } from "./wall-geometry"
 
 // Замеры инструмента «Линейка» (change ruler-tool, design D1–D4). Все функции чистые:
@@ -41,9 +42,24 @@ const roundHundredths = (deg: number): number => Math.round(deg * 100) / 100
 export function rulerReading(p: Point, walls: Wall[]): RulerReading {
   const forms = walls.map((wall) => ({ wall, polys: displayPolygons(wall, walls) }))
   const wall = wallUnder(p, forms)
-  if (wall) return { kind: "wall", wall, from: wall.a, to: wall.b, lengthCm: dist(wall.a, wall.b) }
+  if (wall) return wallReading(wall, walls)
   const polys = forms.flatMap((f) => f.polys)
   return { kind: "space", horizontal: span(p, polys, "x"), vertical: span(p, polys, "y"), angles: roomAngles(p, walls, freeCapCorners(forms)) }
+}
+
+// замер стены: по оси; у конца с выступом тела (коллинеарное продолжение с зазором) линия идёт от плоскости
+// торца — кромки, а число — длина кромка-кромка (change fix-collinear-edge-to-edge-length, design D6)
+function wallReading(wall: Wall, walls: Wall[]): RulerReading {
+  const u = unitVec(wall.a, wall.b)
+  const overA = endOverhangCm(wall, "a", walls)
+  const overB = endOverhangCm(wall, "b", walls)
+  return {
+    kind: "wall",
+    wall,
+    from: { x: wall.a.x - u.x * overA, y: wall.a.y - u.y * overA },
+    to: { x: wall.b.x + u.x * overB, y: wall.b.y + u.y * overB },
+    lengthCm: edgeLengthCm(wall, walls),
+  }
 }
 
 // углы плоских торцов свободных концов: конец оси, не состыкованный ни с одной стеной (в допуске

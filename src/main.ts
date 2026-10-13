@@ -29,6 +29,7 @@ import type { PlanId } from "./plans"
 import { loadStore, saveStore } from "./storage"
 import { placeWall, syncAutoDimensions } from "./auto-dimensions"
 import { mergeContinuation } from "./wall-merge"
+import { axisLengthForEdgeCm, edgeLengthCm, previewEdgeLengthCm } from "./wall-length"
 import { openWorkspace, storedContent } from "./mounting/mounting-workspace"
 import type { Workspace } from "./mounting/mounting-workspace"
 import { thicknessAllowed } from "./doorway/doorway-guard"
@@ -650,9 +651,9 @@ function previewLengthCm(): number | null {
   // конец превью — с учётом трекинга по узлам, а не точка привязки к сетке
   const end = segment?.end ?? cursor
   if (!chainStart || !end) return null
-  const base = chainStart
-  if (pointsEqual(base, end)) return null
-  return Math.hypot(end.x - base.x, end.y - base.y)
+  if (pointsEqual(chainStart, end)) return null
+  // длина от кромки до кромки: у коллинеарного продолжения от торца учитывается выступ начала
+  return previewEdgeLengthCm(chainRef, chainStart, end)
 }
 
 function typedAngleDeg(): number | null {
@@ -671,14 +672,17 @@ function liveLengthCm(): number | null {
   if (chainStart) return previewLengthCm()
   const sel = selectedWalls.length === 1 ? selectedWalls[0] : null
   if (!sel || pointsEqual(sel.a, sel.b)) return null
-  return Math.hypot(sel.b.x - sel.a.x, sel.b.y - sel.a.y)
+  return edgeLengthCm(sel, walls)
 }
 
 // ввод длины с ограничениями (change wall-move-bounds, design D7): подвижный — непримкнутый конец,
 // длина ограничивается касанием; поле приводится к фактической длине при фиксации ввода
 function resizeSelected(): void {
-  const len = typedLengthCm()
-  if (!len || selectedWalls.length !== 1) return
+  const typed = typedLengthCm()
+  if (!typed || selectedWalls.length !== 1) return
+  // введённая длина — от кромки до кромки: ось короче на выступы торцов (change fix-collinear-edge-to-edge-length)
+  const len = axisLengthForEdgeCm(selectedWalls[0], walls, typed)
+  if (len === null) return
   const before = cloneScene(scene())
   const result = resizeWallBounded(walls, selectedWalls[0], len, { ortho, doorways, communications: communicationsOf() })
   if (result.kind === "rejected") return

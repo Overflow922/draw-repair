@@ -13,7 +13,7 @@ export type { VertexSnap } from "./wall-snap"
 const EPS = 1e-9
 const SLICE = 1e-7
 // допуск прямого угла 0.5°: классификация через скалярное произведение направлений
-const RIGHT_COS = Math.cos((0.5 * Math.PI) / 180)
+export const RIGHT_COS = Math.cos((0.5 * Math.PI) / 180)
 export const RIGHT_SIN = Math.sin((0.5 * Math.PI) / 180)
 
 export const dist = (a: Point, b: Point): number => Math.hypot(b.x - a.x, b.y - a.y)
@@ -367,6 +367,11 @@ function pairEnd(
     const onCut = (q: Point): Point => add(q, mul(uIn, dot(sub(V, q), nCut) / dot(uIn, nCut)))
     return { E, cap: [onCut(plus), onCut(minus)], exempt: new Set([c]), wedge: null }
   }
+  // коллинеарно: зазор сводится к концу ранней стены
+  if (isCollinearGapJoint(E, uIn, c, walls, iWall, isLatest)) {
+    const hW = wall.thicknessCm / 2
+    return { E, cap: [add(v, mul(nAB, hW)), add(v, mul(nAB, -hW))], exempt: new Set(), wedge: null }
+  }
   // стена «ранняя» для стыка, если сосед стоит в массиве позже неё
   if (!isLatest && walls.indexOf(c) > iWall) return flat
   const uC = unit(c.a, c.b)
@@ -374,14 +379,8 @@ function pairEnd(
   const hC = c.thicknessCm / 2
   const latE = dot(sub(E, c.a), nC)
   if (Math.abs(latE) < hC - SLICE) {
-    // вершина внутри полосы соседа
-    if (Math.abs(dot(uIn, uC)) >= RIGHT_COS) {
-      // коллинеарно: зазор сводится к концу ранней стены
-      const hW = wall.thicknessCm / 2
-      return { E, cap: [add(v, mul(nAB, hW)), add(v, mul(nAB, -hW))], exempt: new Set(), wedge: null }
-    }
-    // перпендикулярно/косо: каждый угол торца — вдоль своей грани до линии дальней грани
-    // ранней (дальняя — против направления тела поздней); выступающий угол срезается
+    // вершина внутри полосы соседа, оси не коллинеарны (перпендикулярно/косо): каждый угол торца — вдоль своей
+    // грани до линии дальней грани ранней (дальняя — против направления тела поздней); выступающий угол срезается
     const alongN = dot(uIn, nC)
     const sFar = -signOf(alongN || latE)
     const onFarFace = (q: Point): Point => add(q, mul(uIn, (sFar * hC - dot(sub(q, c.a), nC)) / alongN))
@@ -392,15 +391,43 @@ function pairEnd(
   return { E, cap: flat.cap, exempt: new Set(), wedge }
 }
 
+// концы чужих стен в пороге вершины стыка от конца E стены wall
+function endNeighborsOf(wall: Wall, E: Point, walls: Wall[]): EndNeighbor[] {
+  const out: EndNeighbor[] = []
+  for (const c of walls) {
+    if (c === wall || degenerate(c)) continue
+    for (const v of [c.a, c.b]) if (dist(v, E) <= jointTol(wall, c) + SLICE) out.push({ c, v })
+  }
+  return out
+}
+
+// Коллинеарный стык с зазором (change fix-collinear-edge-to-edge-length, design D1): стена поздняя для стыка,
+// вершина E внутри полосы соседа c, оси коллинеарны в допуске прямого угла. Тело поздней стены доводится
+// до конца оси соседа, поэтому выступает за E на расстояние до него
+function isCollinearGapJoint(E: Point, uIn: Point, c: Wall, walls: Wall[], iWall: number, isLatest: boolean): boolean {
+  if (!isLatest && walls.indexOf(c) > iWall) return false
+  const uC = unit(c.a, c.b)
+  return Math.abs(dot(sub(E, c.a), perp(uC))) < c.thicknessCm / 2 - SLICE && Math.abs(dot(uIn, uC)) >= RIGHT_COS
+}
+
+// выступ тела стены за вершину конца end — расстояние до конца оси ранней коллинеарной стены; 0 вне этого
+// стыка (угол, T, свободный конец, три и более концов в пороге)
+export function collinearGapCm(wall: Wall, end: "a" | "b", walls: Wall[]): number {
+  if (degenerate(wall)) return 0
+  const E = wall[end]
+  const neighbors = endNeighborsOf(wall, E, walls)
+  if (neighbors.length !== 1) return 0
+  const u = unit(wall.a, wall.b)
+  const iWall = walls.indexOf(wall)
+  const { c, v } = neighbors[0]
+  return isCollinearGapJoint(E, end === "a" ? u : neg(u), c, walls, iWall, iWall === -1) ? dist(E, v) : 0
+}
+
 function endShape(wall: Wall, E: Point, uIn: Point, nAB: Point, walls: Wall[], iWall: number, isLatest: boolean): EndShape {
   const hW = wall.thicknessCm / 2
   const flat: EndShape = { E, cap: [add(E, mul(nAB, hW)), add(E, mul(nAB, -hW))], exempt: new Set(), wedge: null }
   // соседи по концу
-  const endNeighbors: EndNeighbor[] = []
-  for (const c of walls) {
-    if (c === wall || degenerate(c)) continue
-    for (const v of [c.a, c.b]) if (dist(v, E) <= jointTol(wall, c) + SLICE) endNeighbors.push({ c, v })
-  }
+  const endNeighbors = endNeighborsOf(wall, E, walls)
   if (endNeighbors.length >= 2) {
     // одна вершина 3+ стен (концы попарно в пороге своей пары): плоские торцы, взаимной обрезки нет
     if (isOneVertex(endNeighbors)) return { E, cap: flat.cap, exempt: new Set(endNeighbors.map(({ c }) => c)), wedge: null }

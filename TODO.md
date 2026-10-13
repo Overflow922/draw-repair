@@ -552,3 +552,20 @@ Edge cases of loaded documents where a communication already overlaps a wall (ne
 - [ ] `slideReach` (`src/communications/shape.ts`) gives no distance in the direction away from a wall that already overlaps the body, while `design.md` D3 says overlapped walls count with distance 0. Align code or design text.
 - [ ] Duplicate communication ids in a loaded document are not rejected (`src/communications/storage` check in `src/storage.ts` `isCommunication`); the spec asks for unique ids.
 - [ ] `afterPlace` in `src/tool-mode.ts` has a `riser`/`duct` branch used only by approved tests (UI-09b); production uses `afterPlaceCommunication` (`communications-group.ts`). Drop one through a test-change-request.
+
+---
+
+Follow-ups from exploring and planning `fix-collinear-edge-to-edge-length` (2026-10-13).
+
+## Bugs
+
+- [ ] No automatic length dimensions for collinear walls of equal thickness (faces flush): `placeWall` of a wall N continuing a wall E at the same thickness creates only the thickness dimension at the free end; with N thinner than E both length dimensions appear. Repro: E `(0,0)–(500,0)`, N `(510,0)–(900,0)`, both 20 cm, different materials, `placeWall` → one dimension (`src/auto-dimensions.ts`, `lengthDimensions`: anchors on the shared flush face are probably not found). Unclear whether the spec `dimension-tool` «Автоматические размеры стены» intends this; decide.
+
+## Tests
+
+- [x] (fix-collinear-edge-to-edge-length; checked by hand in the browser 2026-10-13: preview 1000 for 900 + overhang, typed 4000 merges +400 cm, typed 1512 gives body 1512 and ruler 1512 from the edge, selected field 1512, typed 1600 moves `b` by 150 — still no automated test) `src/main.ts` wiring has no automated test: `previewLengthCm` / `liveLengthCm` using the overhang, `resizeSelected` using `axisLengthForEdgeCm`. Only the pure functions are unit-tested; check by hand in the browser (draw a collinear continuation, type a length, select the wall, type a length in the field, hover with the ruler).
+
+## Out of scope (decided, revisit if needed)
+
+- (fix-collinear-edge-to-edge-length) Typing a length for a selected wall when the movable end of `resizeWallBounded` is the end with the overhang (wall built from a free end with `b` at the joint and `a` free): movable-end choice only considers T-attachments, so the end at the joint moves; the spec does not define this case.
+- (fix-collinear-edge-to-edge-length) Bridge (both ends in collinear gaps) with an exact typed length: only the start overhang is accounted for on input; the end `b` is not snapped when a length is typed.
