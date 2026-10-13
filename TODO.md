@@ -582,3 +582,17 @@ Follow-ups from `add-opening-dimension-anchors` (2026-10-13).
 
 - (add-opening-dimension-anchors) An explicit `kind: "edges"` on a stored dimension point is not part of the format: the spec says only that a point without `kind` is read as a face pair, and `isDimension` rejects any other `kind` except `"jamb"`. `EdgePoint.kind` is typed as absent.
 - (add-opening-dimension-anchors) Element numbers shown for a selected window (its own dimensions) are separate from the user's jamb dimensions; no snapping between them.
+
+---
+
+Follow-ups from `fix-opening-distance-collinear` (2026-10-13).
+
+## Bugs
+
+- [ ] **Repeated edits of opening numbers "give no result" (reported, not reproduced).** User report: after the first edit of a dimension or offset of a window / doorway / duct, further edits do nothing. Checked: synthetic pointer events and real keyboard input (type + Enter) in Firefox, on a corner wall with a window placed by the tool, then three edits in a row (left, left, right), same-material and different-material collinear walls, all applied; `collinear-distance-edit.test.ts` CD-19 covers repeated edits at the `createSelectionEditing` level. Not checked: real mouse clicks (the Firefox MCP has no coordinate click), the user's own drawing. Suspected causes: focus/`blur` race in `openNumberEditor` (`src/doorway/doorway-tool.ts`) with a real mouse; or an edit pressed against the host wall limit giving `no-change` (the old artificial face cut made this likelier). Ask the user which number they edit and what happens after Enter; ideally get `copy(localStorage.getItem("draw-repair:drawing"))`. Ducts (communications) were not checked: `communication-tool.ts` has its own `pressNumber`.
+
+## Out of scope (decided, revisit if needed)
+
+- (fix-opening-distance-collinear) The gap-joint boundary between a brick and a concrete wall (axis ends 5 cm apart) is not defined by the spec; the implementation takes the end of the wall that comes earlier in the array, and `CD-6c` accepts 150..155 cm.
+- (fix-opening-distance-collinear) A joint with two or more collinear candidate continuations at one end (ambiguous) stops the chain at that end; no spec scenario describes it.
+- (fix-opening-distance-collinear) `faceRuns` for automatic wall dimensions and demolition marks still cuts faces at `reach` beyond the wall ends; only openings go through collinear continuations (`openingFaceRuns`).

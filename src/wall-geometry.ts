@@ -38,7 +38,7 @@ function clampRange(v: number, lo: number, hi: number): number {
 
 export const degenerate = (w: Wall): boolean => dist(w.a, w.b) < EPS
 
-const jointTol = (a: Wall, b: Wall): number => Math.max(a.thicknessCm, b.thicknessCm) / 2
+export const jointTol = (a: Wall, b: Wall): number => Math.max(a.thicknessCm, b.thicknessCm) / 2
 
 // запас к диагонали угла: дрейф концов от накопленных правок не превращает угол в T-примыкание
 const FACE_CORNER_MARGIN_CM = 1

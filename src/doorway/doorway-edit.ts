@@ -20,13 +20,15 @@ type Interval = [number, number]
 
 const isLength = (v: number): boolean => Number.isFinite(v)
 
-// свободные промежутки стены для элемента self: пересечения участков граней plus и minus
+// свободные промежутки стены для элемента self: пересечения участков граней plus и minus, не дальше концов
+// опорной стены — элемент не переходит на коллинеарное продолжение (change fix-opening-distance-collinear, design D4)
 function freeIntervals(host: Wall, walls: readonly Wall[], elements: readonly WallElement[], self: WallElement): Interval[] {
   const out: Interval[] = []
+  const len = dist(host.a, host.b)
   for (const p of elementRuns(host, walls, elements, 1, self))
     for (const m of elementRuns(host, walls, elements, -1, self)) {
-      const lo = Math.max(p[0], m[0])
-      const hi = Math.min(p[1], m[1])
+      const lo = Math.max(p[0], m[0], 0)
+      const hi = Math.min(p[1], m[1], len)
       if (hi - lo > TOL) out.push([lo, hi])
     }
   return out.sort((x, y) => x[0] - y[0])

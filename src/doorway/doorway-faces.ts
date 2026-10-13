@@ -1,5 +1,6 @@
 import type { Point, Wall, WallElement } from "../types"
 import { add, coveredInterval, degenerate, dist, displayPolygons, mergeIntervals, mul, perp, unit } from "../wall-geometry"
+import { hostChains } from "./collinear-chain"
 
 // Грани опорной стены, стыки и расстояния проёма (change add-doorway, design D1, D3).
 // Свободный участок грани — где внутренняя пробная линия (h − ε) покрыта формами стен,
@@ -81,18 +82,38 @@ function subtract(base: [number, number][], cut: [number, number][]): [number, n
   return parts.filter(([t0, t1]) => t1 - t0 > MIN_RUN)
 }
 
-// свободные участки грани стороны side по координате t (по возрастанию)
-export function faceRuns(host: Wall, walls: readonly Wall[], side: Side): [number, number][] {
-  if (degenerate(host)) return []
+// участки грани на отрезке опорной стены, расширенном на extendA / extendB за концы a и b (0 — как у faceRuns)
+function runsOver(host: Wall, walls: readonly Wall[], side: Side, extendA: number, extendB: number): [number, number][] {
   const reach = Math.max(...walls.map((w) => w.thicknessCm), host.thicknessCm) + 1
   const all = walls as Wall[]
-  const pieces = nearby(host, walls, reach).flatMap((w) => displayPolygons(w, all))
+  const len = dist(host.a, host.b)
+  const from = -reach - extendA
+  const to = len + reach + extendB
+  const span = extendA > 0 || extendB > 0 ? { ...host, a: hostPoint(host, -extendA, 0), b: hostPoint(host, len + extendB, 0) } : host
+  const pieces = nearby(span, walls, reach).flatMap((w) => displayPolygons(w, all))
   const h = host.thicknessCm / 2
-  const from = -reach
-  const to = dist(host.a, host.b) + reach
   const inner = covered(host, side * (h - PROBE_CM), from, to, pieces)
   const outer = covered(host, side * (h + PROBE_CM), from, to, pieces)
   return subtract(inner, outer)
+}
+
+// свободные участки грани стороны side по координате t (по возрастанию)
+export function faceRuns(host: Wall, walls: readonly Wall[], side: Side): [number, number][] {
+  if (degenerate(host)) return []
+  return runsOver(host, walls, side, 0, 0)
+}
+
+// участки грани для проёмов (change fix-opening-distance-collinear, design D1–D3): грань идёт сквозь коллинеарные
+// стены того же материала до угла и обрывается в стыке со стеной другого материала
+export function openingFaceRuns(host: Wall, walls: readonly Wall[], side: Side): [number, number][] {
+  if (degenerate(host)) return []
+  const chains = hostChains(host, walls)
+  const runs = runsOver(host, walls, side, chains.a.extendCm, chains.b.extendCm)
+  const lo = chains.a.limitT ?? -Infinity
+  const hi = chains.b.limitT ?? Infinity
+  return runs
+    .map(([t0, t1]): [number, number] => [Math.max(t0, lo), Math.min(t1, hi)])
+    .filter(([t0, t1]) => t1 - t0 > MIN_RUN)
 }
 
 // участок, к которому относится проём: наибольшее перекрытие, иначе ближайший
@@ -129,7 +150,7 @@ export function elementRuns(
     .filter((e) => e.wallId === host.id && e.id !== self.id)
     .map((e) => jambsT(e, host))
     .sort((p, q) => p[0] - q[0])
-  return subtract(faceRuns(host, walls, side), others)
+  return subtract(openingFaceRuns(host, walls, side), others)
 }
 
 export function doorwayDistances(d: WallElement, walls: readonly Wall[], elements: readonly WallElement[] = []): DoorwayDistances | null {
