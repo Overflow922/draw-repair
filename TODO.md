@@ -568,4 +568,5 @@ Follow-ups from exploring and planning `fix-collinear-edge-to-edge-length` (2026
 ## Out of scope (decided, revisit if needed)
 
 - (fix-collinear-edge-to-edge-length) Typing a length for a selected wall when the movable end of `resizeWallBounded` is the end with the overhang (wall built from a free end with `b` at the joint and `a` free): movable-end choice only considers T-attachments, so the end at the joint moves; the spec does not define this case.
+- (fix-collinear-edge-to-edge-length, verify 2026-10-13) Two or more foreign ends within the joint tolerance that are not one vertex: `collinearGapCm` (`src/wall-geometry.ts`) returns 0, while `pairEnd` may still extend the body to the earliest neighbour's end, so the visible body can be longer than `edgeLengthCm`. No spec scenario describes this crowded case.
 - (fix-collinear-edge-to-edge-length) Bridge (both ends in collinear gaps) with an exact typed length: only the start overhang is accounted for on input; the end `b` is not snapped when a length is typed.
