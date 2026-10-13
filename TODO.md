@@ -607,3 +607,20 @@ Follow-ups from `fix-opening-reach-body-end` (2026-10-13, test validation round 
 - [ ] Montage: no test pins `bodySpan` (`src/doorway/doorway-faces.ts`) clamping to the axis end at an end with a same-material continuation (mutant `Math.min(hi, len)` → `hi` survives, found by the manual mutant run at apply time, task 5.4). Repro for the test: brick `W (0,0)-(500,0)` + brick `W2 (500,0)-(700,0)`, window `b` with offset −5 on `W` must be hidden on the Montage plan; same mirrored at end `a`.
 - [ ] Montage overhang on a skewed joint where the two face runs end at different `t`: pins that the body extent is the intersection of the faces, not one face or their union.
 - [ ] Storage has no lower bound for a negative `offsetCm` (design D3, `T-34` pins −500); an element far outside the wall is read as a violated document. Revisit if such documents should be dropped instead.
+
+
+---
+
+Follow-ups from `fix-duct-resize-against-wall` (2026-10-13).
+
+## Tests
+
+- [ ] History-level test for undoing a duct resize that shifts the centre (apply width, undo, compare size and centre). Checked by hand in the browser; `applyNumber` returns one object, the history path is unchanged (test-validation F3).
+
+## Docs
+
+- [ ] `openspec/changes/fix-duct-resize-against-wall/test-plan.md`: DG numbering differs from the real tests (plan: DG-08 undo, DG-09 integration; file: DG-08* both sides blocked, DG-09 pre-existing overlap, integration inside DG-05). `test-suite.md` matches the file (test-validation F2).
+
+## Out of scope
+
+- Mutation testing, lint and format are not configured in the project (only `tsc` and `vitest`).

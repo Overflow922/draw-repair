@@ -1,6 +1,7 @@
 import type { Communication, Point, Wall } from "../types"
 import { DIRECTION_VECTORS, communicationViolation, slideReach } from "./geometry"
 import type { Direction } from "./geometry"
+import { growDuct } from "./duct-grow"
 import { moveLimited } from "./placement"
 import { BISECT_ITERATIONS, CLEAR_CM } from "./shape"
 
@@ -118,7 +119,11 @@ export function applyNumber(c: Communication, field: NumberField, valueCm: numbe
     const next = { ...c, x: p.x, y: p.y }
     return same(c, next) ? unchanged(c) : { communication: next, changed: true }
   }
-  if (!(valueCm > 0) || sizeOf(c, field.kind) === null) return unchanged(c)
-  const next = withSize(c, field.kind, limitedSize(c, field.kind, valueCm, walls, others))
+  const current = sizeOf(c, field.kind)
+  if (!(valueCm > 0) || current === null) return unchanged(c)
+  const next =
+    c.kind === "duct" && field.kind !== "diameter" && valueCm > current
+      ? growDuct(c, field.kind, valueCm, walls, others)
+      : withSize(c, field.kind, limitedSize(c, field.kind, valueCm, walls, others))
   return same(c, next) ? unchanged(c) : { communication: next, changed: true }
 }

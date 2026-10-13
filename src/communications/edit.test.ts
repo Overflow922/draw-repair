@@ -198,16 +198,30 @@ describe("ввод размера", () => {
     expect(r.communication.kind === "duct" && [r.communication.widthCm, r.communication.depthCm]).toEqual([30, 60])
   })
 
-  it("CE-08: ширина ограничена стеной слева: центр x = 30, ввод 200 → ширина 40 (полуширина 20 до грани x = 10)", () => {
+  // change fix-duct-resize-against-wall (test-change-request): рост на свободное место вдоль оси, а не от центра
+  it("CE-08: ширина у стены слева (зазор 5): ввод 200 помещается — ширина 200, левая грань x = 10, центр x = 110", () => {
     const { walls } = room()
     const r = applyNumber(duct(30, 100), { kind: "width" }, 200, walls, [])
-    expect(r.communication.kind === "duct" && r.communication.widthCm).toBeCloseTo(40, 4)
+    expect(r.communication.kind === "duct" && r.communication.widthCm).toBeCloseTo(200, 4)
+    expectPoint(r.communication, 110, 100, 4)
+    expect(reach(r.communication, "left", walls)).toBeCloseTo(0, 4)
   })
 
-  it("CE-08b: глубина ограничена ближайшей из двух стен (вверх 90): ввод 300 → 180", () => {
+  it("CE-08c: ширина у стены слева: ввод 500 ограничен местом между стенами — ширина 280, касание обеих, центр x = 150", () => {
+    const { walls } = room()
+    const r = applyNumber(duct(30, 100), { kind: "width" }, 500, walls, [])
+    expect(r.communication.kind === "duct" && r.communication.widthCm).toBeCloseTo(280, 4)
+    expectPoint(r.communication, 150, 100, 4)
+    expect(reach(r.communication, "left", walls)).toBeCloseTo(0, 4)
+    expect(reach(r.communication, "right", walls)).toBeCloseTo(0, 4)
+  })
+
+  it("CE-08b: глубина (вверх 80, вниз 280): ввод 300 помещается — глубина 300, верхняя грань касается стены, центр y = 160", () => {
     const { walls } = room()
     const r = applyNumber(duct(100, 100), { kind: "depth" }, 300, walls, [])
-    expect(r.communication.kind === "duct" && r.communication.depthCm).toBeCloseTo(180, 4)
+    expect(r.communication.kind === "duct" && r.communication.depthCm).toBeCloseTo(300, 4)
+    expectPoint(r.communication, 100, 160, 4)
+    expect(reach(r.communication, "up", walls)).toBeCloseTo(0, 4)
   })
 })
 
