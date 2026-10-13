@@ -1,5 +1,6 @@
 import type { DoorHinge, DoorSwing, Doorway, Point, Wall, WallDoor, WallElement, WallWindow } from "../types"
 import { RIGHT_SIN, dist, dot, sub, unit } from "../wall-geometry"
+import { continuesSameMaterial, hostChains } from "./collinear-chain"
 import { elementRuns, hostOf, hostPoint, jambsT } from "./doorway-faces"
 import type { Side } from "./doorway-faces"
 
@@ -20,15 +21,19 @@ type Interval = [number, number]
 
 const isLength = (v: number): boolean => Number.isFinite(v)
 
-// свободные промежутки стены для элемента self: пересечения участков граней plus и minus, не дальше концов
-// опорной стены — элемент не переходит на коллинеарное продолжение (change fix-opening-distance-collinear, design D4)
+// свободные промежутки стены для элемента self: пересечения участков граней plus и minus; у конца с продолжением
+// того же материала — не дальше конца оси опорной стены, чтобы элемент не переходил на продолжение
+// (change fix-opening-distance-collinear, design D4), у остальных концов границу задаёт тело стены, в том числе
+// выступ за ось до плоскости стыка (change fix-opening-reach-body-end, design D1)
 function freeIntervals(host: Wall, walls: readonly Wall[], elements: readonly WallElement[], self: WallElement): Interval[] {
   const out: Interval[] = []
-  const len = dist(host.a, host.b)
+  const chains = hostChains(host, walls)
+  const floor = continuesSameMaterial(chains.a) ? 0 : -Infinity
+  const ceiling = continuesSameMaterial(chains.b) ? dist(host.a, host.b) : Infinity
   for (const p of elementRuns(host, walls, elements, 1, self))
     for (const m of elementRuns(host, walls, elements, -1, self)) {
-      const lo = Math.max(p[0], m[0], 0)
-      const hi = Math.min(p[1], m[1], len)
+      const lo = Math.max(p[0], m[0], floor)
+      const hi = Math.min(p[1], m[1], ceiling)
       if (hi - lo > TOL) out.push([lo, hi])
     }
   return out.sort((x, y) => x[0] - y[0])

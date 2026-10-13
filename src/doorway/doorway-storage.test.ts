@@ -42,7 +42,6 @@ describe("документ хранилища", () => {
     const bad = [
       { ...d, id: "zero", widthCm: 0 },
       { id: "noanchor", wallId: "W", offsetCm: 10, widthCm: 90, heightCm: 210 },
-      { ...d, id: "neg", offsetCm: -1 },
       { ...d, id: "noheight", heightCm: 0 },
       { ...d, id: "badanchor", anchor: "c" },
       { ...d, id: "nan", widthCm: "90" },

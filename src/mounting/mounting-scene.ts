@@ -1,5 +1,6 @@
 import { EPS_CM, effectiveMarks, lengthOf } from "../demolition/mark-model"
 import type { ResolvedMark } from "../demolition/mark-model"
+import { bodySpan } from "../doorway/doorway-faces"
 import type { Dimension, DimPoint, Drawing, Wall, WallElement } from "../types"
 import { remnantId, remnantSpans, remnantWalls } from "./remnants"
 
@@ -29,6 +30,17 @@ function onRemnant(e: WallElement, wall: Wall, len: number, start: number, end: 
   return { ...e, wallId: remnantId(wall.id, start), offsetCm: e.anchor === "a" ? e.offsetCm - start : e.offsetCm - (len - end) }
 }
 
+// остаток, на котором лежит полоса [s, t]: концы остатка, совпадающие с концами исходной стены, продолжены на выступ
+// тела стены за ось (spec mounting-plan «Старые элементы стены на плане «Монтаж»», design D4a); граница сноса не продолжается
+function remnantOf(wall: Wall, walls: readonly Wall[], marks: readonly ResolvedMark[], len: number, s: number, t: number): [number, number] | undefined {
+  const body = bodySpan(wall, walls)
+  return remnantSpans(wall, marks).find(([start, end]) => {
+    const from = start <= EPS_CM && body ? Math.min(0, body[0]) : start
+    const to = end >= len - EPS_CM && body ? Math.max(len, body[1]) : end
+    return from - EPS_CM <= s && t <= to + EPS_CM
+  })
+}
+
 // старый элемент виден, только если его полоса не пересекает и не касается области сноса и лежит на остатке
 function resolveOld(e: WallElement, walls: readonly Wall[], marks: readonly ResolvedMark[]): WallElement | null {
   const wall = walls.find((w) => w.id === e.wallId)
@@ -36,7 +48,7 @@ function resolveOld(e: WallElement, walls: readonly Wall[], marks: readonly Reso
   const len = lengthOf(wall)
   const [s, t] = stripOf(e, len)
   if (marks.some((m) => m.wall.id === wall.id && t >= m.from - EPS_CM && s <= m.to + EPS_CM)) return null
-  const piece = remnantSpans(wall, marks).find(([start, end]) => start - EPS_CM <= s && t <= end + EPS_CM)
+  const piece = remnantOf(wall, walls, marks, len, s, t)
   return piece ? onRemnant(e, wall, len, piece[0], piece[1]) : null
 }
 
@@ -47,7 +59,7 @@ function resolveOwn(e: WallElement, own: readonly Wall[], walls: readonly Wall[]
   if (!wall) return null
   const len = lengthOf(wall)
   const [s, t] = stripOf(e, len)
-  const piece = remnantSpans(wall, marks).find(([start, end]) => start - EPS_CM <= s && t <= end + EPS_CM)
+  const piece = remnantOf(wall, walls, marks, len, s, t)
   return piece ? onRemnant(e, wall, len, piece[0], piece[1]) : null
 }
 

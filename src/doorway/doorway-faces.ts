@@ -1,6 +1,6 @@
 import type { Point, Wall, WallElement } from "../types"
 import { add, coveredInterval, degenerate, dist, displayPolygons, mergeIntervals, mul, perp, unit } from "../wall-geometry"
-import { hostChains } from "./collinear-chain"
+import { continuesSameMaterial, hostChains } from "./collinear-chain"
 
 // Грани опорной стены, стыки и расстояния проёма (change add-doorway, design D1, D3).
 // Свободный участок грани — где внутренняя пробная линия (h − ε) покрыта формами стен,
@@ -114,6 +114,29 @@ export function openingFaceRuns(host: Wall, walls: readonly Wall[], side: Side):
   return runs
     .map(([t0, t1]): [number, number] => [Math.max(t0, lo), Math.min(t1, hi)])
     .filter(([t0, t1]) => t1 - t0 > MIN_RUN)
+}
+
+// тело опорной стены вдоль оси: от начала первого до конца последнего участка, общего для обеих граней и лежащего на
+// стене; у конца с продолжением того же материала — не дальше конца оси (change fix-opening-reach-body-end, design D4a).
+// Выступ за ось есть там, где тело стены доходит до плоскости стыка со стеной другого материала.
+export function bodySpan(host: Wall, walls: readonly Wall[]): [number, number] | null {
+  if (degenerate(host)) return null
+  const len = dist(host.a, host.b)
+  const plus = openingFaceRuns(host, walls, 1)
+  const minus = openingFaceRuns(host, walls, -1)
+  let lo = Infinity
+  let hi = -Infinity
+  for (const p of plus)
+    for (const m of minus) {
+      const from = Math.max(p[0], m[0])
+      const to = Math.min(p[1], m[1])
+      if (to - from <= MIN_RUN || to <= 0 || from >= len) continue
+      lo = Math.min(lo, from)
+      hi = Math.max(hi, to)
+    }
+  if (lo > hi) return null
+  const chains = hostChains(host, walls)
+  return [continuesSameMaterial(chains.a) ? Math.max(lo, 0) : lo, continuesSameMaterial(chains.b) ? Math.min(hi, len) : hi]
 }
 
 // участок, к которому относится проём: наибольшее перекрытие, иначе ближайший

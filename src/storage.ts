@@ -49,10 +49,12 @@ export const isDimension = (dim: unknown): dim is Dimension =>
 
 const num = (v: unknown): v is number => typeof v === "number" && Number.isFinite(v)
 
-// общие поля элемента стены (spec drawing-storage «Формат документа»)
+// общие поля элемента стены (spec drawing-storage «Формат документа»); расстояние привязки — любое конечное число:
+// на выступе тела стены за конец оси оно отрицательное, положение вне стены разбирает правило нарушенных документов
+// (change fix-opening-reach-body-end, design D3)
 const hasElementFields = (x: Record<string, unknown>): boolean =>
   typeof x.id === "string" && x.id !== "" && typeof x.wallId === "string" && x.wallId !== "" &&
-  (x.anchor === "a" || x.anchor === "b") && num(x.offsetCm) && x.offsetCm >= 0 &&
+  (x.anchor === "a" || x.anchor === "b") && num(x.offsetCm) &&
   num(x.widthCm) && x.widthCm > 0 && num(x.heightCm) && x.heightCm > 0
 
 // проём: без вида или с видом "doorway" (change add-window, design D7)

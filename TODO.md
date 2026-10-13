@@ -596,3 +596,14 @@ Follow-ups from `fix-opening-distance-collinear` (2026-10-13).
 - (fix-opening-distance-collinear) The gap-joint boundary between a brick and a concrete wall (axis ends 5 cm apart) is not defined by the spec; the implementation takes the end of the wall that comes earlier in the array, and `CD-6c` accepts 150..155 cm.
 - (fix-opening-distance-collinear) A joint with two or more collinear candidate continuations at one end (ambiguous) stops the chain at that end; no spec scenario describes it.
 - (fix-opening-distance-collinear) `faceRuns` for automatic wall dimensions and demolition marks still cuts faces at `reach` beyond the wall ends; only openings go through collinear continuations (`openingFaceRuns`).
+
+---
+
+Follow-ups from `fix-opening-reach-body-end` (2026-10-13, test validation round 3).
+
+## Tests
+
+- [ ] `T-26o`: mirror of `T-26m` at end `a` of the wall (concrete wall ends at x = 195, 5 cm overhang; offset −5 shown, −6 hidden in the Montage plan). Without it, a fixed 10 cm cap or a +1 cm limit at end `a` survives (`src/mounting/mounting-overhang.test.ts`).
+- [ ] Montage: no test pins `bodySpan` (`src/doorway/doorway-faces.ts`) clamping to the axis end at an end with a same-material continuation (mutant `Math.min(hi, len)` → `hi` survives, found by the manual mutant run at apply time, task 5.4). Repro for the test: brick `W (0,0)-(500,0)` + brick `W2 (500,0)-(700,0)`, window `b` with offset −5 on `W` must be hidden on the Montage plan; same mirrored at end `a`.
+- [ ] Montage overhang on a skewed joint where the two face runs end at different `t`: pins that the body extent is the intersection of the faces, not one face or their union.
+- [ ] Storage has no lower bound for a negative `offsetCm` (design D3, `T-34` pins −500); an element far outside the wall is read as a violated document. Revisit if such documents should be dropped instead.

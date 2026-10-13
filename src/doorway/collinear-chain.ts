@@ -62,6 +62,10 @@ function chainEnd(host: Wall, end: "a" | "b", walls: readonly Wall[]): ChainEnd 
   }
 }
 
+// за концом опорной стены идёт коллинеарная стена того же материала: грань проходит сквозь неё, а положение элемента
+// ограничено концом оси (change fix-opening-reach-body-end, design D1); без продолжения границу задаёт сама грань
+export const continuesSameMaterial = (end: ChainEnd): boolean => end.limitT === null && end.extendCm > 0
+
 export function hostChains(host: Wall, walls: readonly Wall[]): HostChains {
   return { a: chainEnd(host, "a", walls), b: chainEnd(host, "b", walls) }
 }
