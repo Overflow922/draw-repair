@@ -1,4 +1,4 @@
-schema: test-gated
+schema: spec-driven
 
 context: |
   The project uses spec-driven development.
@@ -19,41 +19,11 @@ context: |
   whenever the project has suitable mutation tooling.
 
 rules:
-  test-plan:
-    - Every important requirement must map to at least one test.
-    - Include boundary and negative cases.
-    - Identify important invariants.
-    - Identify potential surviving mutations.
-
-  test-suite:
-    - Create executable tests, not merely test descriptions.
-    - Do not modify production code.
-    - Do not weaken existing approved tests.
-    - Record every executable test in test-suite.md.
-
-  test-validation:
-    - Use a fresh context.
-    - Do not modify tests or production code.
-    - Be adversarial.
-    - A weak assertion is a validation failure.
-    - A surviving critical mutation is a validation failure.
-    - Always produce an explicit VERDICT.
-
   tasks:
-    - Do not proceed when test-validation verdict is FAIL.
-    - Reference approved tests in implementation tasks.
-    - Do not include tasks that modify approved tests.
+    - Keep tasks small and independently verifiable.
 
 operations:
   apply:
     guidance:
-      - Approved tests are read-only during implementation.
-      - Never change a test merely to make it pass.
-      - If an approved test appears incorrect, stop and report it.
       - Run focused tests before completing each task.
       - Run the full suite before completing the change.
-
-  archive:
-    guidance:
-      - Do not archive a change with failed test validation.
-      - Do not archive when approved tests were modified after validation.

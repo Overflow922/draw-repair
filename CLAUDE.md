@@ -17,7 +17,7 @@ When implementation or tests conflict with the specification:
 1. identify the discrepancy;
 2. determine whether the specification is intentionally being changed;
 3. do not silently change the specification to match the implementation;
-4. do not silently change approved tests to match the implementation.
+4. do not silently change tests to match the implementation.
 
 Behavioral requirements must be resolved at the specification level.
 
@@ -34,13 +34,11 @@ Expected workflow:
 3. create/review specifications;
 4. create/review technical design;
 5. create implementation tasks;
-6. write tests;
-7. validate tests;
-8. implement;
-9. run quality gates;
-10. verify implementation against OpenSpec;
-11. archive the completed change;
-12. stage all change files and commit them on the current branch
+6. implement, writing tests alongside the code;
+7. run quality gates;
+8. verify implementation against OpenSpec;
+9. archive the completed change;
+10. stage all change files and commit them on the current branch
     (do not create or switch branches).
 
 Do not start implementation before the relevant specification and task artifacts
@@ -51,92 +49,18 @@ OpenSpec workflow.
 
 ---
 
-## Rule 3 — Test Writer does not modify production code
+## Rule 3 — Tests
 
-During test writing, the Test Writer may:
+Tests are derived from observable behavior and acceptance criteria in the
+specification.
 
-* read the entire repository;
-* read OpenSpec specifications;
-* read design documents;
-* read the test plan;
-* read existing tests;
-* create new tests;
-* create or update test fixtures;
-* create test utilities required for testing.
-
-The Test Writer MUST NOT:
-
-* modify production code;
-* modify OpenSpec specifications;
-* modify design documents;
-* weaken approved tests;
-* remove coverage merely to make tests pass.
-
-Tests must be derived from observable behavior and acceptance criteria.
+Never modify or remove a test merely because the current implementation fails
+it. If a test no longer represents the specification, say so and resolve it at
+the specification level first.
 
 ---
 
-## Rule 4 — Test Validator is read-only
-
-Test Validator runs in a fresh context.
-
-The validator may:
-
-* read the repository;
-* read OpenSpec specifications;
-* read design documents;
-* read the test plan;
-* read tests;
-* run tests;
-* run mutation testing;
-* inspect the git diff;
-* create `test-validation.md`.
-
-The validator MUST NOT modify:
-
-* production code;
-* tests;
-* specifications;
-* design documents.
-
-If the test suite is inadequate:
-
-```text
-VERDICT: FAIL
-```
-
-The work returns to Test Writing.
-
-A validator must never repair the tests it is validating.
-
----
-
-## Rule 5 — Approved tests are immutable during implementation
-
-After tests are approved, the Implementation Agent may modify production code
-required by the specification.
-
-The Implementation Agent MUST NOT modify:
-
-* `tests/`
-* `__tests__/`
-* `spec-tests/`
-* approved test files;
-* approved test fixtures unless explicitly authorized.
-
-If implementation reveals that an approved test must change:
-
-1. stop implementation;
-2. create a test-change-request;
-3. explain why the approved test no longer represents the specification;
-4. resolve the change separately;
-5. re-validate the modified tests.
-
-Never modify a test merely because the current implementation fails it.
-
----
-
-## Rule 6 — TypeScript engineering standards
+## Rule 4 — TypeScript engineering standards
 
 Use strict, modern TypeScript.
 
@@ -174,7 +98,7 @@ Do not create classes merely to wrap functions.
 
 ---
 
-## Rule 7 — Architecture
+## Rule 5 — Architecture
 
 Organize code primarily by business capability/feature.
 
@@ -211,7 +135,7 @@ Do not introduce abstractions speculatively.
 
 ---
 
-## Rule 8 — Decomposition
+## Rule 6 — Decomposition
 
 Do not solve large features in one giant implementation step.
 
@@ -237,7 +161,7 @@ Optimize for maintainability, not minimum file count.
 
 ---
 
-## Rule 9 — Quality gates
+## Rule 7 — Quality gates
 
 A task is NOT complete until all applicable quality gates pass.
 
@@ -257,7 +181,7 @@ Do not hide failures by weakening lint rules, TypeScript settings, or tests.
 
 ---
 
-## Rule 10 — Change discipline
+## Rule 8 — Change discipline
 
 Keep changes scoped to the requested task.
 
@@ -275,7 +199,7 @@ Before finishing, inspect the final diff for accidental changes.
 
 ---
 
-## Rule 11 — Reasoning and planning
+## Rule 9 — Reasoning and planning
 
 For non-trivial tasks:
 
@@ -294,12 +218,12 @@ the specification/design instead of inventing behavior.
 
 ---
 
-## Rule 12 — Completion criteria
+## Rule 10 — Completion criteria
 
 The agent may declare a task complete only when:
 
 * implementation matches the specification;
-* approved tests remain unchanged;
+* no test was weakened to make it pass;
 * required tests pass;
 * typecheck passes;
 * lint passes;
