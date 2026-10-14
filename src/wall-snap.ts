@@ -1,4 +1,4 @@
-import { PX_PER_CM, SNAP_RADIUS_PX } from "./types"
+import { CENTER_SNAP_RADIUS_PX, PX_PER_CM, SNAP_RADIUS_PX } from "./types"
 import type { Communication, Point, Wall, WallElement } from "./types"
 import { violatesCommunications } from "./communications/guard"
 import { violatesDoorways } from "./doorway/doorway-guard"
@@ -42,6 +42,10 @@ const AXIS_TOL = 1e-12 // луч параллелен оси экрана
 
 export function snapRadiusCm(zoom: number): number {
   return SNAP_RADIUS_PX / (PX_PER_CM * zoom)
+}
+
+export function centerSnapRadiusCm(zoom: number): number {
+  return CENTER_SNAP_RADIUS_PX / (PX_PER_CM * zoom)
 }
 
 export type SnapTarget = "face" | "cap" | "corner"

@@ -167,6 +167,8 @@ export interface View {
 export const PX_PER_CM = 2
 export const GRID_STEP_CM = 10
 export const SNAP_RADIUS_PX = 12
+// радиус прилипания центра батареи к центру окна: окно и батарея — длинные объекты, обычного радиуса мало (spec battery «Центровка по окну»)
+export const CENTER_SNAP_RADIUS_PX = 35
 export const ZOOM_MIN = 0.1
 export const ZOOM_MAX = 10
 

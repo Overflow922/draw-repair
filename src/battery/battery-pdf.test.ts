@@ -5,7 +5,7 @@ import { colorRecorder } from "../doorway/window.test-utils"
 import type { ColoredText } from "../doorway/window.test-utils"
 import type { RenderOptions } from "../render"
 import type { Battery, Dimension, Drawing, Wall } from "../types"
-import { bat, sceneR } from "./battery.test-utils"
+import { bat, sceneR, windowAt } from "./battery.test-utils"
 
 // change add-battery: батареи в PDF: состав страниц планов, границы содержимого, передача в отрисовку каждой страницы без выделения и чисел
 // (spec pdf-export «Батареи в PDF»; design D11; test-plan B-PDF-*).
@@ -131,6 +131,15 @@ describe("отрисовка страниц", () => {
     expect(draws.length).toBeGreaterThan(0)
     expect(draws[0].opts?.batteries).toEqual([X]) // батарея в отрисовку передана
     for (const c of draws) expect(c.opts?.selectedBatteries ?? []).toEqual([])
+  })
+
+  it("риска центровки в PDF не попадает: батарея по центру окна, в отрисовку страниц линии трекинга не передаются", () => {
+    const win = windowAt("W", "a", 200) // центр 260
+    const centred = bat("W", "a", 225)
+    const { draws } = build(room({ batteries: [centred], doorways: [win] }))
+    expect(draws.length).toBeGreaterThan(0)
+    expect(draws[0].opts?.batteries).toEqual([centred])
+    for (const c of draws) expect(c.opts?.tracks ?? []).toEqual([])
   })
 
   it("B-PDF-1b: страница обмера рисует батареи обмера (передаёт список в drawScene)", () => {

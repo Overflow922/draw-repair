@@ -22,7 +22,7 @@ export const inheritBatteryParams = (_params: BatteryParams, b: Battery): Batter
   gapCm: b.gapCm,
 })
 
-// snapCm — радиус прилипания в сантиметрах чертежа (с учётом зума); elements — для центровки по окнам
+// snapCm — радиус центровки по окну в сантиметрах чертежа (с учётом зума); elements — окна для центровки
 export interface BatteryContext {
   batteries: readonly Battery[]
   communications: readonly Communication[]

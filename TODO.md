@@ -674,3 +674,20 @@ Follow-ups from `add-callout` (2026-10-14; implemented, tasks 1–11).
 
 - Marquee selection, multi-selection and group move of callouts together with walls (`add-callout` design, non-goals).
 - Italic font (GOST type A) for callout text: decided to match the dimension font, no italic.
+
+---
+
+Follow-ups from `fix-battery-centering-and-numbers` (2026-10-14).
+
+### Bugs
+
+- [ ] `npm test` (`vitest run`) picks up a stale agent worktree copy under `.claude/worktrees/agent-afe5052a1a208916f/` and fails 10 tests there (`battery-tool.test.ts` B-TOOL-7/7b/7c, `plan-tools.test.ts` PT-02/SZ-70/SZ-71, `mounting-plans.test.ts` MP-51, …); the real `src/` is green (`npx vitest run --exclude ".claude/**"`: 211 files, 4706 tests). Remove the worktree (see memory «worktree long-path cleanup») or exclude `.claude/**` in the vitest config.
+
+### Tests
+
+- [ ] `centerGuideTracks` in `src/main.ts` (the centring guide is passed to the renderer as `tracks` only while the battery tool is active or a battery is dragged) has no automated test: the project has no DOM test environment. Checked by hand in the browser on 2026-10-14 (ghost snap at zoom 1 and 0.18, no guide outside the 35 px radius, guide while dragging an already centred battery, numbers 12000 / 7000 / 12000 with the material boundary on the right).
+
+### Out of scope
+
+- Battery placement limits (`visibleRuns` → `faceRuns` in `limitedStart`, `freeStarts`, `stateHolds`) still stop at the end of the host wall plus a thickness margin when the wall is continued collinearly by a wall of the same material, while the numbers now measure to the corner or the material boundary (`openingFaceRuns`, as for openings). A battery stopped at the end of its host wall can show a non-zero distance to the far corner it cannot reach. Decide separately whether batteries should stand across a collinear same-material joint (`battery` «Размещение батареи вдоль стены»).
+- Windows of a collinear neighbour wall are not centring targets: a battery never leaves its host wall, so such a window centre is out of reach (`design.md` D4).

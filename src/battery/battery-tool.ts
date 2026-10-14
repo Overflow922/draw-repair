@@ -6,7 +6,10 @@ import type { Scene } from "../history"
 import { SCREEN_METRICS } from "../render"
 import type { Battery, Communication, Point, Unit, View, Wall, WallElement } from "../types"
 import { PX_PER_CM } from "../types"
+import type { TrackLine } from "../wall-tracking"
 import { setBatteryDistance, setBatteryGap, setBatteryLength, setBatteryThickness } from "./battery-edit"
+import { CENTER_GUIDE_OVERSHOOT_PX, centerGuide } from "./battery-guide"
+import { centeredWindow, hostOfBattery } from "./battery-motion"
 import { batteryNumberLayout } from "./battery-numbers"
 import type { BatteryNumber } from "./battery-numbers"
 import { hitBattery } from "./battery-pick"
@@ -26,7 +29,8 @@ export interface BatteryToolHost {
   editable(b: Battery): boolean // батареи обмера на плане «Монтаж» — только чтение
   view(): View
   unit(): Unit
-  radiusCm(): number // радиус привязки (центровка по окну, допуск попадания)
+  radiusCm(): number // радиус привязки (допуск попадания и поиск стены под курсором)
+  centerRadiusCm(): number // радиус центровки по окну: отдельный, больше обычного (design D1)
   formatCm(cm: number): string // число в текущей единице для поля ввода
   parseCm(text: string): number // NaN — не число
   editorParent: HTMLElement
@@ -43,6 +47,7 @@ export interface BatteryToolHost {
 
 export interface BatteryToolAdapter {
   ghost(): Battery | null
+  guide(): TrackLine | null // риска центровки, пока призрак или перетаскиваемая батарея прилипли к центру окна
   dragging(): boolean
   hover(raw: Point): void
   place(raw: Point): boolean
@@ -62,14 +67,14 @@ export function createBatteryTool(host: BatteryToolHost): BatteryToolAdapter {
   let params = DEFAULT_BATTERY_PARAMS
   let ghost: Battery | null = null
   let editor: NumberEditor | null = null
-  let drag: { start: Battery; live: Battery; grab: Point; snapshot: Scene } | null = null
+  let drag: { start: Battery; live: Battery; grab: Point; snapshot: Scene; moved: boolean } | null = null
 
   const k = (): number => PX_PER_CM * host.view().zoom
   const context = (): BatteryContext => ({
     batteries: host.batteries(),
     communications: host.communications(),
     elements: host.elements(),
-    snapCm: host.radiusCm(),
+    snapCm: host.centerRadiusCm(),
   })
 
   // призрак: у стены под курсором, над существующей батареей — нет (клик по ней новую не ставит)
@@ -117,8 +122,19 @@ export function createBatteryTool(host: BatteryToolHost): BatteryToolAdapter {
     editor = null
   }
 
+  // риска выводится из итогового положения: центр батареи лежит на центре окна (design D2); при нажатии без движения её нет,
+  // а батарея, уже стоящая по центру и удержанная прилипанием, остаётся с риской, пока указатель движется
+  const guide = (): TrackLine | null => {
+    const b = drag ? (drag.moved ? drag.live : null) : ghost
+    const wall = b ? hostOfBattery(b, host.walls()) : null
+    if (!b || !wall) return null
+    const centre = centeredWindow(b, wall, host.elements())
+    return centre === null ? null : centerGuide(b, wall, centre, k(), CENTER_GUIDE_OVERSHOOT_PX)
+  }
+
   return {
     ghost: () => ghost,
+    guide,
     dragging: () => drag !== null,
     hover(raw) {
       ghost = ghostAt(raw)
@@ -161,12 +177,13 @@ export function createBatteryTool(host: BatteryToolHost): BatteryToolAdapter {
       closeEditor()
       const sel = host.selectedBatteries()
       if (sel.length !== 1 || sel[0] !== hit) host.select(hit)
-      drag = { start: hit, live: hit, grab: p, snapshot: host.snapshot() }
+      drag = { start: hit, live: hit, grab: p, snapshot: host.snapshot(), moved: false }
       return true
     },
     // сдвиг от начала жеста полным вектором; батарея не заходит на соседей и стыки
     dragTo(p) {
       if (!drag) return
+      drag.moved = true
       const r = slideBattery(drag.start, host.walls(), { x: p.x - drag.grab.x, y: p.y - drag.grab.y }, context())
       const next = r.kind === "applied" ? r.battery : drag.start
       if (next === drag.live) return

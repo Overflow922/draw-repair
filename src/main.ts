@@ -13,8 +13,9 @@ import { createCalloutTool } from "./callout/callout-tool"
 import type { CalloutToolHost } from "./callout/callout-tool"
 import { moveEndpointBounded, moveWallsBounded, resizeWallBounded } from "./wall-edit"
 import type { EditMode } from "./wall-edit"
-import { chainEndSquare, placementSquare, snapRadiusCm, snapStartVertex, wallClickAction } from "./wall-snap"
+import { centerSnapRadiusCm, chainEndSquare, placementSquare, snapRadiusCm, snapStartVertex, wallClickAction } from "./wall-snap"
 import type { VertexSnap } from "./wall-snap"
+import type { TrackLine } from "./wall-tracking"
 import { parseAngleDeg, startRefOf } from "./wall-angle"
 import { orthoGestureStep, startOrthoGesture } from "./ortho-gesture"
 import type { OrthoGesture } from "./ortho-gesture"
@@ -345,6 +346,7 @@ const batteryHost: BatteryToolHost = {
   view: () => view,
   unit: () => unit,
   radiusCm: () => radiusCm(),
+  centerRadiusCm: () => centerSnapRadiusCm(view.zoom),
   formatCm: (cm) => formatCm(cm, unit),
   parseCm: (text) => parseFloat(text.replace(",", ".")) * UNIT_TO_CM[unit],
   editorParent: canvasWrap,
@@ -952,10 +954,16 @@ function drawMeasurePlan(): void {
       chainStart && segment?.dir && segment.refRay && segment.angleDeg !== null
         ? { at: chainStart, from: segment.refRay, to: segment.dir, deg: segment.angleDeg }
         : null,
-    tracks: tool === "wall" && chainStart && segment ? segment.tracks : null,
+    tracks: tool === "wall" && chainStart && segment ? segment.tracks : centerGuideTracks(),
     ruler: tool === "ruler" && cursor && !gestureActive() ? rulerReading(cursor, walls) : null,
     palette: paletteOf(theme),
   })
+}
+
+// риска центровки батареи по окну рисуется как линия трекинга (change fix-battery-centering-and-numbers, design D2)
+function centerGuideTracks(): TrackLine[] | null {
+  const guide = tool === "battery" || batteryTool.dragging() ? batteryTool.guide() : null
+  return guide ? [guide] : null
 }
 
 // нажатая кнопка мыши: рамка, перетаскивание стен или размера, протяжка пометки, сдвиг вида

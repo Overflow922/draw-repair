@@ -1,7 +1,7 @@
 import { shapeOfCommunication } from "../communications/geometry"
 import { CONTACT_DEPTH_CM, segmentShape, sweep } from "../communications/shape"
 import type { Shape } from "../communications/shape"
-import { faceRuns, jambsT } from "../doorway/doorway-faces"
+import { faceRuns, jambsT, openingFaceRuns } from "../doorway/doorway-faces"
 import type { Battery, Communication, Wall, WallElement } from "../types"
 import { isWindow } from "../types"
 import { degenerate, dist, unit } from "../wall-geometry"
@@ -38,6 +38,23 @@ const snap = (v: number): number => Math.round(v * RUN_ROUND) / RUN_ROUND
 // видимые участки грани батареи; шум границ убран округлением
 export function visibleRuns(host: Wall, walls: readonly Wall[], face: 1 | -1): [number, number][] {
   return faceRuns(host, [...walls], face).map(([t0, t1]): [number, number] => [snap(t0), snap(t1)])
+}
+
+// участок грани, от концов которого отсчитываются числа батареи (change fix-battery-centering-and-numbers, design D3): как у
+// проёмов — сквозь коллинеарные стены того же материала до угла, до границы стены другого материала; выбирается участок с
+// наибольшим перекрытием с батареей, null — батарея не лежит ни на одном участке
+export function numberRun(b: Battery, host: Wall, walls: readonly Wall[]): [number, number] | null {
+  const [s, end] = batterySpan(b, host)
+  let best: [number, number] | null = null
+  let bestOverlap = 0
+  for (const [t0, t1] of openingFaceRuns(host, walls, b.face)) {
+    const overlap = Math.min(t1, end) - Math.max(t0, s)
+    if (overlap > bestOverlap) {
+      best = [snap(t0), snap(t1)]
+      bestOverlap = overlap
+    }
+  }
+  return best
 }
 
 // участок, на котором целиком лежит отрезок [s, s + length]
@@ -128,16 +145,35 @@ export function nearestIn(intervals: readonly [number, number][], s: number): nu
   return best
 }
 
-// центр окна опорной стены, ближайший к центру батареи в пределах радиуса прилипания; двери и проёмы не цели
-export function snapCenter(center: number, host: Wall, elements: readonly WallElement[], snapCm: number): number | null {
-  let best: number | null = null
+// центры окон опорной стены по t вдоль оси; двери и проёмы не цели центровки
+function windowCentres(host: Wall, elements: readonly WallElement[]): number[] {
+  const centres: number[] = []
   for (const e of elements) {
     if (!isWindow(e) || e.wallId !== host.id) continue
     const [j1, j2] = jambsT(e, host)
-    const c = (j1 + j2) / 2
+    centres.push((j1 + j2) / 2)
+  }
+  return centres
+}
+
+// центр окна опорной стены, ближайший к центру батареи в пределах радиуса центровки
+export function snapCenter(center: number, host: Wall, elements: readonly WallElement[], snapCm: number): number | null {
+  let best: number | null = null
+  for (const c of windowCentres(host, elements)) {
     if (Math.abs(c - center) <= snapCm && (best === null || Math.abs(c - center) < Math.abs(best - center))) best = c
   }
   return best
+}
+
+// шум вычисления центра: положения, различающиеся меньше этого значения, считаются совпавшими
+const CENTER_TOL_CM = 1e-6
+
+// центр окна опорной стены, на котором стоит центр батареи (прилипание состоялось); null — батарея не по центру окна
+// (change fix-battery-centering-and-numbers, design D2)
+export function centeredWindow(b: Battery, host: Wall, elements: readonly WallElement[]): number | null {
+  const [s, end] = batterySpan(b, host)
+  const centre = (s + end) / 2
+  return windowCentres(host, elements).find((c) => Math.abs(c - centre) <= CENTER_TOL_CM) ?? null
 }
 
 // допустимая глубина наложения при правке чисел: уже существующее наложение не углубляется; касание — наложение не глубже

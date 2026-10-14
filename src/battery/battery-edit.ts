@@ -1,7 +1,7 @@
 import { BISECT_ITERATIONS } from "../communications/shape"
 import type { Battery, Wall } from "../types"
 import { batterySpan } from "./battery-geometry"
-import { allowedDepth, hostOfBattery, limitedStart, obstacleShapes, runContaining, startOf, stateHolds, visibleRuns, withStart } from "./battery-motion"
+import { allowedDepth, hostOfBattery, limitedStart, numberRun, obstacleShapes, startOf, stateHolds, withStart } from "./battery-motion"
 import type { BatteryContext, BatteryEdit } from "./battery-place"
 
 // Числа выделенной батареи и их правка на месте (change add-battery, design D3): расстояния до концов видимого участка
@@ -30,8 +30,8 @@ export function batteryNumbers(b: Battery, walls: readonly Wall[]): BatteryNumbe
   const host = hostOfBattery(b, walls)
   if (!host) return { toA: Number.NaN, toB: Number.NaN, ...sizes }
   const [s, end] = batterySpan(b, host)
-  const run = runContaining(visibleRuns(host, walls, b.face), s, b.lengthCm)
-  return run ? { toA: s - run[0], toB: run[1] - end, ...sizes } : { toA: Number.NaN, toB: Number.NaN, ...sizes }
+  const run = numberRun(b, host, walls)
+  return run ? { toA: Math.max(0, s - run[0]), toB: Math.max(0, run[1] - end), ...sizes } : { toA: Number.NaN, toB: Number.NaN, ...sizes }
 }
 
 // ввод расстояния: батарея едет так, чтобы расстояние от конца участка toward до её ближнего торца стало равным введённому;
@@ -41,7 +41,7 @@ export function setBatteryDistance(b: Battery, walls: readonly Wall[], toward: "
   const host = hostOfBattery(b, walls)
   if (!host) return INVALID
   const from = startOf(b, host)
-  const run = runContaining(visibleRuns(host, walls, b.face), from, b.lengthCm)
+  const run = numberRun(b, host, walls)
   if (!run) return INVALID
   const wanted = toward === "a" ? run[0] + valueCm : run[1] - valueCm - b.lengthCm
   const s = limitedStart(b, host, walls, obstacleShapes(b, host, walls, ctx), from, wanted)
