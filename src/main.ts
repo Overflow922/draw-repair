@@ -1,5 +1,5 @@
 import "./style.css"
-import { cloneScene, loadHistory, planHistory, record, recordDemolition, recordSnapshot, redoDemolition, redoEntry, saveHistory, undoDemolition, undoEntry } from "./history"
+import { cloneScene, loadHistory, planHistory, record, recordCallouts, recordDemolition, recordSnapshot, redoCallouts, redoDemolition, redoEntry, saveHistory, undoCallouts, undoDemolition, undoEntry } from "./history"
 import type { Scene } from "./history"
 import { dimLevelSnap, dimensionGeometry, dimensionOffsetAt, hitWall, nearestDimAnchor, dimPointPoint, pointsEqual, segmentIntersectsRect, snap, snapOthers, snapWithSource, zoomAt } from "./geometry"
 import type { DimGeometry, SnapResult } from "./geometry"
@@ -8,6 +8,9 @@ import { limitNewWallByBatteries, squareAllowedForBatteries, thicknessAllowedFor
 import { batteriesInRect, hitBattery } from "./battery/battery-pick"
 import { createBatteryTool } from "./battery/battery-tool"
 import type { BatteryToolHost } from "./battery/battery-tool"
+import { calloutsOf, withCallouts } from "./callout/callout-store"
+import { createCalloutTool } from "./callout/callout-tool"
+import type { CalloutToolHost } from "./callout/callout-tool"
 import { moveEndpointBounded, moveWallsBounded, resizeWallBounded } from "./wall-edit"
 import type { EditMode } from "./wall-edit"
 import { chainEndSquare, placementSquare, snapRadiusCm, snapStartVertex, wallClickAction } from "./wall-snap"
@@ -88,6 +91,7 @@ const toolDoorwayBtn = document.querySelector<HTMLButtonElement>("#tool-doorway"
 const toolDoorBtn = document.querySelector<HTMLButtonElement>("#tool-door")!
 const toolWindowBtn = document.querySelector<HTMLButtonElement>("#tool-window")!
 const toolBatteryBtn = document.querySelector<HTMLButtonElement>("#tool-battery")!
+const toolCalloutBtn = document.querySelector<HTMLButtonElement>("#tool-callout")!
 const toolCommunicationsBtn = document.querySelector<HTMLButtonElement>("#tool-communications")!
 const communicationsPanel = document.querySelector<HTMLElement>("#communications-panel")!
 const toolRiserBtn = document.querySelector<HTMLButtonElement>("#tool-riser")!
@@ -525,6 +529,42 @@ function pressDemolitionNumber(p: Point): boolean {
   return true
 }
 
+// выноски активного плана (change add-callout, design D4, D5, D8): список лежит в чертеже по правилам плана (callout-store);
+// выделение, жест и поле ввода ведёт адаптер, а запись истории — один шаг со списком до операции
+const calloutHost: CalloutToolHost = {
+  callouts: () => calloutsOf(current(), activePlanOf(current())),
+  setCallouts: (next) => {
+    Object.assign(current(), withCallouts(current(), activePlanOf(current()), next))
+  },
+  recordBefore: (before) => {
+    nudgeBurst = false
+    recordCallouts(activeHistory(), before)
+  },
+  view: () => view,
+  radiusCm: () => radiusCm(),
+  editorParent: canvasWrap,
+  newId: () => crypto.randomUUID(),
+  // одно выделение на холсте: выделение выноски снимает выделение остальных объектов
+  selected: () => {
+    selectionEditing.closeEditor()
+    communicationTool.closeEditor()
+    batteryTool.closeEditor()
+    selectedBatteries = []
+    selectedCommunication = null
+    selectedWalls = []
+    selectedDimensions = []
+    selectedDoorways = []
+    lengthDirty = false
+    demolitionTool.clearSelection()
+    setWallPanel(false)
+  },
+  changed: () => {
+    dirty = true
+  },
+  redraw: () => redraw(),
+}
+const calloutTool = createCalloutTool(calloutHost)
+
 // инструмент установки активного вида; null — вне инструментов «Проём», «Дверь» и «Окно»
 const placingTool = () => (tool === "window" ? windowTool : tool === "door" ? doorTool : tool === "doorway" ? doorwayTool : null)
 
@@ -557,10 +597,12 @@ function closeOpeningsPanel(): void {
 }
 
 // поле ввода числа выделенного объекта: элемента стены или коммуникации
+// (каждое выделение другого объекта и снятие выделения начинаются с этого вызова, поэтому он же снимает выделение выноски)
 const closeNumberEditor = (): void => {
   selectionEditing.closeEditor()
   communicationTool.closeEditor()
   batteryTool.closeEditor()
+  calloutTool.deselect()
 }
 
 const resetElementTools = (): void => {
@@ -654,6 +696,7 @@ function syncToolUI(): void {
   toolRulerBtn.classList.toggle("active", tool === "ruler")
   toolWindowBtn.classList.toggle("active", tool === "window")
   toolBatteryBtn.classList.toggle("active", tool === "battery")
+  toolCalloutBtn.classList.toggle("active", tool === "callout")
   toolDemolitionBtn.classList.toggle("active", tool === "demolition")
   syncOpeningsUI()
   syncCommunicationsUI()
@@ -674,6 +717,7 @@ function setTool(next: Tool): void {
   selectedBatteries = []
   selectedCommunication = null
   resetElementTools()
+  calloutTool.reset()
   suppressClick = false
   nudgeBurst = false
   groupMove = null
@@ -836,6 +880,8 @@ function redraw(): void {
 // план «Демонтаж»: подложка из стен обмерочного плана без сносимых элементов, область сноса, выделение и превью
 function drawDemolitionPlan(): void {
   const marks = effectiveMarks(demolitionHost.marks(), walls, doorways)
+  // выноска главнее пометки под курсором ластика (spec callout «Удаление выноски ластиком»)
+  const erasingCallout = tool === "eraser" && cursor ? calloutTool.pick(cursor) : null
   renderDemolition(
     canvas,
     {
@@ -848,7 +894,10 @@ function drawDemolitionPlan(): void {
       selectedId: demolitionTool.selectedId(),
       ghost: demolitionTool.ghost(),
       ruler: tool === "ruler" && cursor && !gestureActive() ? rulerReading(cursor, walls) : null,
-      erasing: tool === "eraser" && cursor ? demolitionTool.eraseTarget(cursor) : null,
+      erasing: tool === "eraser" && cursor && !erasingCallout ? demolitionTool.eraseTarget(cursor) : null,
+      callouts: calloutTool.displayList(),
+      selectedCalloutId: calloutTool.selectedId(),
+      erasingCalloutId: erasingCallout?.id ?? null,
     },
     unit,
     view,
@@ -858,7 +907,9 @@ function drawDemolitionPlan(): void {
 
 function drawMeasurePlan(): void {
   const p = chainStart && segment ? segment.end : null
-  const target = tool === "eraser" && cursor ? eraserTarget(cursor) : { wall: null, dim: null, doorway: null, communication: null, battery: null }
+  // выноска главнее остальных объектов под курсором ластика (spec callout «Удаление выноски ластиком»); берётся по сырой точке
+  const erasingCallout = tool === "eraser" && hoverWorld ? calloutTool.pick(hoverWorld) : null
+  const target = tool === "eraser" && cursor && !erasingCallout ? eraserTarget(cursor) : { wall: null, dim: null, doorway: null, communication: null, battery: null }
   const draft = dimDraftGeometry()
   const snapHit = tool === "dimension" && cursor && (!dimDraft.a || !dimDraft.b) ? nearestDimAnchor(cursor, walls, doorways, radiusCm(), batteries.filter(editableBattery)) : null
   let previewWall: Wall | null = null
@@ -890,6 +941,9 @@ function drawMeasurePlan(): void {
     selectedBatteries,
     batteryGhost: tool === "battery" ? batteryTool.ghost() : null,
     hoverBattery: target.battery,
+    callouts: calloutTool.displayList(),
+    selectedCallout: calloutTool.selectedId(),
+    erasingCallout: erasingCallout?.id ?? null,
     hoverDoorDirection: tool !== "eraser" && hoverWorld ? selectionEditing.hoverDirection(hoverWorld) : null,
     marquee,
     marqueeHits,
@@ -906,7 +960,7 @@ function drawMeasurePlan(): void {
 
 // нажатая кнопка мыши: рамка, перетаскивание стен или размера, протяжка пометки, сдвиг вида
 function gestureActive(): boolean {
-  return !!(marquee || marqueePending || groupMove || endpointDrag || dimDrag || doorwayTool.dragging() || communicationTool.dragging() || batteryTool.dragging() || demolitionTool.dragging() || panDrag)
+  return !!(marquee || marqueePending || groupMove || endpointDrag || dimDrag || doorwayTool.dragging() || communicationTool.dragging() || batteryTool.dragging() || calloutTool.dragging() || demolitionTool.dragging() || panDrag)
 }
 
 // ластик: размер → коммуникация → батарея → проём → стена (wall-deletion «Инструмент «Ластик»», «Ластик и удаление
@@ -957,7 +1011,7 @@ function draftRubber(end: Point): [Point, Point] | null {
 function syncScale(): void {
   const pages = pagesOf(current())
   scaleLabelEl.textContent = scaleLabel(pages, pdfFormat.value as PageFormat)
-  pdfExportBtn.disabled = pages.every((p) => p.walls.length === 0)
+  pdfExportBtn.disabled = pages.every((p) => p.walls.length === 0 && !p.callouts?.length)
 }
 function toWorld(e: MouseEvent): Point {
   const r = canvas.getBoundingClientRect()
@@ -1103,6 +1157,11 @@ function editMode(snapped: SnapResult): EditMode {
 }
 
 canvas.addEventListener("pointermove", (e) => {
+  if (calloutTool.dragging()) {
+    calloutTool.dragTo(toWorld(e))
+    redraw()
+    return
+  }
   if (doorwayTool.dragging()) {
     doorwayTool.dragTo(toWorld(e))
     redraw()
@@ -1181,8 +1240,9 @@ canvas.addEventListener("pointermove", (e) => {
   if (onDemolition()) {
     // протяжка пометки перерисовывает сама; «Линейка» и «Ластик» следят за курсором
     if (tool === "demolition") demolitionTool.move(toWorld(e), screenPoint(e))
-    else if (tool === "ruler" || tool === "eraser") {
+    else if (tool === "ruler" || tool === "eraser" || tool === "callout") {
       cursor = toWorld(e)
+      if (tool === "callout") calloutTool.hover(cursor)
       redraw()
     }
     return
@@ -1201,7 +1261,10 @@ canvas.addEventListener("pointermove", (e) => {
   }
   if (tool === "wall") updateWallCursor(e)
   else if (tool === "dimension" || tool === "ruler") cursor = toWorld(e)
-  else if (placingTool()) {
+  else if (tool === "callout") {
+    cursor = toWorld(e)
+    calloutTool.hover(cursor)
+  } else if (placingTool()) {
     cursor = toWorld(e)
     placingTool()?.hover(cursor)
   } else if (communicationKind()) {
@@ -1248,6 +1311,11 @@ canvas.addEventListener("pointerdown", (e) => {
     return
   }
   if (e.button !== 0) return
+  // поле ввода выноски открыто: нажатие вне поля только сохраняет текст (по blur) и ничего не начинает, в том числе click
+  if (calloutTool.editing()) {
+    suppressClick = true
+    return
+  }
   hoverWorld = null // нажатие начинает жест — подсветка до следующего движения не нужна
   if (onDemolition()) {
     const p = toWorld(e)
@@ -1258,10 +1326,19 @@ canvas.addEventListener("pointerdown", (e) => {
       else demolitionTool.down(p, screenPoint(e))
       canvas.setPointerCapture(e.pointerId) // отпускание за пределами холста завершает протяжку
     } else if (selectionAllowed(tool)) {
-      // без инструмента: правимое число выделенной пометки, иначе выделение пометки под точкой
-      if (!pressDemolitionNumber(p)) {
-        demolitionTool.select(p)
-        resumeDemolitionTool()
+      // без инструмента: выноска, иначе правимое число выделенной пометки, иначе выделение пометки под точкой
+      if (calloutTool.press(p)) {
+        suppressClick = true
+        canvas.setPointerCapture(e.pointerId)
+      } else {
+        if (calloutTool.selectedId() !== null) {
+          calloutTool.deselect()
+          redraw()
+        }
+        if (!pressDemolitionNumber(p)) {
+          demolitionTool.select(p)
+          resumeDemolitionTool()
+        }
       }
     }
     return
@@ -1274,6 +1351,12 @@ canvas.addEventListener("pointerdown", (e) => {
   const p = toWorld(e)
   if (selectionEditing.pressNumber(p) || selectionEditing.pressZone(p) || (communicationsEditable() && communicationTool.pressNumber(p)) || batteryTool.pressNumber(p)) {
     suppressClick = true
+    return
+  }
+  // выноска рисуется поверх остальных объектов: нажатие по ней главнее остальных целей (spec callout «Выделение, перенос и правка»)
+  if (calloutTool.press(p)) {
+    suppressClick = true
+    canvas.setPointerCapture(e.pointerId)
     return
   }
   // цель нажатия (change fix-midpoint-marker-priority, design D2): маркеры выделенной стены главнее
@@ -1353,6 +1436,10 @@ canvas.addEventListener("pointerdown", () => {
 })
 
 canvas.addEventListener("pointerup", (e) => {
+  if (calloutTool.dragging()) {
+    if (e.button === 0) calloutTool.endDrag()
+    return
+  }
   if (onDemolition() && e.button === 0) {
     // поставленная пометка остаётся выделенной, инструмент снимается — как у проёма (change demolition-select-after-mark)
     if (tool === "demolition" && batteryPress) {
@@ -1486,12 +1573,20 @@ canvas.addEventListener("click", (e) => {
   // на плане «Демонтаж» жесты разбирает адаптер по нажатию и отпусканию (change demolition-plan, design D10);
   // «Ластик» снимает пометку под курсором по клику (change demolition-doorway-sizes, design D5)
   if (onDemolition()) {
-    if (tool === "eraser" && !demolitionTool.erase(toWorld(e))) eraseBatteryMark(toWorld(e))
+    const at = toWorld(e)
+    if (tool === "callout") calloutTool.click(at)
+    else if (tool === "eraser" && !calloutTool.eraseAt(at) && !demolitionTool.erase(at)) eraseBatteryMark(at)
     return
   }
   const p = toSnappedPoint(e)
   const raw = toWorld(e)
+  if (tool === "callout") {
+    calloutTool.click(raw)
+    return
+  }
   if (tool === "eraser") {
+    // выноска главнее остальных объектов под курсором ластика
+    if (calloutTool.eraseAt(raw)) return
     const { wall, dim, doorway, communication, battery } = eraserTarget(p)
     if (dim) deleteDimension(dim)
     else if (communication) deleteCommunication(communication)
@@ -1532,6 +1627,7 @@ canvas.addEventListener("click", (e) => {
     selectedWalls = []
     selectedBatteries = []
     selectedCommunication = null
+    calloutTool.deselect()
     lengthDirty = false
     clearDimSelection()
     redraw()
@@ -1721,6 +1817,7 @@ function deleteSelection(): void {
 }
 
 canvas.addEventListener("dblclick", () => {
+  if (calloutTool.hasDraft()) calloutTool.cancelDraft()
   endChain()
   if (dimDraft.a || dimDraft.b) {
     dimDraft = emptyDraft()
@@ -1822,6 +1919,7 @@ toolDuctBtn.addEventListener("click", () => applyCommunicationsGroup(communicati
 // у инструментов без кнопок-параметров («Окно», «Размер», «Линейка», «Ластик») панели нет: клик только активирует
 toolWindowBtn.addEventListener("click", () => setTool("window"))
 toolBatteryBtn.addEventListener("click", () => setTool("battery"))
+toolCalloutBtn.addEventListener("click", () => setTool("callout"))
 
 toolRulerBtn.addEventListener("click", () => setTool("ruler"))
 toolDemolitionBtn.addEventListener("click", () => setTool("demolition"))
@@ -1866,6 +1964,8 @@ function renderPlanSwitch(): void {
 
 function setPlan(id: PlanId): void {
   if (id === activePlanOf(current())) return
+  // набранный текст выноски сохраняется на прежнем плане
+  calloutTool.commitEditor()
   commitMounting()
   current().activePlan = id
   activate(store.activeId)
@@ -1889,6 +1989,7 @@ function newDrawing(): void {
 }
 
 function activate(id: string): void {
+  calloutTool.commitEditor()
   commitMounting()
   store.activeId = id
   loadWorking()
@@ -1904,6 +2005,7 @@ function activate(id: string): void {
   selectedBatteries = []
   selectedCommunication = null
   resetElementTools()
+  calloutTool.reset()
   closeOpeningsPanel()
   closeCommunicationsPanel()
   dimDraft = emptyDraft()
@@ -1949,6 +2051,7 @@ function resetEditing(): void {
   resetDemolition()
   clearChain()
   closeNumberEditor()
+  calloutTool.reset()
   selectedWalls = []
   selectedDimensions = []
   selectedDoorways = []
@@ -1978,7 +2081,15 @@ function stepMarks(step: typeof undoDemolition): void {
 // (остатки берутся по текущему обмеру и демонтажу), на остальных планах запись подставляется как есть
 function restoreScene(e: Scene): void {
   if (workspace) {
-    current().mounting = { walls: e.walls, dimensions: e.dimensions, ...(e.doorways ? { doorways: e.doorways } : null), ...(e.batteries ? { batteries: e.batteries } : null) }
+    // выноски «Монтажа» в записи истории не хранятся (у них свои записи): список остаётся как есть
+    const callouts = current().mounting?.callouts
+    current().mounting = {
+      walls: e.walls,
+      dimensions: e.dimensions,
+      ...(e.doorways ? { doorways: e.doorways } : null),
+      ...(e.batteries ? { batteries: e.batteries } : null),
+      ...(callouts ? { callouts } : null),
+    }
     loadWorking()
     return
   }
@@ -1993,9 +2104,25 @@ function restoreScene(e: Scene): void {
   if (e.batteries) setBatteries(e.batteries)
 }
 
+// отмена или повтор шага выносок плана (change add-callout, design D3): подставляется список выносок до операции
+function stepCallouts(step: typeof undoCallouts): void {
+  const next = step(activeHistory(), calloutsOf(current(), activePlanOf(current())))
+  if (!next) return
+  calloutHost.setCallouts(next)
+  dirty = true
+  resetEditing()
+  redraw()
+}
+
 function undo(): void {
-  if (groupMove || endpointDrag || panDrag || dimDrag || doorwayTool.dragging() || communicationTool.dragging() || batteryTool.dragging() || demolitionTool.dragging()) return
+  if (groupMove || endpointDrag || panDrag || dimDrag || doorwayTool.dragging() || communicationTool.dragging() || batteryTool.dragging() || calloutTool.dragging() || demolitionTool.dragging()) return
+  // открытое поле ввода выноски сохраняет текст до отмены
+  calloutTool.commitEditor()
   const h = activeHistory()
+  if (h.past[h.past.length - 1]?.kind === "callouts") {
+    stepCallouts(undoCallouts)
+    return
+  }
   if (h.past[h.past.length - 1]?.kind === "demolition") {
     stepMarks(undoDemolition)
     return
@@ -2017,8 +2144,13 @@ function undo(): void {
 }
 
 function redo(): void {
-  if (groupMove || endpointDrag || panDrag || dimDrag || doorwayTool.dragging() || communicationTool.dragging() || batteryTool.dragging() || demolitionTool.dragging()) return
+  if (groupMove || endpointDrag || panDrag || dimDrag || doorwayTool.dragging() || communicationTool.dragging() || batteryTool.dragging() || calloutTool.dragging() || demolitionTool.dragging()) return
+  calloutTool.commitEditor()
   const h = activeHistory()
+  if (h.future[h.future.length - 1]?.kind === "callouts") {
+    stepCallouts(redoCallouts)
+    return
+  }
   if (h.future[h.future.length - 1]?.kind === "demolition") {
     stepMarks(redoDemolition)
     return
@@ -2114,6 +2246,11 @@ window.addEventListener("keydown", (e) => {
   }
   if (e.key === "Delete") {
     if (e.target instanceof HTMLInputElement) return
+    // выделенная выноска удаляется одним шагом истории на любом плане
+    if (calloutTool.selectedId() !== null) {
+      if (!calloutTool.dragging()) calloutTool.deleteSelected()
+      return
+    }
     if (onDemolition()) {
       if (!demolitionTool.dragging()) {
         demolitionTool.deleteSelected()
@@ -2130,11 +2267,15 @@ window.addEventListener("keydown", (e) => {
       tool,
       gestureActive: demolitionTool.dragging(),
       dimensionDraft: false,
-      hasSelection: demolitionTool.selectedId() !== null,
+      calloutDraft: calloutTool.hasDraft(),
+      hasSelection: demolitionTool.selectedId() !== null || calloutTool.selectedId() !== null,
     })
     if (action === "end-gesture") demolitionTool.cancel()
+    else if (action === "cancel-callout-draft") calloutTool.cancelDraft()
     else if (action === "clear-selection") {
       demolitionTool.clearSelection()
+      calloutTool.deselect()
+      redraw()
       resumeDemolitionTool()
     } else if (action === "deactivate-tool") setTool("none")
     return
@@ -2144,13 +2285,15 @@ window.addEventListener("keydown", (e) => {
       tool,
       gestureActive: !!chainStart,
       dimensionDraft: !!(dimDraft.a || dimDraft.b),
-      hasSelection: selectedDimensions.length + selectedWalls.length + selectedDoorways.length + selectedBatteries.length > 0 || selectedCommunication !== null,
+      calloutDraft: calloutTool.hasDraft(),
+      hasSelection: selectedDimensions.length + selectedWalls.length + selectedDoorways.length + selectedBatteries.length > 0 || selectedCommunication !== null || calloutTool.selectedId() !== null,
     })
     if (action === "end-gesture") endChain()
     else if (action === "cancel-dimension-draft") {
       dimDraft = emptyDraft()
       redraw()
-    } else if (action === "clear-selection") clearSelection()
+    } else if (action === "cancel-callout-draft") calloutTool.cancelDraft()
+    else if (action === "clear-selection") clearSelection()
     else if (action === "deactivate-tool") setTool("none")
   }
   if (e.key !== "ArrowUp" && e.key !== "ArrowDown" && e.key !== "ArrowLeft" && e.key !== "ArrowRight") return
@@ -2158,8 +2301,8 @@ window.addEventListener("keydown", (e) => {
   // на плане «Демонтаж» нет стен, материалов и элементов: стрелки ничего не двигают и не переключают
   if (onDemolition()) return
   if (groupMove || endpointDrag || panDrag || dimDrag || doorwayTool.dragging() || communicationTool.dragging() || batteryTool.dragging()) return
-  // выделенная коммуникация стрелками не двигается и материал не переключается (spec communications)
-  if (selectedCommunication) return
+  // выделенная коммуникация и выноска стрелками не двигаются и материал не переключается (spec communications)
+  if (selectedCommunication || calloutTool.selectedId() !== null) return
   if (selectedWalls.length || selectedDimensions.length || selectedDoorways.length || selectedBatteries.length) {
     if (!selectedWalls.length) {
       if (!selectedDoorways.length && !selectedBatteries.length) return

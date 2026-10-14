@@ -652,3 +652,25 @@ Follow-ups from `fix-duct-resize-against-wall` (2026-10-13).
 
 - The door leaf and swing arc do not constrain a battery (decided; `battery` spec "Размещение батареи вдоль стены").
 - Marks of deleted batteries stay in `batteryDemolition` until reload (hidden while the battery is absent, so undo of a delete restores the mark); loading drops them.
+
+---
+
+Follow-ups from `add-callout` (2026-10-14; implemented, tasks 1–11).
+
+### Docs
+
+- [ ] `openspec/specs/canvas-app/spec.md` «Кнопка «Батарея»» says a repeated click on the active tool's button deactivates it "(как у «Окна»)", but the same file (line 53) and the code say a repeated click on «Окно», «Размер», «Линейка», «Ластик» changes nothing, and `toolBatteryBtn` does nothing on a repeated click. Fix the battery requirement (the `add-callout` delta states the verified behaviour: a repeated click changes nothing).
+
+### Bugs
+
+- [ ] (cosmetic) On screen the callout leader starts at the right/left edge of the text backing at the first line's bottom edge, so it touches the last letter of the first line; the GOST sample leaves a small gap. Spec says only "у края первой строки" (`callout` «Отображение выноски»); decide whether to add a gap in `calloutLayout` (`lineStart`) and cover it in `callout-layout.test.ts`.
+
+### Tests
+
+- [ ] `openTextEditor` (`src/callout/text-editor.ts`, task 9.1) and the callout wiring in `src/main.ts` (tasks 9.2–9.4) have no automated test: the project has no DOM test environment. Checked by hand in the browser (tasks 10.x). Uncovered: Enter/Esc/blur handling, focus, stopping key events from reaching the canvas, preview rubber band, double click cancel, coincident points rejected, drag threshold "click vs move", plan/tab switch while editing, eraser priority over walls and demolition marks, autosave, PDF export button enabled for a plan with only callouts.
+- [ ] Validator gaps left open on purpose (`test-validation.md`, round 4, not blocking): arrow direction when the target is below the text; arrowhead axis of a right-aligned diagonal callout; vertical extent of the arrow tip in `pageBounds`; `\r\n` inside an edit.
+
+### Out of scope
+
+- Marquee selection, multi-selection and group move of callouts together with walls (`add-callout` design, non-goals).
+- Italic font (GOST type A) for callout text: decided to match the dimension font, no italic.

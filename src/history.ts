@@ -1,7 +1,7 @@
 import { historyKey } from "./plans"
 import type { PlanId } from "./plans"
-import { isBattery, isBatteryMark, isCommunication, isDemolitionMark, isDimension, isDrawing, isWall, isWallElement } from "./storage"
-import type { Battery, BatteryMark, Communication, DemolitionMark, Dimension, DimPoint, Drawing, Wall, WallElement } from "./types"
+import { isBattery, isBatteryMark, isCallout, isCommunication, isDemolitionMark, isDimension, isDrawing, isWall, isWallElement } from "./storage"
+import type { Battery, BatteryMark, Callout, Communication, DemolitionMark, Dimension, DimPoint, Drawing, Wall, WallElement } from "./types"
 
 const KEY = "draw-repair:history"
 export const HISTORY_LIMIT = 50
@@ -23,6 +23,8 @@ export type HistoryEntry =
   // шаг плана «Демонтаж» (change demolition-plan, design D7): список пометок чертежа до операции; пометки сноса
   // батарей — в той же записи (change add-battery, design D8), в старой записи их нет
   | { kind: "demolition"; marks: DemolitionMark[]; batteryMarks?: BatteryMark[] }
+  // шаг выносок плана (change add-callout, design D3): список выносок плана до операции; стек истории — того плана, чей список
+  | { kind: "callouts"; callouts: Callout[] }
 
 export interface DrawingHistory {
   past: HistoryEntry[]
@@ -89,17 +91,45 @@ export function recordMarks(history: DrawingHistory, marks: readonly DemolitionM
   history.future = []
 }
 
+const copyCallouts = (list: readonly Callout[]): Callout[] => list.map((c) => ({ id: c.id, target: { ...c.target }, at: { ...c.at }, text: c.text }))
+
+// Выноски (change add-callout, design D3): отмена и повтор работают только с верхней записью вида «callouts» — при другой
+// записи возвращают null и стеки не меняют; прежние функции отмены записи «callouts» не забирают
+export function recordCallouts(history: DrawingHistory, callouts: readonly Callout[]): void {
+  history.past.push({ kind: "callouts", callouts: copyCallouts(callouts) })
+  if (history.past.length > HISTORY_LIMIT) history.past.shift()
+  history.future = []
+}
+
+export function undoCallouts(history: DrawingHistory, current: readonly Callout[]): Callout[] | null {
+  const e = history.past[history.past.length - 1]
+  if (!e || e.kind !== "callouts") return null
+  history.past.pop()
+  history.future.push({ kind: "callouts", callouts: copyCallouts(current) })
+  return copyCallouts(e.callouts)
+}
+
+export function redoCallouts(history: DrawingHistory, current: readonly Callout[]): Callout[] | null {
+  const e = history.future[history.future.length - 1]
+  if (!e || e.kind !== "callouts") return null
+  history.future.pop()
+  history.past.push({ kind: "callouts", callouts: copyCallouts(current) })
+  return copyCallouts(e.callouts)
+}
+
 // отмена: снимок из past возвращается, текущие пометки кладутся в future (в истории плана «Демонтаж» только такие записи)
 export function undoMarks(history: DrawingHistory, current: readonly DemolitionMark[]): DemolitionMark[] | null {
-  const e = history.past.pop()
+  const e = history.past[history.past.length - 1]
   if (!e || e.kind !== "demolition") return null
+  history.past.pop()
   history.future.push({ kind: "demolition", marks: copyMarks(current) })
   return copyMarks(e.marks)
 }
 
 export function redoMarks(history: DrawingHistory, current: readonly DemolitionMark[]): DemolitionMark[] | null {
-  const e = history.future.pop()
+  const e = history.future[history.future.length - 1]
   if (!e || e.kind !== "demolition") return null
+  history.future.pop()
   history.past.push({ kind: "demolition", marks: copyMarks(current) })
   return copyMarks(e.marks)
 }
@@ -127,29 +157,33 @@ const stateOf = (e: HistoryEntry & { kind: "demolition" }, current: DemolitionSt
 })
 
 export function undoDemolition(history: DrawingHistory, current: DemolitionState): DemolitionState | null {
-  const e = history.past.pop()
+  const e = history.past[history.past.length - 1]
   if (!e || e.kind !== "demolition") return null
+  history.past.pop()
   history.future.push(demolitionEntry(current))
   return stateOf(e, current)
 }
 
 export function redoDemolition(history: DrawingHistory, current: DemolitionState): DemolitionState | null {
-  const e = history.future.pop()
+  const e = history.future[history.future.length - 1]
   if (!e || e.kind !== "demolition") return null
+  history.future.pop()
   history.past.push(demolitionEntry(current))
   return stateOf(e, current)
 }
 
 export function undoEntry(history: DrawingHistory, scene: Scene): HistoryEntry | null {
-  const e = history.past.pop()
-  if (!e) return null
+  const e = history.past[history.past.length - 1]
+  if (!e || e.kind === "callouts") return null
+  history.past.pop()
   history.future.push(e.kind === "walls" ? { kind: "walls", ...cloneScene(scene) } : e)
   return e
 }
 
 export function redoEntry(history: DrawingHistory, scene: Scene): HistoryEntry | null {
-  const e = history.future.pop()
-  if (!e) return null
+  const e = history.future[history.future.length - 1]
+  if (!e || e.kind === "callouts") return null
+  history.future.pop()
   history.past.push(e.kind === "walls" ? { kind: "walls", ...cloneScene(scene) } : e)
   return e
 }
@@ -174,6 +208,7 @@ const isHistoryEntry = (e: unknown): e is HistoryEntry => {
   if (x.kind === "demolition")
     return Array.isArray(x.marks) && x.marks.every(isDemolitionMark) &&
       (x.batteryMarks === undefined || (Array.isArray(x.batteryMarks) && x.batteryMarks.every(isBatteryMark)))
+  if (x.kind === "callouts") return Array.isArray(x.callouts) && x.callouts.every(isCallout)
   return x.kind === "close" && typeof x.drawingId === "string" &&
     typeof x.index === "number" && Number.isInteger(x.index) && x.index >= 0
 }

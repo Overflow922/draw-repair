@@ -331,6 +331,21 @@ body {
   z-index: 5;
 }
 
+/* поле ввода текста выноски (change add-callout): положение, размер и шрифт задаёт src/callout/text-editor.ts */
+.callout-text-input {
+  position: absolute;
+  box-sizing: border-box;
+  margin: 0;
+  border: 0;
+  outline: 1px dashed var(--active-border);
+  background: var(--paper);
+  color: var(--text-strong);
+  resize: none;
+  overflow: hidden;
+  white-space: pre;
+  z-index: 5;
+}
+
 #wall-types {
   display: flex;
   flex-direction: column;

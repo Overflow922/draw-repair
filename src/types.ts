@@ -182,11 +182,21 @@ export interface DemolitionMark {
   toCm: number
 }
 
+// Выноска — подпись со стрелкой (change add-callout, design D1): точка стрелки и точка текста лежат в координатах чертежа ровно там,
+// где кликнул пользователь, к стенам не привязаны; текст — строки через \n, не пустой. Принадлежит одному плану
+export interface Callout {
+  id: string
+  target: Point
+  at: Point
+  text: string
+}
+
 // Собственные объекты плана «Монтаж» (change mounting-plan, design D4): те же типы, что у обмера; остатки стен
 // обмера после сноса вычисляются и здесь не хранятся
 export interface MountingContent {
   walls: Wall[]
   dimensions: Dimension[]
+  callouts?: Callout[]
   doorways?: WallElement[]
   batteries?: Battery[]
 }
@@ -212,6 +222,10 @@ export interface Drawing {
   demolition?: DemolitionMark[]
   // объекты плана "mounting"; отсутствие — пустой «Монтаж», при загрузке не дописывается
   mounting?: MountingContent
+  // выноски планов «Обмерочный план» и «Демонтаж»; выноски «Монтажа» — в mounting.callouts; отсутствие — пустой список,
+  // при загрузке не дописывается (add-callout design D1)
+  callouts?: Callout[]
+  demolitionCallouts?: Callout[]
   view: View
 }
 

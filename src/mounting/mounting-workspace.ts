@@ -78,5 +78,7 @@ export function storedContent(
     dimensions: [...workspace.hiddenDimensions, ...scene.dimensions.filter((d) => d.auto === undefined || !workspace.remnantIds.has(d.auto))],
     ...(doorways.length > 0 || drawing.mounting?.doorways !== undefined ? { doorways } : null),
     ...(batteries.length > 0 || drawing.mounting?.batteries !== undefined ? { batteries } : null),
+    // выноски «Монтажа» не зависят от сцены: хранятся как есть (change add-callout, design D1)
+    ...(drawing.mounting?.callouts !== undefined ? { callouts: drawing.mounting.callouts } : null),
   }
 }

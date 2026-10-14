@@ -19,7 +19,8 @@ import type { Palette } from "./theme"
 import { contourSegments, cross, displayPolygons, dot, outlineSegments, sub } from "./wall-geometry"
 import type { Seg } from "./wall-geometry"
 import { GRID_STEP_CM, PX_PER_CM, isDoor, isWindow, normalizeMaterial } from "./types"
-import type { Battery, Communication, Dimension, Material, Point, Riser, Unit, View, Wall, WallDoor, WallElement } from "./types"
+import { drawCallouts } from "./callout/callout-render"
+import type { Battery, Callout, Communication, Dimension, Material, Point, Riser, Unit, View, Wall, WallDoor, WallElement } from "./types"
 import type { TrackLine } from "./wall-tracking"
 import { HATCHES, strokeHatchSeries, strokeHatchTile } from "./wall-hatch"
 
@@ -92,6 +93,9 @@ export interface RenderOptions {
   selectedBatteries?: readonly Battery[]
   batteryGhost?: Battery | null
   hoverBattery?: Battery | null // подсветка ластика
+  callouts?: readonly Callout[]
+  selectedCallout?: string | null
+  erasingCallout?: string | null
   square?: Point[] | null // вершины квадрата установки в мировых координатах
   // угол к стене примыкания у начала превью: дуга от луча отсчёта from к направлению to
   angle?: { at: Point; from: Point; to: Point; deg: number } | null
@@ -233,6 +237,7 @@ export function drawScene(
     if (!selectedDims.includes(dim)) drawDimension(ctx, dim, walls, unit, p.marqueeDim, view, m, p, doorways, batteries)
   for (const dim of selectedDims) drawDimension(ctx, dim, walls, unit, p.selectedDim, view, m, p, doorways, batteries, singleDim)
   if (opts.hoverDim) drawDimension(ctx, opts.hoverDim, walls, unit, p.erase, view, m, p, doorways, batteries)
+  if (opts.callouts?.length) drawCallouts(ctx, opts.callouts, view, m, p, { selected: opts.selectedCallout, erasing: opts.erasingCallout })
   if (opts.ruler) drawRuler(ctx, opts.ruler, unit, view, toScreen, m, p)
   if (opts.marquee) {
     const { x1, y1, x2, y2 } = opts.marquee

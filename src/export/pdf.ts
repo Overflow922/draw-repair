@@ -17,7 +17,10 @@ import { findRooms } from "../room-area"
 import { LIGHT_PALETTE } from "../theme"
 import { cross, dot, sub } from "../wall-geometry"
 import { PX_PER_CM, isDoor, isWindow } from "../types"
-import type { Battery, Communication, Dimension, Drawing, Point, Unit, Wall, WallElement } from "../types"
+import { calloutLayout } from "../callout/callout-layout"
+import { calloutsOf } from "../callout/callout-store"
+import { CHAR_WIDTH } from "../doorway/element-label"
+import type { Battery, Callout, Communication, Dimension, Drawing, Point, Unit, Wall, WallElement } from "../types"
 import { FONT_B64 } from "./font"
 import { PAGE_FORMATS_MM } from "./page-format"
 import type { PageFormat } from "./page-format"
@@ -142,6 +145,8 @@ export interface PlanPage {
   // «Монтаж» — видимые батареи обмера и собственные
   batteries?: readonly Battery[]
   demolishedBatteryIds?: ReadonlySet<string>
+  // выноски плана страницы (change add-callout, design D10)
+  callouts?: readonly Callout[]
   title?: string // название плана страницы — в графу 5 основной надписи (change pdf-plan-page-names)
 }
 
@@ -158,9 +163,12 @@ export function pagesOf(drawing: Drawing): PlanPage[] {
     ? { demolishedBatteryIds: new Set(demolishedBatteries(drawing.batteryDemolition ?? [], drawing.batteries).map((b) => b.id)) }
     : null
   return PLANS.map((plan): PlanPage => {
+    // выноски страницы — только своего плана (change add-callout, design D10)
+    const own = calloutsOf(drawing, plan.id)
+    const callouts = own.length ? { callouts: own } : null
     switch (plan.id) {
       case "demolition":
-        return { walls: drawing.walls, dimensions: [], doorways, demolition: marks, ...shared, ...batteries, ...demolished, title: plan.label }
+        return { walls: drawing.walls, dimensions: [], doorways, demolition: marks, ...shared, ...batteries, ...demolished, ...callouts, title: plan.label }
       case "mounting":
         return {
           walls: mounting.walls,
@@ -168,10 +176,11 @@ export function pagesOf(drawing: Drawing): PlanPage[] {
           doorways: mounting.doorways,
           ...shared,
           ...(mounting.batteries.length ? { batteries: mounting.batteries } : null),
+          ...callouts,
           title: plan.label,
         }
       case "measure":
-        return { walls: drawing.walls, dimensions: drawing.dimensions, doorways, ...shared, ...batteries, title: plan.label }
+        return { walls: drawing.walls, dimensions: drawing.dimensions, doorways, ...shared, ...batteries, ...callouts, title: plan.label }
     }
   })
 }
@@ -192,7 +201,14 @@ export function pageBounds(page: PlanPage, scale: number): BBox {
     const host = hostOfBattery(b, page.walls)
     return host ? batteryRect(b, host) : []
   })
-  const extra = [...marks, ...bodies, ...rects]
+  // выноски: подложка текста и концы линии; раскладка в мм листа (px PDF), оценка ширины строки по кеглю
+  const kMm = 10 / scale
+  const calloutPoints = (page.callouts ?? []).flatMap((c): Point[] => {
+    const l = calloutLayout(c, { zoom: kMm / PX_PER_CM, pan: { x: 0, y: 0 } }, PDF_METRICS, (line) => line.length * PDF_METRICS.labelPx * CHAR_WIDTH)
+    const { x, y, w, h } = l.box
+    return [{ x, y }, { x: x + w, y: y + h }, l.lineStart, l.arrowTip].map((q) => ({ x: q.x / kMm, y: q.y / kMm }))
+  })
+  const extra = [...marks, ...bodies, ...rects, ...calloutPoints]
   return wallsBBox(page.walls, page.dimensions, 0.5 * scale, page.doorways, scale, extra, batteries)
 }
 
@@ -234,6 +250,7 @@ function drawPage(doc: jsPDF, page: PlanPage, unit: Unit, scale: number, format:
       communications: page.communications,
       batteries: page.batteries,
       demolishedBatteryIds: page.demolishedBatteryIds,
+      callouts: page.callouts,
     }
     drawDemolitionScene(ctx, w, h, scene, unit, view, { color: demolitionColor("light"), grid: false, metrics: PDF_METRICS, palette: LIGHT_PALETTE })
     return
@@ -245,6 +262,7 @@ function drawPage(doc: jsPDF, page: PlanPage, unit: Unit, scale: number, format:
     doorways: page.doorways,
     communications: page.communications,
     batteries: page.batteries,
+    callouts: page.callouts,
   })
 }
 

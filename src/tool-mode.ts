@@ -11,16 +11,18 @@ export interface EscapeState {
   tool: Tool
   gestureActive: boolean // идёт незавершённый жест стены
   dimensionDraft: boolean // начато размещение размера
+  calloutDraft?: boolean // начато размещение выноски: задана точка стрелки (change add-callout, design D4)
   hasSelection: boolean
 }
 
-export type EscapeAction = "end-gesture" | "cancel-dimension-draft" | "clear-selection" | "deactivate-tool" | "none"
+export type EscapeAction = "end-gesture" | "cancel-dimension-draft" | "cancel-callout-draft" | "clear-selection" | "deactivate-tool" | "none"
 
 // Esc: сначала отменяется незавершённое действие, затем снимается инструмент; без инструмента — снимается выделение
 // (spec canvas-app «Esc снимает активный инструмент»)
-export function escapeAction({ tool, gestureActive, dimensionDraft, hasSelection }: EscapeState): EscapeAction {
+export function escapeAction({ tool, gestureActive, dimensionDraft, calloutDraft, hasSelection }: EscapeState): EscapeAction {
   if (gestureActive) return "end-gesture"
   if (dimensionDraft) return "cancel-dimension-draft"
+  if (calloutDraft) return "cancel-callout-draft"
   if (tool !== "none") return "deactivate-tool"
   return hasSelection ? "clear-selection" : "none"
 }

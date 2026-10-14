@@ -26,4 +26,4 @@ export function groupPick<T extends string>(s: GroupState<T>, t: T): GroupState<
 
 export const groupButtonActive = <T extends string>(s: GroupState<T>): boolean => s.active !== "other"
 
-export type Tool = "wall" | "dimension" | "doorway" | "door" | "window" | "battery" | "riser" | "duct" | "eraser" | "ruler" | "demolition" | "none"
+export type Tool = "wall" | "dimension" | "doorway" | "door" | "window" | "battery" | "riser" | "duct" | "eraser" | "ruler" | "demolition" | "callout" | "none"

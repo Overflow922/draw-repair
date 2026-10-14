@@ -1,7 +1,7 @@
 import { mergeAll } from "./demolition/marks"
 import { isPlanId } from "./plans"
 import { isDoor, isWindow, normalizeMaterial } from "./types"
-import type { Battery, BatteryCornerPoint, BatteryMark, Communication, DemolitionMark, Dimension, DimPoint, Doorway, Drawing, DrawingStore, EdgePoint, EdgeRef, JambPoint, MountingContent, Point, View, Wall, WallDoor, WallElement, WallWindow } from "./types"
+import type { Battery, BatteryCornerPoint, BatteryMark, Callout, Communication, DemolitionMark, Dimension, DimPoint, Doorway, Drawing, DrawingStore, EdgePoint, EdgeRef, JambPoint, MountingContent, Point, View, Wall, WallDoor, WallElement, WallWindow } from "./types"
 
 const KEY = "draw-repair:drawing"
 
@@ -55,6 +55,17 @@ export const isDimension = (dim: unknown): dim is Dimension =>
   ((dim as Dimension).auto === undefined || typeof (dim as Dimension).auto === "string")
 
 const num = (v: unknown): v is number => typeof v === "number" && Number.isFinite(v)
+
+// выноска документа (change add-callout, design D1): строковый id, обе точки, непустой после trim текст
+export const isCallout = (c: unknown): c is Callout => {
+  if (typeof c !== "object" || c === null) return false
+  const x = c as Record<string, unknown>
+  return typeof x.id === "string" && x.id !== "" && isPoint(x.target) && isPoint(x.at) && typeof x.text === "string" && x.text.trim() !== ""
+}
+
+const copyCallout = (c: Callout): Callout => ({ id: c.id, target: { x: c.target.x, y: c.target.y }, at: { x: c.at.x, y: c.at.y }, text: c.text })
+
+const loadCalloutList = (raw: unknown): Callout[] => (Array.isArray(raw) ? raw.filter(isCallout).map(copyCallout) : [])
 
 // общие поля элемента стены (spec drawing-storage «Формат документа»); расстояние привязки — любое конечное число:
 // на выступе тела стены за конец оси оно отрицательное, положение вне стены разбирает правило нарушенных документов
@@ -212,6 +223,7 @@ function loadMounting(raw: unknown): { mounting?: MountingContent } {
       dimensions: list(x.dimensions).filter(isDimension).map(copyDimension),
       ...(x.doorways === undefined ? null : { doorways: list(x.doorways).filter(isWallElement).map(normalizeElement) }),
       ...(x.batteries === undefined ? null : { batteries: list(x.batteries).filter(isBattery).map(copyBattery) }),
+      ...(x.callouts === undefined ? null : { callouts: loadCalloutList(x.callouts) }),
     },
   }
 }
@@ -266,6 +278,8 @@ export function parseStore(raw: string): LoadedStore | null {
           ...loadCommunications(dr.communications),
           ...batteries,
           ...loadBatteryDemolition(batteryDemolition, batteries.batteries ?? []),
+          ...(Array.isArray(dr.callouts) ? { callouts: loadCalloutList(dr.callouts) } : null),
+          ...(Array.isArray(dr.demolitionCallouts) ? { demolitionCallouts: loadCalloutList(dr.demolitionCallouts) } : null),
           dimensions: (Array.isArray(dr.dimensions) ? dr.dimensions : []).filter(isDimension).map(copyDimension),
         }
       })

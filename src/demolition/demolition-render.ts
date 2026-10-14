@@ -9,7 +9,8 @@ import { LIGHT_PALETTE } from "../theme"
 import type { Palette, Theme } from "../theme"
 import { PX_PER_CM } from "../types"
 import { DEMOLITION_HATCH, strokeHatchSeries } from "../wall-hatch"
-import type { Battery, Communication, Point, Unit, View, Wall, WallElement } from "../types"
+import { drawCallouts } from "../callout/callout-render"
+import type { Battery, Callout, Communication, Point, Unit, View, Wall, WallElement } from "../types"
 import { markDimensions } from "./mark-dimensions"
 import type { MarkSpan, ResolvedMark } from "./mark-model"
 import { markRegion } from "./mark-region"
@@ -30,6 +31,9 @@ export interface DemolitionScene {
   // батареи обмерочного плана серой подложкой; помеченные сносом — красная область (change add-battery, design D8)
   batteries?: readonly Battery[]
   demolishedBatteryIds?: ReadonlySet<string>
+  callouts?: readonly Callout[]
+  selectedCalloutId?: string | null
+  erasingCalloutId?: string | null
 }
 
 export interface DemolitionOptions {
@@ -140,6 +144,7 @@ export function drawDemolitionScene(
     ctx.restore()
     drawDimensions(span, false)
   }
+  if (scene.callouts?.length) drawCallouts(ctx, scene.callouts, view, m, palette, { selected: scene.selectedCalloutId, erasing: scene.erasingCalloutId })
 }
 
 // то же на холсте страницы (размер и плотность пикселей как у render)

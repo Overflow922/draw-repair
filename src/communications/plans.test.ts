@@ -21,7 +21,7 @@ const withCommunications = (communications: Communication[], base: Drawing = dra
 
 describe("инструменты планов", () => {
   it("DP-01: обмерочный план — «Стена», «Проём», «Дверь», «Окно», «Стояк», «Воздуховод», «Размер», «Линейка», «Ластик» в этом порядке", () => {
-    expect(toolsOf("measure")).toEqual(["wall", "doorway", "door", "window", "battery", "riser", "duct", "dimension", "ruler", "eraser"])
+    expect(toolsOf("measure")).toEqual(["wall", "doorway", "door", "window", "battery", "riser", "duct", "dimension", "callout", "ruler", "eraser"])
   })
 
   it("CT-03: на планах «Демонтаж» и «Монтаж» инструментов «Стояк» и «Воздуховод» нет", () => {
@@ -33,11 +33,11 @@ describe("инструменты планов", () => {
 
   it("DP-02: набор «Монтажа» — как у обмерочного плана, кроме коммуникаций, и в том же порядке", () => {
     expect(toolsOf("mounting")).toEqual(toolsOf("measure").filter((t) => t !== "riser" && t !== "duct"))
-    expect(toolsOf("mounting")).toEqual(["wall", "doorway", "door", "window", "battery", "dimension", "ruler", "eraser"])
+    expect(toolsOf("mounting")).toEqual(["wall", "doorway", "door", "window", "battery", "dimension", "callout", "ruler", "eraser"])
   })
 
   it("DP-03: наборы и инструменты по умолчанию остальных планов не изменились", () => {
-    expect(toolsOf("demolition")).toEqual(["demolition", "ruler", "eraser"])
+    expect(toolsOf("demolition")).toEqual(["demolition", "callout", "ruler", "eraser"])
     expect(defaultToolOf("measure")).toBe("wall")
     expect(defaultToolOf("mounting")).toBe("wall")
     expect(defaultToolOf("demolition")).toBe("demolition")

@@ -16,15 +16,15 @@ const group: GroupState = { current: "doorway", active: "other", panelOpen: fals
 
 describe("наборы инструментов планов", () => {
   it("B-TOOL-7: обмерочный план — «Батарея» сразу после «Окна», остальной порядок прежний", () => {
-    expect(toolsOf("measure")).toEqual(["wall", "doorway", "door", "window", "battery", "riser", "duct", "dimension", "ruler", "eraser"])
+    expect(toolsOf("measure")).toEqual(["wall", "doorway", "door", "window", "battery", "riser", "duct", "dimension", "callout", "ruler", "eraser"])
   })
 
   it("B-TOOL-7b: «Монтаж» — «Батарея» сразу после «Окна»", () => {
-    expect(toolsOf("mounting")).toEqual(["wall", "doorway", "door", "window", "battery", "dimension", "ruler", "eraser"])
+    expect(toolsOf("mounting")).toEqual(["wall", "doorway", "door", "window", "battery", "dimension", "callout", "ruler", "eraser"])
   })
 
   it("B-TOOL-7c: «Демонтаж» — без кнопки «Батарея»: набор прежний", () => {
-    expect(toolsOf("demolition")).toEqual(["demolition", "ruler", "eraser"])
+    expect(toolsOf("demolition")).toEqual(["demolition", "callout", "ruler", "eraser"])
     expect(toolsOf("demolition")).not.toContain("battery")
   })
 

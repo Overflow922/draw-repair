@@ -24,6 +24,8 @@ function applyEscape(s: EscapeState, action: EscapeAction): EscapeState {
       return { ...s, gestureActive: false }
     case "cancel-dimension-draft":
       return { ...s, dimensionDraft: false }
+    case "cancel-callout-draft":
+      return { ...s, calloutDraft: false }
     case "clear-selection":
       return { ...s, hasSelection: false }
     case "deactivate-tool":
