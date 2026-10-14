@@ -633,3 +633,22 @@ Follow-ups from `fix-duct-resize-against-wall` (2026-10-13).
 ### Out of scope
 
 - A dimension line hit uses the snap radius, a communication body only `BODY_HIT_PX`; on a small riser the dimension line can cover almost all of the body, so the riser can only be grabbed by a part away from the line (`src/doorway/doorway-scene.ts`, `src/communications/communications-tool.ts`). Revisit if it bites in practice.
+
+
+## add-battery (2026-10-13)
+
+### Tests
+
+- [ ] DOM wiring of the battery tool (`src/main.ts`, `src/battery/battery-tool.ts`: click-to-place, press-to-select, marker priority, one history step per drag, demolition click/eraser) has no automated test; it was checked by hand in the browser on 2026-10-14 (place with window centring, arrows, drag, number edit, Delete/undo, demolition mark/undo/redo/erase, mounting own battery, corner dimension). Plan items B-TOOL-1/5/6, B-HIS-1/2, B-DEM-7/8 remain without an executable test.
+- [ ] Approved tests that conflict with the new spec and wait for the test-change-request (`openspec/changes/add-battery/test-change-request.md`): `src/plan-tools.test.ts` (PT-02, SZ-71), `src/mounting-plans.test.ts` (MP-51), `src/communications/plans.test.ts` (DP-01, DP-02), `src/mounting/mounting-scene.test.ts` (MP-15), and the defective `src/battery/battery-storage.test.ts` B-HIS-9 (mutates its own expected value, passes only with a shallow copy).
+
+### Bugs
+
+- [ ] Wall-start snap candidates (`candidateBlock` in `src/wall-snap.ts`) ignore batteries: a snap point inside a battery can be offered, the click is then rejected by `squareAllowedForBatteries`. Cosmetic.
+- [ ] `dimLevelSnap` (`src/geometry.ts`) skips dimensions with battery-corner points, so dragging a dimension does not snap to their level.
+- [ ] The demolition eraser has no hover highlight for a battery mark (wall marks have one).
+
+### Out of scope
+
+- The door leaf and swing arc do not constrain a battery (decided; `battery` spec "Размещение батареи вдоль стены").
+- Marks of deleted batteries stay in `batteryDemolition` until reload (hidden while the battery is absent, so undo of a delete restores the mark); loading drops them.

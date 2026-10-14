@@ -38,7 +38,7 @@ describe("каталог планов с планом «Монтаж»", () => {
 describe("инструменты плана «Монтаж»", () => {
   // change add-communications (drawing-plans «Инструменты плана»): как у обмерочного плана, кроме группы «Коммуникации»
   it("MP-51: набор и порядок инструментов — как у обмерочного плана, кроме «Стояк» и «Воздуховод»", () => {
-    expect(toolsOf("mounting")).toEqual(["wall", "doorway", "door", "window", "dimension", "ruler", "eraser"])
+    expect(toolsOf("mounting")).toEqual(["wall", "doorway", "door", "window", "battery", "dimension", "ruler", "eraser"])
     expect(toolsOf("mounting")).toEqual(toolsOf("measure").filter((t) => t !== "riser" && t !== "duct"))
   })
 

@@ -51,7 +51,16 @@ export interface JambPoint {
   face: 1 | -1
 }
 
-export type DimPoint = EdgePoint | JambPoint
+// угол батареи — точка замера: торец у конца a или b оси опорной стены, задняя (ближняя к стене) или передняя сторона
+// (change add-battery, design D5)
+export interface BatteryCornerPoint {
+  kind: "corner"
+  batteryId: string
+  end: "a" | "b"
+  side: "back" | "front"
+}
+
+export type DimPoint = EdgePoint | JambPoint | BatteryCornerPoint
 
 export interface Dimension {
   from: DimPoint
@@ -109,6 +118,26 @@ export type WallElement = Doorway | WallWindow | WallDoor
 export const isWindow = (e: WallElement): e is WallWindow => e.kind === "window"
 export const isDoor = (e: WallElement): e is WallDoor => e.kind === "door"
 
+// Батарея — объект на грани опорной стены, не элемент стены (change add-battery, design D1): грань — знак нормали
+// (−d.y, d.x) оси; расстояние привязки — от конца привязки до ближнего торца вдоль оси (может быть дробным);
+// отступ — от грани стены до задней стороны. Положение в плане вычисляется, не хранится
+export interface Battery {
+  id: string
+  wallId: string
+  face: 1 | -1
+  anchor: "a" | "b"
+  offsetCm: number
+  lengthCm: number
+  thicknessCm: number
+  gapCm: number
+}
+
+// Пометка сноса батареи целиком (change add-battery, design D8)
+export interface BatteryMark {
+  id: string
+  batteryId: string
+}
+
 // Коммуникации — вертикальные трубы, общие для всех планов чертежа (change add-communications, design D1):
 // положение — центр в координатах чертежа, к стенам не привязаны; воздуховод — прямоугольник по осям без поворота
 export interface Riser {
@@ -159,6 +188,7 @@ export interface MountingContent {
   walls: Wall[]
   dimensions: Dimension[]
   doorways?: WallElement[]
+  batteries?: Battery[]
 }
 
 export interface Drawing {
@@ -173,6 +203,9 @@ export interface Drawing {
   // коммуникации: общие для всех планов, правятся на обмерочном плане; отсутствие — пустой список, при загрузке не
   // дописывается (add-communications design D1)
   communications?: Communication[]
+  // батареи обмерочного плана и пометки их сноса; отсутствие — пустой список, при загрузке не дописывается (add-battery design D1, D8)
+  batteries?: Battery[]
+  batteryDemolition?: BatteryMark[]
   // активный план; отсутствие или неизвестное значение читается как план по умолчанию (drawing-plans design D3)
   activePlan?: PlanId
   // пометки сноса плана "demolition"; отсутствие — пустой список (design D7)

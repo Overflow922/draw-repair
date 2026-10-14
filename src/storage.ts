@@ -1,7 +1,7 @@
 import { mergeAll } from "./demolition/marks"
 import { isPlanId } from "./plans"
 import { isDoor, isWindow, normalizeMaterial } from "./types"
-import type { Communication, DemolitionMark, Dimension, DimPoint, Doorway, Drawing, DrawingStore, EdgePoint, EdgeRef, JambPoint, MountingContent, Point, View, Wall, WallDoor, WallElement, WallWindow } from "./types"
+import type { Battery, BatteryCornerPoint, BatteryMark, Communication, DemolitionMark, Dimension, DimPoint, Doorway, Drawing, DrawingStore, EdgePoint, EdgeRef, JambPoint, MountingContent, Point, View, Wall, WallDoor, WallElement, WallWindow } from "./types"
 
 const KEY = "draw-repair:drawing"
 
@@ -37,10 +37,17 @@ const isJambPoint = (p: object): p is JambPoint => {
     (x.jamb === "a" || x.jamb === "b") && (x.face === 1 || x.face === -1)
 }
 
-// без признака вида — пара граней (формат до этого change); любой другой вид, кроме "jamb", не принимается
+// угол батареи: kind "corner", непустой идентификатор батареи, торец a/b, сторона back/front (change add-battery, design D5)
+const isCornerPoint = (p: object): p is BatteryCornerPoint => {
+  const x = p as Record<string, unknown>
+  return x.kind === "corner" && typeof x.batteryId === "string" && x.batteryId !== "" &&
+    (x.end === "a" || x.end === "b") && (x.side === "back" || x.side === "front")
+}
+
+// без признака вида — пара граней (формат до этого change); любой другой вид, кроме "jamb" и "corner", не принимается
 const isDimPoint = (p: unknown): p is DimPoint =>
   typeof p === "object" && p !== null &&
-  ((p as DimPoint).kind === undefined ? isEdgeRef((p as EdgePoint).a) && isEdgeRef((p as EdgePoint).b) : isJambPoint(p))
+  ((p as DimPoint).kind === undefined ? isEdgeRef((p as EdgePoint).a) && isEdgeRef((p as EdgePoint).b) : isJambPoint(p) || isCornerPoint(p))
 
 export const isDimension = (dim: unknown): dim is Dimension =>
   typeof dim === "object" && dim !== null && isDimPoint((dim as Dimension).from) && isDimPoint((dim as Dimension).to) &&
@@ -115,6 +122,48 @@ function loadDemolition(raw: unknown, walls: Wall[]): { demolition?: DemolitionM
   return { demolition: mergeAll(raw.filter(isDemolitionMark).filter((m) => ids.has(m.wallId)), walls) }
 }
 
+// батарея (change add-battery, design D1): непустые id и стена, грань 1/-1, привязка a/b, конечное расстояние,
+// длина и толщина больше нуля, отступ не меньше нуля
+export const isBattery = (b: unknown): b is Battery => {
+  if (typeof b !== "object" || b === null) return false
+  const x = b as Record<string, unknown>
+  return typeof x.id === "string" && x.id !== "" && typeof x.wallId === "string" && x.wallId !== "" &&
+    (x.face === 1 || x.face === -1) && (x.anchor === "a" || x.anchor === "b") && num(x.offsetCm) &&
+    num(x.lengthCm) && x.lengthCm > 0 && num(x.thicknessCm) && x.thicknessCm > 0 && num(x.gapCm) && x.gapCm >= 0
+}
+
+const copyBattery = (b: Battery): Battery => ({
+  id: b.id,
+  wallId: b.wallId,
+  face: b.face,
+  anchor: b.anchor,
+  offsetCm: b.offsetCm,
+  lengthCm: b.lengthCm,
+  thicknessCm: b.thicknessCm,
+  gapCm: b.gapCm,
+})
+
+// батареи обмерочного плана при загрузке: корректные и со своей стеной; отсутствие поля сохраняется
+function loadBatteries(raw: unknown, walls: Wall[]): { batteries?: Battery[] } {
+  if (!Array.isArray(raw)) return {}
+  const ids = new Set(walls.map((w) => w.id))
+  return { batteries: raw.filter(isBattery).filter((b) => ids.has(b.wallId)).map(copyBattery) }
+}
+
+// пометка сноса батареи: непустые идентификаторы пометки и батареи (change add-battery, design D8)
+export const isBatteryMark = (m: unknown): m is BatteryMark => {
+  if (typeof m !== "object" || m === null) return false
+  const x = m as Record<string, unknown>
+  return typeof x.id === "string" && x.id !== "" && typeof x.batteryId === "string" && x.batteryId !== ""
+}
+
+// пометки сноса батарей при загрузке: корректные и на существующую батарею; отсутствие поля сохраняется
+function loadBatteryDemolition(raw: unknown, batteries: readonly Battery[]): { batteryDemolition?: BatteryMark[] } {
+  if (!Array.isArray(raw)) return {}
+  const ids = new Set(batteries.map((b) => b.id))
+  return { batteryDemolition: raw.filter(isBatteryMark).filter((m) => ids.has(m.batteryId)).map((m) => ({ id: m.id, batteryId: m.batteryId })) }
+}
+
 // копия элемента только с полями его вида: проём — без kind и sillCm
 export function normalizeElement(e: WallElement): WallElement {
   const base = { id: e.id, wallId: e.wallId, anchor: e.anchor, offsetCm: e.offsetCm, widthCm: e.widthCm, heightCm: e.heightCm }
@@ -141,8 +190,11 @@ export const isDrawing = (d: unknown, version: number = 3): d is Drawing =>
 const assignIds = (walls: Wall[]): Wall[] =>
   walls.map((w) => ({ ...w, id: w.id || crypto.randomUUID(), type: normalizeMaterial(w.type) }))
 
-const copyDimPoint = (p: DimPoint): DimPoint =>
-  p.kind === "jamb" ? { kind: "jamb", elementId: p.elementId, jamb: p.jamb, face: p.face } : { a: { ...p.a }, b: { ...p.b } }
+const copyDimPoint = (p: DimPoint): DimPoint => {
+  if (p.kind === "jamb") return { kind: "jamb", elementId: p.elementId, jamb: p.jamb, face: p.face }
+  if (p.kind === "corner") return { kind: "corner", batteryId: p.batteryId, end: p.end, side: p.side }
+  return { a: { ...p.a }, b: { ...p.b } }
+}
 
 const copyDimension = (dim: Dimension): Dimension =>
   ({ from: copyDimPoint(dim.from), to: copyDimPoint(dim.to), offset: dim.offset, ...(dim.auto !== undefined ? { auto: dim.auto } : null) })
@@ -159,6 +211,7 @@ function loadMounting(raw: unknown): { mounting?: MountingContent } {
       walls: assignIds(list(x.walls).filter(isWallBase)),
       dimensions: list(x.dimensions).filter(isDimension).map(copyDimension),
       ...(x.doorways === undefined ? null : { doorways: list(x.doorways).filter(isWallElement).map(normalizeElement) }),
+      ...(x.batteries === undefined ? null : { batteries: list(x.batteries).filter(isBattery).map(copyBattery) }),
     },
   }
 }
@@ -197,20 +250,25 @@ export function parseStore(raw: string): LoadedStore | null {
       typeof d.activeId === "string" && d.drawings.every((x) => isDrawing(x, version)) &&
       d.drawings.some((x) => (x as Drawing).id === d.activeId)
     ) {
-      const drawings = (d.drawings as Drawing[]).map(({ activePlan, demolition, mounting, ...dr }): Drawing => ({
-        // поля чертежа перечислены явно: масштаб, записанный прежними версиями, в модель не попадает (drawing-storage)
-        id: dr.id,
-        name: dr.name,
-        view: dr.view,
-        // активный план — необязательное поле: допустимое сохраняется, остальное отбрасывается (drawing-plans design D3)
-        ...(isPlanId(activePlan) ? { activePlan } : null),
-        walls: assignIds(dr.walls),
-        ...loadDemolition(demolition, dr.walls),
-        ...loadMounting(mounting),
-        ...loadDoorways(dr.doorways, dr.walls),
-        ...loadCommunications(dr.communications),
-        dimensions: (Array.isArray(dr.dimensions) ? dr.dimensions : []).filter(isDimension).map(copyDimension),
-      }))
+      const drawings = (d.drawings as Drawing[]).map(({ activePlan, demolition, mounting, batteryDemolition, ...dr }): Drawing => {
+        const batteries = loadBatteries(dr.batteries, dr.walls)
+        return {
+          // поля чертежа перечислены явно: масштаб, записанный прежними версиями, в модель не попадает (drawing-storage)
+          id: dr.id,
+          name: dr.name,
+          view: dr.view,
+          // активный план — необязательное поле: допустимое сохраняется, остальное отбрасывается (drawing-plans design D3)
+          ...(isPlanId(activePlan) ? { activePlan } : null),
+          walls: assignIds(dr.walls),
+          ...loadDemolition(demolition, dr.walls),
+          ...loadMounting(mounting),
+          ...loadDoorways(dr.doorways, dr.walls),
+          ...loadCommunications(dr.communications),
+          ...batteries,
+          ...loadBatteryDemolition(batteryDemolition, batteries.batteries ?? []),
+          dimensions: (Array.isArray(dr.dimensions) ? dr.dimensions : []).filter(isDimension).map(copyDimension),
+        }
+      })
       return { store: { version: 3, activeId: d.activeId, drawings }, readOnly: false }
     }
     return null

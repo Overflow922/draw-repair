@@ -1,8 +1,13 @@
 import "./style.css"
-import { cloneScene, loadHistory, planHistory, record, recordMarks, recordSnapshot, redoEntry, redoMarks, saveHistory, undoEntry, undoMarks } from "./history"
+import { cloneScene, loadHistory, planHistory, record, recordDemolition, recordSnapshot, redoDemolition, redoEntry, saveHistory, undoDemolition, undoEntry } from "./history"
 import type { Scene } from "./history"
-import { dimGeometry, dimLevelSnap, dimensionOffsetAt, hitWall, nearestDimAnchor, dimPointPoint, pointsEqual, segmentIntersectsRect, snap, snapOthers, snapWithSource, zoomAt } from "./geometry"
+import { dimLevelSnap, dimensionGeometry, dimensionOffsetAt, hitWall, nearestDimAnchor, dimPointPoint, pointsEqual, segmentIntersectsRect, snap, snapOthers, snapWithSource, zoomAt } from "./geometry"
 import type { DimGeometry, SnapResult } from "./geometry"
+import { addBatteryMark, batteryMarkAt, demolishedBatteries, removeBatteryMark } from "./battery/battery-demolition"
+import { limitNewWallByBatteries, squareAllowedForBatteries, thicknessAllowedForBatteries } from "./battery/battery-guard"
+import { batteriesInRect, hitBattery } from "./battery/battery-pick"
+import { createBatteryTool } from "./battery/battery-tool"
+import type { BatteryToolHost } from "./battery/battery-tool"
 import { moveEndpointBounded, moveWallsBounded, resizeWallBounded } from "./wall-edit"
 import type { EditMode } from "./wall-edit"
 import { chainEndSquare, placementSquare, snapRadiusCm, snapStartVertex, wallClickAction } from "./wall-snap"
@@ -50,7 +55,7 @@ import { afterPlace, escapeAction, resumesAfterSelectionCleared, selectionAllowe
 import { loadThemeChoice, paletteOf, resolveTheme, saveThemeChoice, themeToggleTitle, toggledTheme } from "./theme"
 import type { Theme } from "./theme"
 import { GRID_STEP_CM, MATERIALS, PX_PER_CM } from "./types"
-import type { Communication, DemolitionMark, Dimension, DimPoint, Drawing, Material, Point, Unit, View, Wall, WallElement } from "./types"
+import type { Battery, BatteryMark, Communication, DemolitionMark, Dimension, DimPoint, Drawing, Material, Point, Unit, View, Wall, WallElement } from "./types"
 
 const canvas = document.querySelector<HTMLCanvasElement>("#canvas")!
 const canvasWrap = document.querySelector<HTMLElement>("#canvas-wrap")!
@@ -82,6 +87,7 @@ const openingsPanel = document.querySelector<HTMLElement>("#openings-panel")!
 const toolDoorwayBtn = document.querySelector<HTMLButtonElement>("#tool-doorway")!
 const toolDoorBtn = document.querySelector<HTMLButtonElement>("#tool-door")!
 const toolWindowBtn = document.querySelector<HTMLButtonElement>("#tool-window")!
+const toolBatteryBtn = document.querySelector<HTMLButtonElement>("#tool-battery")!
 const toolCommunicationsBtn = document.querySelector<HTMLButtonElement>("#tool-communications")!
 const communicationsPanel = document.querySelector<HTMLElement>("#communications-panel")!
 const toolRiserBtn = document.querySelector<HTMLButtonElement>("#tool-riser")!
@@ -99,6 +105,10 @@ let dimensions: Dimension[] = current().dimensions
 // элементы стен (проёмы и окна) активного чертежа (change add-doorway, add-window); в чертёж пишутся
 // при первом изменении
 let doorways: WallElement[] = current().doorways ?? []
+// батареи активного плана (change add-battery): на обмерочном плане — батареи обмера, на «Монтаже» — видимые батареи обмера
+// и собственные; в чертёж пишутся при первом изменении
+let batteries: Battery[] = current().batteries ?? []
+let selectedBatteries: Battery[] = []
 // рабочий набор плана «Монтаж» (change mounting-plan, design D5): на этом плане walls, dimensions и doorways — сцена
 // «остатки + собственные объекты», а в чертёж пишется хранимое представление; null на остальных планах
 let workspace: Workspace | null = null
@@ -135,8 +145,9 @@ let wallPanelOpen = false
 let nudgeBurst = false
 let marqueePending: { x: number; y: number } | null = null
 let marquee: { x1: number; y1: number; x2: number; y2: number } | null = null
-let marqueeHits: { walls: Wall[]; dims: Dimension[]; doorways: WallElement[] } | null = null
+let marqueeHits: { walls: Wall[]; dims: Dimension[]; doorways: WallElement[]; batteries: Battery[] } | null = null
 const MARQUEE_THRESHOLD_PX = 5
+const BATTERY_CLICK_PX = 4 // нажатие и отпускание на плане «Демонтаж» в пределах этого расстояния — клик по батарее
 let tool: Tool = defaultToolOf(activePlanOf(current()))
 // группа «Проёмы» (change add-door, design D6): текущий инструмент группы и видимость её панели;
 // активный инструмент группы выводится из tool
@@ -151,7 +162,7 @@ let theme: Theme = resolveTheme(themeChoice, systemDark.matches)
 
 const emptyDraft = (): { a: DimPoint | null; b: DimPoint | null } => ({ a: null, b: null })
 
-const endPoint = (end: DimPoint): Point | null => dimPointPoint(end, walls, doorways)
+const endPoint = (end: DimPoint): Point | null => dimPointPoint(end, walls, doorways, batteries)
 
 const radiusCm = (): number => snapRadiusCm(view.zoom)
 
@@ -165,7 +176,7 @@ const communicationsEditable = (): boolean => activePlanOf(current()) === "measu
 
 // текущая сцена чертежа: стены, размеры, проёмы, коммуникации (снимок истории — change add-doorway); на плане
 // «Монтаж» коммуникации в историю не попадают (historyOf)
-const scene = (): Scene => ({ walls, dimensions, doorways, communications: [...communicationsOf()] })
+const scene = (): Scene => ({ walls, dimensions, doorways, communications: [...communicationsOf()], batteries: [...batteries] })
 
 // история активного плана активного чертежа (change drawing-plans, design D4)
 const activeHistory = () => planHistory(historyStore, store.activeId, activePlanOf(current()))
@@ -175,7 +186,7 @@ const activeHistory = () => planHistory(historyStore, store.activeId, activePlan
 const historyOf = (s: Scene): Scene => {
   if (!workspace) return s
   const stored = storedContent(s, workspace, current())
-  return { walls: stored.walls, dimensions: stored.dimensions, ...(stored.doorways ? { doorways: stored.doorways } : null) }
+  return { walls: stored.walls, dimensions: stored.dimensions, ...(stored.doorways ? { doorways: stored.doorways } : null), ...(stored.batteries ? { batteries: stored.batteries } : null) }
 }
 
 const pushRecord = (): void => {
@@ -188,6 +199,14 @@ function setDoorways(next: WallElement[]): void {
   doorways = next
   if (!workspace) current().doorways = next
   selectedDoorways = selectedDoorways.filter((d) => next.includes(d))
+}
+
+// список батарей заменяется целиком: правки батареи возвращают новый объект; пометки сноса остаются в чертеже и скрыты, пока
+// батареи нет (отмена удаления возвращает и пометку)
+function setBatteries(next: Battery[]): void {
+  batteries = next
+  if (!workspace) current().batteries = next
+  selectedBatteries = selectedBatteries.filter((b) => next.includes(b))
 }
 
 // список размеров заменяется целиком; размеры плана «Монтаж» пишутся в чертёж при фиксации (commitMounting)
@@ -209,6 +228,7 @@ function loadWorking(): void {
     walls = d.walls
     dimensions = d.dimensions
     doorways = d.doorways ?? []
+    batteries = d.batteries ?? []
     workspace = null
     remnantHome = new Map()
     return
@@ -217,6 +237,7 @@ function loadWorking(): void {
   walls = opened.scene.walls
   dimensions = opened.scene.dimensions
   doorways = opened.scene.doorways
+  batteries = opened.scene.batteries
   workspace = opened.workspace
   remnantHome = new Map(walls.filter((w) => opened.workspace.remnantIds.has(w.id)).map((w) => [w.id, { a: { ...w.a }, b: { ...w.b } }]))
 }
@@ -226,7 +247,7 @@ function commitMounting(): void {
   const drawing = store.drawings.find((d) => d.id === store.activeId)
   if (!workspace || !drawing) return // вкладка уже закрыта — писать некуда
   const next = storedContent(scene(), workspace, drawing)
-  if (next.walls.length === 0 && next.dimensions.length === 0 && next.doorways === undefined && drawing.mounting === undefined) return
+  if (next.walls.length === 0 && next.dimensions.length === 0 && next.doorways === undefined && next.batteries === undefined && drawing.mounting === undefined) return
   drawing.mounting = next
 }
 
@@ -243,6 +264,7 @@ function restoreRemnants(): void {
 
 const editableWall = (w: Wall): boolean => !workspace?.remnantIds.has(w.id)
 const editableElement = (e: WallElement): boolean => !workspace?.oldElementIds.has(e.id)
+const editableBattery = (b: Battery): boolean => !workspace?.oldBatteryIds.has(b.id)
 
 function replaceDoorway(prev: WallElement, next: WallElement): void {
   selectedDoorways = selectedDoorways.map((d) => (d === prev ? next : d))
@@ -290,6 +312,55 @@ const windowTool = createElementTool("window", elementHost)
 const elementTools = [doorwayTool, doorTool, windowTool]
 const selectionEditing = createSelectionEditing(elementHost)
 
+function replaceBattery(prev: Battery, next: Battery): void {
+  // выделение переходит на новый объект до замены списка: setBatteries снимает выделение с пропавшего объекта
+  selectedBatteries = selectedBatteries.map((b) => (b === prev ? next : b))
+  setBatteries(batteries.map((b) => (b === prev ? next : b)))
+}
+
+function selectBattery(b: Battery): void {
+  closeNumberEditor()
+  selectedBatteries = [b]
+  selectedCommunication = null
+  selectedWalls = []
+  selectedDimensions = []
+  selectedDoorways = []
+  lengthDirty = false
+  setWallPanel(false)
+  redraw()
+}
+
+// инструмент «Батарея» и правка выделенных батарей (change add-battery, design D10)
+const batteryHost: BatteryToolHost = {
+  walls: () => walls,
+  batteries: () => batteries,
+  communications: () => communicationsOf(),
+  elements: () => doorways,
+  selectedBatteries: () => selectedBatteries,
+  editable: editableBattery,
+  view: () => view,
+  unit: () => unit,
+  radiusCm: () => radiusCm(),
+  formatCm: (cm) => formatCm(cm, unit),
+  parseCm: (text) => parseFloat(text.replace(",", ".")) * UNIT_TO_CM[unit],
+  editorParent: canvasWrap,
+  snapshot: () => cloneScene(scene()),
+  record: () => pushRecord(),
+  recordSnapshot: (s) => pushSnapshot(s),
+  recordNudge: (before) => {
+    if (!nudgeBurst) pushSnapshot(before)
+    nudgeBurst = true
+  },
+  add: (b) => setBatteries([...batteries, b]),
+  replace: (prev, next) => replaceBattery(prev, next),
+  select: (b) => selectBattery(b),
+  changed: () => {
+    dirty = true
+  },
+  redraw: () => redraw(),
+}
+const batteryTool = createBatteryTool(batteryHost)
+
 // инструменты «Стояк» и «Воздуховод» и правка выделенной коммуникации (change add-communications, design D9)
 function setCommunications(next: Communication[]): void {
   current().communications = next
@@ -298,6 +369,7 @@ function setCommunications(next: Communication[]): void {
 
 function selectCommunication(c: Communication): void {
   closeNumberEditor()
+  selectedBatteries = []
   selectedCommunication = c
   selectedWalls = []
   selectedDimensions = []
@@ -376,6 +448,10 @@ function closeCommunicationsPanel(): void {
 // общий неизменяемый пустой список (тот же экземпляр: инструмент по нему узнаёт, что операция ничего не изменила)
 const onDemolition = (): boolean => activePlanOf(current()) === "demolition"
 const NO_MARKS: DemolitionMark[] = []
+const NO_BATTERY_MARKS: BatteryMark[] = []
+const batteryMarksOf = (): BatteryMark[] => current().batteryDemolition ?? NO_BATTERY_MARKS
+// нажатие инструментом «Демонтаж» внутри батареи: пометка ставится отпусканием в мёртвой зоне
+let batteryPress: { id: string; px: Point } | null = null
 const demolitionHost: DemolitionToolHost = {
   walls: () => walls,
   elements: () => doorways,
@@ -383,7 +459,7 @@ const demolitionHost: DemolitionToolHost = {
   setMarks: (next) => {
     current().demolition = next
   },
-  record: () => recordMarks(activeHistory(), current().demolition ?? NO_MARKS),
+  record: () => recordDemolition(activeHistory(), { marks: current().demolition ?? NO_MARKS, batteryMarks: batteryMarksOf() }),
   changed: () => {
     dirty = true
   },
@@ -403,6 +479,7 @@ const closeDemolitionEditor = (): void => {
 // сброс жеста, выделения и поля ввода плана «Демонтаж» (смена плана, чертежа и инструмента, отмена и повтор)
 const resetDemolition = (): void => {
   resumeDemolition = false
+  batteryPress = null
   demolitionTool.cancel()
   demolitionTool.clearSelection()
   closeDemolitionEditor()
@@ -483,15 +560,18 @@ function closeOpeningsPanel(): void {
 const closeNumberEditor = (): void => {
   selectionEditing.closeEditor()
   communicationTool.closeEditor()
+  batteryTool.closeEditor()
 }
 
 const resetElementTools = (): void => {
   for (const t of elementTools) t.reset()
   communicationTool.reset()
+  batteryTool.reset()
 }
 
 function selectDoorway(d: WallElement): void {
   closeNumberEditor()
+  selectedBatteries = []
   selectedDoorways = [d]
   selectedCommunication = null
   selectedWalls = []
@@ -513,6 +593,7 @@ function setWallPanel(open: boolean): void {
 
 function selectDimension(dim: Dimension): void {
   closeNumberEditor()
+  selectedBatteries = []
   selectedDimensions = [dim]
   selectedCommunication = null
   selectedWalls = []
@@ -530,6 +611,7 @@ function clearDimSelection(): void {
 
 function selectWall(wall: Wall): void {
   closeNumberEditor()
+  selectedBatteries = []
   selectedWalls = [wall]
   selectedCommunication = null
   selectedDimensions = []
@@ -542,6 +624,7 @@ function selectWall(wall: Wall): void {
 
 function clearSelection(): void {
   closeNumberEditor()
+  selectedBatteries = []
   selectedCommunication = null
   selectedWalls = []
   selectedDimensions = []
@@ -570,6 +653,7 @@ function syncToolUI(): void {
   toolEraserBtn.classList.toggle("active", tool === "eraser")
   toolRulerBtn.classList.toggle("active", tool === "ruler")
   toolWindowBtn.classList.toggle("active", tool === "window")
+  toolBatteryBtn.classList.toggle("active", tool === "battery")
   toolDemolitionBtn.classList.toggle("active", tool === "demolition")
   syncOpeningsUI()
   syncCommunicationsUI()
@@ -587,6 +671,7 @@ function setTool(next: Tool): void {
   selectedWalls = []
   selectedDimensions = []
   selectedDoorways = []
+  selectedBatteries = []
   selectedCommunication = null
   resetElementTools()
   suppressClick = false
@@ -611,6 +696,14 @@ function leavePlacing(group: GroupState): void {
   for (const t of elementTools) t.clearGhost()
   openingsCurrent = group.current
   openingsPanelOpen = group.panelOpen
+  syncToolUI()
+  redraw()
+}
+
+// выход из установки батареи без снятия выделения: поставленная батарея остаётся выделенной (spec battery «Инструмент «Батарея»…»)
+function leaveBatteryPlacing(): void {
+  tool = "none"
+  batteryTool.clearGhost()
   syncToolUI()
   redraw()
 }
@@ -684,7 +777,7 @@ function resizeSelected(): void {
   const len = axisLengthForEdgeCm(selectedWalls[0], walls, typed)
   if (len === null) return
   const before = cloneScene(scene())
-  const result = resizeWallBounded(walls, selectedWalls[0], len, { ortho, doorways, communications: communicationsOf() })
+  const result = resizeWallBounded(walls, selectedWalls[0], len, { ortho, doorways, communications: communicationsOf(), batteries })
   if (result.kind === "rejected") return
   pushSnapshot(before)
   dirty = true
@@ -749,6 +842,8 @@ function drawDemolitionPlan(): void {
       walls,
       doorways,
       communications: communicationsOf(),
+      batteries,
+      demolishedBatteryIds: new Set(demolishedBatteries(batteryMarksOf(), batteries).map((b) => b.id)),
       marks,
       selectedId: demolitionTool.selectedId(),
       ghost: demolitionTool.ghost(),
@@ -763,9 +858,9 @@ function drawDemolitionPlan(): void {
 
 function drawMeasurePlan(): void {
   const p = chainStart && segment ? segment.end : null
-  const target = tool === "eraser" && cursor ? eraserTarget(cursor) : { wall: null, dim: null, doorway: null, communication: null }
+  const target = tool === "eraser" && cursor ? eraserTarget(cursor) : { wall: null, dim: null, doorway: null, communication: null, battery: null }
   const draft = dimDraftGeometry()
-  const snapHit = tool === "dimension" && cursor && (!dimDraft.a || !dimDraft.b) ? nearestDimAnchor(cursor, walls, doorways, radiusCm()) : null
+  const snapHit = tool === "dimension" && cursor && (!dimDraft.a || !dimDraft.b) ? nearestDimAnchor(cursor, walls, doorways, radiusCm(), batteries.filter(editableBattery)) : null
   let previewWall: Wall | null = null
   if (chainStart && p) previewWall = { id: "", a: chainStart, b: p, thicknessCm, type: wallMaterial }
   let square: Point[] | null = null
@@ -791,6 +886,10 @@ function drawMeasurePlan(): void {
     selectedCommunications: selectedCommunication ? [selectedCommunication] : [],
     communicationGhost: communicationKind() ? communicationTool.ghost() : null,
     hoverCommunication: target.communication,
+    batteries,
+    selectedBatteries,
+    batteryGhost: tool === "battery" ? batteryTool.ghost() : null,
+    hoverBattery: target.battery,
     hoverDoorDirection: tool !== "eraser" && hoverWorld ? selectionEditing.hoverDirection(hoverWorld) : null,
     marquee,
     marqueeHits,
@@ -807,31 +906,46 @@ function drawMeasurePlan(): void {
 
 // нажатая кнопка мыши: рамка, перетаскивание стен или размера, протяжка пометки, сдвиг вида
 function gestureActive(): boolean {
-  return !!(marquee || marqueePending || groupMove || endpointDrag || dimDrag || doorwayTool.dragging() || communicationTool.dragging() || demolitionTool.dragging() || panDrag)
+  return !!(marquee || marqueePending || groupMove || endpointDrag || dimDrag || doorwayTool.dragging() || communicationTool.dragging() || batteryTool.dragging() || demolitionTool.dragging() || panDrag)
 }
 
-// ластик: размер → коммуникация → проём → стена (wall-deletion «Инструмент «Ластик»», «Ластик и удаление
+// ластик: размер → коммуникация → батарея → проём → стена (wall-deletion «Инструмент «Ластик»», «Ластик и удаление
 // коммуникаций»); коммуникации стираются только на обмерочном плане
-function eraserTarget(p: Point): { wall: Wall | null; dim: Dimension | null; doorway: WallElement | null; communication: Communication | null } {
-  const found = erasePick(p, { walls, dimensions, doorways }, radiusCm(), 2)
+function eraserTarget(p: Point): {
+  wall: Wall | null
+  dim: Dimension | null
+  doorway: WallElement | null
+  communication: Communication | null
+  battery: Battery | null
+} {
+  const found = erasePick(p, { walls, dimensions, doorways, batteries }, radiusCm(), 2)
   const communication = found?.kind === "dimension" || !communicationsEditable() ? null : hitCommunication(p, communicationsOf(), radiusCm())
-  // остатки и старые элементы ластиком не стираются
-  const pick = found && (found.kind === "doorway" ? !editableElement(found.doorway) : found.kind === "wall" && !editableWall(found.wall)) ? null : found
+  // остатки, старые элементы и старые батареи ластиком не стираются
+  const readOnly = found && (found.kind === "doorway" ? !editableElement(found.doorway) : found.kind === "battery" ? !editableBattery(found.battery) : found.kind === "wall" && !editableWall(found.wall))
+  const pick = readOnly ? null : found
   return {
     wall: !communication && pick?.kind === "wall" ? pick.wall : null,
     dim: pick?.kind === "dimension" ? pick.dimension : null,
     doorway: !communication && pick?.kind === "doorway" ? pick.doorway : null,
     communication,
+    battery: !communication && pick?.kind === "battery" ? pick.battery : null,
   }
 }
 
-function dimDraftGeometry(): DimGeometry | null {
+function dimDraftGeometry(): (DimGeometry & { valueCm: number }) | null {
   if (!dimDraft.a || !dimDraft.b || !cursor) return null
   const ea = endPoint(dimDraft.a)
   const eb = endPoint(dimDraft.b)
   if (!ea || !eb || pointsEqual(ea, eb)) return null
-  const axis = dimGeometry(ea, eb, 0)!
-  return dimGeometry(ea, eb, dimLevelSnap(cursor, axis, dimensions, walls, radiusCm(), doorways)?.offset ?? dimensionOffsetAt(cursor, axis))
+  const axis = draftGeometry(0)
+  if (!axis) return null
+  return draftGeometry(dimLevelSnap(cursor, axis, dimensions, walls, radiusCm(), doorways)?.offset ?? dimensionOffsetAt(cursor, axis))
+}
+
+// геометрия размера между точками черновика с заданным смещением (число размера с углом батареи — по оси стены батареи)
+function draftGeometry(offset: number): (DimGeometry & { valueCm: number }) | null {
+  if (!dimDraft.a || !dimDraft.b) return null
+  return dimensionGeometry({ from: dimDraft.a, to: dimDraft.b, offset }, walls, doorways, batteries)
 }
 
 function draftRubber(end: Point): [Point, Point] | null {
@@ -893,7 +1007,8 @@ function snapWallCursor(raw: Point): void {
   })
   // конец стены, налагающийся на коммуникацию, обрезается до касания; нулевая стена не ставится (spec wall-collision
   // «Стены не налагаются на коммуникации»)
-  const limited = limitNewWall(chainStart, computed.end, thicknessCm, communicationsOf())
+  const byCommunications = limitNewWall(chainStart, computed.end, thicknessCm, communicationsOf())
+  const limited = byCommunications && limitNewWallByBatteries(chainStart, byCommunications, thicknessCm, walls, batteries)
   endBlocked = limited === null
   segment = limited === null ? { ...computed, end: chainStart } : pointsEqual(limited, computed.end) ? computed : { ...computed, end: limited }
   cursor = segment.snap.point
@@ -910,7 +1025,7 @@ function commitPoint(): void {
     if (!cursor) return
     // квадрат установки, налагающийся на коммуникацию, начала стены не фиксирует
     const startSquare = cursorSnap ? placementSquare(cursorSnap, thicknessCm) : null
-    if (startSquare && !squareAllowed(startSquare, communicationsOf())) return
+    if (startSquare && !(squareAllowed(startSquare, communicationsOf()) && squareAllowedForBatteries(startSquare, walls, batteries))) return
     chainStart = cursor
     chainRef = cursorSnap ? startRefOf(cursorSnap) : null
     segment = null
@@ -984,7 +1099,7 @@ function restoreWalls(scene: Scene): void {
 // передаётся как snappedAxis
 function editMode(snapped: SnapResult): EditMode {
   const communications = communicationsOf()
-  return snapped.axisWall ? { ortho, snappedAxis: snapped.axisWall, doorways, communications } : { ortho, doorways, communications }
+  return snapped.axisWall ? { ortho, snappedAxis: snapped.axisWall, doorways, communications, batteries } : { ortho, doorways, communications, batteries }
 }
 
 canvas.addEventListener("pointermove", (e) => {
@@ -995,6 +1110,11 @@ canvas.addEventListener("pointermove", (e) => {
   }
   if (communicationTool.dragging()) {
     communicationTool.dragTo(toWorld(e))
+    redraw()
+    return
+  }
+  if (batteryTool.dragging()) {
+    batteryTool.dragTo(toWorld(e))
     redraw()
     return
   }
@@ -1018,19 +1138,15 @@ canvas.addEventListener("pointermove", (e) => {
   }
   if (dimDrag) {
     const p = toWorld(e)
-    const ea = endPoint(dimDrag.dim.from)
-    const eb = endPoint(dimDrag.dim.to)
-    if (ea && eb) {
-      const axis = dimGeometry(ea, eb, 0)
-      if (axis) {
-        const dragged = dimDrag.dim
-        const level = dimLevelSnap(p, axis, dimensions.filter((d) => d !== dragged), walls, radiusCm(), doorways)
-        dragged.offset = level ? level.offset : dimensionOffsetAt(p, axis)
-        // передвинутый пользователем размер больше не автоматический: пересчёт его не заменяет (change auto-wall-dimensions, design D5)
-        delete dragged.auto
-        dirty = true
-        redraw()
-      }
+    const axis = dimensionGeometry({ ...dimDrag.dim, offset: 0 }, walls, doorways, batteries)
+    if (axis) {
+      const dragged = dimDrag.dim
+      const level = dimLevelSnap(p, axis, dimensions.filter((d) => d !== dragged), walls, radiusCm(), doorways)
+      dragged.offset = level ? level.offset : dimensionOffsetAt(p, axis)
+      // передвинутый пользователем размер больше не автоматический: пересчёт его не заменяет (change auto-wall-dimensions, design D5)
+      delete dragged.auto
+      dirty = true
+      redraw()
     }
     return
   }
@@ -1091,6 +1207,9 @@ canvas.addEventListener("pointermove", (e) => {
   } else if (communicationKind()) {
     cursor = toWorld(e)
     hoverCommunicationGhost(cursor)
+  } else if (tool === "battery") {
+    cursor = toWorld(e)
+    batteryTool.hover(cursor)
   } else cursor = toSnappedPoint(e)
   hoverWorld = toWorld(e)
   redraw()
@@ -1133,8 +1252,11 @@ canvas.addEventListener("pointerdown", (e) => {
   if (onDemolition()) {
     const p = toWorld(e)
     if (tool === "demolition") {
+      // нажатие внутри батареи — пометка батареи кликом; иначе протяжка по стене (spec demolition-plan «Снос батареи»)
+      const battery = hitBattery(p, walls, batteries, 0)
+      if (battery) batteryPress = { id: battery.id, px: screenPoint(e) }
+      else demolitionTool.down(p, screenPoint(e))
       canvas.setPointerCapture(e.pointerId) // отпускание за пределами холста завершает протяжку
-      demolitionTool.down(p, screenPoint(e))
     } else if (selectionAllowed(tool)) {
       // без инструмента: правимое число выделенной пометки, иначе выделение пометки под точкой
       if (!pressDemolitionNumber(p)) {
@@ -1150,20 +1272,23 @@ canvas.addEventListener("pointerdown", (e) => {
   // правка выделенного элемента на месте (change popups-buttons-only, design D6): правимое число, затем зона
   // направления выделенной двери — главнее любой цели нажатия
   const p = toWorld(e)
-  if (selectionEditing.pressNumber(p) || selectionEditing.pressZone(p) || (communicationsEditable() && communicationTool.pressNumber(p))) {
+  if (selectionEditing.pressNumber(p) || selectionEditing.pressZone(p) || (communicationsEditable() && communicationTool.pressNumber(p)) || batteryTool.pressNumber(p)) {
     suppressClick = true
     return
   }
   // цель нажатия (change fix-midpoint-marker-priority, design D2): маркеры выделенной стены главнее
   // размера, проёма и тела стены
-  const found = pressPick(p, { walls, dimensions, doorways }, radiusCm(), 2, {
+  const found = pressPick(p, { walls, dimensions, doorways, batteries }, radiusCm(), 2, {
     selectedWall: selectedWalls.length === 1 ? selectedWalls[0] : null,
     middleMarker: true,
     dimensions: true,
     elements: true,
+    batteries: true,
   }, communicationsEditable() ? { items: communicationsOf(), tolCm: communicationBodyTolCm(PX_PER_CM * view.zoom) } : undefined)
   // остатки и старые элементы только для чтения: нажатие по ним ничего не выделяет (spec mounting-plan)
-  const pick = found && (found.kind === "doorway" ? !editableElement(found.doorway) : "wall" in found && !editableWall(found.wall)) ? null : found
+  const readOnly =
+    found && (found.kind === "doorway" ? !editableElement(found.doorway) : found.kind === "battery" ? !editableBattery(found.battery) : "wall" in found && !editableWall(found.wall))
+  const pick = readOnly ? null : found
   if (pick?.kind === "end") {
     suppressClick = true
     const other = pick.wall[pick.end === "a" ? "b" : "a"]
@@ -1191,6 +1316,13 @@ canvas.addEventListener("pointerdown", (e) => {
       // коммуникация под курсором: после размера, до проёма и тела стены (spec dimension-selection «Нажатие по размеру
       // главнее тела коммуникации»); только на обмерочном плане
       if (communicationTool.pressBody(p)) {
+        suppressClick = true
+        canvas.setPointerCapture(e.pointerId)
+      }
+      return
+    case "battery":
+      // выделение и перетаскивание батареи вдоль опорной стены
+      if (batteryTool.pressBody(p)) {
         suppressClick = true
         canvas.setPointerCapture(e.pointerId)
       }
@@ -1223,7 +1355,11 @@ canvas.addEventListener("pointerdown", () => {
 canvas.addEventListener("pointerup", (e) => {
   if (onDemolition() && e.button === 0) {
     // поставленная пометка остаётся выделенной, инструмент снимается — как у проёма (change demolition-select-after-mark)
-    if (tool === "demolition" && demolitionTool.up(toWorld(e), screenPoint(e)) !== null) leaveDemolitionTool()
+    if (tool === "demolition" && batteryPress) {
+      const press = batteryPress
+      batteryPress = null
+      if (Math.hypot(screenPoint(e).x - press.px.x, screenPoint(e).y - press.px.y) <= BATTERY_CLICK_PX) markBattery(press.id)
+    } else if (tool === "demolition" && demolitionTool.up(toWorld(e), screenPoint(e)) !== null) leaveDemolitionTool()
     return
   }
   if (marquee) {
@@ -1246,6 +1382,13 @@ canvas.addEventListener("pointerup", (e) => {
   if (communicationTool.dragging()) {
     if (e.button === 0) {
       communicationTool.endDrag()
+      redraw()
+    }
+    return
+  }
+  if (batteryTool.dragging()) {
+    if (e.button === 0) {
+      batteryTool.endDrag()
       redraw()
     }
     return
@@ -1288,19 +1431,22 @@ canvas.addEventListener("pointerup", (e) => {
   redraw()
 })
 
-function marqueePicks(rect: { x1: number; y1: number; x2: number; y2: number }): { walls: Wall[]; dims: Dimension[]; doorways: WallElement[] } {
+function marqueePicks(rect: { x1: number; y1: number; x2: number; y2: number }): { walls: Wall[]; dims: Dimension[]; doorways: WallElement[]; batteries: Battery[] } {
   const k = PX_PER_CM * view.zoom
   const min = { x: Math.min(rect.x1, rect.x2) / k + view.pan.x, y: Math.min(rect.y1, rect.y2) / k + view.pan.y }
   const max = { x: Math.max(rect.x1, rect.x2) / k + view.pan.x, y: Math.max(rect.y1, rect.y2) / k + view.pan.y }
   // ось стены на участке её проёма стену не выделяет (multi-selection «Рамка выделения»)
   const wallsPicked = wallsInRect(min, max, walls, doorways).filter(editableWall)
   const dimsPicked = dimensions.filter((d) => {
-    const a = dimPointPoint(d.from, walls, doorways)
-    const b = dimPointPoint(d.to, walls, doorways)
-    const geom = a && b ? dimGeometry(a, b, d.offset) : null
+    const geom = dimensionGeometry(d, walls, doorways, batteries)
     return !!geom && segmentIntersectsRect(geom.p1, geom.p2, min, max)
   })
-  return { walls: wallsPicked, dims: dimsPicked, doorways: doorwaysInRect(min, max, walls, doorways).filter(editableElement) }
+  return {
+    walls: wallsPicked,
+    dims: dimsPicked,
+    doorways: doorwaysInRect(min, max, walls, doorways).filter(editableElement),
+    batteries: batteriesInRect(min, max, walls, batteries).filter(editableBattery),
+  }
 }
 
 function finishMarquee(rect: { x1: number; y1: number; x2: number; y2: number }, additive: boolean): void {
@@ -1310,9 +1456,10 @@ function finishMarquee(rect: { x1: number; y1: number; x2: number; y2: number },
   selectedWalls = additive ? [...selectedWalls, ...picks.walls.filter((w) => !selectedWalls.includes(w))] : picks.walls
   selectedDimensions = additive ? [...selectedDimensions, ...picks.dims.filter((d) => !selectedDimensions.includes(d))] : picks.dims
   selectedDoorways = additive ? [...selectedDoorways, ...picks.doorways.filter((d) => !selectedDoorways.includes(d))] : picks.doorways
+  selectedBatteries = additive ? [...selectedBatteries, ...picks.batteries.filter((b) => !selectedBatteries.includes(b))] : picks.batteries
   lengthDirty = false
   closeNumberEditor()
-  if (!selectedDoorways.length && selectedWalls.length === 1 && !selectedDimensions.length) {
+  if (!selectedDoorways.length && !selectedBatteries.length && selectedWalls.length === 1 && !selectedDimensions.length) {
     syncThicknessBox()
     setWallMaterial(selectedWalls[0].type)
     setWallPanel(true)
@@ -1339,15 +1486,16 @@ canvas.addEventListener("click", (e) => {
   // на плане «Демонтаж» жесты разбирает адаптер по нажатию и отпусканию (change demolition-plan, design D10);
   // «Ластик» снимает пометку под курсором по клику (change demolition-doorway-sizes, design D5)
   if (onDemolition()) {
-    if (tool === "eraser") demolitionTool.erase(toWorld(e))
+    if (tool === "eraser" && !demolitionTool.erase(toWorld(e))) eraseBatteryMark(toWorld(e))
     return
   }
   const p = toSnappedPoint(e)
   const raw = toWorld(e)
   if (tool === "eraser") {
-    const { wall, dim, doorway, communication } = eraserTarget(p)
+    const { wall, dim, doorway, communication, battery } = eraserTarget(p)
     if (dim) deleteDimension(dim)
     else if (communication) deleteCommunication(communication)
+    else if (battery) deleteBattery(battery)
     else if (doorway) deleteDoorway(doorway)
     else if (wall) deleteWall(wall)
     return
@@ -1356,6 +1504,11 @@ canvas.addEventListener("click", (e) => {
   if (kind) {
     // установка снимает инструмент, поставленная коммуникация остаётся выделенной (spec communications «Установка»)
     if (communicationTool.place(kind, raw)) leaveCommunicationPlacing()
+    return
+  }
+  if (tool === "battery") {
+    // установка снимает инструмент, поставленная батарея остаётся выделенной (spec battery «Инструмент «Батарея»…»)
+    if (batteryTool.place(raw)) leaveBatteryPlacing()
     return
   }
   const placing = placingTool()
@@ -1377,6 +1530,7 @@ canvas.addEventListener("click", (e) => {
       return
     }
     selectedWalls = []
+    selectedBatteries = []
     selectedCommunication = null
     lengthDirty = false
     clearDimSelection()
@@ -1393,7 +1547,7 @@ canvas.addEventListener("click", (e) => {
 
 function placeDimension(p: Point): void {
   if (!dimDraft.a || !dimDraft.b) {
-    const hit = nearestDimAnchor(p, walls, doorways, radiusCm())
+    const hit = nearestDimAnchor(p, walls, doorways, radiusCm(), batteries.filter(editableBattery))
     if (!hit) return
     const point = hit.anchor
     if (!dimDraft.a) dimDraft.a = point
@@ -1401,14 +1555,14 @@ function placeDimension(p: Point): void {
     redraw()
     return
   }
-  const ea = dimPointPoint(dimDraft.a, walls, doorways)
-  const eb = dimPointPoint(dimDraft.b, walls, doorways)
-  if (!ea || !eb || pointsEqual(ea, eb)) {
+  const ea = endPoint(dimDraft.a)
+  const eb = endPoint(dimDraft.b)
+  const axis = draftGeometry(0)
+  if (!ea || !eb || pointsEqual(ea, eb) || !axis) {
     dimDraft = emptyDraft()
     redraw()
     return
   }
-  const axis = dimGeometry(ea, eb, 0)!
   pushRecord()
   dimensions.push({ from: dimDraft.a, to: dimDraft.b, offset: dimLevelSnap(p, axis, dimensions, walls, radiusCm(), doorways)?.offset ?? dimensionOffsetAt(p, axis) })
   dimDraft = emptyDraft()
@@ -1468,11 +1622,40 @@ function endChain(): void {
 }
 
 // удаление выбранного с каскадом размеров и проёмов удаляемых стен (wall-deletion)
-function removeObjects(picked: { walls: Wall[]; dimensions: Dimension[]; doorways: WallElement[] }): void {
+function removeObjects(picked: { walls: Wall[]; dimensions: Dimension[]; doorways: WallElement[]; batteries?: Battery[] }): void {
   const next = deleteObjects(scene(), picked)
   for (const w of picked.walls) walls.splice(walls.indexOf(w), 1)
   setDimensions(next.dimensions)
   setDoorways(next.doorways ?? [])
+  setBatteries(next.batteries ?? batteries)
+}
+
+function deleteBattery(b: Battery): void {
+  pushRecord()
+  closeNumberEditor()
+  removeObjects({ walls: [], dimensions: [], doorways: [], batteries: [b] })
+  dirty = true
+  redraw()
+}
+
+// пометка сноса батареи кликом инструмента «Демонтаж»: один шаг истории плана «Демонтаж»; уже помеченная — без изменений
+function markBattery(id: string): void {
+  const next = addBatteryMark(batteryMarksOf(), id, crypto.randomUUID())
+  if (next === batteryMarksOf()) return
+  recordDemolition(activeHistory(), { marks: current().demolition ?? NO_MARKS, batteryMarks: batteryMarksOf() })
+  current().batteryDemolition = next
+  dirty = true
+  redraw()
+}
+
+// «Ластик» плана «Демонтаж» снимает пометку батареи под курсором
+function eraseBatteryMark(p: Point): void {
+  const mark = batteryMarkAt(p, batteryMarksOf(), batteries, walls, radiusCm())
+  if (!mark) return
+  recordDemolition(activeHistory(), { marks: current().demolition ?? NO_MARKS, batteryMarks: batteryMarksOf() })
+  current().batteryDemolition = removeBatteryMark(batteryMarksOf(), mark.id)
+  dirty = true
+  redraw()
 }
 
 function deleteDoorway(d: WallElement): void {
@@ -1521,13 +1704,14 @@ function deleteSelection(): void {
     deleteCommunication(selectedCommunication)
     return
   }
-  if (!selectedWalls.length && !selectedDimensions.length && !selectedDoorways.length) return
+  if (!selectedWalls.length && !selectedDimensions.length && !selectedDoorways.length && !selectedBatteries.length) return
   pushRecord()
   closeNumberEditor()
-  removeObjects({ walls: selectedWalls, dimensions: selectedDimensions, doorways: selectedDoorways })
+  removeObjects({ walls: selectedWalls, dimensions: selectedDimensions, doorways: selectedDoorways, batteries: selectedBatteries })
   selectedWalls = []
   selectedDimensions = []
   selectedDoorways = []
+  selectedBatteries = []
   lengthDirty = false
   nudgeBurst = false
   setWallPanel(false)
@@ -1553,7 +1737,8 @@ thicknessInput.addEventListener("input", () => {
     selectedWalls.length === 1 &&
     selectedWalls[0].thicknessCm !== thicknessCm &&
     thicknessAllowed(walls, selectedWalls[0], thicknessCm, doorways) &&
-    thicknessAllowedForCommunications(walls, selectedWalls[0], thicknessCm, communicationsOf())
+    thicknessAllowedForCommunications(walls, selectedWalls[0], thicknessCm, communicationsOf()) &&
+    thicknessAllowedForBatteries(walls, selectedWalls[0], thicknessCm, batteries, communicationsOf())
   ) {
     pushRecord()
     selectedWalls[0].thicknessCm = thicknessCm
@@ -1636,6 +1821,7 @@ toolDuctBtn.addEventListener("click", () => applyCommunicationsGroup(communicati
 
 // у инструментов без кнопок-параметров («Окно», «Размер», «Линейка», «Ластик») панели нет: клик только активирует
 toolWindowBtn.addEventListener("click", () => setTool("window"))
+toolBatteryBtn.addEventListener("click", () => setTool("battery"))
 
 toolRulerBtn.addEventListener("click", () => setTool("ruler"))
 toolDemolitionBtn.addEventListener("click", () => setTool("demolition"))
@@ -1715,6 +1901,7 @@ function activate(id: string): void {
   selectedWalls = []
   selectedDimensions = []
   selectedDoorways = []
+  selectedBatteries = []
   selectedCommunication = null
   resetElementTools()
   closeOpeningsPanel()
@@ -1765,6 +1952,7 @@ function resetEditing(): void {
   selectedWalls = []
   selectedDimensions = []
   selectedDoorways = []
+  selectedBatteries = []
   selectedCommunication = null
   resetElementTools()
   dimDraft = emptyDraft()
@@ -1776,10 +1964,11 @@ function resetEditing(): void {
 }
 
 // отмена или повтор шага пометок плана «Демонтаж» (change demolition-plan, design D7)
-function stepMarks(step: typeof undoMarks): void {
-  const next = step(activeHistory(), current().demolition ?? NO_MARKS)
+function stepMarks(step: typeof undoDemolition): void {
+  const next = step(activeHistory(), { marks: current().demolition ?? NO_MARKS, batteryMarks: batteryMarksOf() })
   if (!next) return
-  current().demolition = next
+  current().demolition = next.marks
+  if (next.batteryMarks.length > 0 || current().batteryDemolition !== undefined) current().batteryDemolition = next.batteryMarks
   dirty = true
   resetEditing()
   redraw()
@@ -1789,7 +1978,7 @@ function stepMarks(step: typeof undoMarks): void {
 // (остатки берутся по текущему обмеру и демонтажу), на остальных планах запись подставляется как есть
 function restoreScene(e: Scene): void {
   if (workspace) {
-    current().mounting = { walls: e.walls, dimensions: e.dimensions, ...(e.doorways ? { doorways: e.doorways } : null) }
+    current().mounting = { walls: e.walls, dimensions: e.dimensions, ...(e.doorways ? { doorways: e.doorways } : null), ...(e.batteries ? { batteries: e.batteries } : null) }
     loadWorking()
     return
   }
@@ -1800,13 +1989,15 @@ function restoreScene(e: Scene): void {
   setDoorways(e.doorways ?? [])
   // запись без поля коммуникаций (история до их введения) список не меняет (spec communications «История коммуникаций»)
   if (e.communications) setCommunications(e.communications)
+  // запись без поля батарей список не меняет (spec drawing-history)
+  if (e.batteries) setBatteries(e.batteries)
 }
 
 function undo(): void {
-  if (groupMove || endpointDrag || panDrag || dimDrag || doorwayTool.dragging() || communicationTool.dragging() || demolitionTool.dragging()) return
+  if (groupMove || endpointDrag || panDrag || dimDrag || doorwayTool.dragging() || communicationTool.dragging() || batteryTool.dragging() || demolitionTool.dragging()) return
   const h = activeHistory()
   if (h.past[h.past.length - 1]?.kind === "demolition") {
-    stepMarks(undoMarks)
+    stepMarks(undoDemolition)
     return
   }
   const e = undoEntry(h, historyOf(scene()))
@@ -1826,10 +2017,10 @@ function undo(): void {
 }
 
 function redo(): void {
-  if (groupMove || endpointDrag || panDrag || dimDrag || doorwayTool.dragging() || communicationTool.dragging() || demolitionTool.dragging()) return
+  if (groupMove || endpointDrag || panDrag || dimDrag || doorwayTool.dragging() || communicationTool.dragging() || batteryTool.dragging() || demolitionTool.dragging()) return
   const h = activeHistory()
   if (h.future[h.future.length - 1]?.kind === "demolition") {
-    stepMarks(redoMarks)
+    stepMarks(redoDemolition)
     return
   }
   const e = redoEntry(h, historyOf(scene()))
@@ -1930,7 +2121,7 @@ window.addEventListener("keydown", (e) => {
       }
       return
     }
-    if (groupMove || endpointDrag || panDrag || dimDrag || doorwayTool.dragging() || communicationTool.dragging()) return
+    if (groupMove || endpointDrag || panDrag || dimDrag || doorwayTool.dragging() || communicationTool.dragging() || batteryTool.dragging()) return
     deleteSelection()
     return
   }
@@ -1953,7 +2144,7 @@ window.addEventListener("keydown", (e) => {
       tool,
       gestureActive: !!chainStart,
       dimensionDraft: !!(dimDraft.a || dimDraft.b),
-      hasSelection: selectedDimensions.length + selectedWalls.length + selectedDoorways.length > 0 || selectedCommunication !== null,
+      hasSelection: selectedDimensions.length + selectedWalls.length + selectedDoorways.length + selectedBatteries.length > 0 || selectedCommunication !== null,
     })
     if (action === "end-gesture") endChain()
     else if (action === "cancel-dimension-draft") {
@@ -1966,16 +2157,19 @@ window.addEventListener("keydown", (e) => {
   if (e.target instanceof HTMLInputElement) return
   // на плане «Демонтаж» нет стен, материалов и элементов: стрелки ничего не двигают и не переключают
   if (onDemolition()) return
-  if (groupMove || endpointDrag || panDrag || dimDrag || doorwayTool.dragging() || communicationTool.dragging()) return
+  if (groupMove || endpointDrag || panDrag || dimDrag || doorwayTool.dragging() || communicationTool.dragging() || batteryTool.dragging()) return
   // выделенная коммуникация стрелками не двигается и материал не переключается (spec communications)
   if (selectedCommunication) return
-  if (selectedWalls.length || selectedDimensions.length || selectedDoorways.length) {
+  if (selectedWalls.length || selectedDimensions.length || selectedDoorways.length || selectedBatteries.length) {
     if (!selectedWalls.length) {
-      if (!selectedDoorways.length) return
+      if (!selectedDoorways.length && !selectedBatteries.length) return
       e.preventDefault()
       const step = e.shiftKey ? 1 : GRID_STEP_CM
       const arrow = e.key === "ArrowUp" ? { x: 0, y: -1 } : e.key === "ArrowDown" ? { x: 0, y: 1 } : e.key === "ArrowLeft" ? { x: -1, y: 0 } : { x: 1, y: 0 }
-      if (doorwayTool.nudge(arrow, step)) redraw()
+      // одна серия стрелок — одна запись истории: запись открывает первое изменившее сцену нажатие
+      const movedElements = selectedDoorways.length > 0 && doorwayTool.nudge(arrow, step)
+      const movedBatteries = selectedBatteries.length > 0 && batteryTool.nudge(arrow, step)
+      if (movedElements || movedBatteries) redraw()
       return
     }
     e.preventDefault()
@@ -1986,7 +2180,7 @@ window.addEventListener("keydown", (e) => {
       : { x: step, y: 0 }
     // запись истории открывает только нажатие, давшее сдвиг (design D8)
     const before = cloneScene(scene())
-    const applied = moveWallsBounded(walls, selectedWalls, delta, { ortho, doorways, communications: communicationsOf() })
+    const applied = moveWallsBounded(walls, selectedWalls, delta, { ortho, doorways, communications: communicationsOf(), batteries })
     if (applied.x === 0 && applied.y === 0) return
     if (!nudgeBurst) pushSnapshot(before)
     nudgeBurst = true

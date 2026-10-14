@@ -1,3 +1,5 @@
+import { batteryNumberLayout } from "./battery/battery-numbers"
+import { strokeBatteries } from "./battery/battery-render"
 import { strokeCommunications } from "./communications/communications-render"
 import { diameterLeader } from "./communications/diameter-leader"
 import { OUTSET_PX, communicationNumbers } from "./communications/edit"
@@ -7,7 +9,7 @@ import { CHAIN_BAND_EM, CHAIN_OFFSET_EM, DIM_TEXT_GAP_PX, editableNumbers } from
 import { CHAR_WIDTH, LABEL_GAP, elementLabelLayout } from "./doorway/element-label"
 import type { ElementLabel } from "./doorway/element-label"
 import { formatLength } from "./format-length"
-import { dimGeometry, dimPointPoint, visibleWorld } from "./geometry"
+import { dimGeometry, dimensionGeometry, visibleWorld } from "./geometry"
 import type { DimGeometry } from "./geometry"
 import { findRooms, formatArea } from "./room-area"
 import type { Room } from "./room-area"
@@ -17,7 +19,7 @@ import type { Palette } from "./theme"
 import { contourSegments, cross, displayPolygons, dot, outlineSegments, sub } from "./wall-geometry"
 import type { Seg } from "./wall-geometry"
 import { GRID_STEP_CM, PX_PER_CM, isDoor, isWindow, normalizeMaterial } from "./types"
-import type { Communication, Dimension, Material, Point, Riser, Unit, View, Wall, WallDoor, WallElement } from "./types"
+import type { Battery, Communication, Dimension, Material, Point, Riser, Unit, View, Wall, WallDoor, WallElement } from "./types"
 import type { TrackLine } from "./wall-tracking"
 import { HATCHES, strokeHatchSeries, strokeHatchTile } from "./wall-hatch"
 
@@ -68,12 +70,12 @@ export interface RenderOptions {
   hover?: Wall | null
   hoverDim?: Dimension | null
   dimensions?: Dimension[]
-  dimDraft?: DimGeometry | null
+  dimDraft?: (DimGeometry & { valueCm?: number }) | null // valueCm — число размера, если оно не равно длине отрезка (угол батареи)
   dimRubber?: [Point, Point] | null
   dimSnap?: Point | null
   selectedDims?: Dimension[]
   marquee?: { x1: number; y1: number; x2: number; y2: number } | null
-  marqueeHits?: { walls: Wall[]; dims: Dimension[]; doorways?: WallElement[] } | null
+  marqueeHits?: { walls: Wall[]; dims: Dimension[]; doorways?: WallElement[]; batteries?: readonly Battery[] } | null
   // проёмы (change add-doorway): вырез и подписи всех, размеры — у одиночного выделения и призрака
   doorways?: WallElement[]
   selectedDoorways?: WallElement[]
@@ -85,6 +87,11 @@ export interface RenderOptions {
   selectedCommunications?: readonly Communication[]
   communicationGhost?: Communication | null
   hoverCommunication?: Communication | null // подсветка ластика
+  // батареи (change add-battery, design D10): контуры всех, числа — у одиночного выделения без призрака
+  batteries?: readonly Battery[]
+  selectedBatteries?: readonly Battery[]
+  batteryGhost?: Battery | null
+  hoverBattery?: Battery | null // подсветка ластика
   square?: Point[] | null // вершины квадрата установки в мировых координатах
   // угол к стене примыкания у начала превью: дуга от луча отсчёта from к направлению to
   angle?: { at: Point; from: Point; to: Point; deg: number } | null
@@ -219,11 +226,13 @@ export function drawScene(
   ctx.textBaseline = "bottom"
   if (!opts.underlay) drawDoorways(ctx, walls, rooms, unit, view, m, p, opts, selectedWalls.length > 0 || selectedDims.length > 0)
   drawCommunicationLayer(ctx, walls, unit, view, m, p, opts)
-  for (const dim of opts.dimensions ?? []) drawDimension(ctx, dim, walls, unit, p.ink, view, m, p, doorways)
+  drawBatteryLayer(ctx, walls, unit, view, m, p, opts)
+  const batteries = opts.batteries ?? []
+  for (const dim of opts.dimensions ?? []) drawDimension(ctx, dim, walls, unit, p.ink, view, m, p, doorways, batteries)
   for (const dim of opts.marqueeHits?.dims ?? [])
-    if (!selectedDims.includes(dim)) drawDimension(ctx, dim, walls, unit, p.marqueeDim, view, m, p, doorways)
-  for (const dim of selectedDims) drawDimension(ctx, dim, walls, unit, p.selectedDim, view, m, p, doorways, singleDim)
-  if (opts.hoverDim) drawDimension(ctx, opts.hoverDim, walls, unit, p.erase, view, m, p, doorways)
+    if (!selectedDims.includes(dim)) drawDimension(ctx, dim, walls, unit, p.marqueeDim, view, m, p, doorways, batteries)
+  for (const dim of selectedDims) drawDimension(ctx, dim, walls, unit, p.selectedDim, view, m, p, doorways, batteries, singleDim)
+  if (opts.hoverDim) drawDimension(ctx, opts.hoverDim, walls, unit, p.erase, view, m, p, doorways, batteries)
   if (opts.ruler) drawRuler(ctx, opts.ruler, unit, view, toScreen, m, p)
   if (opts.marquee) {
     const { x1, y1, x2, y2 } = opts.marquee
@@ -248,7 +257,7 @@ export function drawScene(
     drawDimensionGeom(
       ctx,
       opts.dimDraft,
-      formatLength(Math.hypot(opts.dimDraft.b.x - opts.dimDraft.a.x, opts.dimDraft.b.y - opts.dimDraft.a.y), unit),
+      formatLength(opts.dimDraft.valueCm ?? Math.hypot(opts.dimDraft.b.x - opts.dimDraft.a.x, opts.dimDraft.b.y - opts.dimDraft.a.y), unit),
       p.muted,
       view,
       m,
@@ -471,6 +480,33 @@ function drawCommunicationLayer(
     ctx.fillStyle = p.ink
     ctx.fillText(text, s.x, s.y)
     drawUnderline(ctx, { x: s.x, y: s.y + UNDERLINE_GAP_PX }, { x: 1, y: 0 }, text.length * m.labelPx * CHAR_WIDTH, p.ink, m)
+  }
+}
+
+// слой батарей (change add-battery, design D10): подсветки под контуром, контуры с секциями, призрак установки; числа и
+// размерные линии — у одиночно выделенной батареи на экране (в PDF их нет)
+function drawBatteryLayer(ctx: CanvasRenderingContext2D, walls: Wall[], unit: Unit, view: View, m: RenderMetrics, p: Palette, opts: RenderOptions): void {
+  const selected = opts.selectedBatteries ?? []
+  const ghost = opts.batteryGhost ?? null
+  const marquee = opts.marqueeHits?.batteries ?? []
+  strokeBatteries(ctx, marquee.filter((b) => !selected.includes(b)), walls, view, p.marqueeWall, OUTLINE_PX)
+  strokeBatteries(ctx, selected, walls, view, p.selection, OUTLINE_PX)
+  if (opts.hoverBattery) strokeBatteries(ctx, [opts.hoverBattery], walls, view, p.erase, OUTLINE_PX)
+  strokeBatteries(ctx, opts.batteries ?? [], walls, view, p.ink, m.contourPx, m.hatchPx)
+  if (ghost) strokeBatteries(ctx, [ghost], walls, view, p.muted, m.contourPx, m.hatchPx)
+  if (selected.length !== 1 || ghost || m === PDF_METRICS) return
+  const k = PX_PER_CM * view.zoom
+  const toScreen = (q: Point): Point => ({ x: (q.x - view.pan.x) * k, y: (q.y - view.pan.y) * k })
+  for (const n of batteryNumberLayout(selected[0], walls, unit, k, m.labelPx)) {
+    if (n.geom) {
+      drawDimensionGeom(ctx, n.geom, n.text, p.ink, view, m, p, false, true)
+      continue
+    }
+    // нулевое расстояние — число у своей точки, подчёркнутое как все правимые числа
+    const s = toScreen(n.center)
+    ctx.fillStyle = p.ink
+    ctx.fillText(n.text, s.x, s.y + m.labelPx / 2)
+    drawUnderline(ctx, { x: s.x, y: s.y + m.labelPx / 2 + UNDERLINE_GAP_PX }, { x: 1, y: 0 }, n.text.length * m.labelPx * CHAR_WIDTH, p.ink, m)
   }
 }
 
@@ -787,14 +823,12 @@ function drawDimension(
   m: RenderMetrics,
   palette: Palette,
   elements: readonly WallElement[],
+  batteries: readonly Battery[],
   handles = false,
 ): void {
-  const from = dimPointPoint(dim.from, walls, elements)
-  const to = dimPointPoint(dim.to, walls, elements)
-  if (!from || !to) return
-  const geom = dimGeometry(from, to, dim.offset)
+  const geom = dimensionGeometry(dim, walls, elements, batteries)
   if (!geom) return
-  drawDimensionGeom(ctx, geom, formatLength(Math.hypot(to.x - from.x, to.y - from.y), unit), color, view, m, palette, handles)
+  drawDimensionGeom(ctx, geom, formatLength(geom.valueCm, unit), color, view, m, palette, handles)
 }
 
 // underline: число правимое — размерная линия под ним штриховая, вне числа сплошная (design D2)

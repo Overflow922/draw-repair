@@ -30,10 +30,10 @@ export function escapeAction({ tool, gestureActive, dimensionDraft, hasSelection
 export const resumesAfterSelectionCleared = (armed: boolean, hasSelection: boolean): boolean => armed && !hasSelection
 
 // после установки «Проёма», «Двери» или «Окна» инструмент снимается и панель группы закрывается; текущий
-// инструмент группы помнится (spec doorway «Установка проёма»). «Стояк» и «Воздуховод» тоже снимаются; их группа —
-// отдельное состояние (communications-group), группа «Проёмы» не меняется
+// инструмент группы помнится (spec doorway «Установка проёма»). «Стояк», «Воздуховод» и «Батарея» тоже снимаются; группа
+// коммуникаций — отдельное состояние (communications-group), группа «Проёмы» не меняется
 export function afterPlace(tool: Tool, group: GroupState): { tool: Tool; group: GroupState } {
-  if (tool === "riser" || tool === "duct") return { tool: "none", group }
+  if (tool === "riser" || tool === "duct" || tool === "battery") return { tool: "none", group }
   if (tool !== "doorway" && tool !== "door" && tool !== "window") return { tool, group }
   return { tool: "none", group: { current: group.current, active: "other", panelOpen: false } }
 }

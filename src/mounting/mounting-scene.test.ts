@@ -59,7 +59,7 @@ describe("состав сцены", () => {
 
   it("MP-15: пометки сноса сами в сцену не попадают как объекты — сцена содержит только стены, элементы и размеры", () => {
     const s = mountingScene(drawing({ demolition: [mark("m", "W", "a", 100, 190)] }))
-    expect(Object.keys(s).sort()).toEqual(["dimensions", "doorways", "oldElementIds", "own", "remnants", "walls"])
+    expect(Object.keys(s).sort()).toEqual(["batteries", "dimensions", "doorways", "oldBatteryIds", "oldElementIds", "own", "remnants", "walls"])
   })
 })
 

@@ -70,18 +70,28 @@ export function communicationGuard(walls: readonly Wall[], communications: reado
 
 // квадрат установки начала стены не налагается на коммуникации (spec wall-collision «Рисование стены»)
 export function squareAllowed(square: readonly Point[], communications: readonly Communication[]): boolean {
+  return squareAllowedAmong(square, communications.map(shapeOfCommunication))
+}
+
+// то же для произвольных тел (батареи, change add-battery)
+export function squareAllowedAmong(square: readonly Point[], shapes: readonly Shape[]): boolean {
   const body: Shape = { kind: "poly", pts: square }
-  return communications.every((c) => penetration(shapeOfCommunication(c), body).depth <= RECOGNITION_DEPTH_CM)
+  return shapes.every((s) => penetration(s, body).depth <= RECOGNITION_DEPTH_CM)
 }
 
 // конец рисуемой стены, обрезанный до касания с коммуникациями: последнее положение на отрезке от начала, при котором
 // тело стены не налагается на коммуникацию; тело растёт вместе с длиной, поэтому допустимые положения — начало отрезка;
 // null — стена нулевой длины
 export function limitNewWall(start: Point, end: Point, thicknessCm: number, communications: readonly Communication[]): Point | null {
+  return limitNewWallAmong(start, end, thicknessCm, communications.map(shapeOfCommunication))
+}
+
+// то же для произвольных тел (батареи, change add-battery)
+export function limitNewWallAmong(start: Point, end: Point, thicknessCm: number, shapes: readonly Shape[]): Point | null {
   const along = (t: number): Point => ({ x: start.x + (end.x - start.x) * t, y: start.y + (end.y - start.y) * t })
   const depthAt = (t: number): number => {
     const body = segmentShape(start, along(t), thicknessCm)
-    return body ? communications.reduce((m, c) => Math.max(m, penetration(shapeOfCommunication(c), body).depth), 0) : 0
+    return body ? shapes.reduce((m, s) => Math.max(m, penetration(s, body).depth), 0) : 0
   }
   if (depthAt(1) <= RECOGNITION_DEPTH_CM) return end
   let ok = 0

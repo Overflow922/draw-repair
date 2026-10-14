@@ -1,3 +1,6 @@
+import { batteryRect } from "../battery/battery-geometry"
+import { hostOfBattery } from "../battery/battery-motion"
+import { strokeBatteries } from "../battery/battery-render"
 import { strokeCommunications } from "../communications/communications-render"
 import { drawDimensionGeom, drawElementsLayer, drawScene, prepareCanvas, SCREEN_METRICS, tracePolygons } from "../render"
 import type { RenderMetrics } from "../render"
@@ -6,7 +9,7 @@ import { LIGHT_PALETTE } from "../theme"
 import type { Palette, Theme } from "../theme"
 import { PX_PER_CM } from "../types"
 import { DEMOLITION_HATCH, strokeHatchSeries } from "../wall-hatch"
-import type { Communication, Point, Unit, View, Wall, WallElement } from "../types"
+import type { Battery, Communication, Point, Unit, View, Wall, WallElement } from "../types"
 import { markDimensions } from "./mark-dimensions"
 import type { MarkSpan, ResolvedMark } from "./mark-model"
 import { markRegion } from "./mark-region"
@@ -24,6 +27,9 @@ export interface DemolitionScene {
   ruler?: RulerReading | null // замеры инструмента «Линейка» по подложке
   erasing?: string | null // пометка под курсором ластика: область обводится цветом подсветки ластика
   communications?: readonly Communication[] // общие коммуникации чертежа: обычным цветом поверх подложки (add-communications)
+  // батареи обмерочного плана серой подложкой; помеченные сносом — красная область (change add-battery, design D8)
+  batteries?: readonly Battery[]
+  demolishedBatteryIds?: ReadonlySet<string>
 }
 
 export interface DemolitionOptions {
@@ -59,6 +65,7 @@ export function drawDemolitionScene(
     palette: grey,
     dimensions: [],
     doorways,
+    batteries: scene.batteries,
     ruler: scene.ruler,
     underlay: true,
   })
@@ -96,6 +103,21 @@ export function drawDemolitionScene(
       }
     }
     drawDimensions(r, scene.selectedId === r.mark.id)
+  }
+  // помеченная батарея сносится целиком: область закрашена бумагой, красный контур и штриховка по прямоугольнику
+  for (const b of scene.batteries ?? []) {
+    const host = scene.demolishedBatteryIds?.has(b.id) ? hostOfBattery(b, walls) : null
+    if (!host) continue
+    const polygon = batteryRect(b, host).map(toScreen)
+    ctx.save()
+    ctx.fillStyle = palette.paper
+    tracePolygons(ctx, [polygon])
+    ctx.fill()
+    ctx.clip()
+    ctx.strokeStyle = opts.color
+    strokeHatchSeries(ctx, polygon, DEMOLITION_HATCH, origin, m)
+    ctx.restore()
+    strokeBatteries(ctx, [b], walls, view, opts.color, m.contourPx)
   }
 
   // элементы стен не скрываются сносом и рисуются поверх закраски области (change demolition-show-elements)

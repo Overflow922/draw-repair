@@ -13,7 +13,7 @@ const sorted = (xs: readonly string[]): string[] => [...xs].sort()
 describe("наборы инструментов", () => {
   // change add-communications (drawing-plans «Инструменты плана»): группа «Коммуникации» («Стояк», «Воздуховод»)
   it("PT-02: обмерочный план — «Стена», «Проём», «Дверь», «Окно», «Стояк», «Воздуховод», «Размер», «Линейка», «Ластик»", () => {
-    expect(sorted(toolsOf("measure"))).toEqual(sorted(["wall", "doorway", "door", "window", "riser", "duct", "dimension", "ruler", "eraser"]))
+    expect(sorted(toolsOf("measure"))).toEqual(sorted(["wall", "doorway", "door", "window", "battery", "riser", "duct", "dimension", "ruler", "eraser"]))
   })
 
   // TCR-6 (change demolition-doorway-sizes): на плане «Демонтаж» есть «Ластик» (удаляет пометки)
@@ -38,8 +38,8 @@ describe("наборы инструментов", () => {
   // change add-communications (drawing-plans «Инструменты плана»): добавлена группа «Коммуникации» («Стояк», «Воздуховод»);
   // «Ластик» по-прежнему в наборе, «Демонтажа» нет
   it("SZ-71: набор обмерочного плана — прежний плюс «Стояк» и «Воздуховод»: «Ластик» в нём остаётся, «Демонтажа» нет", () => {
-    expect(toolsOf("measure")).toEqual(["wall", "doorway", "door", "window", "riser", "duct", "dimension", "ruler", "eraser"])
-    expect(sorted(toolsOf("measure"))).toEqual(sorted(["wall", "doorway", "door", "window", "riser", "duct", "dimension", "ruler", "eraser"]))
+    expect(toolsOf("measure")).toEqual(["wall", "doorway", "door", "window", "battery", "riser", "duct", "dimension", "ruler", "eraser"])
+    expect(sorted(toolsOf("measure"))).toEqual(sorted(["wall", "doorway", "door", "window", "battery", "riser", "duct", "dimension", "ruler", "eraser"]))
   })
 
   it("PT-02: в наборе обмерочного плана нет инструмента «Демонтаж»", () => {

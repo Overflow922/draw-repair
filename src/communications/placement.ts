@@ -1,6 +1,8 @@
-import type { Communication, Point, Wall } from "../types"
+import { batteryBodies, communicationDepth } from "../battery/battery-guard"
+import type { BatteryBody } from "../battery/battery-guard"
+import type { Battery, Communication, Point, Wall } from "../types"
 import { RECOGNITION_DEPTH_CM } from "../wall-collision"
-import { DIRECTION_VECTORS, communicationBox, communicationViolation, shapeOfCommunication, wallBody } from "./geometry"
+import { DIRECTION_VECTORS, communicationBox, shapeOfCommunication, wallBody } from "./geometry"
 import type { Direction } from "./geometry"
 import { BISECT_ITERATIONS, CLEAR_CM, CONTACT_DEPTH_CM, penetration, sweep, translate } from "./shape"
 import type { Shape } from "./shape"
@@ -32,20 +34,21 @@ const smallestSide = (c: Communication): number => (c.kind === "riser" ? c.diame
 // последнее допустимое положение на прямой от c к target (design D4): допустимое — без изменений, иначе остановка
 // в касании без скольжения; уже стоящая в наложении коммуникация не углубляет его. Проверяются только препятствия в
 // габарите пути; шаг пути — не больше половины суммы собственного размера и толщины самого тонкого из них, поэтому
-// тело не проскакивает препятствие между шагами при любой длине пути
-export function moveLimited(c: Communication, target: Point, walls: readonly Wall[], others: readonly Communication[]): Point {
+// тело не проскакивает препятствие между шагами при любой длине пути; батареи (change add-battery) — такие же препятствия
+export function moveLimited(c: Communication, target: Point, walls: readonly Wall[], others: readonly Communication[], batteries: readonly Battery[] = []): Point {
   const [ax, ay, bx, by] = communicationBox(c)
   const [cx, cy, dx, dy] = communicationBox(at(c, target.x, target.y))
   const path: Box = [Math.min(ax, cx) - 1, Math.min(ay, cy) - 1, Math.max(bx, dx) + 1, Math.max(by, dy) + 1]
   const nearWalls = walls.filter((w) => boxesMeet(wallBox(w), path))
   const nearOthers = others.filter((o) => o.id !== c.id && boxesMeet(communicationBox(o), path))
-  if (!nearWalls.length && !nearOthers.length) return target
-  const violation = (p: Point): number => communicationViolation(at(c, p.x, p.y), nearWalls, nearOthers)
+  const nearBatteries = batteryBodies(batteries, walls).filter((b) => boxesMeet(b.box, path))
+  if (!nearWalls.length && !nearOthers.length && !nearBatteries.length) return target
+  const violation = (p: Point): number => communicationDepth(at(c, p.x, p.y), nearWalls, nearOthers, nearBatteries)
   const v0 = violation(c)
   const recognized = Math.max(v0, RECOGNITION_DEPTH_CM)
   const tol = Math.max(v0 + CLEAR_CM, CONTACT_DEPTH_CM)
   const along = (t: number): Point => ({ x: c.x + (target.x - c.x) * t, y: c.y + (target.y - c.y) * t })
-  const thinnest = Math.min(...nearWalls.map((w) => w.thicknessCm), ...nearOthers.map(smallestSide))
+  const thinnest = Math.min(...nearWalls.map((w) => w.thicknessCm), ...nearOthers.map(smallestSide), ...nearBatteries.map((b) => b.minSideCm))
   const step = Math.max(MIN_STEP_CM, (smallestSide(c) + thinnest) / 2)
   const n = Math.max(1, Math.ceil(Math.hypot(target.x - c.x, target.y - c.y) / step))
   let ok = 0
@@ -63,9 +66,9 @@ export function moveLimited(c: Communication, target: Point, walls: readonly Wal
   return along(ok)
 }
 
-function obstaclesOf(c: Communication, walls: readonly Wall[], others: readonly Communication[]): Shape[] {
+function obstaclesOf(c: Communication, walls: readonly Wall[], others: readonly Communication[], batteries: readonly BatteryBody[]): Shape[] {
   const bodies = walls.flatMap((w) => wallBody(w) ?? [])
-  return [...bodies, ...others.filter((o) => o.id !== c.id).map(shapeOfCommunication)]
+  return [...bodies, ...others.filter((o) => o.id !== c.id).map(shapeOfCommunication), ...batteries.map((b) => b.shape)]
 }
 
 // сдвиг вдоль dir, после которого коммуникация, налагающаяся на препятствия, свободна от них; null — такого сдвига нет:
@@ -107,11 +110,12 @@ function pushOut(c: Communication, dir: Direction, obstacles: readonly Shape[]):
 
 // призрак установки: центр — курсор, округлённый до сантиметра; при наложении — ближайший допустимый сдвиг
 // вдоль одной из осей до касания; null — допустимого положения нет
-export function ghostPosition(proto: Communication, cursor: Point, walls: readonly Wall[], others: readonly Communication[]): Communication | null {
+export function ghostPosition(proto: Communication, cursor: Point, walls: readonly Wall[], others: readonly Communication[], batteries: readonly Battery[] = []): Communication | null {
   // «+ 0» превращает −0 после округления в 0: центр не должен хранить отрицательный нуль
   const placed = at(proto, Math.round(cursor.x) + 0, Math.round(cursor.y) + 0)
-  if (communicationViolation(placed, walls, others) <= RECOGNITION_DEPTH_CM) return placed
-  const obstacles = obstaclesOf(placed, walls, others)
+  const bodies = batteryBodies(batteries, walls)
+  if (communicationDepth(placed, walls, others, bodies) <= RECOGNITION_DEPTH_CM) return placed
+  const obstacles = obstaclesOf(placed, walls, others, bodies)
   let best: Communication | null = null
   let bestShift = Infinity
   for (const dir of DIRECTIONS) {

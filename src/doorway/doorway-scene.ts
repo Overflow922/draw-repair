@@ -1,19 +1,26 @@
 import { dimHitDistance, distanceToWall, endpointAt, hitWall, midpointAt, segmentIntersectsRect } from "../geometry"
+import { hitBattery } from "../battery/battery-pick"
 import { hitCommunication } from "../communications/pick"
 import type { Scene } from "../history"
-import type { Communication, Dimension, Point, Wall, WallElement } from "../types"
+import type { Battery, Communication, Dimension, Point, Wall, WallElement } from "../types"
 import { cross, degenerate, dot, sub, unit } from "../wall-geometry"
 import { hostOf, hostPoint, jambsT } from "./doorway-faces"
 
 // Решения выбора и удаления с проёмами (change add-doorway, design D2, D8): попадание, рамка,
 // приоритет ластика, каскад удаления. Чистые функции; main.ts только маршрутизирует события.
 
-export type ErasePick = { kind: "dimension"; dimension: Dimension } | { kind: "doorway"; doorway: WallElement } | { kind: "wall"; wall: Wall }
+export type ErasePick =
+  | { kind: "dimension"; dimension: Dimension }
+  | { kind: "battery"; battery: Battery }
+  | { kind: "doorway"; doorway: WallElement }
+  | { kind: "wall"; wall: Wall }
 
+// batteries — батареи (change add-battery); без поля батарей в сцене нет
 export interface Selection {
   walls: Wall[]
   dimensions: Dimension[]
   doorways: WallElement[]
+  batteries?: Battery[]
 }
 
 // участок проёма — прямоугольник откосов через всю толщину; tolCm — радиус привязки
@@ -93,18 +100,20 @@ export function wallsInRect(min: Point, max: Point, walls: readonly Wall[], door
   })
 }
 
-// ластик: размер → проём → стена (wall-deletion «Инструмент «Ластик»»)
+// ластик: размер → батарея → проём → стена (wall-deletion «Инструмент «Ластик»»; battery «Удаление батареи»)
 export function erasePick(p: Point, scene: Selection, tolCm: number, textFactor: number): ErasePick | null {
   let dimension: Dimension | null = null
   let best = Infinity
   for (const d of scene.dimensions) {
-    const dd = dimHitDistance(p, d, scene.walls, textFactor, scene.doorways)
+    const dd = dimHitDistance(p, d, scene.walls, textFactor, scene.doorways, scene.batteries)
     if (dd !== null && dd <= tolCm && dd < best) {
       dimension = d
       best = dd
     }
   }
   if (dimension) return { kind: "dimension", dimension }
+  const battery = hitBattery(p, scene.walls, scene.batteries ?? [], tolCm)
+  if (battery) return { kind: "battery", battery }
   const doorway = hitDoorway(p, scene.walls, scene.doorways, tolCm)
   if (doorway) return { kind: "doorway", doorway }
   const wall = hitWall(p, scene.walls, tolCm)
@@ -112,12 +121,13 @@ export function erasePick(p: Point, scene: Selection, tolCm: number, textFactor:
 }
 
 // цель нажатия левой кнопки (change fix-midpoint-marker-priority, design D1; wall-selection «Приоритет маркеров
-// выделенной стены»): маркеры одиночной выделенной стены → размер → элемент стены → тело стены
+// выделенной стены»): маркеры одиночной выделенной стены → размер → коммуникация → батарея → элемент стены → тело стены
 export type PressPick =
   | { kind: "end"; wall: Wall; end: "a" | "b" }
   | { kind: "middle"; wall: Wall }
   | { kind: "dimension"; dimension: Dimension }
   | { kind: "communication"; communication: Communication }
+  | { kind: "battery"; battery: Battery }
   | { kind: "doorway"; doorway: WallElement }
   | { kind: "wall"; wall: Wall }
 
@@ -135,6 +145,8 @@ export interface PressOptions {
   middleMarker: boolean
   dimensions: boolean
   elements: boolean
+  // батареи — цель нажатия; без поля (и при false) батареи не выбираются
+  batteries?: boolean
 }
 
 export function pressPick(
@@ -152,11 +164,15 @@ export function pressPick(
     if (options.middleMarker && midpointAt(p, sel, tolCm)) return { kind: "middle", wall: sel }
   }
   if (options.dimensions) {
-    const dimension = scene.dimensions.find((d) => (dimHitDistance(p, d, scene.walls, textFactor, scene.doorways) ?? Infinity) <= tolCm)
+    const dimension = scene.dimensions.find((d) => (dimHitDistance(p, d, scene.walls, textFactor, scene.doorways, scene.batteries) ?? Infinity) <= tolCm)
     if (dimension) return { kind: "dimension", dimension }
   }
   const communication = communications && hitCommunication(p, communications.items, communications.tolCm)
   if (communication) return { kind: "communication", communication }
+  if (options.batteries) {
+    const battery = hitBattery(p, scene.walls, scene.batteries ?? [], tolCm)
+    if (battery) return { kind: "battery", battery }
+  }
   if (options.elements) {
     const doorway = hitDoorway(p, scene.walls, scene.doorways, tolCm)
     if (doorway) return { kind: "doorway", doorway }
@@ -166,21 +182,26 @@ export function pressPick(
 }
 
 const refsWall = (d: Dimension, ids: ReadonlySet<string>): boolean =>
-  [d.from, d.to].some((p) => p.kind !== "jamb" && (ids.has(p.a.wallId) || ids.has(p.b.wallId)))
+  [d.from, d.to].some((p) => p.kind === undefined && (ids.has(p.a.wallId) || ids.has(p.b.wallId)))
 
-// точка-откос на удаляемом элементе (change add-opening-dimension-anchors, design D6)
-const refsElement = (d: Dimension, ids: ReadonlySet<string>): boolean =>
-  [d.from, d.to].some((p) => p.kind === "jamb" && ids.has(p.elementId))
+// точка-откос на удаляемом элементе (change add-opening-dimension-anchors, design D6) или угол на удаляемой батарее
+// (change add-battery, design D5)
+const refsElement = (d: Dimension, jambs: ReadonlySet<string>, batteries: ReadonlySet<string>): boolean =>
+  [d.from, d.to].some((p) => (p.kind === "jamb" && jambs.has(p.elementId)) || (p.kind === "corner" && batteries.has(p.batteryId)))
 
 // удаление выделенного с каскадом размеров и проёмов удаляемых стен (wall-deletion); размеры на откосах
-// удаляемых элементов уходят вместе с ними
+// удаляемых элементов уходят вместе с ними; батареи уходят с опорной стеной, размеры на их углах — с батареями
+// (battery «Удаление батареи»); сцена без батарей остаётся без поля батарей
 export function deleteObjects(scene: Scene, picked: Selection): Scene {
   const ids = new Set(picked.walls.map((w) => w.id))
   const doorways = (scene.doorways ?? []).filter((d) => !picked.doorways.includes(d) && !ids.has(d.wallId))
   const removed = new Set((scene.doorways ?? []).filter((d) => !doorways.includes(d)).map((d) => d.id))
+  const batteries = (scene.batteries ?? []).filter((b) => !(picked.batteries ?? []).includes(b) && !ids.has(b.wallId))
+  const removedBatteries = new Set((scene.batteries ?? []).filter((b) => !batteries.includes(b)).map((b) => b.id))
   return {
     walls: scene.walls.filter((w) => !picked.walls.includes(w)),
-    dimensions: scene.dimensions.filter((d) => !picked.dimensions.includes(d) && !refsWall(d, ids) && !refsElement(d, removed)),
+    dimensions: scene.dimensions.filter((d) => !picked.dimensions.includes(d) && !refsWall(d, ids) && !refsElement(d, removed, removedBatteries)),
     doorways,
+    ...(scene.batteries ? { batteries } : null),
   }
 }

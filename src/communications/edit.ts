@@ -1,5 +1,7 @@
-import type { Communication, Point, Wall } from "../types"
-import { DIRECTION_VECTORS, communicationViolation, slideReach } from "./geometry"
+import { batteryBodies, communicationDepth } from "../battery/battery-guard"
+import type { BatteryBody } from "../battery/battery-guard"
+import type { Battery, Communication, Point, Wall } from "../types"
+import { DIRECTION_VECTORS, slideReach } from "./geometry"
 import type { Direction } from "./geometry"
 import { growDuct } from "./duct-grow"
 import { moveLimited } from "./placement"
@@ -90,10 +92,10 @@ const same = (a: Communication, b: Communication): boolean =>
     : a.kind === "duct" && b.kind === "duct" && Math.abs(a.widthCm - b.widthCm) <= SAME_CM && Math.abs(a.depthCm - b.depthCm) <= SAME_CM)
 
 // наибольший допустимый размер не больше запрошенного при неизменном центре: до касания (наложение не растёт)
-function limitedSize(c: Communication, kind: "diameter" | "width" | "depth", requested: number, walls: readonly Wall[], others: readonly Communication[]): number {
+function limitedSize(c: Communication, kind: "diameter" | "width" | "depth", requested: number, walls: readonly Wall[], others: readonly Communication[], batteries: readonly BatteryBody[]): number {
   const current = sizeOf(c, kind) ?? requested
-  const allowed = communicationViolation(c, walls, others) + CLEAR_CM
-  const fits = (s: number): boolean => communicationViolation(withSize(c, kind, s), walls, others) <= allowed
+  const allowed = communicationDepth(c, walls, others, batteries) + CLEAR_CM
+  const fits = (s: number): boolean => communicationDepth(withSize(c, kind, s), walls, others, batteries) <= allowed
   if (fits(requested)) return requested
   if (requested <= current) return current
   let lo = current
@@ -108,22 +110,23 @@ function limitedSize(c: Communication, kind: "diameter" | "width" | "depth", req
 
 // ввод числа: расстояние сдвигает коммуникацию вдоль оси до последнего допустимого положения, размер меняется вокруг
 // неизменного центра; некорректное значение и ввод, не меняющий коммуникацию, — changed = false
-export function applyNumber(c: Communication, field: NumberField, valueCm: number, walls: readonly Wall[], others: readonly Communication[]): NumberResult {
+export function applyNumber(c: Communication, field: NumberField, valueCm: number, walls: readonly Wall[], others: readonly Communication[], batteries: readonly Battery[] = []): NumberResult {
   if (!Number.isFinite(valueCm)) return unchanged(c)
   if (field.kind === "distance") {
     const reach = valueCm >= 0 ? slideReach(c, field.dir, walls) : null
     if (!reach) return unchanged(c)
     const d = DIRECTION_VECTORS[field.dir]
     const shift = reach.distanceCm - valueCm
-    const p = moveLimited(c, { x: c.x + d.x * shift, y: c.y + d.y * shift }, walls, others)
+    const p = moveLimited(c, { x: c.x + d.x * shift, y: c.y + d.y * shift }, walls, others, batteries)
     const next = { ...c, x: p.x, y: p.y }
     return same(c, next) ? unchanged(c) : { communication: next, changed: true }
   }
   const current = sizeOf(c, field.kind)
   if (!(valueCm > 0) || current === null) return unchanged(c)
+  const bodies = batteryBodies(batteries, walls)
   const next =
     c.kind === "duct" && field.kind !== "diameter" && valueCm > current
-      ? growDuct(c, field.kind, valueCm, walls, others)
-      : withSize(c, field.kind, limitedSize(c, field.kind, valueCm, walls, others))
+      ? growDuct(c, field.kind, valueCm, walls, others, bodies)
+      : withSize(c, field.kind, limitedSize(c, field.kind, valueCm, walls, others, bodies))
   return same(c, next) ? unchanged(c) : { communication: next, changed: true }
 }

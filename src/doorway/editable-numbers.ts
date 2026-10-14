@@ -37,14 +37,14 @@ export const CHAIN_BAND_EM = 2.2
 const ZERO = 1e-6
 
 // направление текста размерной линии вдоль направления axis: слева направо (render: drawDimensionGeom)
-function textDirection(axis: Point): Point {
+export function textDirection(axis: Point): Point {
   let angle = Math.atan2(axis.y, axis.x)
   if (angle > Math.PI / 2 || angle < -Math.PI / 2) angle += Math.PI
   return { x: Math.cos(angle), y: Math.sin(angle) }
 }
 
 // «вверх» от текста: перпендикуляр к направлению против оси y экрана
-const upOf = (dir: Point): Point => ({ x: dir.y, y: -dir.x })
+export const upOf = (dir: Point): Point => ({ x: dir.y, y: -dir.x })
 
 // числа выделенного элемента d: k — px на см чертежа, labelPx — кегль подписи
 export function editableNumbers(
@@ -89,10 +89,13 @@ export function editableNumbers(
   return out
 }
 
+// положение числа на холсте: центр текста, направление, размеры прямоугольника
+export type NumberBox = Pick<EditableNumber, "center" | "dir" | "widthCm" | "heightCm">
+
 // число, в прямоугольник которого (вдоль текста — ширина, поперёк — кегль) с допуском tolCm попала точка; из
 // нескольких — с ближайшим центром
-export function numberAt(p: Point, numbers: readonly EditableNumber[], tolCm: number): EditableNumber | null {
-  let best: EditableNumber | null = null
+export function numberAt<T extends NumberBox>(p: Point, numbers: readonly T[], tolCm: number): T | null {
+  let best: T | null = null
   let bestDist = Infinity
   for (const n of numbers) {
     const rel = sub(p, n.center)

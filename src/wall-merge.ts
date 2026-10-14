@@ -1,3 +1,4 @@
+import { violatesBatteries } from "./battery/battery-guard"
 import { jointTol, wallEndOccupied } from "./geometry"
 import { violatesCommunications } from "./communications/guard"
 import { jambsT } from "./doorway/doorway-faces"
@@ -61,6 +62,8 @@ export function mergeContinuation(scene: Scene, wall: Wall): MergeResult {
   const extended: Wall = { ...e, [end]: { x: tip.x + dir.x * addedCm, y: tip.y + dir.y * addedCm } }
   const walls = scene.walls.map((w) => (w === e ? extended : w))
   const doorways = (scene.doorways ?? []).map((d) => (d.wallId === e.id ? reattach(d, e, end, addedCm, lengthCm + addedCm) : d))
-  if (violatesDoorways(scene.walls, walls, doorways) || violatesCommunications(scene.walls, walls, scene.communications ?? [])) return { kind: "blocked" }
+  const communications = scene.communications ?? []
+  if (violatesDoorways(scene.walls, walls, doorways) || violatesCommunications(scene.walls, walls, communications) || violatesBatteries(scene.walls, walls, scene.batteries ?? [], communications))
+    return { kind: "blocked" }
   return { kind: "merged", scene: { ...scene, walls, ...(scene.doorways ? { doorways } : null) } }
 }

@@ -1,5 +1,6 @@
 import type { Communication, Duct, Wall } from "../types"
-import { communicationViolation } from "./geometry"
+import { communicationDepth } from "../battery/battery-guard"
+import type { BatteryBody } from "../battery/battery-guard"
 import { BISECT_ITERATIONS, CLEAR_CM } from "./shape"
 
 // Рост воздуховода на свободное место вдоль оси (change fix-duct-resize-against-wall, design D1–D2; spec communications
@@ -20,10 +21,10 @@ function withGrowth(d: Duct, axis: DuctAxis, low: number, high: number): Duct {
 }
 
 // на сколько можно сдвинуть одну грань наружу (другая неподвижна), не больше cap, пока наложение не растёт
-function sideReach(d: Duct, axis: DuctAxis, side: Side, cap: number, walls: readonly Wall[], others: readonly Communication[]): number {
+function sideReach(d: Duct, axis: DuctAxis, side: Side, cap: number, walls: readonly Wall[], others: readonly Communication[], batteries: readonly BatteryBody[]): number {
   const grown = (g: number): Duct => (side === "low" ? withGrowth(d, axis, g, 0) : withGrowth(d, axis, 0, g))
-  const allowed = communicationViolation(d, walls, others) + CLEAR_CM
-  const fits = (g: number): boolean => communicationViolation(grown(g), walls, others) <= allowed
+  const allowed = communicationDepth(d, walls, others, batteries) + CLEAR_CM
+  const fits = (g: number): boolean => communicationDepth(grown(g), walls, others, batteries) <= allowed
   if (fits(cap)) return cap
   let lo = 0
   let hi = cap
@@ -37,11 +38,11 @@ function sideReach(d: Duct, axis: DuctAxis, side: Side, cap: number, walls: read
 
 // увеличение ширины или глубины воздуховода до requested: прирост поровну на обе стороны, пока обе свободны; доля упёршейся
 // стороны уходит в свободную, не выше её предела; если места не хватает, рост идёт до касания с обеих сторон
-export function growDuct(d: Duct, axis: DuctAxis, requested: number, walls: readonly Wall[], others: readonly Communication[]): Duct {
+export function growDuct(d: Duct, axis: DuctAxis, requested: number, walls: readonly Wall[], others: readonly Communication[], batteries: readonly BatteryBody[] = []): Duct {
   const increase = requested - sizeAlong(d, axis)
   const half = increase / 2
-  const lowMax = sideReach(d, axis, "low", increase, walls, others)
-  const highMax = sideReach(d, axis, "high", increase, walls, others)
+  const lowMax = sideReach(d, axis, "low", increase, walls, others, batteries)
+  const highMax = sideReach(d, axis, "high", increase, walls, others, batteries)
   if (half <= lowMax && half <= highMax) return withGrowth(d, axis, half, half)
   if (half > lowMax) return withGrowth(d, axis, lowMax, Math.min(increase - lowMax, highMax))
   return withGrowth(d, axis, Math.min(increase - highMax, lowMax), highMax)

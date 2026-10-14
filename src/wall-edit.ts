@@ -1,3 +1,5 @@
+import { batteryGuard } from "./battery/battery-guard"
+import type { BatteryGuard } from "./battery/battery-guard"
 import { planEdit } from "./edit-plan"
 import type { EditPlan, Segment } from "./edit-plan"
 import { communicationGuard } from "./communications/guard"
@@ -7,7 +9,7 @@ import type { DoorwayGuard } from "./doorway/doorway-guard"
 import type { WallEnd } from "./ortho-stretch"
 import { orthoAxisOf, otherEnd, projectEnd, projectMove, teeContext } from "./tee-bounds"
 import type { TeeContext } from "./tee-bounds"
-import type { Communication, Point, Wall, WallElement } from "./types"
+import type { Battery, Communication, Point, Wall, WallElement } from "./types"
 import { collisionContext } from "./wall-collision"
 import type { AxisSnap, CheckMode, CollisionContext, Verdict } from "./wall-collision"
 import { add, cross, dist, dot, mul, sub, unit } from "./wall-geometry"
@@ -19,12 +21,14 @@ import { add, cross, dist, dot, mul, sub, unit } from "./wall-geometry"
 // snappedAxis — стена, к линии оси которой привязан перетаскиваемый конец или опорный конец
 // перемещаемой стены (snapWithSource); doorways — проёмы чертежа, которые правка не должна
 // нарушать (change add-doorway, design D5); communications — коммуникации, на которые тело стены не налагается
-// (change add-communications, design D6)
+// (change add-communications, design D6); batteries — батареи, на которые тело стены не налагается и которые едут с
+// опорной стеной (change add-battery, design D4)
 export interface EditMode {
   ortho: boolean
   snappedAxis?: Wall
   doorways?: readonly WallElement[]
   communications?: readonly Communication[]
+  batteries?: readonly Battery[]
 }
 
 export type ResizeResult =
@@ -46,6 +50,7 @@ interface Problem {
   collision: CollisionContext
   doorways: DoorwayGuard | null
   communications: CommunicationGuard | null
+  batteries: BatteryGuard | null
   project: (v: Point) => Point
   slide: boolean
 }
@@ -58,6 +63,8 @@ function verdictAt(p: Problem, v: Point, mode: CheckMode): Verdict {
   // нарушение коммуникации даёт нормаль контакта: правка скользит вдоль коммуникации, как вдоль стены
   const blocked = p.communications?.check(positions, mode)
   if (blocked && !blocked.ok) return blocked
+  const crowded = p.batteries?.check(positions, mode)
+  if (crowded && !crowded.ok) return crowded
   return p.collision.check(positions, mode)
 }
 
@@ -154,7 +161,8 @@ export function moveWallsBounded(walls: Wall[], group: readonly Wall[], v: Point
   const collision = collisionContext(walls, moveSnaps(group, project(v), mode.snappedAxis))
   const doorways = doorwayGuard(walls, mode.doorways ?? [])
   const communications = communicationGuard(walls, mode.communications ?? [])
-  const result = limit({ plan, tee, collision, doorways, communications, project, slide: true }, v)
+  const batteries = batteryGuard(walls, mode.batteries ?? [], mode.communications ?? [])
+  const result = limit({ plan, tee, collision, doorways, communications, batteries, project, slide: true }, v)
   if (len(result) === 0) return ZERO
   apply(plan.positions(result))
   return result
@@ -173,7 +181,8 @@ export function moveEndpointBounded(walls: Wall[], wall: Wall, end: WallEnd, tar
   const snaps: AxisSnap[] = mode.snappedAxis ? [{ wall, end, axis: mode.snappedAxis }] : []
   const doorways = doorwayGuard(walls, mode.doorways ?? [])
   const communications = communicationGuard(walls, mode.communications ?? [])
-  const result = limit({ plan, tee, collision: collisionContext(walls, snaps), doorways, communications, project, slide: true }, sub(target, base))
+  const batteries = batteryGuard(walls, mode.batteries ?? [], mode.communications ?? [])
+  const result = limit({ plan, tee, collision: collisionContext(walls, snaps), doorways, communications, batteries, project, slide: true }, sub(target, base))
   const next = add(base, result)
   // нулевая длина не применяется
   if (len(result) === 0 || dist(next, other) < 1e-6) return base
@@ -197,7 +206,8 @@ export function resizeWallBounded(walls: Wall[], wall: Wall, lengthCm: number, m
   const plan = planEdit(walls, { kind: "end", wall, end: movable }, mode.ortho)
   const doorways = doorwayGuard(walls, mode.doorways ?? [])
   const communications = communicationGuard(walls, mode.communications ?? [])
-  const result = limit({ plan, tee, collision: collisionContext(walls, []), doorways, communications, project: (u) => u, slide: false }, request)
+  const batteries = batteryGuard(walls, mode.batteries ?? [], mode.communications ?? [])
+  const result = limit({ plan, tee, collision: collisionContext(walls, []), doorways, communications, batteries, project: (u) => u, slide: false }, request)
   if (len(result) === 0) return { kind: "rejected", reason: "no-change" }
   apply(plan.positions(result))
   const full = result.x === request.x && result.y === request.y

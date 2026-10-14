@@ -1,7 +1,7 @@
 import { historyKey } from "./plans"
 import type { PlanId } from "./plans"
-import { isCommunication, isDemolitionMark, isDimension, isDrawing, isWall, isWallElement } from "./storage"
-import type { Communication, DemolitionMark, Dimension, DimPoint, Drawing, Wall, WallElement } from "./types"
+import { isBattery, isBatteryMark, isCommunication, isDemolitionMark, isDimension, isDrawing, isWall, isWallElement } from "./storage"
+import type { Battery, BatteryMark, Communication, DemolitionMark, Dimension, DimPoint, Drawing, Wall, WallElement } from "./types"
 
 const KEY = "draw-repair:history"
 export const HISTORY_LIMIT = 50
@@ -13,13 +13,16 @@ export interface Scene {
   doorways?: WallElement[]
   // коммуникации: запись без поля при отмене и повторе список не меняет (change add-communications, design D11)
   communications?: Communication[]
+  // батареи: запись без поля при отмене и повторе список не меняет (change add-battery, design D6)
+  batteries?: Battery[]
 }
 
 export type HistoryEntry =
-  | { kind: "walls"; walls: Wall[]; dimensions: Dimension[]; doorways?: WallElement[]; communications?: Communication[] }
+  | { kind: "walls"; walls: Wall[]; dimensions: Dimension[]; doorways?: WallElement[]; communications?: Communication[]; batteries?: Battery[] }
   | { kind: "close"; index: number; drawingId: string }
-  // шаг плана «Демонтаж» (change demolition-plan, design D7): список пометок чертежа до операции
-  | { kind: "demolition"; marks: DemolitionMark[] }
+  // шаг плана «Демонтаж» (change demolition-plan, design D7): список пометок чертежа до операции; пометки сноса
+  // батарей — в той же записи (change add-battery, design D8), в старой записи их нет
+  | { kind: "demolition"; marks: DemolitionMark[]; batteryMarks?: BatteryMark[] }
 
 export interface DrawingHistory {
   past: HistoryEntry[]
@@ -51,7 +54,7 @@ export function planHistory(history: HistoryStore, drawingId: string, plan: Plan
   return drawingHistory(history, historyKey(drawingId, plan))
 }
 
-const cloneDimPoint = (p: DimPoint): DimPoint => (p.kind === "jamb" ? { ...p } : { a: { ...p.a }, b: { ...p.b } })
+const cloneDimPoint = (p: DimPoint): DimPoint => (p.kind === undefined ? { a: { ...p.a }, b: { ...p.b } } : { ...p })
 
 export function cloneScene(scene: Scene): Scene {
   return {
@@ -64,6 +67,7 @@ export function cloneScene(scene: Scene): Scene {
     })),
     ...(scene.doorways ? { doorways: scene.doorways.map((d) => ({ ...d })) } : null),
     ...(scene.communications ? { communications: scene.communications.map((c) => ({ ...c })) } : null),
+    ...(scene.batteries ? { batteries: scene.batteries.map((b) => ({ ...b })) } : null),
   }
 }
 
@@ -100,6 +104,42 @@ export function redoMarks(history: DrawingHistory, current: readonly DemolitionM
   return copyMarks(e.marks)
 }
 
+// состояние плана «Демонтаж»: пометки стен и пометки сноса батарей (change add-battery, design D8)
+export interface DemolitionState {
+  marks: DemolitionMark[]
+  batteryMarks: BatteryMark[]
+}
+
+const copyBatteryMarks = (marks: readonly BatteryMark[]): BatteryMark[] => marks.map((m) => ({ ...m }))
+
+const demolitionEntry = (state: DemolitionState): HistoryEntry => ({ kind: "demolition", marks: copyMarks(state.marks), batteryMarks: copyBatteryMarks(state.batteryMarks) })
+
+export function recordDemolition(history: DrawingHistory, state: DemolitionState): void {
+  history.past.push(demolitionEntry(state))
+  if (history.past.length > HISTORY_LIMIT) history.past.shift()
+  history.future = []
+}
+
+// состояние из записи; запись без пометок батарей (прежний формат) оставляет текущие пометки батарей как есть
+const stateOf = (e: HistoryEntry & { kind: "demolition" }, current: DemolitionState): DemolitionState => ({
+  marks: copyMarks(e.marks),
+  batteryMarks: copyBatteryMarks(e.batteryMarks ?? current.batteryMarks),
+})
+
+export function undoDemolition(history: DrawingHistory, current: DemolitionState): DemolitionState | null {
+  const e = history.past.pop()
+  if (!e || e.kind !== "demolition") return null
+  history.future.push(demolitionEntry(current))
+  return stateOf(e, current)
+}
+
+export function redoDemolition(history: DrawingHistory, current: DemolitionState): DemolitionState | null {
+  const e = history.future.pop()
+  if (!e || e.kind !== "demolition") return null
+  history.past.push(demolitionEntry(current))
+  return stateOf(e, current)
+}
+
 export function undoEntry(history: DrawingHistory, scene: Scene): HistoryEntry | null {
   const e = history.past.pop()
   if (!e) return null
@@ -129,8 +169,11 @@ const isHistoryEntry = (e: unknown): e is HistoryEntry => {
     return Array.isArray(x.walls) && x.walls.every(isWall) &&
       Array.isArray(x.dimensions) && x.dimensions.every(isDimension) &&
       (x.doorways === undefined || (Array.isArray(x.doorways) && x.doorways.every(isWallElement))) &&
-      (x.communications === undefined || (Array.isArray(x.communications) && x.communications.every(isCommunication)))
-  if (x.kind === "demolition") return Array.isArray(x.marks) && x.marks.every(isDemolitionMark)
+      (x.communications === undefined || (Array.isArray(x.communications) && x.communications.every(isCommunication))) &&
+      (x.batteries === undefined || (Array.isArray(x.batteries) && x.batteries.every(isBattery)))
+  if (x.kind === "demolition")
+    return Array.isArray(x.marks) && x.marks.every(isDemolitionMark) &&
+      (x.batteryMarks === undefined || (Array.isArray(x.batteryMarks) && x.batteryMarks.every(isBatteryMark)))
   return x.kind === "close" && typeof x.drawingId === "string" &&
     typeof x.index === "number" && Number.isInteger(x.index) && x.index >= 0
 }

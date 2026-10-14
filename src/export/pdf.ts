@@ -1,7 +1,10 @@
 import { jsPDF } from "jspdf"
+import { batteryRect } from "../battery/battery-geometry"
+import { demolishedBatteries } from "../battery/battery-demolition"
+import { hostOfBattery } from "../battery/battery-motion"
 import { communicationBox } from "../communications/geometry"
 import { doorLeaf, heightLabelAt, heightLabelSide, labelDirection } from "../doorway/doorway-layout"
-import { dimGeometry, dimPointPoint } from "../geometry"
+import { dimensionGeometry } from "../geometry"
 import { LABEL_FRAME_PAD, elementLabel, labelWidth } from "../doorway/element-label"
 import { drawScene, PDF_METRICS } from "../render"
 import { demolitionColor, drawDemolitionScene } from "../demolition/demolition-render"
@@ -14,7 +17,7 @@ import { findRooms } from "../room-area"
 import { LIGHT_PALETTE } from "../theme"
 import { cross, dot, sub } from "../wall-geometry"
 import { PX_PER_CM, isDoor, isWindow } from "../types"
-import type { Communication, Dimension, Drawing, Point, Unit, Wall, WallElement } from "../types"
+import type { Battery, Communication, Dimension, Drawing, Point, Unit, Wall, WallElement } from "../types"
 import { FONT_B64 } from "./font"
 import { PAGE_FORMATS_MM } from "./page-format"
 import type { PageFormat } from "./page-format"
@@ -43,7 +46,8 @@ export interface Placement {
 // масштаб, в котором считаются подписи окон, если вызывающий его не указал (размер подписей задан в мм на бумаге)
 const BBOX_DEFAULT_SCALE = 100
 
-// doorways: подписи высоты выходят за стену со своей стороны (change add-doorway, design D10)
+// doorways: подписи высоты выходят за стену со своей стороны (change add-doorway, design D10); batteries нужны размерам
+// с углами батарей (change add-battery, design D5)
 export function wallsBBox(
   walls: Wall[],
   dimensions: Dimension[] = [],
@@ -51,6 +55,7 @@ export function wallsBBox(
   doorways: WallElement[] = [],
   scale: number = BBOX_DEFAULT_SCALE,
   extra: readonly Point[] = [],
+  batteries: readonly Battery[] = [],
 ): BBox {
   let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity
   const add = (x: number, y: number): void => {
@@ -66,10 +71,7 @@ export function wallsBBox(
     add(w.b.x + w.thicknessCm / 2, w.b.y + w.thicknessCm / 2)
   }
   for (const dim of dimensions) {
-    const from = dimPointPoint(dim.from, walls, doorways)
-    const to = dimPointPoint(dim.to, walls, doorways)
-    if (!from || !to) continue
-    const g = dimGeometry(from, to, dim.offset)
+    const g = dimensionGeometry(dim, walls, doorways, batteries)
     if (!g) continue
     add(g.p1.x, g.p1.y)
     add(g.p2.x, g.p2.y)
@@ -136,6 +138,10 @@ export interface PlanPage {
   demolition?: readonly ResolvedMark[]
   // общие коммуникации чертежа: на каждой странице каждого плана (change add-communications, design D10)
   communications?: readonly Communication[]
+  // батареи страницы (change add-battery, design D11): обмер — батареи обмера, «Демонтаж» — они же с множеством снесённых,
+  // «Монтаж» — видимые батареи обмера и собственные
+  batteries?: readonly Battery[]
+  demolishedBatteryIds?: ReadonlySet<string>
   title?: string // название плана страницы — в графу 5 основной надписи (change pdf-plan-page-names)
 }
 
@@ -147,14 +153,25 @@ export function pagesOf(drawing: Drawing): PlanPage[] {
   // страница «Монтаж» — остатки и собственные объекты плана (change mounting-plan, design D7)
   const mounting = mountingScene(drawing)
   const shared = drawing.communications ? { communications: drawing.communications } : null
+  const batteries = drawing.batteries ? { batteries: drawing.batteries } : null
+  const demolished = drawing.batteries
+    ? { demolishedBatteryIds: new Set(demolishedBatteries(drawing.batteryDemolition ?? [], drawing.batteries).map((b) => b.id)) }
+    : null
   return PLANS.map((plan): PlanPage => {
     switch (plan.id) {
       case "demolition":
-        return { walls: drawing.walls, dimensions: [], doorways, demolition: marks, ...shared, title: plan.label }
+        return { walls: drawing.walls, dimensions: [], doorways, demolition: marks, ...shared, ...batteries, ...demolished, title: plan.label }
       case "mounting":
-        return { walls: mounting.walls, dimensions: mounting.dimensions, doorways: mounting.doorways, ...shared, title: plan.label }
+        return {
+          walls: mounting.walls,
+          dimensions: mounting.dimensions,
+          doorways: mounting.doorways,
+          ...shared,
+          ...(mounting.batteries.length ? { batteries: mounting.batteries } : null),
+          title: plan.label,
+        }
       case "measure":
-        return { walls: drawing.walls, dimensions: drawing.dimensions, doorways, ...shared, title: plan.label }
+        return { walls: drawing.walls, dimensions: drawing.dimensions, doorways, ...shared, ...batteries, title: plan.label }
     }
   })
 }
@@ -169,8 +186,14 @@ export function pageBounds(page: PlanPage, scale: number): BBox {
     const [x1, y1, x2, y2] = communicationBox(c)
     return [{ x: x1, y: y1 }, { x: x2, y: y2 }]
   })
-  const extra = [...marks, ...bodies]
-  return wallsBBox(page.walls, page.dimensions, 0.5 * scale, page.doorways, scale, extra)
+  // прямоугольники батарей — четыре вершины
+  const batteries = page.batteries ?? []
+  const rects = batteries.flatMap((b): Point[] => {
+    const host = hostOfBattery(b, page.walls)
+    return host ? batteryRect(b, host) : []
+  })
+  const extra = [...marks, ...bodies, ...rects]
+  return wallsBBox(page.walls, page.dimensions, 0.5 * scale, page.doorways, scale, extra, batteries)
 }
 
 export function placeOnPage(b: BBox, scale: number, format: PageFormat, legendMm = 0): Placement {
@@ -204,7 +227,14 @@ function drawPage(doc: jsPDF, page: PlanPage, unit: Unit, scale: number, format:
   drawSheet(doc, format, page.title === undefined ? { name, scale, date } : { name, scale, date, pageName: page.title })
   drawLegend(doc, ctx, page, legendArea(format, legendMm))
   if (page.demolition !== undefined) {
-    const scene = { walls: page.walls, doorways: page.doorways, marks: page.demolition, communications: page.communications }
+    const scene = {
+      walls: page.walls,
+      doorways: page.doorways,
+      marks: page.demolition,
+      communications: page.communications,
+      batteries: page.batteries,
+      demolishedBatteryIds: page.demolishedBatteryIds,
+    }
     drawDemolitionScene(ctx, w, h, scene, unit, view, { color: demolitionColor("light"), grid: false, metrics: PDF_METRICS, palette: LIGHT_PALETTE })
     return
   }
@@ -214,6 +244,7 @@ function drawPage(doc: jsPDF, page: PlanPage, unit: Unit, scale: number, format:
     dimensions: page.dimensions,
     doorways: page.doorways,
     communications: page.communications,
+    batteries: page.batteries,
   })
 }
 
