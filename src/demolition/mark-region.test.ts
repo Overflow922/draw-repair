@@ -91,19 +91,42 @@ describe("markRegion в стыках", () => {
   // комната: W (0,0)-(500,0) и V (0,0)-(0,400) с общей вершиной
   const corner = [wall(0, 0, 500, 0, "W"), wall(0, 0, 0, 400, "V")]
 
-  it("RG-06: целая стена в углу — область равна форме стены с учётом угла", () => {
+  // угловой квадрат (−10…10 × −10…10) в форме W занимает только x ≥ 0, часть x < 0 принадлежит форме V:
+  // область сноса доходящего до угла участка включает и её (spec «Угол соседней стены входит в область»)
+  it("RG-06: целая стена в углу — область равна форме стены плюс угловая часть соседней стены (площадь +200)", () => {
     const [r] = effectiveMarks([mk("m", "W", "a", 0, 500)], corner)
     const polys = markRegion(r!, corner)
     const shape = displayPolygons(corner[0]!, corner)
-    expect(areaOf(polys)).toBeCloseTo(areaOf(shape), 6)
-    expect(boxOf(polys)).toEqual(boxOf(shape))
+    expect(areaOf(polys)).toBeCloseTo(areaOf(shape) + 200, 6)
+    expect(boxOf(polys).minX).toBeCloseTo(-10, 6)
   })
 
-  it("RG-06: участок у угла (from = 0) сохраняет угловую часть формы, участок вдали — нет", () => {
-    const shape = boxOf(displayPolygons(corner[0]!, corner))
+  it("RG-06: участок у угла (from = 0) включает угловую часть соседней стены, участок вдали — нет", () => {
     const [near] = effectiveMarks([mk("m", "W", "a", 0, 190)], corner)
     const [far] = effectiveMarks([mk("m", "W", "a", 100, 190)], corner)
-    expect(boxOf(markRegion(near!, corner)).minX).toBe(shape.minX)
+    expect(boxOf(markRegion(near!, corner)).minX).toBeCloseTo(-10, 6)
     expect(boxOf(markRegion(far!, corner)).minX).toBeCloseTo(100, 6)
+  })
+
+  // у угла (0,0) стена W позже V: угловой квадрат за концом оси V принадлежит форме W
+  it("RG-07: целая стена V, чей угол принадлежит форме W, включает весь угловой квадрат за концом оси", () => {
+    const walls = [wall(0, 400, 0, 0, "V"), wall(0, 0, 500, 0, "W")]
+    const [r] = effectiveMarks([mk("m", "V", "a", 0, 400)], walls)
+    const box = boxOf(markRegion(r!, walls))
+    expect(box.minY).toBeCloseTo(-10, 6)
+    expect(box.minX).toBeCloseTo(-10, 6)
+    expect(box.maxX).toBeCloseTo(10, 6)
+  })
+
+  it("RG-07: участок в стороне от угла угловой квадрат соседа не захватывает", () => {
+    const walls = [wall(0, 400, 0, 0, "V"), wall(0, 0, 500, 0, "W")]
+    const [r] = effectiveMarks([mk("m", "V", "a", 0, 300)], walls)
+    expect(boxOf(markRegion(r!, walls)).minY).toBeCloseTo(100, 6)
+  })
+
+  it("RG-07: стена, примкнутая торцом к оси другой стены (Т), её часть за концом не захватывает", () => {
+    const walls = [wall(-300, 0, 300, 0, "W"), wall(0, 400, 0, 0, "V")]
+    const [r] = effectiveMarks([mk("m", "V", "a", 0, 400)], walls)
+    expect(boxOf(markRegion(r!, walls)).minY).toBeGreaterThanOrEqual(-1e-6)
   })
 })

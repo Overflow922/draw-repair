@@ -691,3 +691,18 @@ Follow-ups from `fix-battery-centering-and-numbers` (2026-10-14).
 
 - Battery placement limits (`visibleRuns` → `faceRuns` in `limitedStart`, `freeStarts`, `stateHolds`) still stop at the end of the host wall plus a thickness margin when the wall is continued collinearly by a wall of the same material, while the numbers now measure to the corner or the material boundary (`openingFaceRuns`, as for openings). A battery stopped at the end of its host wall can show a non-zero distance to the far corner it cannot reach. Decide separately whether batteries should stand across a collinear same-material joint (`battery` «Размещение батареи вдоль стены»).
 - Windows of a collinear neighbour wall are not centring targets: a battery never leaves its host wall, so such a window centre is out of reach (`design.md` D4).
+---
+
+Follow-ups from the demolition corner fix (2026-10-15).
+
+## Bugs
+
+- [ ] **Battery: tool stops working after delete** (user report, not reproduced). Checked: eraser on a battery (measurement
+  plan), place → Delete → place again, mark battery on «Демонтаж» → Delete → eraser; the tools kept working. Need the exact
+  plan, delete method (Delete key / eraser), whether the battery was marked for demolition, and which tool stops.
+  Code: `deleteBattery`, `deleteSelection`, Delete handler in `src/main.ts`.
+
+## Out of scope
+
+- A thin seam line is drawn inside the demolition region between the wall body and the corner piece taken from the
+  neighbour's shape (`cornerPieces` in `src/demolition/mark-region.ts`); the pieces are stroked separately.
