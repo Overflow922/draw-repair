@@ -18,18 +18,22 @@ const leafOf = (d: WallDoor, walls: Wall[]): DoorLeaf => {
   return l
 }
 
+const expectCorner = (l: DoorLeaf, x: number, y: number): void => {
+  expect(l.leaf.some((c: Point) => Math.hypot(c.x - x, c.y - y) < 0.01), `угол (${x}, ${y})`).toBe(true)
+}
+
 const sub = (p: Point, q: Point): Point => ({ x: p.x - q.x, y: p.y - q.y })
 const len = (p: Point): number => Math.hypot(p.x, p.y)
 const cross = (p: Point, q: Point): number => p.x * q.y - p.y * q.x
 const angleDeg = (p: Point, q: Point): number => (Math.acos((p.x * q.x + p.y * q.y) / (len(p) * len(q))) * 180) / Math.PI
 
-// прямоугольник полотна: одна длинная сторона hinge → leafEnd, вторая — сдвиг на 4 см прочь от arcFrom
-function expectLeafRect(l: DoorLeaf, hinge: Point, leafEnd: Point, awayFrom: Point): void {
+// прямоугольник полотна: одна длинная сторона hinge → leafEnd, вторая — сдвиг на 4 см в сторону closed (внутри сектора)
+function expectLeafRect(l: DoorLeaf, hinge: Point, leafEnd: Point, closed: Point): void {
   const v = sub(leafEnd, hinge)
   const vl = len(v)
   let p = { x: -v.y / vl, y: v.x / vl }
-  // p направлен в сторону, где нет закрытого положения полотна
-  if (cross(v, sub(awayFrom, hinge)) * cross(v, p) > 0) p = { x: -p.x, y: -p.y }
+  // p направлен в сторону, где закрытое положение полотна
+  if (cross(v, sub(closed, hinge)) * cross(v, p) < 0) p = { x: -p.x, y: -p.y }
   const expected = [hinge, leafEnd, { x: leafEnd.x + p.x * LEAF_CM, y: leafEnd.y + p.y * LEAF_CM }, { x: hinge.x + p.x * LEAF_CM, y: hinge.y + p.y * LEAF_CM }]
   expect(l.leaf).toHaveLength(4)
   for (const e of expected) expect(l.leaf.some((c: Point) => Math.hypot(c.x - e.x, c.y - e.y) < 1e-3)).toBe(true)
@@ -53,10 +57,12 @@ describe("дверь на стене 20 см", () => {
     expectPoint(l.arcTo, 100 + 90 * COS95, -10 - 90 * SIN95)
     expectPoint(l.arcTo, 92.156, -99.658)
     expect(l.radius).toBeCloseTo(90, 6)
-    // прямоугольник полотна — по другую сторону от (190, −10): x меньше линии полотна
+    // прямоугольник полотна — по ту же сторону, что (190, −10): x больше линии полотна, углы по спецификации
     expectLeafRect(l, { x: 100, y: -10 }, { x: 92.156, y: -99.658 }, { x: 190, y: -10 })
-    const minX = Math.min(...l.leaf.map((c: Point) => c.x))
-    expect(minX).toBeLessThan(92.156 - 3)
+    expectCorner(l, 100 + 4 * SIN95, -10 + 4 * COS95)
+    expectCorner(l, 92.156 + 4 * SIN95, -99.658 + 4 * COS95)
+    expectCorner(l, 103.985, -10.349)
+    expectCorner(l, 96.141, -100.007)
   })
 
   it("DG-02: b/right — петля (190, 10), полотно до (197.844, 99.658), дуга от (100, 10)", () => {
@@ -66,6 +72,8 @@ describe("дверь на стене 20 см", () => {
     expectPoint(l.arcFrom, 100, 10)
     expectPoint(l.arcTo, 197.844, 99.658)
     expectLeafRect(l, { x: 190, y: 10 }, { x: 197.844, y: 99.658 }, { x: 100, y: 10 })
+    expectCorner(l, 193.859, 100.007)
+    expectCorner(l, 186.015, 10.349)
   })
 
   it("DG-03: все четыре направления — по формулам спецификации", () => {
@@ -148,6 +156,16 @@ describe("инварианты обозначения", () => {
     const T = w(0, 0, 500, 0, "W", 10)
     const l = leafOf(DR("a", "left"), [T])
     expectPoint(l.hinge, 100, -5)
+  })
+
+  it("DG-12: стена 10 см, b/right — полотно не заходит в тело стены, угол у петли совпадает с углом откоса", () => {
+    const T = w(0, 0, 800, 0, "W", 10)
+    const l = leafOf(dr("W", "b", 100, "b", "right", 80), [T])
+    expectPoint(l.hinge, 700, 5)
+    for (const c of l.leaf) expect(c.y).toBeGreaterThanOrEqual(5 - 1e-9)
+    expectCorner(l, 700, 5)
+    expectCorner(l, 700 - 4 * SIN95, 5 - 4 * COS95)
+    expect(700 - 4 * SIN95).toBeLessThan(700)
   })
 
   it("DG-09: дверь вплотную к углу: петля на грани у x = 10", () => {

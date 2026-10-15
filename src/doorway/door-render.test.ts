@@ -69,8 +69,8 @@ describe("обозначение двери", () => {
     const e = ref("a", "left")
     const c = contour(ops)
     expect(covered(c, S(lerp(e.hinge, e.arcTo, 0.05)), S(lerp(e.hinge, e.arcTo, 0.95)))).toBe(true)
-    // вторая длинная сторона — на 4 см по другую сторону от закрытого положения (x меньше)
-    const off = { x: -4 * towardClosed(e).x, y: -4 * towardClosed(e).y }
+    // вторая длинная сторона — на 4 см в сторону закрытого положения, внутри сектора (x больше)
+    const off = { x: 4 * towardClosed(e).x, y: 4 * towardClosed(e).y }
     const h2 = { x: e.hinge.x + off.x, y: e.hinge.y + off.y }
     const t2 = { x: e.arcTo.x + off.x, y: e.arcTo.y + off.y }
     expect(covered(c, S(lerp(h2, t2, 0.05)), S(lerp(h2, t2, 0.95)))).toBe(true)
@@ -128,7 +128,7 @@ describe("обозначение двери", () => {
     const { ctx, ops } = arcRecorder()
     drawScene(ctx, 1600, 1200, walls, null, "cm", view, [], { grid: false, doorways: [DR()] })
     const e = ref("a", "left")
-    const off = { x: -4 * towardClosed(e).x, y: -4 * towardClosed(e).y }
+    const off = { x: 4 * towardClosed(e).x, y: 4 * towardClosed(e).y }
     const at = (p: Point): Point => toScreen(p, view)
     const c = contour(ops)
     const h2 = { x: e.hinge.x + off.x, y: e.hinge.y + off.y }

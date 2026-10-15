@@ -158,7 +158,8 @@ export interface DoorLeaf {
 }
 
 // обозначение двери (change add-door, design D3): петля на грани стороны открывания у откоса петель, полотно
-// длиной в ширину под 95° от грани в сторону открывания, толщиной 4 см вне сектора, дуга от закрытого положения
+// длиной в ширину под 95° от грани в сторону открывания, толщиной 4 см внутри сектора (угол у петли — угол откоса),
+// дуга от закрытого положения
 export function doorLeaf(d: WallDoor, walls: readonly Wall[]): DoorLeaf | null {
   const host = hostOf(d, walls)
   if (!host) return null
@@ -172,10 +173,10 @@ export function doorLeaf(d: WallDoor, walls: readonly Wall[]): DoorLeaf | null {
   const v = add(mul(u, Math.cos(DOOR_OPEN_RAD)), mul(n, Math.sin(DOOR_OPEN_RAD)))
   const w = d.widthCm
   const arcTo = add(hinge, mul(v, w))
-  // толщина полотна — по нормали к нему в сторону, где нет закрытого положения
+  // толщина полотна — по нормали к нему в сторону закрытого положения
   const across = perp(v)
-  const away = dot(across, u) < 0 ? across : mul(across, -1)
-  const thick = mul(away, LEAF_CM)
+  const toClosed = dot(across, u) > 0 ? across : mul(across, -1)
+  const thick = mul(toClosed, LEAF_CM)
   return {
     leaf: [hinge, arcTo, add(arcTo, thick), add(hinge, thick)],
     hinge,

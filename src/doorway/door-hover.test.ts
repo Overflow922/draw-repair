@@ -26,8 +26,8 @@ describe("hoverDirection: направление под курсором", () =>
   it("HV-1: в зоне альтернативного направления — это направление (прямоугольник, сектор, полотно)", () => {
     const { editing } = setup()
     expect(editing.hoverDirection({ x: 170, y: 40 })).toEqual({ hinge: "b", swing: "right" })
-    expect(editing.hoverDirection({ x: 97, y: 70 })).toEqual({ hinge: "a", swing: "right" })
-    expect(editing.hoverDirection({ x: 197, y: 50 })).toEqual({ hinge: "b", swing: "right" })
+    expect(editing.hoverDirection({ x: 99.5, y: 70 })).toEqual({ hinge: "a", swing: "right" })
+    expect(editing.hoverDirection({ x: 192, y: 50 })).toEqual({ hinge: "b", swing: "right" })
     expect(editing.hoverDirection({ x: 170, y: -40 })).toEqual({ hinge: "b", swing: "left" })
   })
 

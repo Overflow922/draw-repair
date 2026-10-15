@@ -345,6 +345,15 @@ function drawDoorways(
     ctx.stroke()
   }
   const elements = opts.doorways ?? []
+  // область между откосами закрашена цветом бумаги: сетка холста внутри выреза не видна; слой лежит под
+  // подсветкой, гранями, откосами, обозначениями и подписями (change fix-opening-fill-and-door-leaf-corner, design D1)
+  for (const d of elements) {
+    const poly = openingLines(d, walls, elements)?.outline
+    if (!poly) continue
+    ctx.fillStyle = p.paper
+    tracePolygon(ctx, poly.map(toScreen))
+    ctx.fill()
+  }
   const outline = (d: WallElement, color: string): void => {
     const poly = openingLines(d, walls, elements)?.outline
     if (!poly) return

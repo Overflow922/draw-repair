@@ -15,13 +15,17 @@ const door = (hinge: Hinge = "a", swing: Swing = "left") => dr("W", "a", 100, hi
 const at = (p: Point, hinge: Hinge = "a", swing: Swing = "left", wall: Wall = W): Dir | null => doorZoneAt(p, door(hinge, swing), [wall])
 
 describe("тень направления: полотно и сектор", () => {
-  it("DZ-1: клик по штриховому полотну (вне прямоугольника и сектора) задаёт направление", () => {
-    expect(at({ x: 197, y: 50 })).toEqual({ hinge: "b", swing: "right" })
+  it("DZ-1: клик по штриховому полотну (оно лежит в секторе, вне прямоугольника зоны) задаёт направление", () => {
+    expect(at({ x: 192, y: 50 })).toEqual({ hinge: "b", swing: "right" })
   })
 
-  it("DZ-2: сектор вне прямоугольника, левее откоса — направление сектора", () => {
-    expect(at({ x: 97, y: -70 })).toEqual({ hinge: "a", swing: "left" })
-    expect(at({ x: 97, y: 70 })).toEqual({ hinge: "a", swing: "right" })
+  it("DZ-1b: правее оси полотна, за 95° — не сектор и не полотно, зоны нет", () => {
+    expect(at({ x: 197, y: 50 })).toBeNull()
+  })
+
+  it("DZ-2: сектор вне полотна и вне прямоугольника, левее откоса — направление сектора", () => {
+    expect(at({ x: 99.5, y: -70 })).toEqual({ hinge: "a", swing: "left" })
+    expect(at({ x: 99.5, y: 70 })).toEqual({ hinge: "a", swing: "right" })
   })
 
   it("DZ-3: за радиусом w, за 95° и вне полотна, за откосом у дальней петли — нет зоны", () => {
