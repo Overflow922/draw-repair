@@ -1,7 +1,7 @@
 import { mergeAll } from "./demolition/marks"
 import { isPlanId } from "./plans"
 import { isDoor, isWindow, normalizeMaterial } from "./types"
-import type { Battery, BatteryCornerPoint, BatteryMark, Callout, Communication, DemolitionMark, Dimension, DimPoint, Doorway, Drawing, DrawingStore, EdgePoint, EdgeRef, JambPoint, MountingContent, Point, View, Wall, WallDoor, WallElement, WallWindow } from "./types"
+import type { Battery, BatteryCornerPoint, BatteryMark, Callout, Communication, DemolitionMark, Dimension, DimPoint, Doorway, Drawing, DrawingStore, EdgePoint, EdgeRef, JambPoint, MountingContent, Point, RoomRecord, View, Wall, WallDoor, WallElement, WallWindow } from "./types"
 
 const KEY = "draw-repair:drawing"
 
@@ -66,6 +66,29 @@ export const isCallout = (c: unknown): c is Callout => {
 const copyCallout = (c: Callout): Callout => ({ id: c.id, target: { x: c.target.x, y: c.target.y }, at: { x: c.at.x, y: c.at.y }, text: c.text })
 
 const loadCalloutList = (raw: unknown): Callout[] => (Array.isArray(raw) ? raw.filter(isCallout).map(copyCallout) : [])
+
+// запись помещения (change add-room-explication, design D1): натуральный номер, строка названия, целая высота 1–99999 мм, опорная точка
+export const isRoomRecord = (r: unknown): r is RoomRecord => {
+  if (typeof r !== "object" || r === null) return false
+  const x = r as Record<string, unknown>
+  return num(x.number) && Number.isInteger(x.number) && x.number >= 1 && typeof x.name === "string" &&
+    num(x.heightMm) && Number.isInteger(x.heightMm) && x.heightMm >= 1 && x.heightMm <= 99999 && isPoint(x.anchor)
+}
+
+const copyRoomRecord = (r: RoomRecord): RoomRecord => ({ number: r.number, name: r.name, heightMm: r.heightMm, anchor: { x: r.anchor.x, y: r.anchor.y } })
+
+// записи помещений при загрузке: корректные по одному, при повторе номера остаётся первая; отсутствие поля сохраняется
+function loadRooms(raw: unknown): { rooms?: RoomRecord[] } {
+  if (!Array.isArray(raw)) return {}
+  const seen = new Set<number>()
+  const rooms: RoomRecord[] = []
+  for (const r of raw.filter(isRoomRecord)) {
+    if (seen.has(r.number)) continue
+    seen.add(r.number)
+    rooms.push(copyRoomRecord(r))
+  }
+  return { rooms }
+}
 
 // общие поля элемента стены (spec drawing-storage «Формат документа»); расстояние привязки — любое конечное число:
 // на выступе тела стены за конец оси оно отрицательное, положение вне стены разбирает правило нарушенных документов
@@ -280,6 +303,7 @@ export function parseStore(raw: string): LoadedStore | null {
           ...loadBatteryDemolition(batteryDemolition, batteries.batteries ?? []),
           ...(Array.isArray(dr.callouts) ? { callouts: loadCalloutList(dr.callouts) } : null),
           ...(Array.isArray(dr.demolitionCallouts) ? { demolitionCallouts: loadCalloutList(dr.demolitionCallouts) } : null),
+          ...loadRooms(dr.rooms),
           dimensions: (Array.isArray(dr.dimensions) ? dr.dimensions : []).filter(isDimension).map(copyDimension),
         }
       })

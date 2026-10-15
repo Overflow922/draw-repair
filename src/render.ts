@@ -13,6 +13,9 @@ import { dimGeometry, dimensionGeometry, visibleWorld } from "./geometry"
 import type { DimGeometry } from "./geometry"
 import { findRooms, formatArea } from "./room-area"
 import type { Room } from "./room-area"
+import { blockTexts, roomBlockLayout, roomBlocksOf } from "./room-block"
+import type { RoomBlock } from "./room-block"
+import { reconcileRooms } from "./room-explication"
 import type { RoomAngle, RulerReading } from "./ruler"
 import { LIGHT_PALETTE } from "./theme"
 import type { Palette } from "./theme"
@@ -20,7 +23,7 @@ import { contourSegments, cross, displayPolygons, dot, outlineSegments, sub } fr
 import type { Seg } from "./wall-geometry"
 import { GRID_STEP_CM, PX_PER_CM, isDoor, isWindow, normalizeMaterial } from "./types"
 import { drawCallouts } from "./callout/callout-render"
-import type { Battery, Callout, Communication, Dimension, Material, Point, Riser, Unit, View, Wall, WallDoor, WallElement } from "./types"
+import type { Battery, Callout, Communication, Dimension, Material, Point, Riser, RoomRecord, Unit, View, Wall, WallDoor, WallElement } from "./types"
 import type { TrackLine } from "./wall-tracking"
 import { HATCHES, strokeHatchSeries, strokeHatchTile } from "./wall-hatch"
 
@@ -101,6 +104,10 @@ export interface RenderOptions {
   angle?: { at: Point; from: Point; to: Point; deg: number } | null
   tracks?: TrackLine[] | null // линии трекинга по узлам в мировых координатах
   ruler?: RulerReading | null // замеры инструмента «Линейка» под курсором
+  // данные помещений плана «Монтаж» (change add-room-explication, design D4): с ними помещения рисуются блоками вместо подписей
+  // площади; выделенный блок — по номеру
+  roomRecords?: readonly RoomRecord[]
+  selectedRoom?: number | null
   underlay?: boolean // подложка плана «Демонтаж»: без подписей помещений, размеров и слоя элементов стен (вырезы остаются)
   palette?: Palette // цвета схемы; по умолчанию светлая (PDF — всегда светлая)
 }
@@ -224,7 +231,8 @@ export function drawScene(
   }
   if (opts.tracks?.length) drawTracks(ctx, opts.tracks, toScreen, p.track)
   if (opts.angle) drawAngle(ctx, opts.angle, toScreen, m, p)
-  if (!opts.underlay) drawRoomLabels(ctx, rooms, toScreen, m, p.ink)
+  if (opts.roomRecords) drawRoomBlocks(ctx, roomBlocksOf(reconcileRooms(rooms, opts.roomRecords)), opts.selectedRoom ?? null, toScreen, m, p)
+  else if (!opts.underlay) drawRoomLabels(ctx, rooms, toScreen, m, p.ink)
   ctx.font = `${m.labelPx}px ${m.font}`
   ctx.textAlign = "center"
   ctx.textBaseline = "bottom"
@@ -593,6 +601,49 @@ function drawRoomLabels(
     const s = toScreen(room.labelAt)
     ctx.fillText(formatArea(room.areaCm2), s.x, s.y)
   }
+}
+
+// блок помещения: рамка из двух ячеек на фоне бумаги, номер слева, «H=…» справа; выделенный — цветом выделения
+function drawRoomBlocks(
+  ctx: CanvasRenderingContext2D,
+  blocks: readonly RoomBlock[],
+  selected: number | null,
+  toScreen: (p: Point) => Point,
+  m: RenderMetrics,
+  palette: Palette,
+): void {
+  ctx.save()
+  ctx.font = `${m.labelPx}px ${m.font}`
+  ctx.textAlign = "center"
+  ctx.textBaseline = "middle"
+  ctx.lineWidth = m.contourPx
+  for (const b of blocks) {
+    const t = blockTexts(b)
+    const l = roomBlockLayout(toScreen(b.at), t.number, t.height, m.labelPx)
+    const color = palette.ink
+    if (b.number === selected) {
+      // выделение — полупрозрачная обводка вокруг рамки, как у выделенной стены
+      ctx.strokeStyle = palette.selection
+      ctx.lineWidth = OUTLINE_PX
+      ctx.beginPath()
+      ctx.rect(l.x, l.y, l.w, l.h)
+      ctx.stroke()
+      ctx.lineWidth = m.contourPx
+    }
+    // без заливки: блок не закрывает стены под собой (spec room-explication «Блок помещения на холсте»)
+    ctx.strokeStyle = color
+    ctx.beginPath()
+    ctx.rect(l.x, l.y, l.w, l.h)
+    ctx.stroke()
+    ctx.beginPath()
+    ctx.moveTo(l.dividerX, l.y)
+    ctx.lineTo(l.dividerX, l.y + l.h)
+    ctx.stroke()
+    ctx.fillStyle = color
+    ctx.fillText(t.number, l.numberAt.x, l.numberAt.y)
+    ctx.fillText(t.height, l.heightAt.x, l.heightAt.y)
+  }
+  ctx.restore()
 }
 
 // линии трекинга от узла до конца превью: пунктир постоянной экранной толщины

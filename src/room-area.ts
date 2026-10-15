@@ -17,8 +17,10 @@ export interface Room {
 // замыкание закрывает только шум вычислений на швах (одна ступень целой сетки адаптера)
 const CLOSE_CM = 0.001
 const MIN_AREA_CM2 = 1000
+// порог помещения для экспликации: 1 м² (change add-room-explication, spec room-explication «Помещения экспликации»)
+export const EXPLICATION_MIN_AREA_CM2 = 10000
 // площадь считается по контурам в целой сетке; запас лишь на погрешность деления
-const AREA_EPS = 1e-6
+export const AREA_EPS = 1e-6
 const LABEL_PRECISION_CM = 1
 
 const ring = (poly: Point[]): [number, number][] => poly.map((p): [number, number] => [p.x, p.y])

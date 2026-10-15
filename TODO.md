@@ -727,3 +727,20 @@ Follow-ups from the demolition corner fix (2026-10-15).
 
 ### Out of scope
 - Parallel start applies only to the corner snap with a fixed direction (ortho). With ortho off the free direction never moves the start; a typed angle cannot give 0° (`typedDirection` rejects it), so the parallel wall is unreachable without ortho.
+
+## add-room-explication (2026-10-15)
+
+### Bugs
+- [ ] A new wall drawn exactly over a room's anchor point (e.g. a partition through the label point of a named room) leaves the record without a room: both parts become new rooms and the name is lost (spec `room-explication` «Привязка данных к помещению» describes it as the room vanishing). Fix idea: after a step, if the anchor falls into a wall body, give the record to the larger part (needs a spec decision). Repro: name a rectangular room, draw a full partition through its centre. Code: `reconcileRooms` in `src/room-explication.ts`.
+- [ ] With a tall explication table (about 8+ rooms on A4) the drawing area gets low and the legend column (up to 6 entries, 84 mm) may not fit by height; nothing suggests a larger format for the legend (`bottomBandMm` in `src/export/explication.ts`, `src/export/legend-draw.ts`).
+
+### Tests
+- [ ] The `src/main.ts` wiring has no automated test: `selectRoom`/`editRoom`/`commitRooms`, the editor fields positioning (`syncRoomEditor`), the history ordering (snapshot taken before the commit of rooms). Checked by hand in Firefox: block, selection, name and height edit with undo/redo, partition split and its undo, an island wall, PDF page 3 (table, blocks) in pdf.js. Not checked by hand: dark theme, Escape with a focused field, eraser and marquee over a block, other plans after switching.
+- [ ] Test validation (independent) of `add-room-explication` not run; mutation survivors of `src/room-explication.test.ts`, `src/room-block.test.ts`, `src/export/explication*.test.ts` are unknown.
+- [ ] The existing test `MP-91` (`src/export/mounting-pdf.test.ts`) was changed to the new spec (no area label on the «Монтаж» page, a block and a table row instead); review it.
+
+### Docs
+- [ ] `canvas-app` «Вспомогательная панель инструмента» is unchanged: room fields are in place on the canvas, no panel (decision with the user, see `design.md` D5).
+
+### Out of scope
+- Blocks and the table exist only on the «Монтаж» plan; the shared data is ready for later plans. Room number is automatic and not editable; the block cannot be moved or deleted.

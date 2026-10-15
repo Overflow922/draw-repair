@@ -57,19 +57,26 @@ export function titleBlockRect(format: PageFormat): Rect {
   }
 }
 
-// внутренность рамки между полосой названия плана и основной надписью за вычетом столбца легенды шириной legendMm
+// верх нижней полосы листа высотой bandMm (по умолчанию — высота основной надписи; экспликация помещений может сделать её выше,
+// change add-room-explication)
+const bandTop = (format: PageFormat, bandMm?: number): number => {
+  const frame = frameRect(format)
+  return bandMm === undefined ? titleBlockRect(format).y : frame.y + frame.h - bandMm
+}
+
+// внутренность рамки между полосой названия плана и нижней полосой за вычетом столбца легенды шириной legendMm
 // (0 — на всю ширину рамки)
-export function drawingArea(format: PageFormat, legendMm = 0): Rect {
+export function drawingArea(format: PageFormat, legendMm = 0, bandMm?: number): Rect {
   const frame = frameRect(format)
   const top = frame.y + PLAN_STRIP_H_MM
-  return { x: frame.x + legendMm, y: top, w: frame.w - legendMm, h: titleBlockRect(format).y - top }
+  return { x: frame.x + legendMm, y: top, w: frame.w - legendMm, h: bandTop(format, bandMm) - top }
 }
 
 // столбец легенды: левая часть области под полосой названия плана шириной legendMm, на всю высоту области
-export function legendArea(format: PageFormat, legendMm: number): Rect {
+export function legendArea(format: PageFormat, legendMm: number, bandMm?: number): Rect {
   const frame = frameRect(format)
   const top = frame.y + PLAN_STRIP_H_MM
-  return { x: frame.x, y: top, w: legendMm, h: titleBlockRect(format).y - top }
+  return { x: frame.x, y: top, w: legendMm, h: bandTop(format, bandMm) - top }
 }
 
 // Графа основной надписи в координатах надписи (начало — её левый верхний угол). label — печатная подпись графы.

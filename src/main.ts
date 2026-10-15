@@ -29,6 +29,8 @@ import { effectiveMarks } from "./demolition/marks"
 import { createDemolitionTool } from "./demolition/demolition-tool"
 import type { DemolitionToolHost } from "./demolition/demolition-tool"
 import { findRooms } from "./room-area"
+import { roomBlockAt, roomBlockLayout, roomBlocksOf } from "./room-block"
+import { formatRoomHeight, parseRoomHeight, reconcileRooms } from "./room-explication"
 import { rulerReading } from "./ruler"
 import { exportPages, pagesOf } from "./export/pdf"
 import { fitScale, scaleLabel } from "./export/fit-scale"
@@ -59,7 +61,7 @@ import { afterPlace, escapeAction, resumesAfterSelectionCleared, selectionAllowe
 import { loadThemeChoice, paletteOf, resolveTheme, saveThemeChoice, themeToggleTitle, toggledTheme } from "./theme"
 import type { Theme } from "./theme"
 import { GRID_STEP_CM, MATERIALS, PX_PER_CM } from "./types"
-import type { Battery, BatteryMark, Communication, DemolitionMark, Dimension, DimPoint, Drawing, Material, Point, Unit, View, Wall, WallElement } from "./types"
+import type { Battery, BatteryMark, Communication, DemolitionMark, Dimension, DimPoint, Drawing, Material, Point, RoomRecord, Unit, View, Wall, WallElement } from "./types"
 
 const canvas = document.querySelector<HTMLCanvasElement>("#canvas")!
 const canvasWrap = document.querySelector<HTMLElement>("#canvas-wrap")!
@@ -83,6 +85,9 @@ const toolRulerBtn = document.querySelector<HTMLButtonElement>("#tool-ruler")!
 const toolDemolitionBtn = document.querySelector<HTMLButtonElement>("#tool-demolition")!
 const toolbar = document.querySelector<HTMLElement>("#toolbar")!
 const wallPanel = document.querySelector<HTMLElement>("#wall-panel")!
+const roomEditor = document.querySelector<HTMLElement>("#room-editor")!
+const roomNameInput = document.querySelector<HTMLInputElement>("#room-name")!
+const roomHeightInput = document.querySelector<HTMLInputElement>("#room-height")!
 const scaleLabelEl = document.querySelector<HTMLElement>("#scale-label")!
 const pdfFormat = document.querySelector<HTMLSelectElement>("#pdf-format")!
 const pdfExportBtn = document.querySelector<HTMLButtonElement>("#pdf-export")!
@@ -191,7 +196,90 @@ const activeHistory = () => planHistory(historyStore, store.activeId, activePlan
 const historyOf = (s: Scene): Scene => {
   if (!workspace) return s
   const stored = storedContent(s, workspace, current())
-  return { walls: stored.walls, dimensions: stored.dimensions, ...(stored.doorways ? { doorways: stored.doorways } : null), ...(stored.batteries ? { batteries: stored.batteries } : null) }
+  // данные помещений — часть шага истории «Монтажа»: снимок берётся до операции, записи ещё не пересмотрены (design D2)
+  return { walls: stored.walls, dimensions: stored.dimensions, ...(stored.doorways ? { doorways: stored.doorways } : null), ...(stored.batteries ? { batteries: stored.batteries } : null), rooms: current().rooms ?? [] }
+}
+
+// помещения экспликации плана «Монтаж» (change add-room-explication): данные привязаны к помещениям, вычисленным по стенам сцены
+let selectedRoom: number | null = null
+const ROOM_NAME_GAP_PX = 6
+const roomItems = () => (workspace ? reconcileRooms(findRooms(walls), current().rooms ?? []) : [])
+
+// записи помещений пересматриваются при фиксации действия, не во время жеста (spec room-explication «Привязка данных к помещению»)
+function commitRooms(drawing: Drawing): void {
+  if (gestureActive()) return
+  const records = reconcileRooms(findRooms(walls), drawing.rooms ?? []).map((i) => i.record)
+  if (records.length === 0 && drawing.rooms === undefined) return
+  drawing.rooms = records
+}
+
+// состояние редактирования выделенного помещения: поля на холсте — название над блоком, высота поверх правой ячейки блока
+// (spec room-explication «Выделение и редактирование блока»); следуют за блоком при сдвиге и масштабе вида
+function syncRoomEditor(): void {
+  if (selectedRoom === null) return
+  const item = roomItems().find((i) => i.record.number === selectedRoom)
+  if (!item) {
+    deselectRoom()
+    return
+  }
+  const k = PX_PER_CM * view.zoom
+  const c = { x: (item.room.labelAt.x - view.pan.x) * k, y: (item.room.labelAt.y - view.pan.y) * k }
+  const l = roomBlockLayout(c, String(item.record.number), formatRoomHeight(item.record.heightMm), SCREEN_METRICS.labelPx)
+  roomEditor.hidden = false
+  roomNameInput.style.left = `${c.x}px`
+  roomNameInput.style.top = `${l.y - ROOM_NAME_GAP_PX}px`
+  roomHeightInput.style.left = `${l.heightAt.x}px`
+  roomHeightInput.style.top = `${l.heightAt.y}px`
+  roomHeightInput.style.width = `${l.x + l.w - l.dividerX}px`
+  if (document.activeElement !== roomNameInput) roomNameInput.value = item.record.name
+  if (document.activeElement !== roomHeightInput) roomHeightInput.value = String(item.record.heightMm)
+}
+
+function selectRoom(number: number): void {
+  closeNumberEditor()
+  selectedBatteries = []
+  selectedCommunication = null
+  selectedWalls = []
+  selectedDimensions = []
+  selectedDoorways = []
+  lengthDirty = false
+  setWallPanel(false)
+  selectedRoom = number
+  redraw()
+}
+
+function deselectRoom(): void {
+  if (selectedRoom === null) return
+  selectedRoom = null
+  roomEditor.hidden = true
+}
+
+// правка названия или высоты выделенного помещения — один шаг истории; ничего не изменившая правка шага не создаёт
+function editRoom(patch: Partial<Pick<RoomRecord, "name" | "heightMm">>): void {
+  const records = roomItems().map((i) => i.record)
+  const target = records.find((r) => r.number === selectedRoom)
+  if (!target) return
+  if ((patch.name ?? target.name) === target.name && (patch.heightMm ?? target.heightMm) === target.heightMm) return
+  pushRecord()
+  current().rooms = records.map((r) => (r === target ? { ...r, ...patch } : r))
+  dirty = true
+  redraw()
+}
+
+roomNameInput.addEventListener("change", () => editRoom({ name: roomNameInput.value.trim() }))
+roomHeightInput.addEventListener("change", () => {
+  const heightMm = parseRoomHeight(roomHeightInput.value)
+  if (heightMm !== null) editRoom({ heightMm })
+  else {
+    // недопустимая высота не применяется: поле возвращает прежнее значение
+    const item = roomItems().find((i) => i.record.number === selectedRoom)
+    if (item) roomHeightInput.value = String(item.record.heightMm)
+  }
+})
+for (const input of [roomNameInput, roomHeightInput]) {
+  input.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") input.blur()
+  })
 }
 
 const pushRecord = (): void => {
@@ -251,6 +339,7 @@ function loadWorking(): void {
 function commitMounting(): void {
   const drawing = store.drawings.find((d) => d.id === store.activeId)
   if (!workspace || !drawing) return // вкладка уже закрыта — писать некуда
+  commitRooms(drawing)
   const next = storedContent(scene(), workspace, drawing)
   if (next.walls.length === 0 && next.dimensions.length === 0 && next.doorways === undefined && next.batteries === undefined && drawing.mounting === undefined) return
   drawing.mounting = next
@@ -605,6 +694,7 @@ const closeNumberEditor = (): void => {
   communicationTool.closeEditor()
   batteryTool.closeEditor()
   calloutTool.deselect()
+  deselectRoom()
 }
 
 const resetElementTools = (): void => {
@@ -878,6 +968,7 @@ function redraw(): void {
   updateLengthBox()
   updateAngleBox()
   syncHistoryButtons()
+  syncRoomEditor()
   syncScale()
   if (dirty) {
     dirty = false
@@ -954,6 +1045,7 @@ function drawMeasurePlan(): void {
     callouts: calloutTool.displayList(),
     selectedCallout: calloutTool.selectedId(),
     erasingCallout: erasingCallout?.id ?? null,
+    ...(workspace ? { roomRecords: current().rooms ?? [], selectedRoom } : null),
     hoverDoorDirection: tool !== "eraser" && hoverWorld ? selectionEditing.hoverDirection(hoverWorld) : null,
     marquee,
     marqueeHits,
@@ -1439,6 +1531,13 @@ canvas.addEventListener("pointerdown", (e) => {
       startGroupMove(pick.wall, p, e)
       return
     case undefined: {
+      // блок помещения — цель с самым низким приоритетом: стены, размеры, элементы и батареи главнее (spec room-explication)
+      const room = workspace ? roomBlockAt(p, roomBlocksOf(roomItems()), view, SCREEN_METRICS.labelPx) : null
+      if (room !== null) {
+        suppressClick = true
+        selectRoom(room)
+        return
+      }
       const r = canvas.getBoundingClientRect()
       marqueePending = { x: e.clientX - r.left, y: e.clientY - r.top }
       canvas.setPointerCapture(e.pointerId)
@@ -1644,6 +1743,7 @@ canvas.addEventListener("click", (e) => {
     selectedBatteries = []
     selectedCommunication = null
     calloutTool.deselect()
+    deselectRoom()
     lengthDirty = false
     clearDimSelection()
     redraw()
@@ -2106,6 +2206,8 @@ function restoreScene(e: Scene): void {
       ...(e.batteries ? { batteries: e.batteries } : null),
       ...(callouts ? { callouts } : null),
     }
+    // запись без данных помещений (история до их введения) данные не меняет
+    if (e.rooms) current().rooms = e.rooms
     loadWorking()
     return
   }
@@ -2302,7 +2404,7 @@ window.addEventListener("keydown", (e) => {
       gestureActive: !!chainStart,
       dimensionDraft: !!(dimDraft.a || dimDraft.b),
       calloutDraft: calloutTool.hasDraft(),
-      hasSelection: selectedDimensions.length + selectedWalls.length + selectedDoorways.length + selectedBatteries.length > 0 || selectedCommunication !== null || calloutTool.selectedId() !== null,
+      hasSelection: selectedDimensions.length + selectedWalls.length + selectedDoorways.length + selectedBatteries.length > 0 || selectedCommunication !== null || calloutTool.selectedId() !== null || selectedRoom !== null,
     })
     if (action === "end-gesture") endChain()
     else if (action === "cancel-dimension-draft") {
@@ -2318,7 +2420,7 @@ window.addEventListener("keydown", (e) => {
   if (onDemolition()) return
   if (groupMove || endpointDrag || panDrag || dimDrag || doorwayTool.dragging() || communicationTool.dragging() || batteryTool.dragging()) return
   // выделенная коммуникация и выноска стрелками не двигаются и материал не переключается (spec communications)
-  if (selectedCommunication || calloutTool.selectedId() !== null) return
+  if (selectedCommunication || calloutTool.selectedId() !== null || selectedRoom !== null) return
   if (selectedWalls.length || selectedDimensions.length || selectedDoorways.length || selectedBatteries.length) {
     if (!selectedWalls.length) {
       if (!selectedDoorways.length && !selectedBatteries.length) return

@@ -175,14 +175,19 @@ describe("третья страница в документе PDF", () => {
     expect(textsOn(3).some((t) => t.includes("210"))).toBe(true)
   })
 
-  it("MP-91: замкнутое помещение из остатков и собственных стен подписано площадью 13,44 м² на третьей странице (и только на ней)", () => {
+  // change add-room-explication (spec room-areas «Подпись площади», «Помещения в PDF»): на странице «Монтаж» помещение обозначено
+  // блоком и строкой таблицы экспликации, подписи площади «… м²» там нет; замкнутость по остаткам и собственным стенам прежняя
+  it("MP-91: замкнутое помещение из остатков и собственных стен на третьей странице — блок и строка экспликации с площадью 13,4, без подписи «13,44 м²»", () => {
     const closed = drawing({
       demolition: [MARK],
       mounting: { walls: [wall("F", 100, 0, 190, 0), wall("R", 500, 0, 500, 300), wall("B", 500, 300, 0, 300), wall("L", 0, 300, 0, 0)], dimensions: [] },
     })
     build(closed)
-    expect(textsOn(3)).toContain("13,44 м²")
-    expect(textsOn(2).some((t) => / м²$/.test(t))).toBe(false)
+    const page3 = textsOn(3)
+    expect(page3).toContain("H=3000")
+    expect(page3).toContain("13,4")
+    expect(page3.some((t) => / м²$/.test(t))).toBe(false)
+    expect(textsOn(2).some((t) => / м²$/.test(t) || t.startsWith("H="))).toBe(false)
   })
 
   it("MP-91: пока в сносе остаётся разрыв, подписи площади на третьей странице нет", () => {

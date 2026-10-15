@@ -14,6 +14,8 @@ import { mountingScene } from "../mounting/mounting-scene"
 import type { ResolvedMark } from "../demolition/marks"
 import { PLANS } from "../plans"
 import { findRooms } from "../room-area"
+import { reconcileRooms } from "../room-explication"
+import type { ExplicatedRoom } from "../room-explication"
 import { LIGHT_PALETTE } from "../theme"
 import { cross, dot, sub } from "../wall-geometry"
 import { PX_PER_CM, isDoor, isWindow } from "../types"
@@ -24,6 +26,8 @@ import type { Battery, Callout, Communication, Dimension, Drawing, Point, Unit, 
 import { FONT_B64 } from "./font"
 import { PAGE_FORMATS_MM } from "./page-format"
 import type { PageFormat } from "./page-format"
+import { bottomBandMm, pageExplication } from "./explication"
+import { drawExplication } from "./explication-draw"
 import { drawLegend } from "./legend-draw"
 import { legendWidthMm } from "./legend"
 import { drawSheet } from "./sheet-draw"
@@ -126,9 +130,9 @@ export function wallsBBox(
   return { minX: minX - padCm, minY: minY - padCm, maxX: maxX + padCm, maxY: maxY + padCm }
 }
 
-export function fitsFormat(b: BBox, scale: number, format: PageFormat, legendMm = 0): boolean {
+export function fitsFormat(b: BBox, scale: number, format: PageFormat, legendMm = 0, bandMm?: number): boolean {
   const mmPerCm = 10 / scale
-  const area = drawingArea(format, legendMm)
+  const area = drawingArea(format, legendMm, bandMm)
   return (b.maxX - b.minX) * mmPerCm <= area.w && (b.maxY - b.minY) * mmPerCm <= area.h
 }
 
@@ -147,6 +151,9 @@ export interface PlanPage {
   demolishedBatteryIds?: ReadonlySet<string>
   // выноски плана страницы (change add-callout, design D10)
   callouts?: readonly Callout[]
+  // помещения экспликации страницы «Монтаж» с данными (change add-room-explication, design D6): блоки на чертеже и таблица;
+  // у остальных страниц поля нет
+  rooms?: readonly ExplicatedRoom[]
   title?: string // название плана страницы — в графу 5 основной надписи (change pdf-plan-page-names)
 }
 
@@ -177,6 +184,7 @@ export function pagesOf(drawing: Drawing): PlanPage[] {
           ...shared,
           ...(mounting.batteries.length ? { batteries: mounting.batteries } : null),
           ...callouts,
+          rooms: reconcileRooms(findRooms(mounting.walls), drawing.rooms ?? []),
           title: plan.label,
         }
       case "measure":
@@ -212,11 +220,11 @@ export function pageBounds(page: PlanPage, scale: number): BBox {
   return wallsBBox(page.walls, page.dimensions, 0.5 * scale, page.doorways, scale, extra, batteries)
 }
 
-export function placeOnPage(b: BBox, scale: number, format: PageFormat, legendMm = 0): Placement {
+export function placeOnPage(b: BBox, scale: number, format: PageFormat, legendMm = 0, bandMm?: number): Placement {
   const mmPerCm = 10 / scale
   const dw = (b.maxX - b.minX) * mmPerCm
   const dh = (b.maxY - b.minY) * mmPerCm
-  const area = drawingArea(format, legendMm)
+  const area = drawingArea(format, legendMm, bandMm)
   return {
     landscape: true,
     mmPerCm,
@@ -232,8 +240,18 @@ export function pdfFileName(name: string, now: Date): string {
 }
 
 // рамка, основная надпись и чертёж одной страницы на текущей странице документа
-function drawPage(doc: jsPDF, page: PlanPage, unit: Unit, scale: number, format: PageFormat, legendMm: number, name: string, date: Date): void {
-  const placement = placeOnPage(pageBounds(page, scale), scale, format, legendMm)
+function drawPage(
+  doc: jsPDF,
+  page: PlanPage,
+  unit: Unit,
+  scale: number,
+  format: PageFormat,
+  legendMm: number,
+  bandMm: number,
+  name: string,
+  date: Date,
+): void {
+  const placement = placeOnPage(pageBounds(page, scale), scale, format, legendMm, bandMm)
   const { w, h } = sheetSizeMm(format)
   const ctx = doc.context2d as unknown as CanvasRenderingContext2D
   const view = {
@@ -241,7 +259,9 @@ function drawPage(doc: jsPDF, page: PlanPage, unit: Unit, scale: number, format:
     pan: { x: -placement.offsetX / placement.mmPerCm, y: -placement.offsetY / placement.mmPerCm },
   }
   drawSheet(doc, format, page.title === undefined ? { name, scale, date } : { name, scale, date, pageName: page.title })
-  drawLegend(doc, ctx, page, legendArea(format, legendMm))
+  drawLegend(doc, ctx, page, legendArea(format, legendMm, bandMm))
+  const explication = pageExplication(page)
+  if (explication) drawExplication(doc, format, explication)
   if (page.demolition !== undefined) {
     const scene = {
       walls: page.walls,
@@ -263,6 +283,8 @@ function drawPage(doc: jsPDF, page: PlanPage, unit: Unit, scale: number, format:
     communications: page.communications,
     batteries: page.batteries,
     callouts: page.callouts,
+    // страница «Монтаж»: помещения — блоками вместо подписей площади
+    ...(page.rooms ? { roomRecords: page.rooms.map((r) => r.record) } : null),
   })
 }
 
@@ -281,9 +303,10 @@ export function buildPdfPages(
   doc.addFileToVFS("PTSans.ttf", fontB64)
   doc.addFont("PTSans.ttf", "PTSans", "normal")
   const legendMm = legendWidthMm(pages)
+  const bandMm = bottomBandMm(pages, format)
   pages.forEach((page, i) => {
     if (i > 0) doc.addPage([pw, ph], "landscape")
-    drawPage(doc, page, unit, scale, format, legendMm, name, date)
+    drawPage(doc, page, unit, scale, format, legendMm, bandMm, name, date)
   })
   return doc
 }

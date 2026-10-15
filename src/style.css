@@ -318,6 +318,28 @@ body {
   width: 44px;
 }
 
+/* поля выделенного помещения на холсте (change add-room-explication): название над блоком, высота поверх правой ячейки блока;
+   положение и ширину задаёт main.ts */
+#room-editor input {
+  position: absolute;
+  box-sizing: border-box;
+  font-size: 12px;
+  padding: 2px 4px;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  text-align: center;
+  z-index: 5;
+}
+
+.room-name-input {
+  width: 140px;
+  transform: translate(-50%, -100%);
+}
+
+.room-height-input {
+  transform: translate(-50%, -50%);
+}
+
 /* поле ввода на месте правимого числа: числа размеров и подписей элементов стены */
 .doorway-number-input {
   width: 56px;

@@ -193,6 +193,15 @@ export interface Callout {
   text: string
 }
 
+// Данные помещения экспликации (change add-room-explication, design D1): помещение вычисляется по стенам, запись привязана к нему
+// опорной точкой внутри помещения; пустое название выводится как «Комната», номер автоматический
+export interface RoomRecord {
+  number: number
+  name: string
+  heightMm: number
+  anchor: Point
+}
+
 // Собственные объекты плана «Монтаж» (change mounting-plan, design D4): те же типы, что у обмера; остатки стен
 // обмера после сноса вычисляются и здесь не хранятся
 export interface MountingContent {
@@ -228,6 +237,9 @@ export interface Drawing {
   // при загрузке не дописывается (add-callout design D1)
   callouts?: Callout[]
   demolitionCallouts?: Callout[]
+  // данные помещений плана «Монтаж», общие для планов; отсутствие — пустой список, при загрузке не дописывается
+  // (add-room-explication design D1)
+  rooms?: RoomRecord[]
   view: View
 }
 

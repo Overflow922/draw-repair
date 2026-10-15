@@ -1,3 +1,4 @@
+import { bottomBandMm } from "./explication"
 import { legendWidthMm } from "./legend"
 import { fitsFormat, pageBounds } from "./pdf"
 import type { PageFormat, PlanPage } from "./pdf"
@@ -17,7 +18,8 @@ export function fitScale(pages: PlanPage[], format: PageFormat): ScaleDenominato
   const filled = pages.filter((p) => p.walls.length > 0 || (p.callouts?.length ?? 0) > 0)
   if (filled.length === 0) return null
   const legendMm = legendWidthMm(pages)
-  const fits = (scale: ScaleDenominator): boolean => filled.every((p) => fitsFormat(pageBounds(p, scale), scale, format, legendMm))
+  const bandMm = bottomBandMm(pages, format)
+  const fits = (scale: ScaleDenominator): boolean => filled.every((p) => fitsFormat(pageBounds(p, scale), scale, format, legendMm, bandMm))
   return SCALE_SERIES.find(fits) ?? COARSEST_SCALE
 }
 
