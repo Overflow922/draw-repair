@@ -370,7 +370,8 @@ function pairEnd(
   // коллинеарно: зазор сводится к концу ранней стены
   if (isCollinearGapJoint(E, uIn, c, walls, iWall, isLatest)) {
     const hW = wall.thicknessCm / 2
-    return { E, cap: [add(v, mul(nAB, hW)), add(v, mul(nAB, -hW))], exempt: new Set(), wedge: null }
+    const { centre } = collinearGapCap(E, uIn, c, v)
+    return { E, cap: [add(centre, mul(nAB, hW)), add(centre, mul(nAB, -hW))], exempt: new Set(), wedge: null }
   }
   // стена «ранняя» для стыка, если сосед стоит в массиве позже неё
   if (!isLatest && walls.indexOf(c) > iWall) return flat
@@ -410,6 +411,18 @@ function isCollinearGapJoint(E: Point, uIn: Point, c: Wall, walls: Wall[], iWall
   return Math.abs(dot(sub(E, c.a), perp(uC))) < c.thicknessCm / 2 - SLICE && Math.abs(dot(uIn, uC)) >= RIGHT_COS
 }
 
+// Торец поздней стены у коллинеарного стыка с зазором: центр и выступ за вершину E. У стыка почти на одной оси —
+// конец оси ранней стены v; при сдвиге осей поперёк больше AXIS_OFFSET_CM торец плоский (change cap-flush-snap,
+// design D6): центр — проекция v на ось поздней стены, выступ — расстояние вдоль этой оси
+const AXIS_OFFSET_CM = 1
+
+function collinearGapCap(E: Point, uIn: Point, c: Wall, v: Point): { centre: Point; overhang: number } {
+  const offset = Math.abs(dot(sub(E, c.a), perp(unit(c.a, c.b))))
+  if (offset <= AXIS_OFFSET_CM) return { centre: v, overhang: dist(E, v) }
+  const along = dot(sub(v, E), uIn)
+  return { centre: add(E, mul(uIn, along)), overhang: Math.abs(along) }
+}
+
 // выступ тела стены за вершину конца end — расстояние до конца оси ранней коллинеарной стены; 0 вне этого
 // стыка (угол, T, свободный конец, три и более концов в пороге)
 export function collinearGapCm(wall: Wall, end: "a" | "b", walls: Wall[]): number {
@@ -420,7 +433,8 @@ export function collinearGapCm(wall: Wall, end: "a" | "b", walls: Wall[]): numbe
   const u = unit(wall.a, wall.b)
   const iWall = walls.indexOf(wall)
   const { c, v } = neighbors[0]
-  return isCollinearGapJoint(E, end === "a" ? u : neg(u), c, walls, iWall, iWall === -1) ? dist(E, v) : 0
+  const uIn = end === "a" ? u : neg(u)
+  return isCollinearGapJoint(E, uIn, c, walls, iWall, iWall === -1) ? collinearGapCap(E, uIn, c, v).overhang : 0
 }
 
 function endShape(wall: Wall, E: Point, uIn: Point, nAB: Point, walls: Wall[], iWall: number, isLatest: boolean): EndShape {

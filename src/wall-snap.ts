@@ -215,10 +215,20 @@ function freeCap(scene: SceneContour, w: Wall, end: Point, out: Point): boolean 
   return visible.length === 1 && visible[0][0] <= LINE_TOL && visible[0][1] >= 1 - LINE_TOL
 }
 
-// Кандидат на свободном торце без заданного направления (change cap-snap-vertex-at-square-center,
-// design D1): квадрат приставлен к плоскости торца, вершина — его центр на оси.
-function capCandidate(scene: SceneContour, w: Wall, end: Point, out: Point, newHalf: number): Candidate | null {
-  return freeCap(scene, w, end, out) ? { point: add(end, mul(out, newHalf)), base: end, normal: out, target: "cap" } : null
+// Кандидаты на свободном торце без заданного направления (change cap-snap-vertex-at-square-center, design D1):
+// квадрат приставлен к плоскости торца, вершина — его центр. Позиция по центру — на оси; если новая стена тоньше
+// существующей, добавляются две позиции заподлицо с гранями — центр сдвинут вдоль торца на hW − newHalf
+// (change cap-flush-snap, design D1, D2). Центр идёт первым: при равенстве расстояний `nearest` оставляет его.
+function capCandidates(scene: SceneContour, w: Wall, end: Point, out: Point, newHalf: number): Candidate[] {
+  if (!freeCap(scene, w, end, out)) return []
+  const centre: Candidate = { point: add(end, mul(out, newHalf)), base: end, normal: out, target: "cap" }
+  const flush = w.thicknessCm / 2 - newHalf
+  if (flush <= LINE_TOL) return [centre]
+  const shifted = [1, -1].map((side): Candidate => {
+    const shift = mul(perp(out), side * flush)
+    return { ...centre, point: add(centre.point, shift), base: add(centre.base, shift) }
+  })
+  return [centre, ...shifted]
 }
 
 // Кандидат на угле свободного торца (change diagonal-corner-snap, design D1): квадрат касается угла торца
@@ -392,9 +402,9 @@ function wallCandidates(
     // в полосе: за концом — торец (продолжение, только вблизи торца), в пределах длины —
     // ближняя грань, запасная — дальняя, если ближняя не дала места (design D4)
     if (s > len) {
-      if (s - len <= reach) accept(capCandidate(scene(), w, w.b, u, newHalf))
+      if (s - len <= reach) capCandidates(scene(), w, w.b, u, newHalf).forEach(accept)
     } else if (s < 0) {
-      if (-s <= reach) accept(capCandidate(scene(), w, w.a, mul(u, -1), newHalf))
+      if (-s <= reach) capCandidates(scene(), w, w.a, mul(u, -1), newHalf).forEach(accept)
     } else if (!accept(faceCandidate(scene(), w, side, p, newHalf))) accept(faceCandidate(scene(), w, -side, p, newHalf))
     return
   }

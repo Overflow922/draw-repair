@@ -706,3 +706,15 @@ Follow-ups from the demolition corner fix (2026-10-15).
 
 - A thin seam line is drawn inside the demolition region between the wall body and the corner piece taken from the
   neighbour's shape (`cornerPieces` in `src/demolition/mark-region.ts`); the pieces are stroked separately.
+
+## cap-flush-snap (2026-10-15)
+
+### Tests
+- [ ] Test validation (independent) of `cap-flush-snap` not run; the mutation survivors of the new tests are unknown (`src/wall-snap-cap-flush.test.ts`, `src/wall-geometry-offset-gap.test.ts`).
+- [ ] The window of the flush position (nearest of three along the cap) and the DOM wiring were checked by hand only for one scene (A 40 cm, new 20 cm, flush on the lower face); the left/upper face, a cap at an angle in the browser and the preview while rotating the segment were not checked by hand.
+
+### Docs
+- [ ] A plain `npx vitest run` also picks up stale `.claude/worktrees/*/src/**` copies and reports 18 failures there; run it with `--exclude ".claude/**"` or clean the worktrees.
+
+### Out of scope
+- The flat-cap rule applies only to the late wall of a collinear gap joint with the axis offset above 1 cm. A late wall whose end meets the cap of an earlier wall at a small angle (0.5-15 deg) with an axis offset still uses the bisector cut of "Почти коллинеарный стык".
