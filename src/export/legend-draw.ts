@@ -1,11 +1,26 @@
 import type { jsPDF } from "jspdf"
+import { strokeBatteries } from "../battery/battery-render"
+import { strokeCommunications } from "../communications/communications-render"
 import { demolitionColor } from "../demolition/demolition-render"
 import { PDF_METRICS, SAMPLE_LENGTH_MM, SAMPLE_THICKNESS_MM, drawLegendSample, tracePolygons } from "../render"
 import { LIGHT_PALETTE } from "../theme"
 import type { Palette } from "../theme"
-import type { Point } from "../types"
+import { PX_PER_CM } from "../types"
+import type { Battery, Communication, Point, View, Wall } from "../types"
 import { DEMOLITION_HATCH, strokeHatchSeries } from "../wall-hatch"
-import { LEGEND_FONT_MM, LEGEND_GAP_MM, LEGEND_LINE_PITCH_MM, LEGEND_PAD_LEFT_MM, LEGEND_ROW_PITCH_MM, legendEntries, wrapLabel } from "./legend"
+import {
+  LEGEND_BATTERY_THICKNESS_MM,
+  LEGEND_DUCT_DEPTH_MM,
+  LEGEND_DUCT_WIDTH_MM,
+  LEGEND_FONT_MM,
+  LEGEND_GAP_MM,
+  LEGEND_LINE_PITCH_MM,
+  LEGEND_PAD_LEFT_MM,
+  LEGEND_RISER_DIAMETER_MM,
+  LEGEND_ROW_PITCH_MM,
+  legendEntries,
+  wrapLabel,
+} from "./legend"
 import type { LegendEntry } from "./legend"
 import type { PlanPage } from "./pdf"
 import type { Rect } from "./sheet-layout"
@@ -38,9 +53,44 @@ function drawDemolitionSample(ctx: CanvasRenderingContext2D, origin: Point): voi
   ctx.stroke()
 }
 
+// вид, в котором одна единица чертежа равна одному миллиметру листа, а начало координат — в origin
+const mmView = (origin: Point): View => ({ zoom: 1 / PX_PER_CM, pan: { x: -origin.x, y: -origin.y } })
+
+// образец «Батарея»: батарея длиной 70 см на невидимой опорной стене, нарисованная рендером чертежа; единица вида — сантиметр,
+// 70 см укладываются в длину образца, поэтому секции (шаг 10 см) читаются как на чертеже
+function drawBatterySample(ctx: CanvasRenderingContext2D, origin: Point, palette: Palette): void {
+  const lengthCm = 70
+  const mmPerCm = SAMPLE_LENGTH_MM / lengthCm
+  const thicknessCm = LEGEND_BATTERY_THICKNESS_MM / mmPerCm
+  const hostY = -thicknessCm / 2
+  const host: Wall = { id: "legend-host", a: { x: 0, y: hostY }, b: { x: lengthCm, y: hostY }, thicknessCm: 0, type: "brick" }
+  const battery: Battery = { id: "legend-battery", wallId: host.id, face: 1, anchor: "a", offsetCm: 0, lengthCm, thicknessCm, gapCm: 0 }
+  const view: View = { zoom: mmPerCm / PX_PER_CM, pan: { x: -origin.x / mmPerCm, y: -origin.y / mmPerCm } }
+  strokeBatteries(ctx, [battery], [host], view, palette.ink, PDF_METRICS.contourPx, PDF_METRICS.hatchPx)
+}
+
+// образцы «Стояк» и «Воздуховод»: коммуникации тем же рендером и тем же цветом на любой странице
+function drawCommunicationSample(ctx: CanvasRenderingContext2D, entry: LegendEntry, origin: Point): void {
+  const center = { x: SAMPLE_LENGTH_MM / 2, y: 0 }
+  const sample: Communication =
+    entry.kind === "riser"
+      ? { kind: "riser", id: "legend-riser", ...center, diameterCm: LEGEND_RISER_DIAMETER_MM }
+      : { kind: "duct", id: "legend-duct", ...center, widthCm: LEGEND_DUCT_WIDTH_MM, depthCm: LEGEND_DUCT_DEPTH_MM }
+  strokeCommunications(ctx, [sample], mmView(origin), LIGHT_PALETTE.ink, PDF_METRICS.contourPx, LIGHT_PALETTE.concreteFill)
+}
+
 function drawSample(ctx: CanvasRenderingContext2D, entry: LegendEntry, origin: Point, palette: Palette): void {
-  if (entry.kind === "material") drawLegendSample(ctx, entry.material, origin, PDF_METRICS, palette)
-  else drawDemolitionSample(ctx, origin)
+  switch (entry.kind) {
+    case "material":
+      return drawLegendSample(ctx, entry.material, origin, PDF_METRICS, palette)
+    case "battery":
+      return drawBatterySample(ctx, origin, palette)
+    case "riser":
+    case "duct":
+      return drawCommunicationSample(ctx, entry, origin)
+    case "demolition":
+      return drawDemolitionSample(ctx, origin)
+  }
 }
 
 // столбец легенды страницы: записи сверху вниз с верхнего края столбца; на странице «Демонтаж» образцы материалов серые,

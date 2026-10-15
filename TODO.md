@@ -765,3 +765,11 @@ Follow-ups from `add-plan-notes` (2026-10-15).
 ## Out of scope (decided, revisit if needed)
 
 - Notes alone do not enable the PDF export button (a page with only notes is not "filled"); limits 15 items × 300 chars are unvalidated defaults.
+---
+
+Follow-ups from add-legend-objects (2026-10-15).
+
+## Tests
+
+- [ ] `vitest run` picks up stale copies of tests from `.claude/worktrees/agent-afe5052a1a208916f/` (18 failures there: tool-set order tests, wall-edit-invariants). Remove the worktree or add `.claude/worktrees` to the vitest `exclude` list in `vite.config.ts`.
+- [ ] `src/wall-edit-invariants.test.ts` (INV-1, INV-2) fails when the full suite runs in parallel (~13 s under load) and passes alone; looks like a timeout under load.

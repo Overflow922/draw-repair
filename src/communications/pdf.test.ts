@@ -162,9 +162,10 @@ describe("содержимое страниц", () => {
     }
   })
 
-  it("CF-05: числа размера и расстояний в PDF не попадают: тексты страниц те же, что без коммуникаций", () => {
+  it("CF-05: числа размера и расстояний в PDF не попадают: тексты страниц те же, что без коммуникаций, кроме подписей легенды", () => {
+    const legendLabels = new Set(["Стояк", "Воздуховод"])
     const withIt = build(base([riser(250, 150, 11), duct(100, 150)]))
-    const textsWith = texts.map((t) => `${t.page}:${t.text}`)
+    const textsWith = texts.filter((t) => !legendLabels.has(t.text)).map((t) => `${t.page}:${t.text}`)
     const without = build(base())
     const textsWithout = texts.map((t) => `${t.page}:${t.text}`)
     expect(textsWith).toEqual(textsWithout)

@@ -6,7 +6,12 @@ import type { PlanPage } from "./pdf"
 // Легенда страницы PDF (change pdf-legend): состав записей страницы, перенос подписи и ширина столбца легенды документа.
 // Все размеры — абсолютные миллиметры на бумаге и не зависят от масштаба чертежа (design D6).
 
-export type LegendEntry = { kind: "material"; material: Material; label: string } | { kind: "demolition"; label: string }
+export type LegendEntry =
+  | { kind: "material"; material: Material; label: string }
+  | { kind: "battery"; label: string }
+  | { kind: "riser"; label: string }
+  | { kind: "duct"; label: string }
+  | { kind: "demolition"; label: string }
 
 export const LEGEND_PAD_LEFT_MM = 8
 export const LEGEND_SAMPLE_W_MM = 16
@@ -16,12 +21,22 @@ export const LEGEND_FONT_MM = 3.5
 export const LEGEND_LINE_PITCH_MM = 4.5
 export const LEGEND_LABEL_MAX_MM = 28
 export const LEGEND_PAD_RIGHT_MM = 5
+// образцы объектов (change add-legend-objects, design D4): стояк — окружность, воздуховод — прямоугольник с диагональю, батарея — прямоугольник с секциями
+export const LEGEND_RISER_DIAMETER_MM = 8
+export const LEGEND_DUCT_WIDTH_MM = 16
+export const LEGEND_DUCT_DEPTH_MM = 8
+export const LEGEND_BATTERY_THICKNESS_MM = 4
 
-// записи страницы сверху вниз: материалы стен в порядке каталога, затем снос; элементы стены (проём, дверь, окно) в легенду не входят
+// записи страницы сверху вниз: материалы стен в порядке каталога, затем батарея, стояк, воздуховод (если они нарисованы на странице),
+// затем снос; элементы стены (проём, дверь, окно) в легенду не входят
 export function legendEntries(page: PlanPage): LegendEntry[] {
   if (page.walls.length === 0) return []
   const used = new Set(page.walls.map((w) => normalizeMaterial(w.type)))
   const entries: LegendEntry[] = MATERIALS.filter((m) => used.has(m.id)).map((m) => ({ kind: "material", material: m.id, label: m.label }))
+  const communications = page.communications ?? []
+  if ((page.batteries?.length ?? 0) > 0) entries.push({ kind: "battery", label: "Батарея" })
+  if (communications.some((c) => c.kind === "riser")) entries.push({ kind: "riser", label: "Стояк" })
+  if (communications.some((c) => c.kind === "duct")) entries.push({ kind: "duct", label: "Воздуховод" })
   if ((page.demolition?.length ?? 0) > 0) entries.push({ kind: "demolition", label: "Демонтируемая стена" })
   return entries
 }
