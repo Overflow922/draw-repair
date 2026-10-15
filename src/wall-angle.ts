@@ -1,5 +1,5 @@
 import type { Point } from "./types"
-import type { VertexSnap } from "./wall-snap"
+import type { ParallelStart, VertexSnap } from "./wall-snap"
 import { cross, dot, mul, perp } from "./wall-geometry"
 
 // Угол новой стены к стене примыкания и опорные направления построения
@@ -10,6 +10,7 @@ export interface StartRef {
   kind: "face" | "cap"
   normal: Point
   anchor?: Point // у торца — конец оси стены примыкания (точка приставления квадрата), design D4
+  parallel?: ParallelStart // у угла торца — параллельное направление и начало стены в нём
 }
 
 const ORTHO_TAN = Math.tan((15 * Math.PI) / 180)
@@ -39,6 +40,7 @@ export function startRefOf(snap: VertexSnap): StartRef | null {
   const kind = snap.target === "corner" ? "face" : snap.target
   const ref: StartRef = { kind, normal: { x: snap.normal.x, y: snap.normal.y } }
   if (snap.target === "cap" && snap.base) ref.anchor = { x: snap.base.x, y: snap.base.y }
+  if (snap.target === "corner" && snap.parallel) ref.parallel = snap.parallel
   return ref
 }
 
@@ -70,7 +72,9 @@ export function orthoDirection(ref: StartRef | null, v: Point): Point | null {
         ]
       : ref.kind === "cap"
         ? [ref.normal, perp(ref.normal), neg(perp(ref.normal))]
-        : [ref.normal]
+        : ref.parallel
+          ? [ref.normal, ref.parallel.dir]
+          : [ref.normal]
   for (const d of candidates) {
     const along = dot(v, d)
     if (along > 0 && Math.abs(cross(v, d)) <= ORTHO_TAN * along) return { x: d.x, y: d.y }

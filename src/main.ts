@@ -789,10 +789,17 @@ function typedLengthCm(): number | null {
 function previewLengthCm(): number | null {
   // конец превью — с учётом трекинга по узлам, а не точка привязки к сетке
   const end = segment?.end ?? cursor
-  if (!chainStart || !end) return null
-  if (pointsEqual(chainStart, end)) return null
+  const start = wallStart()
+  if (!start || !end) return null
+  if (pointsEqual(start, end)) return null
   // длина от кромки до кромки: у коллинеарного продолжения от торца учитывается выступ начала
-  return previewEdgeLengthCm(chainRef, chainStart, end)
+  return previewEdgeLengthCm(chainRef, start, end)
+}
+
+// начало строящейся стены: у угла торца в параллельном направлении оно смещено от точки первого клика
+// (change fix-corner-snap-parallel-start); превью, угол и фиксация берут его отсюда
+function wallStart(): Point | null {
+  return segment?.start ?? chainStart
 }
 
 function typedAngleDeg(): number | null {
@@ -915,7 +922,8 @@ function drawMeasurePlan(): void {
   const draft = dimDraftGeometry()
   const snapHit = tool === "dimension" && cursor && (!dimDraft.a || !dimDraft.b) ? nearestDimAnchor(cursor, walls, doorways, radiusCm(), batteries.filter(editableBattery)) : null
   let previewWall: Wall | null = null
-  if (chainStart && p) previewWall = { id: "", a: chainStart, b: p, thicknessCm, type: wallMaterial }
+  const start = wallStart()
+  if (start && p) previewWall = { id: "", a: start, b: p, thicknessCm, type: wallMaterial }
   let square: Point[] | null = null
   if (tool === "wall" && cursor) {
     // на свободном конце: прилип к стене — квадрат установки у грани, иначе последний блок вдоль сегмента
@@ -952,7 +960,7 @@ function drawMeasurePlan(): void {
     square,
     angle:
       chainStart && segment?.dir && segment.refRay && segment.angleDeg !== null
-        ? { at: chainStart, from: segment.refRay, to: segment.dir, deg: segment.angleDeg }
+        ? { at: segment.start, from: segment.refRay, to: segment.dir, deg: segment.angleDeg }
         : null,
     tracks: tool === "wall" && chainStart && segment ? segment.tracks : centerGuideTracks(),
     ruler: tool === "ruler" && cursor && !gestureActive() ? rulerReading(cursor, walls) : null,
@@ -1069,10 +1077,10 @@ function snapWallCursor(raw: Point): void {
   })
   // конец стены, налагающийся на коммуникацию, обрезается до касания; нулевая стена не ставится (spec wall-collision
   // «Стены не налагаются на коммуникации»)
-  const byCommunications = limitNewWall(chainStart, computed.end, thicknessCm, communicationsOf())
-  const limited = byCommunications && limitNewWallByBatteries(chainStart, byCommunications, thicknessCm, walls, batteries)
+  const byCommunications = limitNewWall(computed.start, computed.end, thicknessCm, communicationsOf())
+  const limited = byCommunications && limitNewWallByBatteries(computed.start, byCommunications, thicknessCm, walls, batteries)
   endBlocked = limited === null
-  segment = limited === null ? { ...computed, end: chainStart } : pointsEqual(limited, computed.end) ? computed : { ...computed, end: limited }
+  segment = limited === null ? { ...computed, end: computed.start } : pointsEqual(limited, computed.end) ? computed : { ...computed, end: limited }
   cursor = segment.snap.point
   cursorSnap = segment.snap
 }
@@ -1097,7 +1105,7 @@ function commitPoint(): void {
     redraw()
     return
   }
-  const a = chainStart
+  const a = segment?.start ?? chainStart
   const end = segment?.end ?? cursor ?? chainStart
   if (endBlocked) return
   if (!pointsEqual(a, end)) {

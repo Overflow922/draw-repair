@@ -56,6 +56,13 @@ export interface VertexSnap {
   normal?: Point // наружная нормаль грани или торца при прилипании (для квадрата установки)
   target?: SnapTarget // вид прилипания — грань или торец (опора начала цепочки)
   base?: Point // середина стороны квадрата, приставленной к грани/торцу (у торца — не вершина)
+  parallel?: ParallelStart // у угла торца — начало стены, идущей вдоль оси существующей стены наружу
+}
+
+// начало стены, торец которой лежит на стороне квадрата в плоскости торца (change fix-corner-snap-parallel-start)
+export interface ParallelStart {
+  dir: Point // направление вдоль оси существующей стены от торца наружу
+  start: Point // середина стороны квадрата в плоскости торца
 }
 
 export type ClickAction = { kind: "select"; wall: Wall } | { kind: "draw" }
@@ -65,6 +72,7 @@ interface Candidate {
   base: Point // середина приставленной стороны квадрата установки (design D1)
   normal: Point
   target: SnapTarget
+  parallel?: ParallelStart
 }
 
 // открытый участок ребра контура сцены с наружной нормалью
@@ -238,7 +246,9 @@ function cornerCandidate(scene: SceneContour, w: Wall, end: Point, out: Point, s
   if (!freeCap(scene, w, end, out)) return null
   const normal = mul(perp(unit(w.a, w.b)), side)
   const point = add(add(end, mul(normal, w.thicknessCm / 2)), mul(out, newHalf))
-  return { point, base: point, normal, target: "corner" }
+  // стена вдоль оси наружу: торец на стороне квадрата в плоскости торца, ось через центр квадрата
+  const start = add(sub(point, mul(out, newHalf)), mul(normal, newHalf))
+  return { point, base: point, normal, target: "corner", parallel: { dir: out, start } }
 }
 
 // квадрат, приставленный стороной с центром в point, вытянутый на sizeCm по normal
@@ -464,6 +474,7 @@ function wallSnap(c: Candidate): VertexSnap {
   Object.defineProperty(result, "normal", { value: c.normal, enumerable: false })
   Object.defineProperty(result, "target", { value: c.target, enumerable: false })
   Object.defineProperty(result, "base", { value: c.base, enumerable: false })
+  if (c.parallel) Object.defineProperty(result, "parallel", { value: c.parallel, enumerable: false })
   return result
 }
 

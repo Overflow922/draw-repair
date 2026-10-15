@@ -27,6 +27,7 @@ export interface ChainInput {
 }
 
 export interface ChainSegment {
+  start: Point // начало стены: у угла торца при параллельном направлении — середина стороны квадрата в плоскости торца
   end: Point
   dir: Point | null // направление сегмента; null — нулевая длина
   snap: VertexSnap // привязка свободного конца к стене или сетке (квадрат на конце)
@@ -68,26 +69,37 @@ function tracked(input: ChainInput, snap: VertexSnap, fixed: Point | null): { en
 // продолжения от торца ось короче введённого на выступ начала; значение не больше выступа не применяется
 export function chainSegment(input: ChainInput): ChainSegment {
   const seg = segmentFor(input)
-  const { typedLengthCm, start, ref } = input
+  const { typedLengthCm, ref } = input
   if (typedLengthCm === null || !seg.dir) return seg
-  const overhang = startOverhangCm(ref, start, seg.dir)
+  const overhang = startOverhangCm(ref, seg.start, seg.dir)
   if (overhang === 0) return seg
   if (typedLengthCm <= overhang) return segmentFor({ ...input, typedLengthCm: null })
-  return { ...seg, end: add(start, mul(seg.dir, typedLengthCm - overhang)) }
+  return { ...seg, end: add(seg.start, mul(seg.dir, typedLengthCm - overhang)) }
+}
+
+// Начало стены (change fix-corner-snap-parallel-start): у угла торца при заданном направлении вдоль оси
+// существующей стены наружу торец новой стены лежит на стороне квадрата в плоскости торца
+function wallStart(start: Point, ref: StartRef | null, fixed: Point | null): Point {
+  const parallel = ref?.parallel
+  if (!parallel || !fixed) return start
+  const along = Math.abs(fixed.x - parallel.dir.x) <= 1e-9 && Math.abs(fixed.y - parallel.dir.y) <= 1e-9
+  return along ? parallel.start : start
 }
 
 function segmentFor(input: ChainInput): ChainSegment {
-  const { start, ref, raw, walls, radiusCm, gridStepCm, thicknessCm, typedLengthCm, doorways = [], communications = [] } = input
-  const v = unitOrNull(sub(raw, start))
+  const { ref, raw, walls, radiusCm, gridStepCm, thicknessCm, typedLengthCm, doorways = [], communications = [] } = input
+  const v = unitOrNull(sub(raw, input.start))
   const fixed = v ? constrainedDirection(input, v) : null
+  const start = wallStart(input.start, ref, fixed)
   const snap = fixed
     ? snapOnRay(raw, walls, radiusCm, gridStepCm, thicknessCm, start, fixed, doorways, communications)
     : snapVertex(raw, walls, radiusCm, gridStepCm, thicknessCm, undefined, doorways, false, communications) // без диагонали: вторая вершина
-  const track = tracked(input, snap, fixed)
+  const track = tracked({ ...input, start }, snap, fixed)
   const target = track?.end ?? snap.point
   const dir = fixed ?? unitOrNull(sub(target, start))
   const end = typedLengthCm !== null && dir ? add(start, mul(dir, typedLengthCm)) : target
   return {
+    start,
     end,
     dir,
     snap,

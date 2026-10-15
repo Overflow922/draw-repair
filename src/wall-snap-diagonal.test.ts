@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest"
 import { chainSegment } from "./wall-chain"
+import type { ChainSegment } from "./wall-chain"
 import { startRefOf } from "./wall-angle"
 import { placementSquare, snapRadiusCm, snapStartVertex } from "./wall-snap"
 import type { VertexSnap } from "./wall-snap"
@@ -191,23 +192,31 @@ describe("DS: диагональное прилипание к углу своб
     expect(seg.angleDeg).toBeCloseTo(90, 6)
   })
 
-  it("DS-13b: от диагонального начала орто не притягивает к оси стены (как у торца), только перпендикуляр", () => {
+  // change fix-corner-snap-parallel-start: от угла торца орто предлагает перпендикуляр к грани и направление
+  // вдоль оси стены от торца наружу (допуск 15°); остальные направления не притягиваются
+  it("DS-13b: от диагонального начала орто притягивает к оси стены наружу (≈ 8°) и к перпендикуляру", () => {
     const walls = A()
     const snap = start({ x: 8, y: 18 }, walls)
-    const seg = chainSegment({
-      start: snap.point,
-      ref: startRefOf(snap),
-      raw: { x: 60, y: 17 }, // почти параллельно A (≈ 8° к оси), в допуске 15° у опоры-торца
-      walls,
-      radiusCm: R(),
-      gridStepCm: GRID,
-      thicknessCm: 20,
-      ortho: true,
-      typedAngleDeg: null,
-      typedLengthCm: null,
-    })
-    expect(seg.dir).not.toBeNull()
-    expect(seg.dir?.y ?? 0).toBeGreaterThan(0.1) // направление не прижато к (1, 0)
+    const run = (raw: Point): ChainSegment =>
+      chainSegment({
+        start: snap.point,
+        ref: startRefOf(snap),
+        raw,
+        walls,
+        radiusCm: R(),
+        gridStepCm: GRID,
+        thicknessCm: 20,
+        ortho: true,
+        typedAngleDeg: null,
+        typedLengthCm: null,
+      })
+    const parallel = run({ x: 60, y: 17 }) // ≈ 8° к оси A
+    expect(parallel.dir?.x).toBeCloseTo(1, 9)
+    expect(parallel.dir?.y).toBeCloseTo(0, 9)
+    const perpendicular = run({ x: 14, y: 90 })
+    expect(perpendicular.dir?.x).toBeCloseTo(0, 9)
+    expect(perpendicular.dir?.y).toBeCloseTo(1, 9)
+    expect(run({ x: 60, y: 10 + 50 * Math.tan((30 * Math.PI) / 180) }).dir?.y ?? 0).toBeGreaterThan(0.3) // 30° — не притягивается
   })
 
   it("DS-14: для второй вершины цепочки диагонали нет (прежние правила)", () => {

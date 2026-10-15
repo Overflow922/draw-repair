@@ -718,3 +718,12 @@ Follow-ups from the demolition corner fix (2026-10-15).
 
 ### Out of scope
 - The flat-cap rule applies only to the late wall of a collinear gap joint with the axis offset above 1 cm. A late wall whose end meets the cap of an earlier wall at a small angle (0.5-15 deg) with an axis offset still uses the bisector cut of "Почти коллинеарный стык".
+
+## fix-corner-snap-parallel-start (2026-10-15)
+
+### Tests
+- [ ] The `src/main.ts` wiring of `segment.start` (preview wall, angle arc `at`, `commitPoint`, `previewLengthCm`, `limitNewWall*` start) has no automated test; checked by hand in the browser for the upper corner with ortho on only. Not checked by hand: the second (lower) corner, ortho off, a typed length from the shifted start.
+- [ ] Test validation (independent) of `fix-corner-snap-parallel-start` not run; mutation survivors of `src/wall-chain-corner-parallel.test.ts` are unknown.
+
+### Out of scope
+- Parallel start applies only to the corner snap with a fixed direction (ortho). With ortho off the free direction never moves the start; a typed angle cannot give 0° (`typedDirection` rejects it), so the parallel wall is unreachable without ortho.
