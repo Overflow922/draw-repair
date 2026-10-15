@@ -210,6 +210,7 @@ export interface MountingContent {
   callouts?: Callout[]
   doorways?: WallElement[]
   batteries?: Battery[]
+  notes?: string[]
 }
 
 export interface Drawing {
@@ -237,6 +238,10 @@ export interface Drawing {
   // при загрузке не дописывается (add-callout design D1)
   callouts?: Callout[]
   demolitionCallouts?: Callout[]
+  // примечания планов «Обмерочный план» и «Демонтаж»; примечания «Монтажа» — в mounting.notes; отсутствие — пустой список,
+  // при загрузке не дописывается (add-plan-notes design D1)
+  notes?: string[]
+  demolitionNotes?: string[]
   // данные помещений плана «Монтаж», общие для планов; отсутствие — пустой список, при загрузке не дописывается
   // (add-room-explication design D1)
   rooms?: RoomRecord[]

@@ -1,5 +1,5 @@
 import "./style.css"
-import { cloneScene, loadHistory, planHistory, record, recordCallouts, recordDemolition, recordSnapshot, redoCallouts, redoDemolition, redoEntry, saveHistory, undoCallouts, undoDemolition, undoEntry } from "./history"
+import { cloneScene, loadHistory, planHistory, record, recordCallouts, recordDemolition, recordNotes, recordSnapshot, redoCallouts, redoDemolition, redoEntry, redoNotes, saveHistory, undoCallouts, undoDemolition, undoEntry, undoNotes } from "./history"
 import type { Scene } from "./history"
 import { dimLevelSnap, dimensionGeometry, dimensionOffsetAt, hitWall, nearestDimAnchor, dimPointPoint, pointsEqual, segmentIntersectsRect, snap, snapOthers, snapWithSource, zoomAt } from "./geometry"
 import type { DimGeometry, SnapResult } from "./geometry"
@@ -11,6 +11,8 @@ import type { BatteryToolHost } from "./battery/battery-tool"
 import { calloutsOf, withCallouts } from "./callout/callout-store"
 import { createCalloutTool } from "./callout/callout-tool"
 import type { CalloutToolHost } from "./callout/callout-tool"
+import { applyNotesText, notesText } from "./notes/notes-actions"
+import { notesOf, withNotes } from "./notes/notes-store"
 import { moveEndpointBounded, moveWallsBounded, resizeWallBounded } from "./wall-edit"
 import type { EditMode } from "./wall-edit"
 import { centerSnapRadiusCm, chainEndSquare, placementSquare, snapRadiusCm, snapStartVertex, wallClickAction } from "./wall-snap"
@@ -98,6 +100,9 @@ const toolDoorBtn = document.querySelector<HTMLButtonElement>("#tool-door")!
 const toolWindowBtn = document.querySelector<HTMLButtonElement>("#tool-window")!
 const toolBatteryBtn = document.querySelector<HTMLButtonElement>("#tool-battery")!
 const toolCalloutBtn = document.querySelector<HTMLButtonElement>("#tool-callout")!
+const toolNotesBtn = document.querySelector<HTMLButtonElement>("#tool-notes")!
+const notesPanel = document.querySelector<HTMLElement>("#notes-panel")!
+const notesInput = document.querySelector<HTMLTextAreaElement>("#notes-input")!
 const toolCommunicationsBtn = document.querySelector<HTMLButtonElement>("#tool-communications")!
 const communicationsPanel = document.querySelector<HTMLElement>("#communications-panel")!
 const toolRiserBtn = document.querySelector<HTMLButtonElement>("#tool-riser")!
@@ -620,6 +625,45 @@ function pressDemolitionNumber(p: Point): boolean {
   return true
 }
 
+// примечания активного плана (change add-plan-notes, design D4): панель с полем; правка применяется при потере фокуса,
+// закрытии панели, смене инструмента, плана и вкладки, Esc — одним шагом истории плана, если список изменился
+let notesPanelOpen = false
+const activeNotes = (): string[] => notesOf(current(), activePlanOf(current()))
+
+function syncNotesUI(): void {
+  notesPanel.classList.toggle("open", notesPanelOpen)
+  toolNotesBtn.classList.toggle("active", tool === "notes")
+}
+
+function showNotes(): void {
+  notesInput.value = notesText(activeNotes())
+}
+
+function commitNotes(): void {
+  if (!notesPanelOpen) return
+  const before = activeNotes()
+  const applied = applyNotesText(before, notesInput.value)
+  notesInput.value = notesText(applied.list)
+  if (!applied.changed) return
+  nudgeBurst = false
+  recordNotes(activeHistory(), before)
+  Object.assign(current(), withNotes(current(), activePlanOf(current()), applied.list))
+  dirty = true
+  redraw()
+}
+
+function openNotesPanel(): void {
+  notesPanelOpen = true
+  showNotes()
+  syncNotesUI()
+}
+
+function closeNotesPanel(): void {
+  commitNotes()
+  notesPanelOpen = false
+  syncNotesUI()
+}
+
 // выноски активного плана (change add-callout, design D4, D5, D8): список лежит в чертеже по правилам плана (callout-store);
 // выделение, жест и поле ввода ведёт адаптер, а запись истории — один шаг со списком до операции
 const calloutHost: CalloutToolHost = {
@@ -789,6 +833,7 @@ function syncToolUI(): void {
   toolWindowBtn.classList.toggle("active", tool === "window")
   toolBatteryBtn.classList.toggle("active", tool === "battery")
   toolCalloutBtn.classList.toggle("active", tool === "callout")
+  syncNotesUI()
   toolDemolitionBtn.classList.toggle("active", tool === "demolition")
   syncOpeningsUI()
   syncCommunicationsUI()
@@ -798,6 +843,7 @@ function syncToolUI(): void {
 
 function setTool(next: Tool): void {
   if (tool === next) return
+  closeNotesPanel()
   tool = next
   clearChain()
   closeNumberEditor()
@@ -2037,6 +2083,22 @@ toolWindowBtn.addEventListener("click", () => setTool("window"))
 toolBatteryBtn.addEventListener("click", () => setTool("battery"))
 toolCalloutBtn.addEventListener("click", () => setTool("callout"))
 
+// «Примечания»: инструмент без жестов на холсте; клик по кнопке активного инструмента переключает панель
+toolNotesBtn.addEventListener("click", () => {
+  if (tool !== "notes") {
+    setTool("notes")
+    openNotesPanel()
+  } else if (notesPanelOpen) closeNotesPanel()
+  else openNotesPanel()
+})
+notesInput.addEventListener("blur", commitNotes)
+// клавиши поля не доходят до холста: Delete, стрелки, Ctrl+Z правят текст, а не чертёж; Esc применяет правку
+notesInput.addEventListener("keydown", (e) => {
+  e.stopPropagation()
+  if (e.key === "Escape") notesInput.blur()
+})
+window.addEventListener("pagehide", commitNotes)
+
 toolRulerBtn.addEventListener("click", () => setTool("ruler"))
 toolDemolitionBtn.addEventListener("click", () => setTool("demolition"))
 
@@ -2080,8 +2142,9 @@ function renderPlanSwitch(): void {
 
 function setPlan(id: PlanId): void {
   if (id === activePlanOf(current())) return
-  // набранный текст выноски сохраняется на прежнем плане
+  // набранный текст выноски и примечаний сохраняется на прежнем плане
   calloutTool.commitEditor()
+  closeNotesPanel() // панель закрывается до смены плана: поле показывает список прежнего плана
   commitMounting()
   current().activePlan = id
   activate(store.activeId)
@@ -2106,6 +2169,7 @@ function newDrawing(): void {
 
 function activate(id: string): void {
   calloutTool.commitEditor()
+  closeNotesPanel()
   commitMounting()
   store.activeId = id
   loadWorking()
@@ -2198,13 +2262,16 @@ function stepMarks(step: typeof undoDemolition): void {
 function restoreScene(e: Scene): void {
   if (workspace) {
     // выноски «Монтажа» в записи истории не хранятся (у них свои записи): список остаётся как есть
+    // примечания «Монтажа» — тоже (change add-plan-notes, design D3)
     const callouts = current().mounting?.callouts
+    const notes = current().mounting?.notes
     current().mounting = {
       walls: e.walls,
       dimensions: e.dimensions,
       ...(e.doorways ? { doorways: e.doorways } : null),
       ...(e.batteries ? { batteries: e.batteries } : null),
       ...(callouts ? { callouts } : null),
+      ...(notes ? { notes } : null),
     }
     // запись без данных помещений (история до их введения) данные не меняет
     if (e.rooms) current().rooms = e.rooms
@@ -2232,13 +2299,30 @@ function stepCallouts(step: typeof undoCallouts): void {
   redraw()
 }
 
+// отмена или повтор шага примечаний плана (change add-plan-notes, design D3): подставляется список до правки; открытая панель
+// показывает восстановленный список
+function stepNotes(step: typeof undoNotes): void {
+  const next = step(activeHistory(), activeNotes())
+  if (!next) return
+  Object.assign(current(), withNotes(current(), activePlanOf(current()), next))
+  if (notesPanelOpen) showNotes()
+  dirty = true
+  resetEditing()
+  redraw()
+}
+
 function undo(): void {
   if (groupMove || endpointDrag || panDrag || dimDrag || doorwayTool.dragging() || communicationTool.dragging() || batteryTool.dragging() || calloutTool.dragging() || demolitionTool.dragging()) return
-  // открытое поле ввода выноски сохраняет текст до отмены
+  // открытое поле ввода выноски и поле примечаний сохраняют текст до отмены
   calloutTool.commitEditor()
+  commitNotes()
   const h = activeHistory()
   if (h.past[h.past.length - 1]?.kind === "callouts") {
     stepCallouts(undoCallouts)
+    return
+  }
+  if (h.past[h.past.length - 1]?.kind === "notes") {
+    stepNotes(undoNotes)
     return
   }
   if (h.past[h.past.length - 1]?.kind === "demolition") {
@@ -2264,9 +2348,14 @@ function undo(): void {
 function redo(): void {
   if (groupMove || endpointDrag || panDrag || dimDrag || doorwayTool.dragging() || communicationTool.dragging() || batteryTool.dragging() || calloutTool.dragging() || demolitionTool.dragging()) return
   calloutTool.commitEditor()
+  commitNotes()
   const h = activeHistory()
   if (h.future[h.future.length - 1]?.kind === "callouts") {
     stepCallouts(redoCallouts)
+    return
+  }
+  if (h.future[h.future.length - 1]?.kind === "notes") {
+    stepNotes(redoNotes)
     return
   }
   if (h.future[h.future.length - 1]?.kind === "demolition") {

@@ -1,4 +1,5 @@
 import { mergeAll } from "./demolition/marks"
+import { loadNoteList } from "./notes/notes-store"
 import { isPlanId } from "./plans"
 import { isDoor, isWindow, normalizeMaterial } from "./types"
 import type { Battery, BatteryCornerPoint, BatteryMark, Callout, Communication, DemolitionMark, Dimension, DimPoint, Doorway, Drawing, DrawingStore, EdgePoint, EdgeRef, JambPoint, MountingContent, Point, RoomRecord, View, Wall, WallDoor, WallElement, WallWindow } from "./types"
@@ -240,6 +241,7 @@ function loadMounting(raw: unknown): { mounting?: MountingContent } {
   if (typeof raw !== "object" || raw === null || Array.isArray(raw)) return {}
   const x = raw as Record<string, unknown>
   const list = (v: unknown): unknown[] => (Array.isArray(v) ? v : [])
+  const notes = loadNoteList(x.notes) // примечания плана (change add-plan-notes, design D1): не список — как отсутствующее поле
   return {
     mounting: {
       walls: assignIds(list(x.walls).filter(isWallBase)),
@@ -247,6 +249,7 @@ function loadMounting(raw: unknown): { mounting?: MountingContent } {
       ...(x.doorways === undefined ? null : { doorways: list(x.doorways).filter(isWallElement).map(normalizeElement) }),
       ...(x.batteries === undefined ? null : { batteries: list(x.batteries).filter(isBattery).map(copyBattery) }),
       ...(x.callouts === undefined ? null : { callouts: loadCalloutList(x.callouts) }),
+      ...(notes === undefined ? null : { notes }),
     },
   }
 }
@@ -287,6 +290,8 @@ export function parseStore(raw: string): LoadedStore | null {
     ) {
       const drawings = (d.drawings as Drawing[]).map(({ activePlan, demolition, mounting, batteryDemolition, ...dr }): Drawing => {
         const batteries = loadBatteries(dr.batteries, dr.walls)
+        const notes = loadNoteList(dr.notes)
+        const demolitionNotes = loadNoteList(dr.demolitionNotes)
         return {
           // поля чертежа перечислены явно: масштаб, записанный прежними версиями, в модель не попадает (drawing-storage)
           id: dr.id,
@@ -303,6 +308,8 @@ export function parseStore(raw: string): LoadedStore | null {
           ...loadBatteryDemolition(batteryDemolition, batteries.batteries ?? []),
           ...(Array.isArray(dr.callouts) ? { callouts: loadCalloutList(dr.callouts) } : null),
           ...(Array.isArray(dr.demolitionCallouts) ? { demolitionCallouts: loadCalloutList(dr.demolitionCallouts) } : null),
+          ...(notes === undefined ? null : { notes }),
+          ...(demolitionNotes === undefined ? null : { demolitionNotes }),
           ...loadRooms(dr.rooms),
           dimensions: (Array.isArray(dr.dimensions) ? dr.dimensions : []).filter(isDimension).map(copyDimension),
         }

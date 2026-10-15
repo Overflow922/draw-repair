@@ -80,5 +80,7 @@ export function storedContent(
     ...(batteries.length > 0 || drawing.mounting?.batteries !== undefined ? { batteries } : null),
     // выноски «Монтажа» не зависят от сцены: хранятся как есть (change add-callout, design D1)
     ...(drawing.mounting?.callouts !== undefined ? { callouts: drawing.mounting.callouts } : null),
+    // примечания «Монтажа» не зависят от сцены: хранятся как есть (change add-plan-notes, design D1)
+    ...(drawing.mounting?.notes !== undefined ? { notes: drawing.mounting.notes } : null),
   }
 }

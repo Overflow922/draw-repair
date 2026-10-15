@@ -1,10 +1,11 @@
-import { CHAR_WIDTH } from "../doorway/element-label"
 import { explicationTable } from "../room-explication"
 import type { ExplicationTable } from "../room-explication"
 import type { PlanPage } from "./pdf"
+import { maxNotesHeightMm } from "./notes"
 import { frameRect, titleBlockRect } from "./sheet-layout"
 import type { PageFormat } from "./page-format"
 import type { Rect } from "./sheet-layout"
+import { wrapText } from "./wrap-text"
 
 // Таблица экспликации помещений на странице «Монтаж» (change add-room-explication, design D6, D7): раскладка в абсолютных
 // миллиметрах листа, не зависит от масштаба чертежа. Таблица стоит в левом нижнем углу рамки и не касается основной надписи.
@@ -23,35 +24,9 @@ export const EXPLICATION_W_MM = EXPLICATION_COLS_MM[0] + EXPLICATION_COLS_MM[1] 
 export const EXPLICATION_AREA_HEADER = ["Площадь,", "м²"] as const
 export const EXPLICATION_TOTAL_LABEL = "Общая"
 
-const textWidthMm = (text: string): number => text.length * EXPLICATION_FONT_MM * CHAR_WIDTH
-
 // перенос названия по пробелам в ширину ячейки; слово, не помещающееся целиком, разбивается по символам
-export function wrapName(name: string, widthMm: number = EXPLICATION_COLS_MM[1] - 2 * EXPLICATION_CELL_PAD_MM): string[] {
-  const lines: string[] = []
-  let current = ""
-  const push = (): void => {
-    if (current !== "") lines.push(current)
-    current = ""
-  }
-  for (const word of name.split(/\s+/).filter((w) => w !== "")) {
-    let rest = word
-    while (textWidthMm(rest) > widthMm) {
-      let cut = rest.length - 1
-      while (cut > 1 && textWidthMm(rest.slice(0, cut)) > widthMm) cut--
-      if (current !== "") push()
-      lines.push(rest.slice(0, cut))
-      rest = rest.slice(cut)
-    }
-    if (current === "") current = rest
-    else if (textWidthMm(`${current} ${rest}`) <= widthMm) current = `${current} ${rest}`
-    else {
-      push()
-      current = rest
-    }
-  }
-  push()
-  return lines.length > 0 ? lines : [""]
-}
+export const wrapName = (name: string, widthMm: number = EXPLICATION_COLS_MM[1] - 2 * EXPLICATION_CELL_PAD_MM): string[] =>
+  wrapText(name, widthMm, EXPLICATION_FONT_MM)
 
 export interface ExplicationRowLayout {
   number: string
@@ -86,9 +61,10 @@ export function explicationLayout(table: ExplicationTable): ExplicationLayout {
 export const pageExplication = (page: PlanPage): ExplicationTable | null =>
   page.rooms !== undefined && page.rooms.length > 0 ? explicationTable(page.rooms) : null
 
-// высота нижней полосы листа — одна на документ: наибольшая из высот основной надписи и таблицы экспликации любой страницы
+// высота нижней полосы листа — одна на документ: наибольшая из двух величин — основная надпись вместе с самым высоким блоком
+// примечаний (change add-plan-notes, design D6) и самая высокая таблица экспликации любой страницы
 export function bottomBandMm(pages: readonly PlanPage[], format: PageFormat): number {
-  const title = titleBlockRect(format).h
+  const title = titleBlockRect(format).h + maxNotesHeightMm(pages, format)
   const tables = pages.map((p) => pageExplication(p)).flatMap((t) => (t === null ? [] : [explicationLayout(t).heightMm]))
   return Math.max(title, ...tables)
 }

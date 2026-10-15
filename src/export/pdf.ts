@@ -21,6 +21,7 @@ import { cross, dot, sub } from "../wall-geometry"
 import { PX_PER_CM, isDoor, isWindow } from "../types"
 import { calloutLayout } from "../callout/callout-layout"
 import { calloutsOf } from "../callout/callout-store"
+import { notesOf } from "../notes/notes-store"
 import { CHAR_WIDTH } from "../doorway/element-label"
 import type { Battery, Callout, Communication, Dimension, Drawing, Point, Unit, Wall, WallElement } from "../types"
 import { FONT_B64 } from "./font"
@@ -28,6 +29,8 @@ import { PAGE_FORMATS_MM } from "./page-format"
 import type { PageFormat } from "./page-format"
 import { bottomBandMm, pageExplication } from "./explication"
 import { drawExplication } from "./explication-draw"
+import { pageNotes } from "./notes"
+import { drawNotes } from "./notes-draw"
 import { drawLegend } from "./legend-draw"
 import { legendWidthMm } from "./legend"
 import { drawSheet } from "./sheet-draw"
@@ -154,6 +157,8 @@ export interface PlanPage {
   // помещения экспликации страницы «Монтаж» с данными (change add-room-explication, design D6): блоки на чертеже и таблица;
   // у остальных страниц поля нет
   rooms?: readonly ExplicatedRoom[]
+  // примечания плана страницы (change add-plan-notes, design D5): блок над основной надписью; у страницы без примечаний поля нет
+  notes?: readonly string[]
   title?: string // название плана страницы — в графу 5 основной надписи (change pdf-plan-page-names)
 }
 
@@ -173,9 +178,11 @@ export function pagesOf(drawing: Drawing): PlanPage[] {
     // выноски страницы — только своего плана (change add-callout, design D10)
     const own = calloutsOf(drawing, plan.id)
     const callouts = own.length ? { callouts: own } : null
+    const ownNotes = notesOf(drawing, plan.id)
+    const notes = ownNotes.length ? { notes: ownNotes } : null
     switch (plan.id) {
       case "demolition":
-        return { walls: drawing.walls, dimensions: [], doorways, demolition: marks, ...shared, ...batteries, ...demolished, ...callouts, title: plan.label }
+        return { walls: drawing.walls, dimensions: [], doorways, demolition: marks, ...shared, ...batteries, ...demolished, ...callouts, ...notes, title: plan.label }
       case "mounting":
         return {
           walls: mounting.walls,
@@ -184,11 +191,12 @@ export function pagesOf(drawing: Drawing): PlanPage[] {
           ...shared,
           ...(mounting.batteries.length ? { batteries: mounting.batteries } : null),
           ...callouts,
+          ...notes,
           rooms: reconcileRooms(findRooms(mounting.walls), drawing.rooms ?? []),
           title: plan.label,
         }
       case "measure":
-        return { walls: drawing.walls, dimensions: drawing.dimensions, doorways, ...shared, ...batteries, ...callouts, title: plan.label }
+        return { walls: drawing.walls, dimensions: drawing.dimensions, doorways, ...shared, ...batteries, ...callouts, ...notes, title: plan.label }
     }
   })
 }
@@ -262,6 +270,8 @@ function drawPage(
   drawLegend(doc, ctx, page, legendArea(format, legendMm, bandMm))
   const explication = pageExplication(page)
   if (explication) drawExplication(doc, format, explication)
+  const notes = pageNotes(page)
+  if (notes) drawNotes(doc, format, notes)
   if (page.demolition !== undefined) {
     const scene = {
       walls: page.walls,

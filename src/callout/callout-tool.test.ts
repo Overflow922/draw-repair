@@ -17,15 +17,15 @@ const state = { gestureActive: false, dimensionDraft: false, hasSelection: false
 
 describe("наборы инструментов планов", () => {
   it("C-TOOL-1: обмерочный план — «Выноска» сразу после «Размера», перед «Линейкой»; остальной порядок прежний", () => {
-    expect(toolsOf("measure")).toEqual(["wall", "doorway", "door", "window", "battery", "riser", "duct", "dimension", "callout", "ruler", "eraser"])
+    expect(toolsOf("measure")).toEqual(["wall", "doorway", "door", "window", "battery", "riser", "duct", "dimension", "callout", "ruler", "notes", "eraser"])
   })
 
   it("C-TOOL-2: «Монтаж» — «Выноска» сразу после «Размера»", () => {
-    expect(toolsOf("mounting")).toEqual(["wall", "doorway", "door", "window", "battery", "dimension", "callout", "ruler", "eraser"])
+    expect(toolsOf("mounting")).toEqual(["wall", "doorway", "door", "window", "battery", "dimension", "callout", "ruler", "notes", "eraser"])
   })
 
   it("C-TOOL-3: «Демонтаж» — «Демонтаж», «Выноска», «Линейка», «Ластик»", () => {
-    expect(toolsOf("demolition")).toEqual(["demolition", "callout", "ruler", "eraser"])
+    expect(toolsOf("demolition")).toEqual(["demolition", "callout", "ruler", "notes", "eraser"])
   })
 
   it("C-TOOL-3b: «Выноска» есть у каждого плана каталога ровно один раз", () => {

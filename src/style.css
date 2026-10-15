@@ -318,6 +318,28 @@ body {
   width: 44px;
 }
 
+/* панель «Примечания» (change add-plan-notes): заголовок и многострочное поле, как поле толщины по стилю */
+#notes-label {
+  font-size: 10px;
+  color: var(--text-muted);
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 2px;
+}
+
+#notes-input {
+  width: 260px;
+  box-sizing: border-box;
+  font-size: 12px;
+  padding: 4px 6px;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  background: var(--panel-bg);
+  color: var(--text);
+  resize: vertical;
+}
+
 /* поля выделенного помещения на холсте (change add-room-explication): название над блоком, высота поверх правой ячейки блока;
    положение и ширину задаёт main.ts */
 #room-editor input {

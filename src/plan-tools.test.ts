@@ -13,17 +13,17 @@ const sorted = (xs: readonly string[]): string[] => [...xs].sort()
 describe("наборы инструментов", () => {
   // change add-communications (drawing-plans «Инструменты плана»): группа «Коммуникации» («Стояк», «Воздуховод»)
   it("PT-02: обмерочный план — «Стена», «Проём», «Дверь», «Окно», «Стояк», «Воздуховод», «Размер», «Линейка», «Ластик»", () => {
-    expect(sorted(toolsOf("measure"))).toEqual(sorted(["wall", "doorway", "door", "window", "battery", "riser", "duct", "dimension", "callout", "ruler", "eraser"]))
+    expect(sorted(toolsOf("measure"))).toEqual(sorted(["wall", "doorway", "door", "window", "battery", "riser", "duct", "dimension", "callout", "ruler", "notes", "eraser"]))
   })
 
   // TCR-6 (change demolition-doorway-sizes): на плане «Демонтаж» есть «Ластик» (удаляет пометки)
   it("PT-02: план «Демонтаж» — «Демонтаж», «Линейка» и «Ластик»", () => {
-    expect(sorted(toolsOf("demolition"))).toEqual(sorted(["demolition", "callout", "ruler", "eraser"]))
+    expect(sorted(toolsOf("demolition"))).toEqual(sorted(["demolition", "callout", "ruler", "notes", "eraser"]))
   })
 
   it("PT-02: инструменты планов пересекаются только по «Линейке» и «Ластику»", () => {
     const common = toolsOf("measure").filter((t) => toolsOf("demolition").includes(t))
-    expect(sorted(common)).toEqual(sorted(["callout", "ruler", "eraser"]))
+    expect(sorted(common)).toEqual(sorted(["callout", "ruler", "notes", "eraser"]))
   })
 
   it("PT-02: в наборе плана «Демонтаж» нет инструментов правки стен", () => {
@@ -31,15 +31,15 @@ describe("наборы инструментов", () => {
   })
 
   it("SZ-70: «Ластик» идёт после «Линейки» в наборе плана «Демонтаж», инструмент по умолчанию — «Демонтаж»", () => {
-    expect(toolsOf("demolition")).toEqual(["demolition", "callout", "ruler", "eraser"])
+    expect(toolsOf("demolition")).toEqual(["demolition", "callout", "ruler", "notes", "eraser"])
     expect(defaultToolOf("demolition")).toBe("demolition")
   })
 
   // change add-communications (drawing-plans «Инструменты плана»): добавлена группа «Коммуникации» («Стояк», «Воздуховод»);
   // «Ластик» по-прежнему в наборе, «Демонтажа» нет
   it("SZ-71: набор обмерочного плана — прежний плюс «Стояк» и «Воздуховод»: «Ластик» в нём остаётся, «Демонтажа» нет", () => {
-    expect(toolsOf("measure")).toEqual(["wall", "doorway", "door", "window", "battery", "riser", "duct", "dimension", "callout", "ruler", "eraser"])
-    expect(sorted(toolsOf("measure"))).toEqual(sorted(["wall", "doorway", "door", "window", "battery", "riser", "duct", "dimension", "callout", "ruler", "eraser"]))
+    expect(toolsOf("measure")).toEqual(["wall", "doorway", "door", "window", "battery", "riser", "duct", "dimension", "callout", "ruler", "notes", "eraser"])
+    expect(sorted(toolsOf("measure"))).toEqual(sorted(["wall", "doorway", "door", "window", "battery", "riser", "duct", "dimension", "callout", "ruler", "notes", "eraser"]))
   })
 
   it("PT-02: в наборе обмерочного плана нет инструмента «Демонтаж»", () => {

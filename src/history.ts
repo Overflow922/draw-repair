@@ -1,3 +1,4 @@
+import { isNoteList } from "./notes/notes-store"
 import { historyKey } from "./plans"
 import type { PlanId } from "./plans"
 import { isBattery, isBatteryMark, isCallout, isCommunication, isDemolitionMark, isDimension, isDrawing, isRoomRecord, isWall, isWallElement } from "./storage"
@@ -27,6 +28,8 @@ export type HistoryEntry =
   | { kind: "demolition"; marks: DemolitionMark[]; batteryMarks?: BatteryMark[] }
   // шаг выносок плана (change add-callout, design D3): список выносок плана до операции; стек истории — того плана, чей список
   | { kind: "callouts"; callouts: Callout[] }
+  // шаг примечаний плана (change add-plan-notes, design D3): список примечаний плана до правки
+  | { kind: "notes"; notes: string[] }
 
 export interface DrawingHistory {
   past: HistoryEntry[]
@@ -120,6 +123,30 @@ export function redoCallouts(history: DrawingHistory, current: readonly Callout[
   return copyCallouts(e.callouts)
 }
 
+// Примечания (change add-plan-notes, design D3): как у выносок — работают только с верхней записью вида «notes»,
+// при другой записи возвращают null и стеки не меняют; прежние функции отмены записи «notes» не забирают
+export function recordNotes(history: DrawingHistory, notes: readonly string[]): void {
+  history.past.push({ kind: "notes", notes: [...notes] })
+  if (history.past.length > HISTORY_LIMIT) history.past.shift()
+  history.future = []
+}
+
+export function undoNotes(history: DrawingHistory, current: readonly string[]): string[] | null {
+  const e = history.past[history.past.length - 1]
+  if (!e || e.kind !== "notes") return null
+  history.past.pop()
+  history.future.push({ kind: "notes", notes: [...current] })
+  return [...e.notes]
+}
+
+export function redoNotes(history: DrawingHistory, current: readonly string[]): string[] | null {
+  const e = history.future[history.future.length - 1]
+  if (!e || e.kind !== "notes") return null
+  history.future.pop()
+  history.past.push({ kind: "notes", notes: [...current] })
+  return [...e.notes]
+}
+
 // отмена: снимок из past возвращается, текущие пометки кладутся в future (в истории плана «Демонтаж» только такие записи)
 export function undoMarks(history: DrawingHistory, current: readonly DemolitionMark[]): DemolitionMark[] | null {
   const e = history.past[history.past.length - 1]
@@ -177,7 +204,7 @@ export function redoDemolition(history: DrawingHistory, current: DemolitionState
 
 export function undoEntry(history: DrawingHistory, scene: Scene): HistoryEntry | null {
   const e = history.past[history.past.length - 1]
-  if (!e || e.kind === "callouts") return null
+  if (!e || e.kind === "callouts" || e.kind === "notes") return null
   history.past.pop()
   history.future.push(e.kind === "walls" ? { kind: "walls", ...cloneScene(scene) } : e)
   return e
@@ -185,7 +212,7 @@ export function undoEntry(history: DrawingHistory, scene: Scene): HistoryEntry |
 
 export function redoEntry(history: DrawingHistory, scene: Scene): HistoryEntry | null {
   const e = history.future[history.future.length - 1]
-  if (!e || e.kind === "callouts") return null
+  if (!e || e.kind === "callouts" || e.kind === "notes") return null
   history.future.pop()
   history.past.push(e.kind === "walls" ? { kind: "walls", ...cloneScene(scene) } : e)
   return e
@@ -213,6 +240,7 @@ const isHistoryEntry = (e: unknown): e is HistoryEntry => {
     return Array.isArray(x.marks) && x.marks.every(isDemolitionMark) &&
       (x.batteryMarks === undefined || (Array.isArray(x.batteryMarks) && x.batteryMarks.every(isBatteryMark)))
   if (x.kind === "callouts") return Array.isArray(x.callouts) && x.callouts.every(isCallout)
+  if (x.kind === "notes") return isNoteList(x.notes)
   return x.kind === "close" && typeof x.drawingId === "string" &&
     typeof x.index === "number" && Number.isInteger(x.index) && x.index >= 0
 }
