@@ -6,6 +6,7 @@ import type { Callout, Drawing } from "../types"
 export const calloutsOf = (drawing: Drawing, plan: PlanId): Callout[] => {
   if (plan === "measure") return drawing.callouts ?? []
   if (plan === "demolition") return drawing.demolitionCallouts ?? []
+  if (plan === "rough") return drawing.roughCallouts ?? []
   return drawing.mounting?.callouts ?? []
 }
 
@@ -13,6 +14,7 @@ export const calloutsOf = (drawing: Drawing, plan: PlanId): Callout[] => {
 export function withCallouts(drawing: Drawing, plan: PlanId, list: Callout[]): Drawing {
   if (plan === "measure") return { ...drawing, callouts: list }
   if (plan === "demolition") return { ...drawing, demolitionCallouts: list }
+  if (plan === "rough") return { ...drawing, roughCallouts: list }
   const mounting = drawing.mounting ?? { walls: [], dimensions: [] }
   return { ...drawing, mounting: { ...mounting, callouts: list } }
 }

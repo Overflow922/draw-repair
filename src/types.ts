@@ -184,6 +184,27 @@ export interface DemolitionMark {
   toCm: number
 }
 
+// Пометка штукатурки плана «Черновые работы» (change add-rough-works-plan, design D3): участок грани стены от конца привязки,
+// как у пометки сноса; грань — знак нормали (−d.y, d.x) оси стены; толщина — целые миллиметры. Стена — стена обмера или собственная
+// стена «Монтажа», положение участка — относительно исходной стены (остатки вычисляются)
+export interface PlasterMark {
+  id: string
+  wallId: string
+  face: 1 | -1
+  anchor: "a" | "b"
+  fromCm: number
+  toCm: number
+  thicknessMm: number
+}
+
+// Стяжка помещения (change add-rough-works-plan, design D1, D2): опорная точка — точка клика и место подписи «h = …мм»;
+// действует, пока опорная точка лежит в помещении экспликации
+export interface Screed {
+  id: string
+  at: Point
+  thicknessMm: number
+}
+
 // Выноска — подпись со стрелкой (change add-callout, design D1): точка стрелки и точка текста лежат в координатах чертежа ровно там,
 // где кликнул пользователь, к стенам не привязаны; текст — строки через \n, не пустой. Принадлежит одному плану
 export interface Callout {
@@ -245,6 +266,12 @@ export interface Drawing {
   // данные помещений плана «Монтаж», общие для планов; отсутствие — пустой список, при загрузке не дописывается
   // (add-room-explication design D1)
   rooms?: RoomRecord[]
+  // объекты плана «Черновые работы»: штукатурка, стяжки, выноски и примечания; отсутствие — пустой список, при загрузке не
+  // дописывается (add-rough-works-plan design D7)
+  roughPlaster?: PlasterMark[]
+  roughScreeds?: Screed[]
+  roughCallouts?: Callout[]
+  roughNotes?: string[]
   view: View
 }
 

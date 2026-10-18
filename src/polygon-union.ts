@@ -4,10 +4,13 @@ import {
   FillRule,
   JoinType,
   PolyTree64,
+  areaPaths,
   booleanOpWithPolyTree,
   inflatePaths,
+  intersect,
   isPositive,
   reversePath,
+  union,
 } from "clipper2-ts"
 import type { Path64, PolyPath64 } from "clipper2-ts"
 import type { Point } from "./types"
@@ -39,6 +42,21 @@ function toRegion(node: PolyPath64): Region {
     outer: fromPath(node.poly ?? []),
     holes: childrenOf(node).map((hole) => ({ path: fromPath(hole.poly ?? []), islands: childrenOf(hole).map(toRegion) })),
   }
+}
+
+// Площадь (см²) объединения полигонов clip, лежащего внутри области: контур outer минус острова holes. Перекрытия clip
+// считаются один раз (change add-rough-works-plan, design D5).
+export function overlapAreaCm2(outer: Point[], holes: readonly Point[][], clip: readonly Point[][]): number {
+  const oriented = (polys: readonly Point[][]): Path64[] =>
+    polys
+      .filter((poly) => poly.length >= 3)
+      .map(toPath)
+      .map((path) => (isPositive(path) ? path : reversePath(path)))
+  const strips = union(oriented(clip), FillRule.NonZero)
+  if (strips.length === 0) return 0
+  const inside = (poly: Point[]): number => Math.abs(areaPaths(intersect(oriented([poly]), strips, FillRule.NonZero)))
+  const area = inside(outer) - holes.reduce((sum, hole) => sum + inside(hole), 0)
+  return area / (SCALE * SCALE)
 }
 
 // объединение кусков; щели уже 2·closeCm закрываются, остальная форма сохраняется

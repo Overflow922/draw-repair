@@ -28,6 +28,7 @@ export const loadNoteList = (raw: unknown): string[] | undefined => (Array.isArr
 export const notesOf = (drawing: Drawing, plan: PlanId): string[] => {
   if (plan === "measure") return drawing.notes ?? []
   if (plan === "demolition") return drawing.demolitionNotes ?? []
+  if (plan === "rough") return drawing.roughNotes ?? []
   return drawing.mounting?.notes ?? []
 }
 
@@ -35,6 +36,7 @@ export const notesOf = (drawing: Drawing, plan: PlanId): string[] => {
 export function withNotes(drawing: Drawing, plan: PlanId, list: string[]): Drawing {
   if (plan === "measure") return { ...drawing, notes: list }
   if (plan === "demolition") return { ...drawing, demolitionNotes: list }
+  if (plan === "rough") return { ...drawing, roughNotes: list }
   const mounting = drawing.mounting ?? { walls: [], dimensions: [] }
   return { ...drawing, mounting: { ...mounting, notes: list } }
 }

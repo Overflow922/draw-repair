@@ -4,6 +4,7 @@ import { dot, sub } from "../wall-geometry"
 import { faceBounds } from "./mark-chains"
 import type { NumberTarget } from "./mark-chains"
 import { EPS_CM, MIN_WIDTH_CM, effectiveMarks, lengthOf, span } from "./mark-model"
+import type { MarkSpan } from "./mark-model"
 import { markFromSpan, mergeAll } from "./marks"
 
 // Числа участка (change demolition-plan, design D5; по граням — change demolition-doorway-sizes, design D2):
@@ -32,6 +33,27 @@ const clamp = (v: number, lo: number, hi: number): number => Math.min(Math.max(v
 // введённым, с сохранением ширины вдоль оси; ширина сохраняет начало; значение за допустимым зажимается. null —
 // недопустимый ввод (не число, отступ < 0, ширина < MIN_WIDTH_CM), недействующая пометка или стена без граней.
 // Результат сливается с соседними; id — идентификатор пометки, в которую влился участок.
+// Границы участка r после правки числа which на грани side (общая арифметика пометок сноса и штукатурки): отступы сдвигают
+// участок с сохранением ширины, ширина сохраняет начало; значение за допустимым зажимается; null — недопустимый ввод или
+// стена без граней.
+export function editedSpan(r: MarkSpan, walls: readonly Wall[], which: NumberTarget, side: Side, valueCm: number): [number, number] | null {
+  if (!Number.isFinite(valueCm)) return null
+  if (which === "width" ? valueCm < MIN_WIDTH_CM : valueCm < 0) return null
+  const bounds = faceBounds(r, walls, side)
+  if (!bounds) return null
+  const len = lengthOf(r.wall)
+  const width = r.to - r.from
+  if (which === "gapA") {
+    const start = clamp(bounds.j0 + valueCm, 0, len - width)
+    return [start, start + width]
+  }
+  if (which === "gapB") {
+    const start = clamp(bounds.j1 - valueCm - width, 0, len - width)
+    return [start, start + width]
+  }
+  return [r.from, clamp(bounds.start + valueCm, r.from + MIN_WIDTH_CM, len)]
+}
+
 export function editNumber(
   marks: readonly DemolitionMark[],
   walls: readonly Wall[],
@@ -41,23 +63,10 @@ export function editNumber(
   valueCm: number,
 ): { marks: DemolitionMark[]; id: string } | null {
   const r = effectiveMarks(marks, walls).find((x) => x.mark.id === id)
-  if (!r || !Number.isFinite(valueCm)) return null
-  if (which === "width" ? valueCm < MIN_WIDTH_CM : valueCm < 0) return null
-  const bounds = faceBounds(r, walls, side)
-  if (!bounds) return null
-  const len = lengthOf(r.wall)
-  const width = r.to - r.from
-  let start = r.from
-  let end = r.to
-  if (which === "gapA") {
-    start = clamp(bounds.j0 + valueCm, 0, len - width)
-    end = start + width
-  } else if (which === "gapB") {
-    start = clamp(bounds.j1 - valueCm - width, 0, len - width)
-    end = start + width
-  } else {
-    end = clamp(bounds.start + valueCm, r.from + MIN_WIDTH_CM, len)
-  }
+  if (!r) return null
+  const edit = editedSpan(r, walls, which, side, valueCm)
+  if (!edit) return null
+  const [start, end] = edit
   const edited = markFromSpan(id, r.wall, start, end)
   const merged = mergeAll(
     marks.map((m) => (m.id === id ? edited : m)),

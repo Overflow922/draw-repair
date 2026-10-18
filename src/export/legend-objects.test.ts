@@ -79,17 +79,20 @@ describe("легенда: объекты на страницах докумен�
     ...over,
   })
 
-  it("батарея и стояк обмера есть в легенде всех трёх страниц", () => {
+  // TCR (change add-rough-works-plan): страниц четыре — «Объекты на всех планах» (pdf-export «Легенда на странице PDF»)
+  it("батарея и стояк обмера есть в легенде всех четырёх страниц", () => {
     const pages = pagesOf(drawing({ batteries: [BATTERY], communications: [RISER] }))
     expect(pages.map(labels)).toEqual([
+      ["Кирпич", "Батарея", "Стояк"],
       ["Кирпич", "Батарея", "Стояк"],
       ["Кирпич", "Батарея", "Стояк"],
       ["Кирпич", "Батарея", "Стояк"],
     ])
   })
 
-  it("единственная батарея, помеченная сносом: на «Демонтаже» запись есть, на «Монтаже» нет", () => {
+  // TCR (change add-rough-works-plan): запись «Батарея» нет в легендах «Монтаж» и «Черновые работы» (сценарий «Снесённая батарея на «Монтаже»»)
+  it("единственная батарея, помеченная сносом: на «Демонтаже» запись есть, на «Монтаже» и «Черновых работах» нет", () => {
     const pages = pagesOf(drawing({ batteries: [BATTERY], batteryDemolition: [{ id: "bm", batteryId: "b1" }] }))
-    expect(pages.map((p) => labels(p).includes("Батарея"))).toEqual([true, true, false])
+    expect(pages.map((p) => labels(p).includes("Батарея"))).toEqual([true, true, false, false])
   })
 })

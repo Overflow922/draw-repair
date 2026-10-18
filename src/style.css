@@ -305,7 +305,9 @@ body {
   cursor: default;
 }
 
-#thickness-label {
+/* поле толщины панелей «Штукатурка» и «Стяжка» (change add-rough-works-plan): как поле толщины стены */
+#thickness-label,
+.thickness-field {
   font-size: 10px;
   color: var(--text-muted);
   display: flex;
@@ -314,7 +316,8 @@ body {
   gap: 2px;
 }
 
-#thickness {
+#thickness,
+.thickness-field input {
   width: 44px;
 }
 

@@ -1,8 +1,8 @@
 import { isNoteList } from "./notes/notes-store"
 import { historyKey } from "./plans"
 import type { PlanId } from "./plans"
-import { isBattery, isBatteryMark, isCallout, isCommunication, isDemolitionMark, isDimension, isDrawing, isRoomRecord, isWall, isWallElement } from "./storage"
-import type { Battery, BatteryMark, Callout, Communication, DemolitionMark, Dimension, DimPoint, Drawing, RoomRecord, Wall, WallElement } from "./types"
+import { isBattery, isBatteryMark, isCallout, isCommunication, isDemolitionMark, isDimension, isDrawing, isPlasterMark, isRoomRecord, isScreed, isWall, isWallElement } from "./storage"
+import type { Battery, BatteryMark, Callout, Communication, DemolitionMark, Dimension, DimPoint, Drawing, PlasterMark, RoomRecord, Screed, Wall, WallElement } from "./types"
 
 const KEY = "draw-repair:history"
 export const HISTORY_LIMIT = 50
@@ -30,6 +30,8 @@ export type HistoryEntry =
   | { kind: "callouts"; callouts: Callout[] }
   // шаг примечаний плана (change add-plan-notes, design D3): список примечаний плана до правки
   | { kind: "notes"; notes: string[] }
+  // шаг плана «Черновые работы» (change add-rough-works-plan, design D7): списки штукатурки и стяжек до операции
+  | { kind: "rough"; plaster: PlasterMark[]; screeds: Screed[] }
 
 export interface DrawingHistory {
   past: HistoryEntry[]
@@ -147,6 +149,39 @@ export function redoNotes(history: DrawingHistory, current: readonly string[]): 
   return [...e.notes]
 }
 
+// Штукатурка и стяжки (change add-rough-works-plan, design D7): как у выносок — работают только с верхней записью вида «rough»,
+// при другой записи возвращают null и стеки не меняют; прежние функции отмены записи «rough» не забирают
+export interface RoughState {
+  plaster: PlasterMark[]
+  screeds: Screed[]
+}
+
+const copyRough = (state: RoughState): RoughState => ({ plaster: state.plaster.map((m) => ({ ...m })), screeds: state.screeds.map((s) => ({ id: s.id, at: { ...s.at }, thicknessMm: s.thicknessMm })) })
+
+const roughEntry = (state: RoughState): HistoryEntry => ({ kind: "rough", ...copyRough(state) })
+
+export function recordRough(history: DrawingHistory, state: RoughState): void {
+  history.past.push(roughEntry(state))
+  if (history.past.length > HISTORY_LIMIT) history.past.shift()
+  history.future = []
+}
+
+export function undoRough(history: DrawingHistory, current: RoughState): RoughState | null {
+  const e = history.past[history.past.length - 1]
+  if (!e || e.kind !== "rough") return null
+  history.past.pop()
+  history.future.push(roughEntry(current))
+  return copyRough(e)
+}
+
+export function redoRough(history: DrawingHistory, current: RoughState): RoughState | null {
+  const e = history.future[history.future.length - 1]
+  if (!e || e.kind !== "rough") return null
+  history.future.pop()
+  history.past.push(roughEntry(current))
+  return copyRough(e)
+}
+
 // отмена: снимок из past возвращается, текущие пометки кладутся в future (в истории плана «Демонтаж» только такие записи)
 export function undoMarks(history: DrawingHistory, current: readonly DemolitionMark[]): DemolitionMark[] | null {
   const e = history.past[history.past.length - 1]
@@ -204,7 +239,7 @@ export function redoDemolition(history: DrawingHistory, current: DemolitionState
 
 export function undoEntry(history: DrawingHistory, scene: Scene): HistoryEntry | null {
   const e = history.past[history.past.length - 1]
-  if (!e || e.kind === "callouts" || e.kind === "notes") return null
+  if (!e || e.kind === "callouts" || e.kind === "notes" || e.kind === "rough") return null
   history.past.pop()
   history.future.push(e.kind === "walls" ? { kind: "walls", ...cloneScene(scene) } : e)
   return e
@@ -212,7 +247,7 @@ export function undoEntry(history: DrawingHistory, scene: Scene): HistoryEntry |
 
 export function redoEntry(history: DrawingHistory, scene: Scene): HistoryEntry | null {
   const e = history.future[history.future.length - 1]
-  if (!e || e.kind === "callouts" || e.kind === "notes") return null
+  if (!e || e.kind === "callouts" || e.kind === "notes" || e.kind === "rough") return null
   history.future.pop()
   history.past.push(e.kind === "walls" ? { kind: "walls", ...cloneScene(scene) } : e)
   return e
@@ -241,6 +276,7 @@ const isHistoryEntry = (e: unknown): e is HistoryEntry => {
       (x.batteryMarks === undefined || (Array.isArray(x.batteryMarks) && x.batteryMarks.every(isBatteryMark)))
   if (x.kind === "callouts") return Array.isArray(x.callouts) && x.callouts.every(isCallout)
   if (x.kind === "notes") return isNoteList(x.notes)
+  if (x.kind === "rough") return Array.isArray(x.plaster) && x.plaster.every(isPlasterMark) && Array.isArray(x.screeds) && x.screeds.every(isScreed)
   return x.kind === "close" && typeof x.drawingId === "string" &&
     typeof x.index === "number" && Number.isInteger(x.index) && x.index >= 0
 }

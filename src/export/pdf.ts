@@ -14,8 +14,13 @@ import { mountingScene } from "../mounting/mounting-scene"
 import type { ResolvedMark } from "../demolition/marks"
 import { PLANS } from "../plans"
 import { findRooms } from "../room-area"
+import type { Room } from "../room-area"
+import { roomBlocksOf } from "../room-block"
 import { reconcileRooms } from "../room-explication"
 import type { ExplicatedRoom } from "../room-explication"
+import type { PlasterPiece } from "../rough/plaster"
+import { drawRoughScene, roughExtent } from "../rough/rough-render"
+import { roughScene } from "../rough/rough-scene"
 import { LIGHT_PALETTE } from "../theme"
 import { cross, dot, sub } from "../wall-geometry"
 import { PX_PER_CM, isDoor, isWindow } from "../types"
@@ -23,7 +28,7 @@ import { calloutLayout } from "../callout/callout-layout"
 import { calloutsOf } from "../callout/callout-store"
 import { notesOf } from "../notes/notes-store"
 import { CHAR_WIDTH } from "../doorway/element-label"
-import type { Battery, Callout, Communication, Dimension, Drawing, Point, Unit, Wall, WallElement } from "../types"
+import type { Battery, Callout, Communication, Dimension, Drawing, Point, Screed, Unit, Wall, WallElement } from "../types"
 import { FONT_B64 } from "./font"
 import { PAGE_FORMATS_MM } from "./page-format"
 import type { PageFormat } from "./page-format"
@@ -160,6 +165,14 @@ export interface PlanPage {
   // примечания плана страницы (change add-plan-notes, design D5): блок над основной надписью; у страницы без примечаний поля нет
   notes?: readonly string[]
   title?: string // название плана страницы — в графу 5 основной надписи (change pdf-plan-page-names)
+  // слой плана «Черновые работы» (change add-rough-works-plan, design D6): действующие куски штукатурки и действующие стяжки с
+  // помещениями; поле есть только у страницы этого плана, рядом rooms — помещения с площадью после штукатурки
+  rough?: RoughLayer
+}
+
+export interface RoughLayer {
+  pieces: readonly PlasterPiece[]
+  screeds: readonly { screed: Screed; room: Room }[]
 }
 
 // страницы чертежа: по одной на план каталога в порядке каталога; объекты обмерочного плана лежат в прежних полях
@@ -197,6 +210,21 @@ export function pagesOf(drawing: Drawing): PlanPage[] {
         }
       case "measure":
         return { walls: drawing.walls, dimensions: drawing.dimensions, doorways, ...shared, ...batteries, ...callouts, ...notes, title: plan.label }
+      case "rough": {
+        const rough = roughScene(drawing, mounting)
+        return {
+          walls: mounting.walls,
+          dimensions: [],
+          doorways: mounting.doorways,
+          ...shared,
+          ...(mounting.batteries.length ? { batteries: mounting.batteries } : null),
+          ...callouts,
+          ...notes,
+          rooms: rough.netItems,
+          rough: { pieces: rough.pieces, screeds: rough.screeds.map((a) => ({ screed: a.screed, room: a.item.room })) },
+          title: plan.label,
+        }
+      }
     }
   })
 }
@@ -224,7 +252,9 @@ export function pageBounds(page: PlanPage, scale: number): BBox {
     const { x, y, w, h } = l.box
     return [{ x, y }, { x: x + w, y: y + h }, l.lineStart, l.arrowTip].map((q) => ({ x: q.x / kMm, y: q.y / kMm }))
   })
-  const extra = [...marks, ...bodies, ...rects, ...calloutPoints]
+  // штукатурка и подписи стяжек плана «Черновые работы»
+  const rough = page.rough ? roughExtent(page.rough, kMm, PDF_METRICS.labelPx) : []
+  const extra = [...marks, ...bodies, ...rects, ...calloutPoints, ...rough]
   return wallsBBox(page.walls, page.dimensions, 0.5 * scale, page.doorways, scale, extra, batteries)
 }
 
@@ -272,6 +302,20 @@ function drawPage(
   if (explication) drawExplication(doc, format, explication)
   const notes = pageNotes(page)
   if (notes) drawNotes(doc, format, notes)
+  if (page.rough !== undefined) {
+    const scene = {
+      walls: page.walls,
+      doorways: page.doorways,
+      communications: page.communications,
+      batteries: page.batteries,
+      pieces: page.rough.pieces,
+      screeds: page.rough.screeds,
+      blocks: roomBlocksOf(page.rooms ?? []),
+      callouts: page.callouts,
+    }
+    drawRoughScene(ctx, w, h, scene, unit, view, { grid: false, metrics: PDF_METRICS, palette: LIGHT_PALETTE, theme: "light", dimensions: false })
+    return
+  }
   if (page.demolition !== undefined) {
     const scene = {
       walls: page.walls,

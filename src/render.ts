@@ -109,6 +109,8 @@ export interface RenderOptions {
   roomRecords?: readonly RoomRecord[]
   selectedRoom?: number | null
   underlay?: boolean // подложка плана «Демонтаж»: без подписей помещений, размеров и слоя элементов стен (вырезы остаются)
+  // слой под телами стен: рисуется после сетки и заливки помещений, до стен (штукатурка и стяжка плана «Черновые работы»)
+  beneath?: (ctx: CanvasRenderingContext2D) => void
   palette?: Palette // цвета схемы; по умолчанию светлая (PDF — всегда светлая)
 }
 
@@ -206,6 +208,7 @@ export function drawScene(
     // заливка скрывает сетку внутри помещений; без сетки (PDF) она не наблюдаема
     fillRooms(ctx, rooms, toScreen, p.paper)
   }
+  opts.beneath?.(ctx)
   const sceneWalls = preview ? [...walls, preview] : walls
   const selectedDims = opts.selectedDims ?? []
   const singleWalls = selectedWalls.length === 1 && !selectedDims.length
@@ -604,7 +607,7 @@ function drawRoomLabels(
 }
 
 // блок помещения: рамка из двух ячеек на фоне бумаги, номер слева, «H=…» справа; выделенный — цветом выделения
-function drawRoomBlocks(
+export function drawRoomBlocks(
   ctx: CanvasRenderingContext2D,
   blocks: readonly RoomBlock[],
   selected: number | null,

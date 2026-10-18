@@ -12,6 +12,8 @@ export type LegendEntry =
   | { kind: "riser"; label: string }
   | { kind: "duct"; label: string }
   | { kind: "demolition"; label: string }
+  | { kind: "plaster"; label: string }
+  | { kind: "screed"; label: string }
 
 export const LEGEND_PAD_LEFT_MM = 8
 export const LEGEND_SAMPLE_W_MM = 16
@@ -28,7 +30,8 @@ export const LEGEND_DUCT_DEPTH_MM = 8
 export const LEGEND_BATTERY_THICKNESS_MM = 4
 
 // записи страницы сверху вниз: материалы стен в порядке каталога, затем батарея, стояк, воздуховод (если они нарисованы на странице),
-// затем снос; элементы стены (проём, дверь, окно) в легенду не входят
+// затем снос, штукатурка и стяжка плана «Черновые работы» («Стяжка до N мм» — по наибольшей толщине действующих стяжек страницы,
+// change add-rough-works-plan, design D9); элементы стены (проём, дверь, окно) в легенду не входят
 export function legendEntries(page: PlanPage): LegendEntry[] {
   if (page.walls.length === 0) return []
   const used = new Set(page.walls.map((w) => normalizeMaterial(w.type)))
@@ -38,6 +41,9 @@ export function legendEntries(page: PlanPage): LegendEntry[] {
   if (communications.some((c) => c.kind === "riser")) entries.push({ kind: "riser", label: "Стояк" })
   if (communications.some((c) => c.kind === "duct")) entries.push({ kind: "duct", label: "Воздуховод" })
   if ((page.demolition?.length ?? 0) > 0) entries.push({ kind: "demolition", label: "Демонтируемая стена" })
+  if ((page.rough?.pieces.length ?? 0) > 0) entries.push({ kind: "plaster", label: "Штукатурка" })
+  const screeds = page.rough?.screeds ?? []
+  if (screeds.length > 0) entries.push({ kind: "screed", label: `Стяжка до ${Math.max(...screeds.map((s) => s.screed.thicknessMm))} мм` })
   return entries
 }
 

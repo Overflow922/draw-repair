@@ -1,8 +1,10 @@
 import { mergeAll } from "./demolition/marks"
 import { loadNoteList } from "./notes/notes-store"
 import { isPlanId } from "./plans"
+import { mergeAllPlaster } from "./rough/plaster-marks"
+import { PLASTER_THICKNESS, SCREED_THICKNESS, isThickness } from "./rough/rough-model"
 import { isDoor, isWindow, normalizeMaterial } from "./types"
-import type { Battery, BatteryCornerPoint, BatteryMark, Callout, Communication, DemolitionMark, Dimension, DimPoint, Doorway, Drawing, DrawingStore, EdgePoint, EdgeRef, JambPoint, MountingContent, Point, RoomRecord, View, Wall, WallDoor, WallElement, WallWindow } from "./types"
+import type { Battery, BatteryCornerPoint, BatteryMark, Callout, Communication, DemolitionMark, Dimension, DimPoint, Doorway, Drawing, DrawingStore, EdgePoint, EdgeRef, JambPoint, MountingContent, PlasterMark, Point, RoomRecord, Screed, View, Wall, WallDoor, WallElement, WallWindow } from "./types"
 
 const KEY = "draw-repair:drawing"
 
@@ -157,6 +159,39 @@ function loadDemolition(raw: unknown, walls: Wall[]): { demolition?: DemolitionM
   return { demolition: mergeAll(raw.filter(isDemolitionMark).filter((m) => ids.has(m.wallId)), walls) }
 }
 
+// пометка штукатурки (change add-rough-works-plan, design D7): идентификаторы, грань 1/-1, конец привязки, 0 ≤ fromCm < toCm и
+// целая толщина 5–100 мм
+export const isPlasterMark = (m: unknown): m is PlasterMark => {
+  if (typeof m !== "object" || m === null) return false
+  const x = m as Record<string, unknown>
+  return typeof x.id === "string" && x.id !== "" && typeof x.wallId === "string" && x.wallId !== "" &&
+    (x.face === 1 || x.face === -1) && (x.anchor === "a" || x.anchor === "b") && num(x.fromCm) && num(x.toCm) &&
+    x.fromCm >= 0 && x.toCm > x.fromCm && isThickness(x.thicknessMm, PLASTER_THICKNESS)
+}
+
+// стяжка: непустой идентификатор, опорная точка и целая толщина 10–200 мм
+export const isScreed = (s: unknown): s is Screed => {
+  if (typeof s !== "object" || s === null) return false
+  const x = s as Record<string, unknown>
+  return typeof x.id === "string" && x.id !== "" && isPoint(x.at) && isThickness(x.thicknessMm, SCREED_THICKNESS)
+}
+
+const copyPlaster = (m: PlasterMark): PlasterMark => ({ id: m.id, wallId: m.wallId, face: m.face, anchor: m.anchor, fromCm: m.fromCm, toCm: m.toCm, thicknessMm: m.thicknessMm })
+
+const copyScreed = (s: Screed): Screed => ({ id: s.id, at: { x: s.at.x, y: s.at.y }, thicknessMm: s.thicknessMm })
+
+// штукатурка плана «Черновые работы» при загрузке: корректные пометки, слитые на существующих стенах (обмера и «Монтажа»);
+// пометки на отсутствующие стены сохраняются; отсутствие поля и не-список читаются как отсутствие
+function loadPlaster(raw: unknown, sources: readonly Wall[]): { roughPlaster?: PlasterMark[] } {
+  if (!Array.isArray(raw)) return {}
+  return { roughPlaster: mergeAllPlaster(raw.filter(isPlasterMark).map(copyPlaster), sources) }
+}
+
+function loadScreeds(raw: unknown): { roughScreeds?: Screed[] } {
+  if (!Array.isArray(raw)) return {}
+  return { roughScreeds: raw.filter(isScreed).map(copyScreed) }
+}
+
 // батарея (change add-battery, design D1): непустые id и стена, грань 1/-1, привязка a/b, конечное расстояние,
 // длина и толщина больше нуля, отступ не меньше нуля
 export const isBattery = (b: unknown): b is Battery => {
@@ -292,6 +327,9 @@ export function parseStore(raw: string): LoadedStore | null {
         const batteries = loadBatteries(dr.batteries, dr.walls)
         const notes = loadNoteList(dr.notes)
         const demolitionNotes = loadNoteList(dr.demolitionNotes)
+        const roughNotes = loadNoteList(dr.roughNotes)
+        const mountingPart = loadMounting(mounting)
+        const walls = assignIds(dr.walls)
         return {
           // поля чертежа перечислены явно: масштаб, записанный прежними версиями, в модель не попадает (drawing-storage)
           id: dr.id,
@@ -299,9 +337,9 @@ export function parseStore(raw: string): LoadedStore | null {
           view: dr.view,
           // активный план — необязательное поле: допустимое сохраняется, остальное отбрасывается (drawing-plans design D3)
           ...(isPlanId(activePlan) ? { activePlan } : null),
-          walls: assignIds(dr.walls),
+          walls,
           ...loadDemolition(demolition, dr.walls),
-          ...loadMounting(mounting),
+          ...mountingPart,
           ...loadDoorways(dr.doorways, dr.walls),
           ...loadCommunications(dr.communications),
           ...batteries,
@@ -310,6 +348,10 @@ export function parseStore(raw: string): LoadedStore | null {
           ...(Array.isArray(dr.demolitionCallouts) ? { demolitionCallouts: loadCalloutList(dr.demolitionCallouts) } : null),
           ...(notes === undefined ? null : { notes }),
           ...(demolitionNotes === undefined ? null : { demolitionNotes }),
+          ...loadPlaster(dr.roughPlaster, [...walls, ...(mountingPart.mounting?.walls ?? [])]),
+          ...loadScreeds(dr.roughScreeds),
+          ...(Array.isArray(dr.roughCallouts) ? { roughCallouts: loadCalloutList(dr.roughCallouts) } : null),
+          ...(roughNotes === undefined ? null : { roughNotes }),
           ...loadRooms(dr.rooms),
           dimensions: (Array.isArray(dr.dimensions) ? dr.dimensions : []).filter(isDimension).map(copyDimension),
         }

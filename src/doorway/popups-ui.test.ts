@@ -48,11 +48,14 @@ describe("разметка панелей", () => {
   // change add-communications (canvas-app «Вспомогательная панель инструмента»): третья панель — группа «Коммуникации»
   // change add-plan-notes (canvas-app «Вспомогательная панель инструмента»): четвёртая панель — «Примечания»
   it("PB-UI-02: панели есть только у «Стена», групп «Проёмы» и «Коммуникации» и «Примечаний»; удалённых полей и панелей нет", () => {
-    expect(count(toolbar, /class="[^"]*\btool-panel\b/g)).toBe(4)
+    // TCR (change add-rough-works-plan, canvas-app «Вспомогательная панель инструмента»): добавлены панели «Штукатурка» и «Стяжка»
+    expect(count(toolbar, /class="[^"]*\btool-panel\b/g)).toBe(6)
     expect(panel("wall-panel").length).toBeGreaterThan(0)
     expect(panel("openings-panel").length).toBeGreaterThan(0)
     expect(panel("communications-panel").length).toBeGreaterThan(0)
     expect(panel("notes-panel").length).toBeGreaterThan(0)
+    expect(panel("plaster-panel").length).toBeGreaterThan(0)
+    expect(panel("screed-panel").length).toBeGreaterThan(0)
     for (const id of [
       "window-panel",
       "dim-panel",

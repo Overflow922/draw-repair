@@ -9,13 +9,14 @@ const drawing = (extra: Record<string, unknown> = {}): Drawing =>
   ({ id: "a", name: "Чертёж 1", walls: [], dimensions: [], view: { zoom: 1, pan: { x: 0, y: 0 } }, ...extra }) as Drawing
 
 describe("каталог планов с планом «Монтаж»", () => {
-  it("MP-50: «Монтаж» (mounting) — третий и последний план каталога", () => {
-    expect(PLANS).toHaveLength(3)
+  // TCR (change add-rough-works-plan): «Монтаж» остаётся третьим, но уже не последним — каталог пополнен планом «Черновые работы»
+  it("MP-50: «Монтаж» (mounting) — третий план каталога", () => {
+    expect(PLANS).toHaveLength(4)
     expect(PLANS[2]).toEqual({ id: "mounting", label: "Монтаж" })
   })
 
-  it("MP-50: порядок каталога — обмер, демонтаж, монтаж", () => {
-    expect(PLANS.map((p) => p.id)).toEqual(["measure", "demolition", "mounting"])
+  it("MP-50: порядок каталога — обмер, демонтаж, монтаж, черновые работы", () => {
+    expect(PLANS.map((p) => p.id)).toEqual(["measure", "demolition", "mounting", "rough"])
   })
 
   it("MP-50: план по умолчанию остаётся measure", () => {
@@ -65,9 +66,10 @@ describe("ключ истории плана «Монтаж»", () => {
     expect(historyKey("a", "demolition")).toBe("a:demolition")
   })
 
-  it("MP-53: ключи трёх планов одного чертежа различны, а у разных чертежей — тоже", () => {
+  // TCR (change add-rough-works-plan): планов четыре
+  it("MP-53: ключи планов одного чертежа различны, а у разных чертежей — тоже", () => {
     const keys = PLANS.map((p) => historyKey("a", p.id))
-    expect(new Set(keys).size).toBe(3)
+    expect(new Set(keys).size).toBe(4)
     expect(historyKey("a", "mounting")).not.toBe(historyKey("b", "mounting"))
   })
 })

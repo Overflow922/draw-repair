@@ -1,5 +1,5 @@
 import "./style.css"
-import { cloneScene, loadHistory, planHistory, record, recordCallouts, recordDemolition, recordNotes, recordSnapshot, redoCallouts, redoDemolition, redoEntry, redoNotes, saveHistory, undoCallouts, undoDemolition, undoEntry, undoNotes } from "./history"
+import { cloneScene, loadHistory, planHistory, record, recordCallouts, recordDemolition, recordNotes, recordRough, recordSnapshot, redoCallouts, redoDemolition, redoEntry, redoNotes, redoRough, saveHistory, undoCallouts, undoDemolition, undoEntry, undoNotes, undoRough } from "./history"
 import type { Scene } from "./history"
 import { dimLevelSnap, dimensionGeometry, dimensionOffsetAt, hitWall, nearestDimAnchor, dimPointPoint, pointsEqual, segmentIntersectsRect, snap, snapOthers, snapWithSource, zoomAt } from "./geometry"
 import type { DimGeometry, SnapResult } from "./geometry"
@@ -30,6 +30,14 @@ import { reanchorMarks } from "./demolition/mark-follow"
 import { effectiveMarks } from "./demolition/marks"
 import { createDemolitionTool } from "./demolition/demolition-tool"
 import type { DemolitionToolHost } from "./demolition/demolition-tool"
+import { createPlasterTool } from "./rough/plaster-tool"
+import type { PlasterToolHost } from "./rough/plaster-tool"
+import { PLASTER_THICKNESS, SCREED_THICKNESS, parseThickness } from "./rough/rough-model"
+import { renderRough } from "./rough/rough-render"
+import { roughScene } from "./rough/rough-scene"
+import type { RoughScene } from "./rough/rough-scene"
+import { createScreedTool } from "./rough/screed-tool"
+import type { ScreedToolHost } from "./rough/screed-tool"
 import { findRooms } from "./room-area"
 import { roomBlockAt, roomBlockLayout, roomBlocksOf } from "./room-block"
 import { formatRoomHeight, parseRoomHeight, reconcileRooms } from "./room-explication"
@@ -63,7 +71,7 @@ import { afterPlace, escapeAction, resumesAfterSelectionCleared, selectionAllowe
 import { loadThemeChoice, paletteOf, resolveTheme, saveThemeChoice, themeToggleTitle, toggledTheme } from "./theme"
 import type { Theme } from "./theme"
 import { GRID_STEP_CM, MATERIALS, PX_PER_CM } from "./types"
-import type { Battery, BatteryMark, Communication, DemolitionMark, Dimension, DimPoint, Drawing, Material, Point, RoomRecord, Unit, View, Wall, WallElement } from "./types"
+import type { Battery, BatteryMark, Communication, DemolitionMark, Dimension, DimPoint, Drawing, Material, PlasterMark, Point, RoomRecord, Screed, Unit, View, Wall, WallElement } from "./types"
 
 const canvas = document.querySelector<HTMLCanvasElement>("#canvas")!
 const canvasWrap = document.querySelector<HTMLElement>("#canvas-wrap")!
@@ -85,6 +93,12 @@ const toolDimensionBtn = document.querySelector<HTMLButtonElement>("#tool-dimens
 const toolEraserBtn = document.querySelector<HTMLButtonElement>("#tool-eraser")!
 const toolRulerBtn = document.querySelector<HTMLButtonElement>("#tool-ruler")!
 const toolDemolitionBtn = document.querySelector<HTMLButtonElement>("#tool-demolition")!
+const toolPlasterBtn = document.querySelector<HTMLButtonElement>("#tool-plaster")!
+const plasterPanel = document.querySelector<HTMLElement>("#plaster-panel")!
+const plasterThicknessInput = document.querySelector<HTMLInputElement>("#plaster-thickness")!
+const toolScreedBtn = document.querySelector<HTMLButtonElement>("#tool-screed")!
+const screedPanel = document.querySelector<HTMLElement>("#screed-panel")!
+const screedThicknessInput = document.querySelector<HTMLInputElement>("#screed-thickness")!
 const toolbar = document.querySelector<HTMLElement>("#toolbar")!
 const wallPanel = document.querySelector<HTMLElement>("#wall-panel")!
 const roomEditor = document.querySelector<HTMLElement>("#room-editor")!
@@ -322,6 +336,18 @@ function setDimensions(next: Dimension[]): void {
 // рабочие списки активного плана активного чертежа; «Монтаж» — сцена из остатков и собственных объектов
 function loadWorking(): void {
   const d = current()
+  roughCache = null
+  if (activePlanOf(d) === "rough") {
+    // подложка «Черновых работ» — результат «Монтажа», только для чтения: инструменты плана правят свои списки, а не стены
+    const base = roughNow().base
+    walls = base.walls
+    dimensions = []
+    doorways = base.doorways
+    batteries = base.batteries
+    workspace = null
+    remnantHome = new Map()
+    return
+  }
   if (activePlanOf(d) !== "mounting") {
     walls = d.walls
     dimensions = d.dimensions
@@ -625,6 +651,191 @@ function pressDemolitionNumber(p: Point): boolean {
   return true
 }
 
+// план «Черновые работы» (change add-rough-works-plan, design D8): штукатурка и стяжки лежат в чертеже; сцена (подложка,
+// куски штукатурки, действующие стяжки, помещения) вычисляется и держится в кэше до изменения данных или смены плана
+const onRough = (): boolean => activePlanOf(current()) === "rough"
+const NO_PLASTER: PlasterMark[] = []
+const NO_SCREEDS: Screed[] = []
+let roughCache: RoughScene | null = null
+const roughNow = (): RoughScene => (roughCache ??= roughScene(current()))
+const plasterOf = (): PlasterMark[] => current().roughPlaster ?? NO_PLASTER
+const screedsOf = (): Screed[] => current().roughScreeds ?? NO_SCREEDS
+// толщины для новых объектов: запоминаются в сеансе, в чертёж не входят
+let plasterThicknessMm: number = PLASTER_THICKNESS.default
+let screedThicknessMm: number = SCREED_THICKNESS.default
+let plasterPanelOpen = false
+let screedPanelOpen = false
+// инструмент «Штукатурка» снят постановкой пометки и должен вернуться, когда выделение будет снято
+let resumePlaster = false
+
+const recordRoughStep = (): void => {
+  nudgeBurst = false
+  recordRough(activeHistory(), { plaster: plasterOf(), screeds: screedsOf() })
+}
+
+const plasterHost: PlasterToolHost = {
+  drawing: () => current(),
+  scene: roughNow,
+  marks: plasterOf,
+  setMarks: (next) => {
+    current().roughPlaster = next
+    roughCache = null
+  },
+  record: recordRoughStep,
+  changed: () => {
+    dirty = true
+  },
+  redraw: () => redraw(),
+  radiusCm: () => radiusCm(),
+  newId: () => crypto.randomUUID(),
+  newThicknessMm: () => plasterThicknessMm,
+}
+const plasterTool = createPlasterTool(plasterHost)
+
+const screedHost: ScreedToolHost = {
+  scene: roughNow,
+  screeds: screedsOf,
+  setScreeds: (next) => {
+    current().roughScreeds = next
+    roughCache = null
+  },
+  record: recordRoughStep,
+  changed: () => {
+    dirty = true
+  },
+  redraw: () => redraw(),
+  newId: () => crypto.randomUUID(),
+  newThicknessMm: () => screedThicknessMm,
+  view: () => view,
+  labelPx: SCREEN_METRICS.labelPx,
+}
+const screedTool = createScreedTool(screedHost)
+
+let roughEditor: NumberEditor | null = null
+
+const closeRoughEditor = (): void => {
+  roughEditor?.close()
+  roughEditor = null
+}
+
+// панели «Штукатурка» и «Стяжка»: значение выделенного объекта, иначе значение для новых; открыта панель — по кнопке
+// инструмента или выбором объекта
+function syncRoughPanels(): void {
+  plasterPanel.classList.toggle("open", plasterPanelOpen)
+  screedPanel.classList.toggle("open", screedPanelOpen)
+  toolPlasterBtn.classList.toggle("active", tool === "plaster")
+  toolScreedBtn.classList.toggle("active", tool === "screed")
+  if (document.activeElement !== plasterThicknessInput) plasterThicknessInput.value = String(plasterTool.selectedMark()?.thicknessMm ?? plasterThicknessMm)
+  if (document.activeElement !== screedThicknessInput) screedThicknessInput.value = String(screedTool.selected()?.thicknessMm ?? screedThicknessMm)
+}
+
+const closeRoughPanels = (): void => {
+  plasterPanelOpen = false
+  screedPanelOpen = false
+  syncRoughPanels()
+}
+
+// сброс жеста, выделения, поля ввода и панелей плана «Черновые работы» (смена плана, чертежа и инструмента, отмена и повтор)
+const resetRough = (): void => {
+  resumePlaster = false
+  plasterTool.cancel()
+  plasterTool.clearSelection()
+  screedTool.clearSelection()
+  closeRoughEditor()
+  closeRoughPanels()
+}
+
+// вернуть инструмент «Штукатурка», если он снят постановкой и выделение пометки уже снято
+function resumePlasterTool(): void {
+  if (!resumesAfterSelectionCleared(resumePlaster, plasterTool.selectedId() !== null)) return
+  resumePlaster = false
+  setTool("plaster")
+  plasterPanelOpen = true
+  syncRoughPanels()
+}
+
+// снять инструмент «Штукатурка» без сброса выделения (setTool выделение снимает); панель показывает значение пометки
+function leavePlasterTool(): void {
+  resumePlaster = true
+  tool = "none"
+  plasterPanelOpen = true
+  syncToolUI()
+  redraw()
+}
+
+// снять выделение штукатурки и стяжки (Escape, клик мимо, Delete)
+function clearRoughSelection(): void {
+  closeRoughEditor()
+  plasterTool.clearSelection()
+  screedTool.clearSelection()
+  closeRoughPanels()
+  resumePlasterTool()
+}
+
+// нажатие на правимое число выделенной пометки штукатурки — поле ввода на месте; Enter применяет
+function pressPlasterNumber(p: Point): boolean {
+  const k = PX_PER_CM * view.zoom
+  const spot = plasterTool.numberAt(p, unit, k, SCREEN_METRICS.labelPx, NUMBER_HIT_PX / k)
+  if (!spot) return false
+  closeRoughEditor()
+  const at = { x: (spot.center.x - view.pan.x) * k, y: (spot.center.y - view.pan.y) * k }
+  roughEditor = openNumberEditor(
+    canvasWrap,
+    at,
+    formatCm(spot.valueCm, unit),
+    (text) => {
+      plasterTool.applyNumber(spot, parseFloat(text.replace(",", ".")) * UNIT_TO_CM[unit])
+      redraw()
+    },
+    () => {
+      roughEditor = null
+    },
+  )
+  return true
+}
+
+// нажатие на подпись стяжки выделяет её и открывает на месте поле толщины; Enter применяет значение из допустимых
+function pressScreedLabel(p: Point): boolean {
+  const screed = screedTool.labelAt(p)
+  if (!screed) return false
+  closeRoughEditor()
+  plasterTool.clearSelection()
+  screedTool.select(p)
+  screedPanelOpen = true
+  plasterPanelOpen = false
+  const k = PX_PER_CM * view.zoom
+  const at = { x: (screed.at.x - view.pan.x) * k, y: (screed.at.y - view.pan.y) * k + SCREEN_METRICS.labelPx }
+  roughEditor = openNumberEditor(
+    canvasWrap,
+    at,
+    String(screed.thicknessMm),
+    (text) => {
+      const mm = parseThickness(text, SCREED_THICKNESS)
+      if (mm !== null) screedTool.setThicknessOf(screed.id, mm)
+      redraw()
+    },
+    () => {
+      roughEditor = null
+    },
+  )
+  redraw()
+  return true
+}
+
+// выделение на плане «Черновые работы» без инструмента: число выделенной пометки, подпись стяжки, пометка штукатурки, иначе снятие
+function pressRough(p: Point): void {
+  if (pressPlasterNumber(p) || pressScreedLabel(p)) return
+  closeRoughEditor()
+  if (plasterTool.select(p)) {
+    screedTool.clearSelection()
+    plasterPanelOpen = true
+    screedPanelOpen = false
+    syncRoughPanels()
+    return
+  }
+  clearRoughSelection()
+}
+
 // примечания активного плана (change add-plan-notes, design D4): панель с полем; правка применяется при потере фокуса,
 // закрытии панели, смене инструмента, плана и вкладки, Esc — одним шагом истории плана, если список изменился
 let notesPanelOpen = false
@@ -691,6 +902,10 @@ const calloutHost: CalloutToolHost = {
     selectedDoorways = []
     lengthDirty = false
     demolitionTool.clearSelection()
+    plasterTool.clearSelection()
+    screedTool.clearSelection()
+    closeRoughEditor()
+    closeRoughPanels()
     setWallPanel(false)
   },
   changed: () => {
@@ -835,6 +1050,7 @@ function syncToolUI(): void {
   toolCalloutBtn.classList.toggle("active", tool === "callout")
   syncNotesUI()
   toolDemolitionBtn.classList.toggle("active", tool === "demolition")
+  syncRoughPanels()
   syncOpeningsUI()
   syncCommunicationsUI()
   syncToolbar()
@@ -863,6 +1079,7 @@ function setTool(next: Tool): void {
   marqueeHits = null
   marqueePending = null
   resetDemolition()
+  resetRough()
   setWallPanel(false)
   closeOpeningsPanel()
   closeCommunicationsPanel()
@@ -1009,8 +1226,10 @@ function redraw(): void {
     restoreRemnants()
     if (dirty) commitMounting()
   }
-  if (onDemolition()) drawDemolitionPlan()
+  if (onRough()) drawRoughPlan()
+  else if (onDemolition()) drawDemolitionPlan()
   else drawMeasurePlan()
+  syncRoughPanels()
   updateLengthBox()
   updateAngleBox()
   syncHistoryButtons()
@@ -1021,6 +1240,38 @@ function redraw(): void {
     if (!readOnly) saveStore(store)
     if (!readOnly && !historyReadOnly) saveHistory(historyStore)
   }
+}
+
+// план «Черновые работы»: подложка «Монтажа» серым, стяжка штриховкой, штукатурка полосой, блоки помещений, выделение и превью
+function drawRoughPlan(): void {
+  const s = roughNow()
+  // выноска главнее остальных объектов под курсором ластика, затем штукатурка, затем стяжка (spec rough-works-plan «Ластик»)
+  const erasingCallout = tool === "eraser" && cursor ? calloutTool.pick(cursor) : null
+  const erasePlaster = tool === "eraser" && cursor && !erasingCallout ? plasterTool.eraseTarget(cursor) : null
+  const eraseScreed = tool === "eraser" && cursor && !erasingCallout && !erasePlaster ? screedTool.eraseTarget(cursor) : null
+  renderRough(
+    canvas,
+    {
+      walls: s.base.walls,
+      doorways: s.base.doorways,
+      communications: communicationsOf(),
+      batteries: s.base.batteries,
+      pieces: s.pieces,
+      screeds: s.screeds.map((a) => ({ screed: a.screed, room: a.item.room })),
+      blocks: roomBlocksOf(s.netItems),
+      selectedPlasterId: plasterTool.selectedId(),
+      selectedScreedId: screedTool.selectedId(),
+      ghost: plasterTool.ghost(),
+      ruler: tool === "ruler" && cursor && !gestureActive() ? rulerReading(cursor, s.base.walls) : null,
+      erasing: erasePlaster ? { kind: "plaster", id: erasePlaster } : eraseScreed ? { kind: "screed", id: eraseScreed } : null,
+      callouts: calloutTool.displayList(),
+      selectedCalloutId: calloutTool.selectedId(),
+      erasingCalloutId: erasingCallout?.id ?? null,
+    },
+    unit,
+    view,
+    { palette: paletteOf(theme), theme },
+  )
 }
 
 // план «Демонтаж»: подложка из стен обмерочного плана без сносимых элементов, область сноса, выделение и превью
@@ -1114,7 +1365,7 @@ function centerGuideTracks(): TrackLine[] | null {
 
 // нажатая кнопка мыши: рамка, перетаскивание стен или размера, протяжка пометки, сдвиг вида
 function gestureActive(): boolean {
-  return !!(marquee || marqueePending || groupMove || endpointDrag || dimDrag || doorwayTool.dragging() || communicationTool.dragging() || batteryTool.dragging() || calloutTool.dragging() || demolitionTool.dragging() || panDrag)
+  return !!(marquee || marqueePending || groupMove || endpointDrag || dimDrag || doorwayTool.dragging() || communicationTool.dragging() || batteryTool.dragging() || calloutTool.dragging() || demolitionTool.dragging() || plasterTool.dragging() || panDrag)
 }
 
 // ластик: размер → коммуникация → батарея → проём → стена (wall-deletion «Инструмент «Ластик»», «Ластик и удаление
@@ -1391,6 +1642,16 @@ canvas.addEventListener("pointermove", (e) => {
     redraw()
     return
   }
+  if (onRough()) {
+    // протяжка штукатурки перерисовывает сама; «Линейка», «Ластик» и «Выноска» следят за курсором
+    if (tool === "plaster") plasterTool.move(toWorld(e), screenPoint(e))
+    else if (tool === "ruler" || tool === "eraser" || tool === "callout") {
+      cursor = toWorld(e)
+      if (tool === "callout") calloutTool.hover(cursor)
+      redraw()
+    }
+    return
+  }
   if (onDemolition()) {
     // протяжка пометки перерисовывает сама; «Линейка» и «Ластик» следят за курсором
     if (tool === "demolition") demolitionTool.move(toWorld(e), screenPoint(e))
@@ -1435,7 +1696,7 @@ canvas.addEventListener("pointermove", (e) => {
 // линейка показывает замеры только пока курсор над холстом; подсветка тени направления двери — тоже
 canvas.addEventListener("pointerleave", () => {
   hoverWorld = null
-  if ((tool === "ruler" || (tool === "eraser" && onDemolition())) && cursor) cursor = null
+  if ((tool === "ruler" || (tool === "eraser" && (onDemolition() || onRough()))) && cursor) cursor = null
   redraw()
 })
 
@@ -1471,6 +1732,26 @@ canvas.addEventListener("pointerdown", (e) => {
     return
   }
   hoverWorld = null // нажатие начинает жест — подсветка до следующего движения не нужна
+  if (onRough()) {
+    const p = toWorld(e)
+    if (tool === "plaster") {
+      plasterTool.down(p, screenPoint(e))
+      canvas.setPointerCapture(e.pointerId) // отпускание за пределами холста завершает протяжку
+    } else if (selectionAllowed(tool)) {
+      // без инструмента: выноска, иначе число выделенной пометки, подпись стяжки или пометка штукатурки под точкой
+      if (calloutTool.press(p)) {
+        suppressClick = true
+        canvas.setPointerCapture(e.pointerId)
+      } else {
+        if (calloutTool.selectedId() !== null) {
+          calloutTool.deselect()
+          redraw()
+        }
+        pressRough(p)
+      }
+    }
+    return
+  }
   if (onDemolition()) {
     const p = toWorld(e)
     if (tool === "demolition") {
@@ -1601,6 +1882,11 @@ canvas.addEventListener("pointerup", (e) => {
     if (e.button === 0) calloutTool.endDrag()
     return
   }
+  if (onRough() && e.button === 0) {
+    // поставленная пометка остаётся выделенной, инструмент снимается — как у «Демонтажа»
+    if (tool === "plaster" && plasterTool.up(toWorld(e), screenPoint(e)) !== null) leavePlasterTool()
+    return
+  }
   if (onDemolition() && e.button === 0) {
     // поставленная пометка остаётся выделенной, инструмент снимается — как у проёма (change demolition-select-after-mark)
     if (tool === "demolition" && batteryPress) {
@@ -1729,6 +2015,14 @@ canvas.addEventListener("wheel", (e) => {
 canvas.addEventListener("click", (e) => {
   if (suppressClick) {
     suppressClick = false
+    return
+  }
+  // на плане «Черновые работы»: «Стяжка» ставится кликом, «Ластик» стирает выноску, штукатурку или стяжку под курсором
+  if (onRough()) {
+    const at = toWorld(e)
+    if (tool === "callout") calloutTool.click(at)
+    else if (tool === "screed") screedTool.place(at)
+    else if (tool === "eraser" && !calloutTool.eraseAt(at) && !plasterTool.erase(at)) screedTool.erase(at)
     return
   }
   // на плане «Демонтаж» жесты разбирает адаптер по нажатию и отпусканию (change demolition-plan, design D10);
@@ -2102,6 +2396,50 @@ window.addEventListener("pagehide", commitNotes)
 toolRulerBtn.addEventListener("click", () => setTool("ruler"))
 toolDemolitionBtn.addEventListener("click", () => setTool("demolition"))
 
+// «Штукатурка» и «Стяжка»: кнопка включает инструмент и открывает панель, повторный клик по активному — переключает панель
+toolPlasterBtn.addEventListener("click", () => {
+  if (tool !== "plaster") {
+    setTool("plaster")
+    plasterPanelOpen = true
+  } else plasterPanelOpen = !plasterPanelOpen
+  syncRoughPanels()
+})
+toolScreedBtn.addEventListener("click", () => {
+  if (tool !== "screed") {
+    setTool("screed")
+    screedPanelOpen = true
+  } else screedPanelOpen = !screedPanelOpen
+  syncRoughPanels()
+})
+
+// поле толщины панели: меняет выделенный объект одним шагом истории, иначе — значение для новых; недопустимое значение не
+// применяется, поле возвращает прежнее
+plasterThicknessInput.addEventListener("change", () => {
+  const mm = parseThickness(plasterThicknessInput.value, PLASTER_THICKNESS)
+  if (mm !== null) {
+    if (plasterTool.selectedId() !== null) plasterTool.setSelectedThickness(mm)
+    else plasterThicknessMm = mm
+  }
+  plasterThicknessInput.blur()
+  redraw()
+})
+screedThicknessInput.addEventListener("change", () => {
+  const mm = parseThickness(screedThicknessInput.value, SCREED_THICKNESS)
+  if (mm !== null) {
+    if (screedTool.selectedId() !== null) screedTool.setSelectedThickness(mm)
+    else screedThicknessMm = mm
+  }
+  screedThicknessInput.blur()
+  redraw()
+})
+for (const input of [plasterThicknessInput, screedThicknessInput]) {
+  // клавиши поля не доходят до холста: Delete и Ctrl+Z правят текст, а не чертёж
+  input.addEventListener("keydown", (e) => {
+    e.stopPropagation()
+    if (e.key === "Enter" || e.key === "Escape") input.blur()
+  })
+}
+
 wallTypesRow.addEventListener("click", (e) => {
   const btn = (e.target as HTMLElement).closest<HTMLButtonElement>(".wall-type")
   if (btn) setWallMaterial(btn.dataset.material as Material)
@@ -2177,6 +2515,7 @@ function activate(id: string): void {
   tool = defaultToolOf(activePlanOf(current()))
   syncToolUI()
   resetDemolition()
+  resetRough()
   clearChain()
   closeNumberEditor()
   selectedWalls = []
@@ -2229,6 +2568,7 @@ function removeDrawing(id: string, index: number): void {
 
 function resetEditing(): void {
   resetDemolition()
+  resetRough()
   clearChain()
   closeNumberEditor()
   calloutTool.reset()
@@ -2252,6 +2592,18 @@ function stepMarks(step: typeof undoDemolition): void {
   if (!next) return
   current().demolition = next.marks
   if (next.batteryMarks.length > 0 || current().batteryDemolition !== undefined) current().batteryDemolition = next.batteryMarks
+  dirty = true
+  resetEditing()
+  redraw()
+}
+
+// отмена или повтор шага плана «Черновые работы» (change add-rough-works-plan, design D7): подставляются оба списка до операции
+function stepRough(step: typeof undoRough): void {
+  const next = step(activeHistory(), { plaster: plasterOf(), screeds: screedsOf() })
+  if (!next) return
+  current().roughPlaster = next.plaster
+  current().roughScreeds = next.screeds
+  roughCache = null
   dirty = true
   resetEditing()
   redraw()
@@ -2312,7 +2664,7 @@ function stepNotes(step: typeof undoNotes): void {
 }
 
 function undo(): void {
-  if (groupMove || endpointDrag || panDrag || dimDrag || doorwayTool.dragging() || communicationTool.dragging() || batteryTool.dragging() || calloutTool.dragging() || demolitionTool.dragging()) return
+  if (groupMove || endpointDrag || panDrag || dimDrag || doorwayTool.dragging() || communicationTool.dragging() || batteryTool.dragging() || calloutTool.dragging() || demolitionTool.dragging() || plasterTool.dragging()) return
   // открытое поле ввода выноски и поле примечаний сохраняют текст до отмены
   calloutTool.commitEditor()
   commitNotes()
@@ -2323,6 +2675,10 @@ function undo(): void {
   }
   if (h.past[h.past.length - 1]?.kind === "notes") {
     stepNotes(undoNotes)
+    return
+  }
+  if (h.past[h.past.length - 1]?.kind === "rough") {
+    stepRough(undoRough)
     return
   }
   if (h.past[h.past.length - 1]?.kind === "demolition") {
@@ -2346,7 +2702,7 @@ function undo(): void {
 }
 
 function redo(): void {
-  if (groupMove || endpointDrag || panDrag || dimDrag || doorwayTool.dragging() || communicationTool.dragging() || batteryTool.dragging() || calloutTool.dragging() || demolitionTool.dragging()) return
+  if (groupMove || endpointDrag || panDrag || dimDrag || doorwayTool.dragging() || communicationTool.dragging() || batteryTool.dragging() || calloutTool.dragging() || demolitionTool.dragging() || plasterTool.dragging()) return
   calloutTool.commitEditor()
   commitNotes()
   const h = activeHistory()
@@ -2356,6 +2712,10 @@ function redo(): void {
   }
   if (h.future[h.future.length - 1]?.kind === "notes") {
     stepNotes(redoNotes)
+    return
+  }
+  if (h.future[h.future.length - 1]?.kind === "rough") {
+    stepRough(redoRough)
     return
   }
   if (h.future[h.future.length - 1]?.kind === "demolition") {
@@ -2458,6 +2818,15 @@ window.addEventListener("keydown", (e) => {
       if (!calloutTool.dragging()) calloutTool.deleteSelected()
       return
     }
+    if (onRough()) {
+      if (!plasterTool.dragging()) {
+        closeRoughEditor()
+        if (!plasterTool.deleteSelected()) screedTool.deleteSelected()
+        closeRoughPanels()
+        resumePlasterTool()
+      }
+      return
+    }
     if (onDemolition()) {
       if (!demolitionTool.dragging()) {
         demolitionTool.deleteSelected()
@@ -2467,6 +2836,22 @@ window.addEventListener("keydown", (e) => {
     }
     if (groupMove || endpointDrag || panDrag || dimDrag || doorwayTool.dragging() || communicationTool.dragging() || batteryTool.dragging()) return
     deleteSelection()
+    return
+  }
+  if (e.key === "Escape" && onRough()) {
+    const action = escapeAction({
+      tool,
+      gestureActive: plasterTool.dragging(),
+      dimensionDraft: false,
+      calloutDraft: calloutTool.hasDraft(),
+      hasSelection: plasterTool.selectedId() !== null || screedTool.selectedId() !== null || calloutTool.selectedId() !== null,
+    })
+    if (action === "end-gesture") plasterTool.cancel()
+    else if (action === "cancel-callout-draft") calloutTool.cancelDraft()
+    else if (action === "clear-selection") {
+      calloutTool.deselect()
+      clearRoughSelection()
+    } else if (action === "deactivate-tool") setTool("none")
     return
   }
   if (e.key === "Escape" && onDemolition()) {
@@ -2506,7 +2891,7 @@ window.addEventListener("keydown", (e) => {
   if (e.key !== "ArrowUp" && e.key !== "ArrowDown" && e.key !== "ArrowLeft" && e.key !== "ArrowRight") return
   if (e.target instanceof HTMLInputElement) return
   // на плане «Демонтаж» нет стен, материалов и элементов: стрелки ничего не двигают и не переключают
-  if (onDemolition()) return
+  if (onDemolition() || onRough()) return
   if (groupMove || endpointDrag || panDrag || dimDrag || doorwayTool.dragging() || communicationTool.dragging() || batteryTool.dragging()) return
   // выделенная коммуникация и выноска стрелками не двигаются и материал не переключается (spec communications)
   if (selectedCommunication || calloutTool.selectedId() !== null || selectedRoom !== null) return

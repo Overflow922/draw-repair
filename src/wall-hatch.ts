@@ -38,6 +38,9 @@ export const HATCHES: Record<Material, HatchSpec> = {
 // красная штриховка области сноса: линии 135° с шагом прежней штриховки «Кирпича» (change demolition-plan, design D8)
 export const DEMOLITION_HATCH: LineSeries = { angle: 135, stepMm: 3, widthK: 1, dashMm: [] }
 
+// штриховка стяжки плана «Черновые работы»: линии «/» под 45° с шагом реже, чем у материалов (change add-rough-works-plan, design D9)
+export const SCREED_HATCH: LineSeries = { angle: 45, stepMm: 4, widthK: 0.6, dashMm: [] }
+
 function polyBounds(poly: readonly Point[]): [number, number, number, number] {
   const xs = poly.map((p) => p.x)
   const ys = poly.map((p) => p.y)

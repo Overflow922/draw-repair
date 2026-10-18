@@ -773,3 +773,34 @@ Follow-ups from add-legend-objects (2026-10-15).
 
 - [ ] `vitest run` picks up stale copies of tests from `.claude/worktrees/agent-afe5052a1a208916f/` (18 failures there: tool-set order tests, wall-edit-invariants). Remove the worktree or add `.claude/worktrees` to the vitest `exclude` list in `vite.config.ts`.
 - [ ] `src/wall-edit-invariants.test.ts` (INV-1, INV-2) fails when the full suite runs in parallel (~13 s under load) and passes alone; looks like a timeout under load.
+
+---
+
+Follow-ups from `add-rough-works-plan` (2026-10-18).
+
+## Bugs
+
+- [ ] **Plaster mark over a demolished gap loses its other pieces when a number is edited.** If demolition later cuts a
+  section out of the middle of a plastered face, the mark has two pieces; editing a number of one piece replaces the
+  mark with that piece's span (`editPlasterNumber`, `src/rough/plaster-marks.ts`). Marks placed by the tool always lie on one
+  piece, so this only shows after demolition is edited under an existing mark. Repro: plaster 100-300 on W, then demolish
+  150-250 on the demolition plan, select the mark, edit its width.
+- [ ] **The screed label hides the room block when the click was near the room centre.** The label is drawn over the
+  block (`src/rough/rough-render.ts`), the user can place it elsewhere but cannot move it afterwards (anchor point is not draggable,
+  design D2). Revisit if users complain: draw the block above the label or allow moving the label.
+
+## Tests
+
+- [ ] `src/main.ts` wiring of the rough plan has no automated test: pointer handlers (`onRough()` branches), panel sync
+  (`syncRoughPanels`), in-place editors (`pressPlasterNumber`, `pressScreedLabel`), Delete / Escape, undo and redo
+  (`stepRough`). The pure parts (tools, scene, history, storage, PDF) are unit-tested; the DOM flow was checked by hand in the browser.
+
+## Docs
+
+- [ ] pdf-export legend: on A4 the legend fits up to nine entries, a worst-case rough page has ten (five materials, battery,
+  riser, duct, plaster, screed = 140 mm > 135 mm area). Spec says so; if it matters, shrink the row pitch or add a column.
+
+## Out of scope (decided, revisit if needed)
+
+- Mutation testing of net area and active-screed derivation: the project has no mutation tooling (`package.json`).
+- Plaster dimensions are not printed on the PDF page (only on the canvas); the page shows the strips themselves.

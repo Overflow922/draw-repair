@@ -7,7 +7,8 @@ import { LIGHT_PALETTE } from "../theme"
 import type { Palette } from "../theme"
 import { PX_PER_CM } from "../types"
 import type { Battery, Communication, Point, View, Wall } from "../types"
-import { DEMOLITION_HATCH, strokeHatchSeries } from "../wall-hatch"
+import { plasterColors } from "../rough/rough-render"
+import { DEMOLITION_HATCH, SCREED_HATCH, strokeHatchSeries } from "../wall-hatch"
 import {
   LEGEND_BATTERY_THICKNESS_MM,
   LEGEND_DUCT_DEPTH_MM,
@@ -53,6 +54,46 @@ function drawDemolitionSample(ctx: CanvasRenderingContext2D, origin: Point): voi
   ctx.stroke()
 }
 
+// прямоугольник образца: длина и толщина образца материала
+function sampleRect(origin: Point): Point[] {
+  const h = SAMPLE_THICKNESS_MM / 2
+  return [
+    { x: origin.x, y: origin.y - h },
+    { x: origin.x + SAMPLE_LENGTH_MM, y: origin.y - h },
+    { x: origin.x + SAMPLE_LENGTH_MM, y: origin.y + h },
+    { x: origin.x, y: origin.y + h },
+  ]
+}
+
+// образец «Штукатурка»: фиолетовая заливка и тёмный контур, как на чертеже
+function drawPlasterSample(ctx: CanvasRenderingContext2D, origin: Point): void {
+  const m = PDF_METRICS
+  const colors = plasterColors("light")
+  const poly = sampleRect(origin)
+  ctx.fillStyle = colors.fill
+  tracePolygons(ctx, [poly])
+  ctx.fill()
+  ctx.strokeStyle = colors.stroke
+  ctx.lineWidth = m.contourPx
+  ctx.stroke()
+}
+
+// образец «Стяжка до N мм»: тонкий контур и косая штриховка «/», как на чертеже
+function drawScreedSample(ctx: CanvasRenderingContext2D, origin: Point): void {
+  const m = PDF_METRICS
+  const poly = sampleRect(origin)
+  ctx.save()
+  tracePolygons(ctx, [poly])
+  ctx.clip()
+  ctx.strokeStyle = LIGHT_PALETTE.ink
+  strokeHatchSeries(ctx, poly, SCREED_HATCH, { x: 0, y: 0 }, m)
+  ctx.restore()
+  ctx.strokeStyle = LIGHT_PALETTE.ink
+  ctx.lineWidth = m.hatchPx
+  tracePolygons(ctx, [poly])
+  ctx.stroke()
+}
+
 // вид, в котором одна единица чертежа равна одному миллиметру листа, а начало координат — в origin
 const mmView = (origin: Point): View => ({ zoom: 1 / PX_PER_CM, pan: { x: -origin.x, y: -origin.y } })
 
@@ -90,13 +131,18 @@ function drawSample(ctx: CanvasRenderingContext2D, entry: LegendEntry, origin: P
       return drawCommunicationSample(ctx, entry, origin)
     case "demolition":
       return drawDemolitionSample(ctx, origin)
+    case "plaster":
+      return drawPlasterSample(ctx, origin)
+    case "screed":
+      return drawScreedSample(ctx, origin)
   }
 }
 
 // столбец легенды страницы: записи сверху вниз с верхнего края столбца; на странице «Демонтаж» образцы материалов серые,
 // как подложка. Образец стоит по центру блока строк подписи.
 export function drawLegend(doc: jsPDF, ctx: CanvasRenderingContext2D, page: PlanPage, column: Rect): void {
-  const palette: Palette = page.demolition === undefined ? LIGHT_PALETTE : { ...LIGHT_PALETTE, ink: LIGHT_PALETTE.muted }
+  const underlay = page.demolition !== undefined || page.rough !== undefined
+  const palette: Palette = underlay ? { ...LIGHT_PALETTE, ink: LIGHT_PALETTE.muted } : LIGHT_PALETTE
   legendEntries(page).forEach((entry, i) => {
     const centerY = column.y + LEGEND_ROW_PITCH_MM * (i + 0.5)
     const origin: Point = { x: column.x + LEGEND_PAD_LEFT_MM, y: centerY }

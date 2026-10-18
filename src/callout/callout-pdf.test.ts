@@ -137,10 +137,11 @@ describe("отрисовка страниц", () => {
     expect((demolition[0].callouts ?? []).map((x) => x.id)).toEqual(["d1", "d2", "d3"])
   })
 
-  it("C-PDF-3b: PDF содержит три страницы и собирается с выносками на всех планах", () => {
+  // TCR (change add-rough-works-plan): страниц четыре — добавлена страница плана «Черновые работы» (pdf-export «Одна страница PDF на каждый план»)
+  it("C-PDF-3b: PDF содержит четыре страницы и собирается с выносками на всех планах", () => {
     calls.length = 0
     const doc = buildPdfPages(pagesOf(all()), "cm", SCALE, "A4", font, "t", new Date(2026, 0, 1))
-    expect(doc.getNumberOfPages()).toBe(3)
+    expect(doc.getNumberOfPages()).toBe(4)
   })
 })
 
@@ -230,6 +231,7 @@ describe("границы содержимого страницы", () => {
     expect(b.maxX).toBeGreaterThanOrEqual(300)
     expect(b.minX).toBeLessThanOrEqual(100)
     const doc = buildPdfPages(pagesOf(only), "cm", SCALE, "A4", font, "t", new Date(2026, 0, 1))
-    expect(doc.getNumberOfPages()).toBe(3)
+    // TCR (change add-rough-works-plan): страниц четыре
+    expect(doc.getNumberOfPages()).toBe(4)
   })
 })
