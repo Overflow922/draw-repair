@@ -133,7 +133,7 @@ describe("DS: диагональное прилипание к углу своб
     if (r.source === "wall") expect(maxOverlap(placementSquare(r, 20), walls)).toBeLessThan(TOL)
   })
 
-  it("DS-10: наружный угол L из двух стен и внутренний угол — не цели диагонального прилипания", () => {
+  it("DS-10: у стыка двух стен вне окна наружного угла и у внутреннего угла диагонали нет", () => {
     // sceneL: стены (0,0)-(300,0) и (0,0)-(0,300), толщина 20; наружный угол (−10, −10), внутренний (10, 10).
     // Курсоры в дальней части зоны угла торца (по 8 см от плоскости торца и от грани, зона 10 см): у свободного
     // торца одиночной стены они дают диагональ (контроль), у стыка двух стен — нет.
@@ -143,8 +143,11 @@ describe("DS: диагональное прилипание к углу своб
     expectCorner(start({ x: -18, y: -8 }, verticalAlone), { x: -10, y: -10 }, { x: -1, y: 0 }, 20, rect(-30, -20, -10, 0))
     expectNotCorner(start({ x: -8, y: -18 }, sceneL()))
     expectNotCorner(start({ x: -18, y: -8 }, sceneL()))
-    // и сама биссектриса снаружи угла, как в прежнем сценарии
-    expectNotCorner(start({ x: -14, y: -14 }, sceneL()))
+    // change wall-body-corners-snap: наружный угол стыка — цель, если курсор над квадратом у угла
+    // (биссектриса снаружи угла); ближайшая вершина при равенстве — на ребре стены раньше в массиве
+    const outer = start({ x: -14, y: -14 }, sceneL())
+    expect(targetOf(outer)).toBe("corner")
+    expectPoint(outer.point, -20, -10)
     const inner = start({ x: 14, y: 14 }, sceneL())
     expectNotCorner(inner)
     expect(inner.source).toBe("wall")

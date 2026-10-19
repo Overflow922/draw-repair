@@ -877,3 +877,34 @@ Follow-ups from `remove-wall-tracking` (2026-10-19).
   or exclude `.claude/**` in the vitest config.
 - [ ] `src/wall-edit-invariants.test.ts` times out (5 s per test, 2 tests) in the full run and passes alone (6 tests,
   ~6 s). Raise its timeout or split the property runs.
+
+---
+
+Follow-ups from `wall-body-corners-snap` (2026-10-19).
+
+## Docs
+
+- [ ] `wall-selection` «Привязка при перетаскивании конца» says the end snaps "по тем же правилам, что и вершины при
+  рисовании", but the drag code uses `snapWithSource` / `snapOnOrthoAxis` (`src/geometry.ts`) over axes, not the
+  drawing-vertex rules of `src/wall-snap.ts`. `wall-body-corners-snap` only adds body corners to the drag targets; the
+  wording/behaviour mismatch stays to be settled at the spec level.
+
+## Out of scope (decided, revisit if needed)
+
+- Baseline failures (stale validator worktree, `wall-edit-invariants` timeout) are already listed under
+  `remove-wall-tracking` above.
+
+- [ ] `wall-selection` «Привязка к углам тел стен…» examples are inconsistent with their own geometry: wall A
+  (0,0)→(200,0) has corners at (200,±10), not (210,−10); the ortho scenario puts the cursor 50 cm from the corner while
+  the rule needs it within the snap radius. Tests use (200,±10) and an axis near the corner. Fix the spec text.
+- [ ] `wall-drawing` tie rule «у одной стены — на ребре, идущем от её начала оси» is not implemented: for equal
+  distances only the wall order in the array decides (`junctionCandidates`, `src/wall-snap.ts`); no scenario covers it.
+
+## Tests
+
+- [ ] No test for the «Проём» scenario at a junction corner (vertex violating a doorway must not be offered):
+  `acceptor` applies `candidateBlock`, but only the free-end case is covered (`CW-7f`).
+
+- [ ] `wall-drawing` «Привязка к существующим стенам» (main spec, ~line 155) still says an outer corner has no snap
+  target "кроме угла свободного торца"; after `wall-body-corners-snap` the outer junction corner is a target
+  («Диагональное прилипание к углу тела стены»). Reword that sentence (and the line about the end-zone window, ~157).

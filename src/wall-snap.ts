@@ -2,18 +2,18 @@ import { CENTER_SNAP_RADIUS_PX, PX_PER_CM, SNAP_RADIUS_PX } from "./types"
 import type { Communication, Point, Wall, WallElement } from "./types"
 import { violatesCommunications } from "./communications/guard"
 import { violatesDoorways } from "./doorway/doorway-guard"
+import { convexCorners, EDGE_SHIFT, edgeNormals, farEnd, hiddenBy, LINE_TOL, sceneContour } from "./scene-contour"
+import type { ConvexCorner, OpenEdge, SceneContour } from "./scene-contour"
 import { orthoDirection } from "./wall-angle"
 import {
   add,
   clipHalfPlane,
-  coveredInterval,
   cross,
   degenerate,
   displayPolygons,
   dist,
   dot,
   hitWall,
-  lerp,
   mergeIntervals,
   mul,
   perp,
@@ -32,10 +32,6 @@ import {
 
 const EPS = 1e-9
 const SLICE = 1e-7
-// смещение ребра наружу при проверке открытости: больше SLICE — куски, отсечённые
-// clipHalfPlane, могут выступать за свою плоскость на SLICE
-const EDGE_SHIFT = 3 * SLICE
-const LINE_TOL = 1e-6 // допуск коллинеарности рёбер контура и совпадения вершин
 const PROBE = 1e-5 // шаг пробной точки за концом открытого участка
 const OVERLAP_AREA = 1e-6 // касание по стороне допустимо, наложение — нет
 const AXIS_TOL = 1e-12 // луч параллелен оси экрана
@@ -75,63 +71,11 @@ interface Candidate {
   parallel?: ParallelStart
 }
 
-// открытый участок ребра контура сцены с наружной нормалью
-interface OpenEdge {
-  p1: Point
-  p2: Point
-  normal: Point
-}
-
-interface SceneContour {
-  pieces: Point[][]
-  open: OpenEdge[]
-}
-
 // линия цели: грань (или торец) стены; параметр s — вдоль u от origin
 interface TargetLine {
   origin: Point
   u: Point
   normal: Point
-}
-
-// единичные наружные нормали рёбер выпуклого куска (ребро i: piece[i] → piece[i+1])
-function edgeNormals(piece: Point[]): Point[] {
-  const c = mul(piece.reduce(add, { x: 0, y: 0 }), 1 / piece.length)
-  return piece.map((a, i) => {
-    const b = piece[(i + 1) % piece.length]
-    const len = dist(a, b)
-    if (len < EPS) return { x: 0, y: 0 }
-    const n = mul({ x: b.y - a.y, y: a.x - b.x }, 1 / len)
-    return dot(n, sub(c, a)) > 0 ? mul(n, -1) : n
-  })
-}
-
-function hiddenBy(q1: Point, q2: Point, pieces: Point[][]): [number, number][] {
-  const hidden: [number, number][] = []
-  for (const pc of pieces) {
-    const iv = coveredInterval(q1, q2, pc)
-    if (iv) hidden.push(iv)
-  }
-  return hidden
-}
-
-// Контур сцены: рёбра всех кусков отображаемых тел, открытые снаружи — точки,
-// смещённые от ребра по наружной нормали, не лежат ни в одном куске (design D2).
-function sceneContour(walls: Wall[]): SceneContour {
-  const pieces = walls.filter((w) => !degenerate(w)).flatMap((w) => displayPolygons(w, walls))
-  const open: OpenEdge[] = []
-  for (const piece of pieces) {
-    const normals = edgeNormals(piece)
-    piece.forEach((p1, k) => {
-      const normal = normals[k]
-      if (normal.x === 0 && normal.y === 0) return
-      const p2 = piece[(k + 1) % piece.length]
-      const shift = mul(normal, EDGE_SHIFT)
-      for (const [t0, t1] of uncovered(hiddenBy(add(p1, shift), add(p2, shift), pieces)))
-        open.push({ p1: lerp(p1, p2, t0), p2: lerp(p1, p2, t1), normal })
-    })
-  }
-  return { pieces, open }
 }
 
 const onLine = (q: Point, line: TargetLine): boolean => Math.abs(dot(sub(q, line.origin), line.normal)) <= LINE_TOL
@@ -251,6 +195,49 @@ function cornerCandidate(scene: SceneContour, w: Wall, end: Point, out: Point, s
   return { point, base: point, normal, target: "corner", parallel: { dir: out, start } }
 }
 
+// угол свободного торца какой-либо стены: им занимаются зоны стены (cornerCandidate), а не контур сцены
+function isFreeCapCorner(scene: SceneContour, walls: Wall[], v: Point): boolean {
+  return walls.some((w) => {
+    if (degenerate(w)) return false
+    const u = unit(w.a, w.b)
+    const n = mul(perp(u), w.thicknessCm / 2)
+    return (
+      [
+        [w.a, mul(u, -1)],
+        [w.b, u],
+      ] as const
+    ).some(([end, out]) => (dist(add(end, n), v) <= LINE_TOL || dist(sub(end, n), v) <= LINE_TOL) && freeCap(scene, w, end, out))
+  })
+}
+
+// Кандидаты у выпуклого угла стыка (change wall-body-corners-snap, design D2): квадрат касается угла своим углом
+// и лежит по внешнюю сторону плоскостей обоих рёбер; его стороны на линиях рёбер дают две вершины — середины сторон
+// (на линии одного ребра за плоскостью другого на newHalf). Ребро стоящей раньше стены идёт первым: при равенстве
+// расстояний `nearest` оставляет его. Курсор должен быть над квадратом: по каждой нормали от угла строго больше
+// нуля и не больше толщины новой стены.
+function junctionCandidates(corner: ConvexCorner, p: Point, newHalf: number, walls: Wall[]): Candidate[] {
+  // ребро принадлежит стене, на линии грани которой оно лежит (кусок контура может принадлежать соседу)
+  const faceOwner = (e: OpenEdge): number =>
+    walls.findIndex((w) => {
+      if (degenerate(w)) return false
+      const u = unit(w.a, w.b)
+      const n = perp(u)
+      const line: TargetLine = { origin: add(w.a, mul(e.normal, w.thicknessCm / 2)), u, normal: e.normal }
+      return Math.abs(Math.abs(dot(e.normal, n)) - 1) <= LINE_TOL && onLine(e.p1, line) && onLine(e.p2, line)
+    })
+  const edges = [...corner.edges].sort((x, y) => faceOwner(x) - faceOwner(y))
+  const [e1, e2] = edges
+  const rel = sub(p, corner.point)
+  const inWindow = (v: number): boolean => v > SLICE && v <= 2 * newHalf + SLICE
+  if (!inWindow(dot(rel, e1.normal)) || !inWindow(dot(rel, e2.normal))) return []
+  const onEdge = (e: OpenEdge): Candidate => {
+    const away = sub(corner.point, farEnd(e, corner.point))
+    const base = add(corner.point, mul(away, newHalf / Math.hypot(away.x, away.y)))
+    return { point: base, base, normal: e.normal, target: "corner" }
+  }
+  return [onEdge(e1), onEdge(e2)]
+}
+
 // квадрат, приставленный стороной с центром в point, вытянутый на sizeCm по normal
 export function squareOnSide(point: Point, normal: Point, sizeCm: number): Point[] {
   const t = mul(perp(normal), sizeCm / 2)
@@ -319,6 +306,16 @@ export function snapVertex(
   // принятые кандидаты в порядке стен массива; квадрат не налагается на тела (design D5)
   const accepted: Candidate[] = []
   const accept = acceptor(scene, newWallThicknessCm, accepted, candidateBlock(walls, doorways, communications, newWallThicknessCm))
+  // угол стыка — приоритетнее граней стен: курсор в окне находится над квадратом, касающимся угла
+  if (corners) {
+    const atCorner: Candidate[] = []
+    const acceptCorner = acceptor(scene, newWallThicknessCm, atCorner, candidateBlock(walls, doorways, communications, newWallThicknessCm))
+    const contour = scene()
+    for (const corner of convexCorners(contour))
+      if (!isFreeCapCorner(contour, walls, corner.point)) junctionCandidates(corner, p, newHalf, walls).forEach(acceptCorner)
+    const junction = nearest(p, atCorner)
+    if (junction) return wallSnap(junction)
+  }
   for (const w of walls) if (!degenerate(w)) wallCandidates(w, p, scene, newHalf, reach, corners, accept)
   const best = nearest(p, accepted)
   if (best) return wallSnap(best)

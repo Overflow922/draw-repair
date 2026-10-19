@@ -83,8 +83,11 @@ describe("Наружный угол", () => {
     expectWall(snap({ x: -5, y: -15 }, sceneL()), 0, -10, 0, -1)
   })
 
-  it("SNAP-OUT-3: снаружи угла вне зон граней — нет прилипания углом к углу", () => {
-    expect(snap({ x: -24, y: -26 }, sceneL())).toEqual({ point: { x: -20, y: -30 }, source: "grid" })
+  // change wall-body-corners-snap: наружный угол стыка L — цель диагонального прилипания (окно T × T)
+  it("SNAP-OUT-3: снаружи угла стыка в окне — прилипание углом к углу", () => {
+    const r = snap({ x: -24, y: -26 }, sceneL())
+    expect(r.target).toBe("corner")
+    expectWall(r, -10, -20, -1, 0)
   })
 })
 
@@ -95,9 +98,10 @@ describe("Стык и торцы", () => {
     expect(r.point).not.toEqual({ x: 0, y: 0 })
   })
 
-  it("SNAP-JOINT-2: отдалённый вид — зона стыка не перехватывает прилипание к грани", () => {
+  it("SNAP-JOINT-2: отдалённый вид — окно угла стыка не зависит от масштаба", () => {
     const r = snap({ x: -12, y: -12 }, sceneL(), 0.25)
-    expectWall(r, 0, -10, 0, -1)
+    expect(r.target).toBe("corner")
+    expectWall(r, -20, -10, 0, -1)
   })
 
   it("SNAP-CAP-CLOSED-1: закрытый торец C (T-стык) не даёт продолжения", () => {
@@ -233,7 +237,8 @@ describe("Вершины цепочки", () => {
   it("SNAP-CHAIN-1: второй конец не уходит в точку оси стыка", () => {
     // change wall-relative-angle-snap (TCR): без заданного направления — при сработавшем
     // орто (горизонталь от (−100,−12)) конец определяет луч, а не прилипание к грани
-    const r = snap({ x: -12, y: -12 }, sceneL(), 0.25, 20)
+    // вторая вершина цепочки: диагонального прилипания нет (corners = false)
+    const r = snapVertex({ x: -12, y: -12 }, sceneL(), R(0.25), GRID, 20, undefined, [], false)
     expectWall(r, 0, -10)
     expect(r.point).not.toEqual({ x: 0, y: 0 })
   })

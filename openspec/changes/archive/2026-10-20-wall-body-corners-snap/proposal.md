@@ -22,6 +22,6 @@
 ## Impact
 
 - Код: `src/wall-snap.ts` (кандидаты `cornerCandidate`, `wallCandidates`, окно срабатывания), `src/geometry.ts` (`snapWithSource`, `snapOnOrthoAxis`: цели-углы), возможно `src/ortho-gesture.ts` (кандидаты для жеста); вспомогательные вычисления углов тела — `src/wall-geometry.ts`.
-- Тесты: `wall-snap-*.test.ts`, `geometry-*snap*.test.ts`, `ortho-gesture*.test.ts` дополняются сценариями углов; существующие ожидания не меняются.
+- Тесты: `wall-snap-*.test.ts`, `geometry-*snap*.test.ts`, `ortho-gesture*.test.ts` дополняются сценариями углов; ожидания, закреплявшие «угол стыка не цель», обновляются по спеке (CW-7e, SNAP-OUT-3, SNAP-JOINT-2, SNAP-CHAIN-1, BS-1d, BS-2a/2c, DS-10); остальные не меняются.
 - Данные и формат хранения не затрагиваются.
 - Порядок с change `remove-wall-tracking`: независимы, пересечений по требованиям нет.

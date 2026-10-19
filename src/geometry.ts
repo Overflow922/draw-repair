@@ -3,6 +3,7 @@ import { ZOOM_MAX, ZOOM_MIN } from "./types"
 import { batteryCorner } from "./battery/battery-geometry"
 import { hostOf, hostPoint, jambsT } from "./doorway/doorway-faces"
 import type { Battery, BatteryCornerPoint, Dimension, DimPoint, EdgeRef, JambPoint, Point, View, Wall, WallElement } from "./types"
+import { convexCorners, sceneContour } from "./scene-contour"
 import { faceCornerTol, pointInPolygon } from "./wall-geometry"
 
 // попадание курсора — канонический расчёт по отображаемой форме (design D1)
@@ -67,6 +68,31 @@ export interface SnapResult {
   axisWall: Wall | null
 }
 
+// Углы тел стен как цели привязки (change wall-body-corners-snap, design D3, D4): выпуклые вершины контура сцены
+// не дальше радиуса от курсора; project — положение привязываемой точки (угол или его проекция на ось орто).
+// Угол заменяет текущую цель только если строго ближе: при равенстве оси и концы осей раньше углов.
+function withBodyCorners(
+  cursor: Point,
+  walls: Wall[],
+  radiusCm: number,
+  best: SnapResult | null,
+  bestDist: number,
+  project: (corner: Point) => Point,
+): SnapResult | null {
+  let result = best
+  let resultDist = bestDist
+  for (const { point } of convexCorners(sceneContour(walls))) {
+    if (distance(cursor, point) > radiusCm) continue
+    const p = project(point)
+    const d = distance(cursor, p)
+    if (d <= resultDist && (result === null || d < resultDist)) {
+      result = { point: p, axisWall: null }
+      resultDist = d
+    }
+  }
+  return result
+}
+
 // привязка вдоль оси орто (design D1): пересечение оси с линией стены или проекция конца стены
 // в радиусе — ближайшая к курсору; иначе сетка только по координате вдоль оси
 function snapOnOrthoAxis(cursor: Point, walls: Wall[], gridStepCm: number, radiusCm: number, axis: OrthoAxis): SnapResult {
@@ -85,6 +111,7 @@ function snapOnOrthoAxis(cursor: Point, walls: Wall[], gridStepCm: number, radiu
     if (Math.abs(span) > EPS) consider(onAxis(axis, w.a[along] + ((fixed - w.a[across]) / span) * (w.b[along] - w.a[along])), w)
     for (const end of [w.a, w.b]) if (distance(cursor, end) <= radiusCm) consider(onAxis(axis, end[along]), null)
   }
+  best = withBodyCorners(cursor, walls, radiusCm, best, bestDist, (corner) => onAxis(axis, corner[along]))
   return best ?? { point: onAxis(axis, Math.round(cursor[along] / gridStepCm) * gridStepCm), axisWall: null }
 }
 
@@ -125,6 +152,7 @@ export function snapWithSource(cursor: Point, walls: Wall[], gridStepCm: number,
       consider(foot, distance(cursor, foot), w)
     }
   }
+  best = withBodyCorners(cursor, walls, radiusCm, best, bestDist, (corner) => corner)
   if (best) return best
   return {
     point: {

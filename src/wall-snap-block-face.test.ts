@@ -102,7 +102,6 @@ describe("курсор над выступающей частью блока", (
 describe("порядок стен", () => {
   it.each([
     [15, -15],
-    [28, -19],
     [20, -15],
   ])("BS-1d: курсор (%d, %d) — результат не зависит от порядка стен A, B", (x, y) => {
     const [a, b] = scene()
@@ -112,6 +111,16 @@ describe("порядок стен", () => {
     expectPoint(ba.point, ab.point.x, ab.point.y)
     expect(ab.source).toBe("wall")
     expectPoint(ab.point, 10, -10)
+  })
+
+  // change wall-body-corners-snap: угол блока (20, −10) — выпуклая вершина контура сцены, цель диагонали
+  it("BS-1e: курсор (28, −19) в окне угла блока — результат не зависит от порядка стен A, B", () => {
+    const [a, b] = scene()
+    const ab = start({ x: 28, y: -19 }, [a, b])
+    const ba = start({ x: 28, y: -19 }, [b, a])
+    expect(ab.target).toBe("corner")
+    expectPoint(ab.point, 20, -20)
+    expectPoint(ba.point, 20, -20)
   })
 })
 
@@ -131,21 +140,16 @@ describe("граница зоны вдоль грани от края блока
     )
   })
 
-  const squareUnderBlock = [
-    { x: 0, y: -10 },
-    { x: 20, y: -10 },
-    { x: 20, y: -30 },
-    { x: 0, y: -30 },
-  ]
-
-  it("BS-2a: курсор (25, −19) — за краем блока в пределах зоны — прилипает к грани A, вершина (10, −10)", () => {
+  // change wall-body-corners-snap: за краем блока курсор над квадратом у угла блока (20, −10) — диагональное прилипание
+  it.each([
+    [25, -19],
+    [28, -19],
+  ])("BS-2a: курсор (%d, %d) — за краем блока в окне угла — квадрат касается угла блока, вершина (20, −20)", (x, y) => {
     const walls = scene()
-    expectFaceSnap(start({ x: 25, y: -19 }, walls), { x: 10, y: -10 }, squareUnderBlock, walls)
-  })
-
-  it("BS-2c: курсор (28, −19) — глубже в зону от края блока — прилипает к грани A, вершина (10, −10)", () => {
-    const walls = scene()
-    expectFaceSnap(start({ x: 28, y: -19 }, walls), { x: 10, y: -10 }, squareUnderBlock, walls)
+    const r = start({ x, y }, walls)
+    expect(r.target).toBe("corner")
+    expectPoint(r.point, 20, -20)
+    expect(maxOverlap(placementSquare(r, T), walls)).toBeLessThanOrEqual(TOL)
   })
 
   it("BS-2b: курсор (30.5, −20) — за зоной от края блока — к грани A не прилипает", () => {
