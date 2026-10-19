@@ -8,6 +8,11 @@ import { RIGHT_COS, degenerate, dist, dot, jointTol, sub, unit } from "../wall-g
 export interface ChainEnd {
   extendCm: number // на сколько цепочка того же материала выходит за конец опорной стены вдоль оси
   limitT: number | null // граница материала по t от конца a опорной стены; null — другой материал не встретился
+  walls: readonly Wall[] // продолжения за этим концом, по порядку от опорной стены
+}
+
+export interface ChainOptions {
+  ignoreMaterial?: boolean // цепочка идёт сквозь стены любого материала (штукатурка), limitT всегда null
 }
 
 export interface HostChains {
@@ -40,23 +45,25 @@ function nextLink(cur: Wall, at: Point, out: Point, walls: readonly Wall[], visi
   return found.length === 1 ? found[0] : null
 }
 
-function chainEnd(host: Wall, end: "a" | "b", walls: readonly Wall[]): ChainEnd {
+function chainEnd(host: Wall, end: "a" | "b", walls: readonly Wall[], options: ChainOptions): ChainEnd {
   const axis = unit(host.a, host.b)
   const out = end === "b" ? axis : { x: -axis.x, y: -axis.y }
   const tOf = (p: Point): number => dot(sub(p, host.a), axis)
   const edge = tOf(host[end])
   const visited = new Set<Wall>([host])
+  const linked: Wall[] = []
   let cur = host
   let at = host[end]
   for (;;) {
     const link = nextLink(cur, at, out, walls, visited)
-    if (!link) return { extendCm: Math.abs(tOf(at) - edge), limitT: null }
-    if (link.wall.type !== host.type) {
+    if (!link) return { extendCm: Math.abs(tOf(at) - edge), limitT: null, walls: linked }
+    if (!options.ignoreMaterial && link.wall.type !== host.type) {
       // граница — вершина стыка: конец ранней в массиве стены из пары
       const vertex = walls.indexOf(link.wall) < walls.indexOf(cur) ? link.near : at
-      return { extendCm: Math.abs(tOf(vertex) - edge), limitT: tOf(vertex) }
+      return { extendCm: Math.abs(tOf(vertex) - edge), limitT: tOf(vertex), walls: linked }
     }
     visited.add(link.wall)
+    linked.push(link.wall)
     cur = link.wall
     at = link.far
   }
@@ -66,6 +73,6 @@ function chainEnd(host: Wall, end: "a" | "b", walls: readonly Wall[]): ChainEnd 
 // ограничено концом оси (change fix-opening-reach-body-end, design D1); без продолжения границу задаёт сама грань
 export const continuesSameMaterial = (end: ChainEnd): boolean => end.limitT === null && end.extendCm > 0
 
-export function hostChains(host: Wall, walls: readonly Wall[]): HostChains {
-  return { a: chainEnd(host, "a", walls), b: chainEnd(host, "b", walls) }
+export function hostChains(host: Wall, walls: readonly Wall[], options: ChainOptions = {}): HostChains {
+  return { a: chainEnd(host, "a", walls, options), b: chainEnd(host, "b", walls, options) }
 }

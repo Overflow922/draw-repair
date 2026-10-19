@@ -19,11 +19,16 @@ import { screedLabel } from "./rough-model"
 // Отрисовка плана «Черновые работы» (change add-rough-works-plan, design D4, D8, D9): подложка — результат «Монтажа» серым,
 // стяжка — штриховкой помещения, штукатурка — фиолетовой полосой; блоки помещений поверх. Одна функция для холста и PDF.
 
-export interface PlasterGhost {
+// подсветка цели инструмента «Штукатурка» (change plaster-click-whole-face, design D6): куски на стенах подложки
+export interface PlasterGhostPiece {
   wall: Wall // стена подложки
   from: number
   to: number
   face: 1 | -1
+}
+
+export interface PlasterGhost {
+  pieces: readonly PlasterGhostPiece[]
   thicknessMm: number
 }
 
@@ -157,22 +162,26 @@ export function drawRoughScene(
 
   const ghost = scene.ghost
   if (ghost) {
-    const piece: PlasterPiece = { mark: { id: "ghost", wallId: ghost.wall.id, face: ghost.face, anchor: "a", fromCm: ghost.from, toCm: ghost.to, thicknessMm: ghost.thicknessMm }, wall: ghost.wall, from: ghost.from, to: ghost.to }
-    ctx.save()
-    const strip = plasterStrip(piece).map(toScreen)
-    // превью — полупрозрачная фиолетовая полоса с пунктирным контуром
-    ctx.globalAlpha = GHOST_ALPHA
-    ctx.fillStyle = colors.fill
-    tracePolygons(ctx, [strip])
-    ctx.fill()
-    ctx.globalAlpha = 1
-    ctx.strokeStyle = colors.stroke
-    ctx.lineWidth = m.contourPx
-    ctx.setLineDash(GHOST_DASH)
-    ctx.stroke()
-    ctx.restore()
-    for (const d of markDimensions(piece, walls, "chain", unit, k, m.labelPx)) {
-      if (d.side === ghost.face) drawDimensionGeom(ctx, d.geom, d.text, colors.stroke, view, m, palette, false, false)
+    for (const part of ghost.pieces) {
+      const piece: PlasterPiece = {
+        mark: { id: "ghost", wallId: part.wall.id, face: part.face, anchor: "a", fromCm: part.from, toCm: part.to, thicknessMm: ghost.thicknessMm },
+        wall: part.wall,
+        from: part.from,
+        to: part.to,
+      }
+      ctx.save()
+      const strip = plasterStrip(piece).map(toScreen)
+      // подсветка — полупрозрачная фиолетовая полоса с пунктирным контуром; размеров у неё нет
+      ctx.globalAlpha = GHOST_ALPHA
+      ctx.fillStyle = colors.fill
+      tracePolygons(ctx, [strip])
+      ctx.fill()
+      ctx.globalAlpha = 1
+      ctx.strokeStyle = colors.stroke
+      ctx.lineWidth = m.contourPx
+      ctx.setLineDash(GHOST_DASH)
+      ctx.stroke()
+      ctx.restore()
     }
   }
 

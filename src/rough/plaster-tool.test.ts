@@ -1,13 +1,14 @@
 import { describe, expect, it } from "vitest"
 import { markDimensions } from "../demolition/mark-dimensions"
+import { door } from "../doorway/doorway.test-utils"
 import type { Drawing, PlasterMark, Point } from "../types"
 import { createPlasterTool } from "./plaster-tool"
 import type { PlasterToolHost } from "./plaster-tool"
 import { roughScene } from "./rough-scene"
 import { demolitionMark, drawing, idGen, plaster, r6, wall } from "./rough.test-utils"
 
-// change add-rough-works-plan: инструмент «Штукатурка» — протяжка, выделение, числа, ластик
-// (spec rough-works-plan «Инструмент «Штукатурка»», «Выделение штукатурки и правка на месте», «Ластик на плане «Черновые работы»»)
+// change add-rough-works-plan, plaster-click-whole-face: инструмент «Штукатурка» — наведение и клик по грани, выделение, числа, ластик
+// (spec rough-works-plan «Постановка штукатурки кликом по грани», «Выделение штукатурки и правка на месте», «Ластик на плане «Черновые работы»»)
 
 const NONE: PlasterMark[] = []
 
@@ -37,118 +38,166 @@ function setup(initial: Drawing, thicknessMm = 20) {
   return { tool: createPlasterTool(host), log, marks: () => d.roughPlaster ?? [], drawing: () => d }
 }
 
+type Setup = ReturnType<typeof setup>
+
 const px = (x: number, y = 0): Point => ({ x, y })
-// протяжка по стене: нажатие в (x0, y), отпускание в (x1, y); экранные точки далеко друг от друга (вне мёртвой зоны)
-const drag = (tool: ReturnType<typeof setup>["tool"], x0: number, x1: number, y = 5): string | null => {
-  tool.down(px(x0, y), px(0))
-  tool.move(px(x1, y), px(100))
-  return tool.up(px(x1, y), px(100))
+// клик по миру в (x, y): нажатие и отпускание в одной экранной точке
+const click = (s: Setup, x: number, y = 5): string | null => {
+  s.tool.down(px(0))
+  return s.tool.up(px(x, y), px(1))
 }
 
-describe("протяжка", () => {
-  it("RW-140: протяжка со стороны y > 0 ставит пометку на грани +1 с участком 100–300 и толщиной из панели; один шаг истории", () => {
+describe("клик по грани", () => {
+  it("RW-140: клик со стороны y > 0 ставит пометку на грани +1 на всю грань с толщиной из панели; один шаг истории", () => {
     const s = setup(drawing(), 30)
-    const id = drag(s.tool, 100, 300, 5)
-    expect(id).toBe("n1")
-    expect(s.marks()).toEqual([plaster("n1", "W", 1, "a", 100, 300, 30)])
+    expect(click(s, 100)).toBe("n1")
+    expect(s.marks()).toEqual([plaster("n1", "W", 1, "a", 0, 500, 30)])
     expect(s.log.records).toBe(1)
     expect(s.tool.selectedId()).toBe("n1")
   })
 
-  it("RW-141: грань определяется стороной нажатия: со стороны y < 0 — грань −1", () => {
+  it("RW-141: грань определяется стороной курсора: со стороны y < 0 — грань −1", () => {
     const s = setup(drawing())
-    drag(s.tool, 100, 300, -5)
+    click(s, 100, -5)
     expect(s.marks()[0]?.face).toBe(-1)
   })
 
-  it("RW-142: клик (отпускание в мёртвой зоне) ничего не меняет и шага истории не создаёт", () => {
+  it("RW-142: клик вдали от стен ничего не меняет и шага истории не создаёт", () => {
     const s = setup(drawing())
-    s.tool.down(px(100, 5), px(0))
-    expect(s.tool.up(px(100, 5), px(2))).toBeNull()
+    expect(click(s, 250, 200)).toBeNull()
     expect(s.marks()).toEqual([])
     expect(s.log.records).toBe(0)
   })
 
-  it("RW-143: Escape (cancel) во время протяжки отменяет её без изменений", () => {
+  it("RW-143: перетаскивание дальше мёртвой зоны пометку не создаёт", () => {
     const s = setup(drawing())
-    s.tool.down(px(100, 5), px(0))
-    s.tool.move(px(300, 5), px(100))
-    expect(s.tool.dragging()).toBe(true)
-    s.tool.cancel()
-    expect(s.tool.dragging()).toBe(false)
-    expect(s.tool.ghost()).toBeNull()
+    s.tool.down(px(0))
+    expect(s.tool.up(px(300, 5), px(100))).toBeNull()
     expect(s.marks()).toEqual([])
     expect(s.log.records).toBe(0)
   })
 
-  it("RW-144: слишком короткая протяжка (границы после округления совпали) ничего не создаёт", () => {
+  it("RW-144: отпускание без нажатия на плане пометку не создаёт", () => {
     const s = setup(drawing())
-    expect(drag(s.tool, 100, 100.4)).toBeNull()
+    expect(s.tool.up(px(100, 5), px(1))).toBeNull()
     expect(s.marks()).toEqual([])
   })
 
-  it("RW-145: превью протяжки показывает участок, грань и толщину из панели", () => {
+  it("RW-145: наведение подсвечивает всю цель с толщиной из панели; пометки и шага истории нет", () => {
     const s = setup(drawing(), 40)
-    s.tool.down(px(100, 5), px(0))
-    s.tool.move(px(300, 5), px(100))
+    s.tool.hover(px(300, 5))
     const g = s.tool.ghost()
-    expect([g?.from, g?.to, g?.face, g?.thicknessMm]).toEqual([100, 300, 1, 40])
+    expect(g?.thicknessMm).toBe(40)
+    expect(g?.pieces.map((x) => [x.wall.id, x.face, x.from, x.to])).toEqual([["W~0", 1, 0, 500]]) // стена подложки — остаток W
+    expect(s.marks()).toEqual([])
+    expect(s.log.records).toBe(0)
   })
 
-  it("RW-146: конец протяжки привязывается к концу стены в радиусе привязки: 497 → 500", () => {
+  it("RW-146: подсветка пропадает, когда курсор ушёл от стен, с плана или нажат Escape (cancel)", () => {
     const s = setup(drawing())
-    drag(s.tool, 100, 497)
-    // участок 100–500 хранится от конца b (середина 300 > 250): 0–400, то есть граница ровно на конце стены
-    expect(s.marks()).toEqual([plaster("n1", "W", 1, "b", 0, 400, 20)])
+    s.tool.hover(px(300, 5))
+    s.tool.hover(px(300, 200))
+    expect(s.tool.ghost()).toBeNull()
+    s.tool.hover(px(300, 5))
+    s.tool.hover(null)
+    expect(s.tool.ghost()).toBeNull()
+    s.tool.hover(px(300, 5))
+    s.tool.cancel()
+    expect(s.tool.ghost()).toBeNull()
+    expect(s.log.records).toBe(0)
   })
 
-  it("RW-147: протяжка от конца до конца штукатурит грань целиком", () => {
+  it("RW-147: перерисовка при наведении — только при смене цели", () => {
     const s = setup(drawing())
-    drag(s.tool, 0, 700)
+    s.tool.hover(px(300, 5))
+    const after = s.log.redraws
+    s.tool.hover(px(310, 6))
+    expect(s.log.redraws).toBe(after)
+    s.tool.hover(px(310, -6))
+    expect(s.log.redraws).toBe(after + 1)
+  })
+
+  it("RW-148: проём не прерывает цель: клик против проёма ставит сплошной участок", () => {
+    const withOpening: Drawing = { ...drawing(), doorways: [door("W", "a", 200, 90)] }
+    const s = setup(withOpening)
+    s.tool.hover(px(245, 5))
+    expect(s.tool.ghost()?.pieces.map((x) => [x.from, x.to])).toEqual([[0, 500]])
+    click(s, 245)
     expect(s.marks()).toEqual([plaster("n1", "W", 1, "a", 0, 500, 20)])
   })
 
-  it("RW-148: нажатие вне стен жеста не начинает", () => {
-    const s = setup(drawing())
-    s.tool.down(px(250, 200), px(0))
-    s.tool.move(px(300, 200), px(100))
-    expect(s.tool.dragging()).toBe(false)
-    expect(s.tool.up(px(300, 200), px(100))).toBeNull()
-  })
-
-  it("RW-149: протяжка по остатку стены даёт пометку в координатах исходной стены", () => {
+  it("RW-149: клик по остатку стены даёт пометку в координатах исходной стены на весь остаток", () => {
     const s = setup(drawing({ demolition: [demolitionMark("m", "W", "a", 0, 200)] }))
-    // остаток 200–500; протяжка по нему от x = 250 до x = 350
-    drag(s.tool, 250, 350)
-    expect(s.marks()).toEqual([plaster("n1", "W", 1, "b", 150, 250, 20)])
+    // остаток 200–500
+    click(s, 350)
+    expect(s.marks()).toEqual([plaster("n1", "W", 1, "b", 0, 300, 20)])
   })
 
-  it("RW-150: протяжка не пересекает снесённый участок: участок обрезается границей остатка", () => {
+  it("RW-150: цель заканчивается у края снесённого участка", () => {
     const s = setup(drawing({ demolition: [demolitionMark("m", "W", "a", 200, 300)] }))
-    // остаток 0–200; протяжка от 100 за границу сноса — участок 100–200
-    drag(s.tool, 100, 400)
-    expect(s.marks()).toEqual([plaster("n1", "W", 1, "a", 100, 200, 20)])
+    // остаток слева 0–200
+    click(s, 100)
+    expect(s.marks()).toEqual([plaster("n1", "W", 1, "a", 0, 200, 20)])
   })
 
-  it("RW-151: собственная стена «Монтажа» штукатурится", () => {
+  it("RW-151: собственная стена «Монтажа» штукатурится целиком", () => {
     const own = wall("own", 0, 300, 300, 300)
     const s = setup(drawing({ mounting: { walls: [own], dimensions: [] } }))
-    drag(s.tool, 50, 250, 305)
-    expect(s.marks()).toEqual([plaster("n1", "own", 1, "a", 50, 250, 20)])
+    click(s, 150, 305)
+    expect(s.marks()).toEqual([plaster("n1", "own", 1, "a", 0, 300, 20)])
   })
 
-  it("RW-152: пересекающаяся протяжка сливается, слитая пометка выделена и берёт толщину из панели", () => {
+  it("RW-152: пересекающаяся частичная пометка сливается, слитая пометка выделена и берёт толщину из панели", () => {
     const s = setup(drawing({ roughPlaster: [plaster("p", "W", 1, "a", 100, 200, 20)] }), 30)
-    expect(drag(s.tool, 150, 300)).toBe("p")
-    expect(s.marks()).toEqual([plaster("p", "W", 1, "a", 100, 300, 30)])
+    expect(click(s, 400)).toBe("p")
+    expect(s.marks()).toEqual([plaster("p", "W", 1, "a", 0, 500, 30)])
     expect(s.tool.selectedId()).toBe("p")
   })
 
   it("RW-153: скрытая (недействующая) пометка в слиянии не участвует и остаётся без изменений", () => {
     const hidden = plaster("h", "gone", 1, "a", 100, 200)
     const s = setup(drawing({ roughPlaster: [hidden] }))
-    drag(s.tool, 100, 300)
-    expect(s.marks()).toEqual([hidden, plaster("n1", "W", 1, "a", 100, 300, 20)])
+    click(s, 100)
+    expect(s.marks()).toEqual([hidden, plaster("n1", "W", 1, "a", 0, 500, 20)])
+  })
+
+  it("RW-154: повторный клик по уже оштукатуренной грани ничего не меняет, даже при другой толщине в панели", () => {
+    const s = setup(drawing({ roughPlaster: [plaster("p", "W", 1, "a", 0, 500, 20)] }), 30)
+    expect(click(s, 100)).toBeNull()
+    expect(s.marks()).toEqual([plaster("p", "W", 1, "a", 0, 500, 20)])
+    expect(s.log.records).toBe(0)
+  })
+
+  it("RW-155: штукатурка противоположной грани не мешает: ставится вторая пометка", () => {
+    const s = setup(drawing({ roughPlaster: [plaster("p", "W", 1, "a", 0, 500, 20)] }))
+    click(s, 100, -5)
+    expect(s.marks()).toEqual([plaster("p", "W", 1, "a", 0, 500, 20), plaster("n1", "W", -1, "a", 0, 500, 20)])
+  })
+
+  it("RW-156: примыкание режет цель: клик ставит только участок до примыкания", () => {
+    const T = wall("T", 250, 0, 250, 300)
+    const s = setup(drawing({ walls: [wall("W", 0, 0, 500, 0), T] }))
+    click(s, 100)
+    expect(s.marks()).toEqual([plaster("n1", "W", 1, "a", 0, 240, 20)])
+  })
+
+  it("RW-157: сторона из двух коллинеарных отрезков — по пометке на каждый, один шаг истории, выделена пометка под курсором", () => {
+    const s = setup(drawing({ walls: [wall("W1", 0, 0, 300, 0, 20, "brick"), wall("W2", 300, 0, 600, 0, 20, "gkl")] }))
+    s.tool.hover(px(450, 5))
+    expect(s.tool.ghost()?.pieces).toHaveLength(2)
+    expect(click(s, 450)).toBe("n2")
+    expect(s.marks()).toEqual([plaster("n1", "W1", 1, "a", 0, 300, 20), plaster("n2", "W2", 1, "a", 0, 300, 20)])
+    expect(s.log.records).toBe(1)
+    expect(s.log.changes).toBe(1)
+    expect(s.tool.selectedId()).toBe("n2")
+  })
+
+  it("RW-158: цепочка, в которой один отрезок уже оштукатурен, добавляет только недостающий; шаг истории один", () => {
+    const walls = [wall("W1", 0, 0, 300, 0), wall("W2", 300, 0, 600, 0)]
+    const s = setup(drawing({ walls, roughPlaster: [plaster("p", "W1", 1, "a", 0, 300, 20)] }))
+    click(s, 450)
+    expect(s.marks()).toEqual([plaster("p", "W1", 1, "a", 0, 300, 20), plaster("n1", "W2", 1, "a", 0, 300, 20)])
+    expect(s.log.records).toBe(1)
   })
 })
 

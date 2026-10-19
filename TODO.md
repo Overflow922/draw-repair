@@ -804,3 +804,18 @@ Follow-ups from `add-rough-works-plan` (2026-10-18).
 
 - Mutation testing of net area and active-screed derivation: the project has no mutation tooling (`package.json`).
 - Plaster dimensions are not printed on the PDF page (only on the canvas); the page shows the strips themselves.
+---
+
+Follow-ups from `plaster-click-whole-face` (2026-10-19).
+
+## Bugs
+
+- [ ] Full `npx vitest run` fails: the stale validator worktree `.claude/worktrees/agent-afe5052a1a208916f` is picked up by vitest and its old test copies fail (plan-tools, mounting-plans, battery-tool, communications/plans, wall-edit-invariants). Remove the worktree or exclude `.claude/**` in the vitest config. Under full-suite load `src/wall-edit-invariants.test.ts` INV-1/INV-2 also exceed the default timeout (14 s, pass alone in ~6 s).
+- [ ] (unverified, not caused by this change) On a side made of two collinear walls S1 `(0,500)-(250,500)` and S2 `(250,500)-(500,500)` (brick + gkl) a selected plaster mark `0–250` on each shows the width number `2710` (mm) instead of `2500` in the browser. Check `markDimensions` for collinear joints.
+
+## Tests
+
+- [ ] `src/main.ts` wiring of the plaster hover/click (`pointermove` → `hover`, `pointerleave` → `hover(null)`, `pointerdown`/`pointerup` → `down`/`up`) has no automated test; checked by hand in the browser (highlight, click, opening, collinear chain, drag places nothing, Escape, undo).
+## Docs
+
+- [ ] Other specs still describe a plaster drag that no longer exists: `openspec/specs/drawing-plans/spec.md` line 50 («незавершённая протяжка пометки (сноса или штукатурки)») and the scenario at lines 65–66 («идёт протяжка штукатурки, и план переключается»); check `drawing-history/spec.md` lines 307 and 322 («новая протяжка слила две пометки») for plaster. Demolition drag is unchanged, so only the plaster mentions need rewording (the plaster gesture is now a click with a hover highlight; switching plans just drops the highlight).

@@ -116,6 +116,14 @@ export function openingFaceRuns(host: Wall, walls: readonly Wall[], side: Side):
     .filter(([t0, t1]) => t1 - t0 > MIN_RUN)
 }
 
+// участки грани сквозь коллинеарные стены любого материала до углов и примыканий (change plaster-click-whole-face, design D2–D3);
+// t — от конца a опорной стены и может выходить за [0, длина] в пределах цепочки и углов
+export function chainFaceRuns(host: Wall, walls: readonly Wall[], side: Side): [number, number][] {
+  if (degenerate(host)) return []
+  const chains = hostChains(host, walls, { ignoreMaterial: true })
+  return runsOver(host, walls, side, chains.a.extendCm, chains.b.extendCm)
+}
+
 // тело опорной стены вдоль оси: от начала первого до конца последнего участка, общего для обеих граней и лежащего на
 // стене; у конца с продолжением того же материала — не дальше конца оси (change fix-opening-reach-body-end, design D4a).
 // Выступ за ось есть там, где тело стены доходит до плоскости стыка со стеной другого материала.
