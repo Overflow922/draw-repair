@@ -6,7 +6,7 @@ import type { RulerReading } from "./ruler"
 import type { Dimension, Point, Unit, View, Wall } from "./types"
 import { PX_PER_CM } from "./types"
 import { W, sceneR } from "./room-area.test-utils"
-import { contrastOnWhite, parseColor } from "./wall-tracking.test-utils"
+import { contrastOnWhite, parseColor } from "./stroke-recorder.test-utils"
 import { angleDiff, arcRecorder, extraOps, near, normSector, rot } from "./ruler.test-utils"
 import type { ArcRec, Op } from "./ruler.test-utils"
 

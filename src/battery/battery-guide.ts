@@ -1,9 +1,14 @@
 import { hostPoint } from "../doorway/doorway-faces"
-import type { Battery, Wall } from "../types"
-import type { TrackLine } from "../wall-tracking"
+import type { Battery, Point, Wall } from "../types"
+
+// вспомогательная пунктирная линия на холсте: от точки до точки в мировых координатах
+export interface TrackLine {
+  from: Point
+  to: Point
+}
 
 // Риска центровки (change fix-battery-centering-and-numbers, design D2; spec battery «Риска центровки»): отрезок поперёк оси
-// опорной стены через общий центр окна и батареи. Чистая функция; рисуется как линия трекинга стен.
+// опорной стены через общий центр окна и батареи. Чистая функция.
 
 // выступ риски за переднюю сторону батареи, экранные px (не масштабируется с зумом)
 export const CENTER_GUIDE_OVERSHOOT_PX = 6

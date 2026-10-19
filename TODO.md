@@ -864,3 +864,16 @@ Follow-ups from `collinear-axes-meet` (2026-10-19).
   `isCollinearGapJoint` (`src/wall-geometry.ts`), `edgeLengthCm`, `axisLengthForEdgeCm`, `endOverhangCm`
   (`src/wall-length.ts`, used by `src/main.ts`, `src/ruler.ts`), the doorway distance below zero (`doorway`
   «Расстояния проёма сквозь коллинеарные стены») and the matching spec requirements.
+
+---
+
+Follow-ups from `remove-wall-tracking` (2026-10-19).
+
+## Tests
+
+- [ ] Baseline `npm test` is not green: vitest also collects the stale validator worktree
+  `.claude/worktrees/agent-afe5052a1a208916f/` (git-ignored; 15 failures there in `plan-tools`, `plans`, `battery-tool`,
+  `mounting-plans` — tool-set order of an old source copy). Remove the worktree (see memory «worktree long-path cleanup»)
+  or exclude `.claude/**` in the vitest config.
+- [ ] `src/wall-edit-invariants.test.ts` times out (5 s per test, 2 tests) in the full run and passes alone (6 tests,
+  ~6 s). Raise its timeout or split the property runs.

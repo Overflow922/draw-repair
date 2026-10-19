@@ -1,22 +1,11 @@
-import { expect } from "vitest"
 import type { Point } from "./types"
 import { recordingContext } from "./room-area.test-utils"
 
-// Тестовые утилиты change wall-axis-tracking-snap.
+// Тестовые утилиты записи обводок и цвета: пунктирные линии, контраст.
 
 export interface Track {
   from: Point
   to: Point
-}
-
-const key = (t: Track): string => [t.from.x, t.from.y, t.to.x, t.to.y].map((v) => (Math.round(v * 1e6) / 1e6 + 0).toFixed(6)).join(",")
-
-// набор линий трекинга без учёта порядка; линия — от узла (from) до конца (to)
-export function expectTracks(actual: readonly Track[] | undefined, expected: Track[]): void {
-  expect(actual).toBeDefined()
-  if (!actual) return
-  expect(actual).toHaveLength(expected.length)
-  expect(actual.map(key).sort()).toEqual(expected.map(key).sort())
 }
 
 export interface StrokeRecord {

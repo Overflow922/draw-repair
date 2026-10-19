@@ -5,7 +5,7 @@ import { describe, expect, it } from "vitest"
 import { drawScene } from "./render"
 import { LIGHT_PALETTE } from "./theme"
 import { contourSegments, displayPolygons, outlineSegments } from "./wall-geometry"
-import { strokeRecorder } from "./wall-tracking.test-utils"
+import { strokeRecorder } from "./stroke-recorder.test-utils"
 import { PX_PER_CM } from "./types"
 import type { Material, Point, View, Wall } from "./types"
 

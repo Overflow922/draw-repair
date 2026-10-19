@@ -4,11 +4,11 @@ import type { RenderOptions } from "./render"
 import type { Point, View, Wall } from "./types"
 import { PX_PER_CM } from "./types"
 import { W } from "./wall-snap.test-utils"
-import { contrastOnWhite, parseColor, strokeRecorder, strokesAlong } from "./wall-tracking.test-utils"
-import type { StrokeRecord, Track } from "./wall-tracking.test-utils"
+import { contrastOnWhite, parseColor, strokeRecorder, strokesAlong } from "./stroke-recorder.test-utils"
+import type { StrokeRecord, Track } from "./stroke-recorder.test-utils"
 
-// Тесты change wall-axis-tracking-snap: отрисовка линий трекинга (spec wall-drawing
-// «Трекинг по узлам чертежа», design D3). Линии передаются в drawScene через RenderOptions.
+// Отрисовка пунктирных направляющих (риска центровки батареи, spec battery «Риска центровки»).
+// Линии передаются в drawScene через RenderOptions.
 
 const INK = "#333" // контур стен
 const GRID_STROKE = "#e0e0e0"
@@ -29,7 +29,7 @@ function draw(walls: Wall[], view: View, opts: RenderOptions): StrokeRecord[] {
 
 const isDashed = (s: StrokeRecord): boolean => s.dashPx.some((v) => v > 0)
 
-describe("отрисовка линий трекинга", () => {
+describe("отрисовка пунктирных направляющих", () => {
   it("TRK-R-1: линия от узла до конца — пунктир контрастного цвета, отличного от стен и сетки", () => {
     const view: View = { zoom: 1, pan: { x: -50, y: -50 } }
     const strokes = draw([W(0, 0, 103, 0)], view, { tracks: [TRACK] })

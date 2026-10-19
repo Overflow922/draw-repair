@@ -24,7 +24,7 @@ import type { Seg } from "./wall-geometry"
 import { GRID_STEP_CM, PX_PER_CM, isDoor, isWindow, normalizeMaterial } from "./types"
 import { drawCallouts } from "./callout/callout-render"
 import type { Battery, Callout, Communication, Dimension, Material, Point, Riser, RoomRecord, Unit, View, Wall, WallDoor, WallElement } from "./types"
-import type { TrackLine } from "./wall-tracking"
+import type { TrackLine } from "./battery/battery-guide"
 import { HATCHES, strokeHatchSeries, strokeHatchTile } from "./wall-hatch"
 
 const OUTLINE_PX = 4
@@ -102,7 +102,7 @@ export interface RenderOptions {
   square?: Point[] | null // вершины квадрата установки в мировых координатах
   // угол к стене примыкания у начала превью: дуга от луча отсчёта from к направлению to
   angle?: { at: Point; from: Point; to: Point; deg: number } | null
-  tracks?: TrackLine[] | null // линии трекинга по узлам в мировых координатах
+  tracks?: TrackLine[] | null // риска центровки батареи в мировых координатах
   ruler?: RulerReading | null // замеры инструмента «Линейка» под курсором
   // данные помещений плана «Монтаж» (change add-room-explication, design D4): с ними помещения рисуются блоками вместо подписей
   // площади; выделенный блок — по номеру
@@ -652,7 +652,7 @@ export function drawRoomBlocks(
   ctx.restore()
 }
 
-// линии трекинга от узла до конца превью: пунктир постоянной экранной толщины
+// пунктирные направляющие (риска центровки батареи): пунктир постоянной экранной толщины
 function drawTracks(ctx: CanvasRenderingContext2D, tracks: TrackLine[], toScreen: (p: Point) => Point, color: string): void {
   ctx.save()
   ctx.strokeStyle = color

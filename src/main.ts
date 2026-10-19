@@ -17,7 +17,7 @@ import { moveEndpointBounded, moveWallsBounded, resizeWallBounded } from "./wall
 import type { EditMode } from "./wall-edit"
 import { centerSnapRadiusCm, chainEndSquare, placementSquare, snapRadiusCm, snapStartVertex, wallClickAction } from "./wall-snap"
 import type { VertexSnap } from "./wall-snap"
-import type { TrackLine } from "./wall-tracking"
+import type { TrackLine } from "./battery/battery-guide"
 import { parseAngleDeg, startRefOf } from "./wall-angle"
 import { orthoGestureStep, startOrthoGesture } from "./ortho-gesture"
 import type { OrthoGesture } from "./ortho-gesture"
@@ -1140,7 +1140,7 @@ function typedLengthCm(): number | null {
 }
 
 function previewLengthCm(): number | null {
-  // конец превью — с учётом трекинга по узлам, а не точка привязки к сетке
+  // конец превью — конец сегмента (с учётом привязки), а не точка курсора
   const end = segment?.end ?? cursor
   const start = wallStart()
   if (!start || !end) return null
@@ -1351,13 +1351,13 @@ function drawMeasurePlan(): void {
       chainStart && segment?.dir && segment.refRay && segment.angleDeg !== null
         ? { at: segment.start, from: segment.refRay, to: segment.dir, deg: segment.angleDeg }
         : null,
-    tracks: tool === "wall" && chainStart && segment ? segment.tracks : centerGuideTracks(),
+    tracks: centerGuideTracks(),
     ruler: tool === "ruler" && cursor && !gestureActive() ? rulerReading(cursor, walls) : null,
     palette: paletteOf(theme),
   })
 }
 
-// риска центровки батареи по окну рисуется как линия трекинга (change fix-battery-centering-and-numbers, design D2)
+// риска центровки батареи по окну (change fix-battery-centering-and-numbers, design D2)
 function centerGuideTracks(): TrackLine[] | null {
   const guide = tool === "battery" || batteryTool.dragging() ? batteryTool.guide() : null
   return guide ? [guide] : null

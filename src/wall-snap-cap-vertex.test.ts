@@ -20,7 +20,7 @@ import {
 // change cap-snap-vertex-at-square-center (test-plan.md): прилипание к свободному торцу
 // без заданного направления фиксирует вершину в центре квадрата установки; квадрат
 // остаётся приставленным к плоскости торца; луч по-прежнему упирается в плоскость торца;
-// стык закрывают существующие правила; конец оси у торца начала — не узел трекинга.
+// стык закрывают существующие правила.
 
 const GRID = 10
 const R = (zoom = 1): number => snapRadiusCm(zoom)
@@ -344,43 +344,28 @@ describe("стык после привязки начала у торца (ин�
   })
 })
 
-describe("трекинг: конец оси у торца начала — не узел", () => {
+describe("без трекинга: конец оси соседней стены конец не подтягивает", () => {
   const zoom = 0.5 // радиус привязки 12 см > полтолщины 10
 
-  it("CV-TRK-1: начало у торца A — горизонталь конца оси A не подтягивает конец", () => {
+  it("CV-TRK-1: начало у торца A — конец определяется сеткой", () => {
     const walls = deepFreeze([wallA()])
     const snap = start({ x: 2, y: -4 }, walls, 20, zoom)
     expectCap(snap, 0, -10, 0, -1)
     const seg = segment({ start: snap.point, ref: startRefOf(snap), raw: { x: 80, y: -8 }, walls, radiusCm: R(zoom) })
-    expect(seg.tracks).toEqual([])
     expectPoint(seg.end, 80, -10)
   })
 
-  it("CV-TRK-FAR: дальний конец оси стены примыкания остаётся узлом", () => {
-    const walls = deepFreeze([wallA()])
-    const snap = start({ x: 2, y: -4 }, walls, 20, zoom)
-    expectCap(snap, 0, -10, 0, -1)
-    const seg = segment({ start: snap.point, ref: startRefOf(snap), raw: { x: 80, y: 93 }, walls, radiusCm: R(zoom) })
-    expectPoint(seg.end, 80, 100)
-    expect(seg.tracks).toHaveLength(1)
-    expectPoint(seg.tracks[0].from, 0, 100)
-  })
-
-  it("CV-TRK-CTRL: без опоры то же начало — конец оси A узел, трекинг срабатывает", () => {
+  it("CV-TRK-CTRL: без опоры горизонталь конца оси A конец не подтягивает — ордината по сетке", () => {
     const walls = deepFreeze([wallA()])
     const seg = segment({ start: { x: 0, y: -10 }, ref: null, raw: { x: 80, y: -8 }, walls, radiusCm: R(zoom) })
-    expectPoint(seg.end, 80, 0)
-    expect(seg.tracks).toHaveLength(1)
-    expectPoint(seg.tracks[0].from, 0, 0)
+    expectPoint(seg.end, 80, -10)
   })
 
-  it("CV-TRK-FACE: опора-грань не исключает узлы — конец оси A остаётся узлом", () => {
+  it("CV-TRK-FACE: опора-грань — конец оси A конец не подтягивает", () => {
     const walls = deepFreeze([wallA()])
     const snap = start({ x: 14, y: 30 }, walls, 20, zoom)
     expect(snap.target).toBe("face")
     const seg = segment({ start: snap.point, ref: startRefOf(snap), raw: { x: 80, y: -8 }, walls, radiusCm: R(zoom) })
-    expectPoint(seg.end, 80, 0)
-    expect(seg.tracks).toHaveLength(1)
-    expectPoint(seg.tracks[0].from, 0, 0)
+    expectPoint(seg.end, 80, -10)
   })
 })

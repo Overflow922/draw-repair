@@ -4,7 +4,7 @@ import type { RenderOptions } from "../render"
 import { findRooms } from "../room-area"
 import { DARK_PALETTE, LIGHT_PALETTE } from "../theme"
 import type { Point, Unit, View, Wall, WallElement } from "../types"
-import { parseColor } from "../wall-tracking.test-utils"
+import { parseColor } from "../stroke-recorder.test-utils"
 import {
   AREA_LABEL,
   D0,
