@@ -819,3 +819,15 @@ Follow-ups from `plaster-click-whole-face` (2026-10-19).
 ## Docs
 
 - [ ] Other specs still describe a plaster drag that no longer exists: `openspec/specs/drawing-plans/spec.md` line 50 («незавершённая протяжка пометки (сноса или штукатурки)») and the scenario at lines 65–66 («идёт протяжка штукатурки, и план переключается»); check `drawing-history/spec.md` lines 307 and 322 («новая протяжка слила две пометки») for plaster. Demolition drag is unchanged, so only the plaster mentions need rewording (the plaster gesture is now a click with a hover highlight; switching plans just drops the highlight).
+
+Follow-ups from `screed-floor-layers` (2026-10-19).
+
+## Tests
+
+- [ ] `rough-pdf.test.ts` RW-123b checks the PDF threshold only as "more diagonal strokes than without the doorway"; assert the threshold hatch and the divider in sheet coordinates.
+- [ ] `src/main.ts` passes the same `RoughSceneView` to the canvas, so the threshold wiring needs no code there; checked by hand in the browser (equal, different and one-sided screed, battery over hatch).
+
+## Out of scope (decided, revisit if needed)
+
+- Risers, ducts and door leaves do not paint the floor over like batteries do (the spec asks only for the battery body); the hatch stays visible inside their contours.
+- A threshold probe point is taken at the middle of each half, 0.5 cm past the face: on skew or crowded joints the half is treated as "no screed" (safe, not specified).

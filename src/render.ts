@@ -111,6 +111,8 @@ export interface RenderOptions {
   underlay?: boolean // подложка плана «Демонтаж»: без подписей помещений, размеров и слоя элементов стен (вырезы остаются)
   // слой под телами стен: рисуется после сетки и заливки помещений, до стен (штукатурка и стяжка плана «Черновые работы»)
   beneath?: (ctx: CanvasRenderingContext2D) => void
+  // пол в проёмах: рисуется поверх закраски проёма бумагой, под откосами, гранями и обозначениями (change screed-floor-layers, design D3)
+  openingFloor?: (ctx: CanvasRenderingContext2D) => void
   palette?: Palette // цвета схемы; по умолчанию светлая (PDF — всегда светлая)
 }
 
@@ -365,6 +367,7 @@ function drawDoorways(
     tracePolygon(ctx, poly.map(toScreen))
     ctx.fill()
   }
+  opts.openingFloor?.(ctx)
   const outline = (d: WallElement, color: string): void => {
     const poly = openingLines(d, walls, elements)?.outline
     if (!poly) return
@@ -910,6 +913,7 @@ export function drawDimensionGeom(
   palette: Palette,
   handles = false,
   underline = false,
+  backdrop = false,
 ): void {
   const k = PX_PER_CM * view.zoom
   const toScreen = (p: Point): Point => ({ x: (p.x - view.pan.x) * k, y: (p.y - view.pan.y) * k })
@@ -970,6 +974,14 @@ export function drawDimensionGeom(
   }
   ctx.stroke()
   const ty = -m.dimTextGapPx
+  if (backdrop) {
+    // подложка цвета бумаги ровно под числом: объекты под ним (штриховка пола) цифр не пересекают
+    const w = text.length * m.labelPx * CHAR_WIDTH
+    ctx.fillStyle = palette.paper
+    ctx.fillRect(-w / 2, ty - m.labelPx, w, m.labelPx)
+    ctx.textAlign = "center"
+    ctx.textBaseline = "bottom"
+  }
   ctx.lineWidth = (4 * m.labelPx) / 14
   ctx.strokeStyle = palette.paper
   ctx.strokeText(text, 0, ty)

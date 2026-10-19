@@ -1,3 +1,5 @@
+import { batteryRect } from "../battery/battery-geometry"
+import { hostOfBattery } from "../battery/battery-motion"
 import { strokeCommunications } from "../communications/communications-render"
 import { markDimensions } from "../demolition/mark-dimensions"
 import { drawCallouts } from "../callout/callout-render"
@@ -14,6 +16,7 @@ import { SCREED_HATCH, strokeHatchSeries } from "../wall-hatch"
 import { plasterStrip } from "./plaster"
 import type { PlasterPiece } from "./plaster"
 import { screedLabelBox } from "./screed-label"
+import { screedThresholds } from "./screed-threshold"
 import { screedLabel } from "./rough-model"
 
 // Отрисовка плана «Черновые работы» (change add-rough-works-plan, design D4, D8, D9): подложка — результат «Монтажа» серым,
@@ -88,6 +91,7 @@ export function drawRoughScene(
   const origin = toScreen({ x: 0, y: 0 })
   const walls = [...scene.walls]
   const grey = { ...palette, ink: palette.muted }
+  const thresholds = screedThresholds(walls, scene.doorways, scene.screeds)
 
   const highlight = (polys: Point[][], color: string): void => {
     ctx.strokeStyle = color
@@ -120,6 +124,14 @@ export function drawRoughScene(
       c.stroke()
       if (scene.erasing?.kind === "screed" && scene.erasing.id === screed.id) highlight([outline], palette.erase)
     }
+    // объекты в помещениях закрывают пол: штриховка под телом батареи не видна
+    c.fillStyle = palette.paper
+    for (const battery of scene.screeds.length ? (scene.batteries ?? []) : []) {
+      const host = hostOfBattery(battery, walls)
+      if (!host) continue
+      tracePolygons(c, [batteryRect(battery, host).map(toScreen)])
+      c.fill()
+    }
     for (const piece of scene.pieces) {
       const poly = plasterStrip(piece).map(toScreen)
       c.fillStyle = colors.fill
@@ -130,6 +142,30 @@ export function drawRoughScene(
       c.stroke()
       if (scene.erasing?.kind === "plaster" && scene.erasing.id === piece.mark.id) highlight([poly], palette.erase)
       else if (scene.selectedPlasterId === piece.mark.id) highlight([poly], palette.selection)
+    }
+  }
+
+  // порог проёма — часть пола: рисуется слоем элементов поверх закраски проёма бумагой (иначе закраска стирает штриховку);
+  // половины со стяжкой штрихуются с той же фазой, что помещения, линия — где уровни различаются
+  const openingFloor = (c: CanvasRenderingContext2D): void => {
+    for (const threshold of thresholds) {
+      for (const half of threshold.halves) {
+        const poly = half.poly.map(toScreen)
+        c.save()
+        tracePolygons(c, [poly])
+        c.clip()
+        c.strokeStyle = palette.ink
+        strokeHatchSeries(c, poly, SCREED_HATCH, origin, m)
+        c.restore()
+      }
+      if (!threshold.divider) continue
+      const [from, to] = [toScreen(threshold.divider.p1), toScreen(threshold.divider.p2)]
+      c.strokeStyle = palette.ink
+      c.lineWidth = m.hatchPx
+      c.beginPath()
+      c.moveTo(from.x, from.y)
+      c.lineTo(to.x, to.y)
+      c.stroke()
     }
   }
 
@@ -145,20 +181,11 @@ export function drawRoughScene(
     beneath,
   })
 
-  drawElementsLayer(ctx, walls, unit, view, { metrics: m, palette: grey, doorways: [...scene.doorways] })
+  drawElementsLayer(ctx, walls, unit, view, { metrics: m, palette: grey, doorways: [...scene.doorways], openingFloor })
   strokeCommunications(ctx, scene.communications ?? [], view, palette.ink, m.contourPx, palette.concreteFill)
 
   // блоки помещений — обычным цветом, поверх штриховки и полос
   drawRoomBlocks(ctx, scene.blocks, null, toScreen, m, palette)
-
-  // размеры участков: у выделенной пометки — цепочка своей грани, у остальных — только ширина
-  for (const piece of opts.dimensions === false ? [] : scene.pieces) {
-    const selected = scene.selectedPlasterId === piece.mark.id
-    for (const d of markDimensions(piece, walls, "chain", unit, k, m.labelPx)) {
-      if (d.side !== piece.mark.face || (!selected && d.target !== "width")) continue
-      drawDimensionGeom(ctx, d.geom, d.text, colors.stroke, view, m, palette, false, selected)
-    }
-  }
 
   const ghost = scene.ghost
   if (ghost) {
@@ -206,6 +233,18 @@ export function drawRoughScene(
   ctx.restore()
 
   if (scene.callouts?.length) drawCallouts(ctx, scene.callouts, view, m, palette, { selected: scene.selectedCalloutId, erasing: scene.erasingCalloutId })
+
+  // размеры участков — поверх всего чертежа; у выделенной пометки — цепочка своей грани, у остальных — только ширина
+  ctx.save()
+  ctx.font = `${m.labelPx}px ${m.font}`
+  for (const piece of opts.dimensions === false ? [] : scene.pieces) {
+    const selected = scene.selectedPlasterId === piece.mark.id
+    for (const d of markDimensions(piece, walls, "chain", unit, k, m.labelPx)) {
+      if (d.side !== piece.mark.face || (!selected && d.target !== "width")) continue
+      drawDimensionGeom(ctx, d.geom, d.text, colors.stroke, view, m, palette, false, selected, true)
+    }
+  }
+  ctx.restore()
 }
 
 // то же на холсте страницы (размер и плотность пикселей как у render)

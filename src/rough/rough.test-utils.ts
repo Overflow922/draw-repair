@@ -1,4 +1,4 @@
-import type { DemolitionMark, Drawing, MountingContent, PlasterMark, Point, Screed, Wall } from "../types"
+import type { DemolitionMark, Drawing, MountingContent, PlasterMark, Point, Screed, Wall, WallElement } from "../types"
 import { polygonArea } from "../wall-geometry"
 
 // change add-rough-works-plan: сцены и независимые эталоны для тестов плана «Черновые работы».
@@ -36,6 +36,7 @@ export interface RoughParts {
   roughPlaster?: PlasterMark[]
   roughScreeds?: Screed[]
   rooms?: Drawing["rooms"]
+  doorways?: WallElement[]
 }
 
 export const drawing = (parts: RoughParts = {}): Drawing => ({
@@ -48,6 +49,7 @@ export const drawing = (parts: RoughParts = {}): Drawing => ({
   ...(parts.roughPlaster !== undefined ? { roughPlaster: parts.roughPlaster } : null),
   ...(parts.roughScreeds !== undefined ? { roughScreeds: parts.roughScreeds } : null),
   ...(parts.rooms !== undefined ? { rooms: parts.rooms } : null),
+  ...(parts.doorways !== undefined ? { doorways: parts.doorways } : null),
   view: { zoom: 1, pan: { x: 0, y: 0 } },
 })
 

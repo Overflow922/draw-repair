@@ -132,6 +132,15 @@ describe("страница «Черновые работы» в документ
     expect(diagonals(rough({ roughScreeds: [screed("s", 200, 260, 65)] }))).toBeGreaterThan(diagonals(rough()))
   })
 
+  it("RW-123b: порог проёма между помещениями со стяжкой 50 и 65 мм заштрихован и на странице PDF: диагональных штрихов больше, чем без проёма", () => {
+    const diagonals = (d: Drawing): number =>
+      parseColoredStrokes(build(d), 4).flatMap((s) => s.subpaths).filter((sp) => sp.length === 2 && Math.abs(Math.abs(sp[0]!.x - sp[1]!.x) - Math.abs(sp[0]!.y - sp[1]!.y)) < 0.01 && Math.abs(sp[0]!.x - sp[1]!.x) > 0.5).length
+    const partitioned = (doorways: Drawing["doorways"]): Drawing =>
+      drawing({ walls: [...ROOM(), wall("p", 210, 0, 210, 520)], roughScreeds: [screed("l", 100, 260, 50), screed("r", 300, 260, 65)], ...(doorways ? { doorways } : null) })
+    const opening = { id: "o", wallId: "p", anchor: "a" as const, offsetCm: 200, widthCm: 90, heightCm: 210 }
+    expect(diagonals(partitioned([opening]))).toBeGreaterThan(diagonals(partitioned(undefined)))
+  })
+
   it("RW-124: таблица экспликации на страницах «Монтаж» и «Черновые работы» — площади до и после штукатурки", () => {
     build(rough({ roughPlaster: ALL_FACES }))
     expect(textsOn(3)).toContain("Экспликация помещений")
