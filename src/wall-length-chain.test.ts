@@ -38,7 +38,7 @@ const asWall = (r: RulerReading) => {
 }
 
 describe("введённая длина при рисовании — от плоскости торца", () => {
-  it("TL-1: 4000 мм вдоль оси от торца E — конец в (900, 0), ось 390", () => {
+  it("TL-1: 4000 мм вдоль оси от торца E — конец в (900, 0), ось 400", () => {
     const seg = alongAxis(400)
     expectPoint(seg.end, 900, 0)
   })
@@ -46,7 +46,7 @@ describe("введённая длина при рисовании — от пл�
   it("TL-1a: введённое значение даёт длину кромка-кромка новой стены ровно L (круговое свойство)", () => {
     for (const typed of [10.5, 55.5, 151.2, 400, 1234.5]) {
       const seg = alongAxis(typed)
-      const n = wall("N", START.x, START.y, seg.end.x, seg.end.y, 20, "blocks")
+      const n = wall("N", seg.start.x, seg.start.y, seg.end.x, seg.end.y, 20, "blocks")
       expect(edgeLengthCm(n, [E(), n]), `typed ${typed}`).toBeCloseTo(typed, 6)
     }
   })
@@ -56,15 +56,15 @@ describe("введённая длина при рисовании — от пл�
     expectPoint(seg.end, 510, 300)
   })
 
-  it("TL-3: введено ровно выступ (10) — ввод не применяется, сегмент как без ввода", () => {
-    expect(alongAxis(10).end).toEqual(alongAxis(null).end)
+  it("TL-3: введено 10 — ось от плоскости торца, конец в (510, 0): ввод применяется как есть", () => {
+    expectPoint(alongAxis(10).end, 510, 0)
   })
 
-  it("TL-3a: введено меньше выступа (5) — ввод не применяется", () => {
-    expect(alongAxis(5).end).toEqual(alongAxis(null).end)
+  it("TL-3a: введено 5 — конец в (505, 0)", () => {
+    expectPoint(alongAxis(5).end, 505, 0)
   })
 
-  it("TL-3b: введено чуть больше выступа (10.01) — конец на 0.01 от начала вдоль оси", () => {
+  it("TL-3b: введено 10.01 — конец в (510.01, 0)", () => {
     expectPoint(alongAxis(10.01).end, 510.01, 0)
   })
 
@@ -93,7 +93,7 @@ describe("введённая длина при рисовании — от пл�
 describe("слияние, видимое тело и линейка согласованы с введённой длиной", () => {
   it("MG-1: слияние с E того же материала удлиняет её ровно на введённые 400 см", () => {
     const seg = alongAxis(400)
-    const n = wall("N", START.x, START.y, seg.end.x, seg.end.y, 20, "brick")
+    const n = wall("N", seg.start.x, seg.start.y, seg.end.x, seg.end.y, 20, "brick")
     const scene: Scene = { walls: [E()], dimensions: [] }
     const before = edgeLengthCm(scene.walls[0], scene.walls)
     const r = mergeContinuation(scene, n)
@@ -108,7 +108,7 @@ describe("слияние, видимое тело и линейка соглас
 
   it("BE-1: тело новой стены после ввода 4000 мм занимает ровно 400 см вдоль оси — размер между углами", () => {
     const seg = alongAxis(400)
-    const n = wall("N", START.x, START.y, seg.end.x, seg.end.y, 20, "blocks")
+    const n = wall("N", seg.start.x, seg.start.y, seg.end.x, seg.end.y, 20, "blocks")
     const walls = [E(), n]
     expect(bodyExtentAlongAxis(n, walls)).toBeCloseTo(400, 4)
     expect(edgeLengthCm(n, walls)).toBeCloseTo(400, 6)
@@ -118,7 +118,7 @@ describe("слияние, видимое тело и линейка соглас
     const early = wall("E", 0, 0, 500, 0, 19.5)
     const start = { x: 509.75, y: 0 }
     const seg = segment({ start, ref: CAP_REF, raw: { x: 700, y: 3 }, walls: [early], thicknessCm: 19.5, typedLengthCm: 151.2 })
-    const n = wall("N", start.x, start.y, seg.end.x, seg.end.y, 19.5, "blocks")
+    const n = wall("N", seg.start.x, seg.start.y, seg.end.x, seg.end.y, 19.5, "blocks")
     const walls = [early, n]
     expect(bodyExtentAlongAxis(n, walls)).toBeCloseTo(151.2, 4)
     const r = asWall(rulerReading({ x: 600, y: 0 }, walls))

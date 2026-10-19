@@ -831,3 +831,36 @@ Follow-ups from `screed-floor-layers` (2026-10-19).
 
 - Risers, ducts and door leaves do not paint the floor over like batteries do (the spec asks only for the battery body); the hatch stays visible inside their contours.
 - A threshold probe point is taken at the middle of each half, 0.5 cm past the face: on skew or crowded joints the half is treated as "no screed" (safe, not specified).
+
+---
+
+Follow-ups from `collinear-axes-meet` (2026-10-19).
+
+## Bugs
+
+- [ ] **Plaster skips the axis gap in drawings saved before `collinear-axes-meet`.** In such a drawing the late wall of a
+  collinear joint (different material or thickness) starts half a thickness past the early wall's axis end, and its body
+  overhangs backwards; `pieceOn` (`src/rough/plaster-face.ts`) and `plasterPieces` (`src/rough/plaster.ts`) clip every
+  piece to its own axis `[0, len]`, so the gap belongs to neither wall and the plaster strip breaks there (~16 px at 1:40
+  for 20 cm walls). Repro: a store with `E (0,0)-(500,0)` and `N (510,0)-(580,0)` of different materials, plaster click on
+  the `+1` face. New walls drawn after the change are not affected. Workaround: redraw the joint.
+- [ ] **Plaster width number is 21 cm too long at a collinear joint of two materials.** `markDimensions`
+  (`src/demolition/mark-dimensions.ts`) gives `5210` for a plaster piece `0–500` on `E` with `N (500,0)-(580,0)` of another
+  material (and `1010` for the `0–80` piece on `N`); a single wall gives `5000`. Same with a 10 cm axis gap, so it does
+  not come from the axes; suspected cause: `markChains` (`src/demolition/mark-chains.ts`) measures to the joint's body
+  boundary. Found while checking `collinear-axes-meet` in the browser; not fixed there (no spec scenario).
+
+## Tests
+
+- [ ] `src/main.ts` wiring of the axis shift has no automated test: `previewLengthCm` now returns the segment length and
+  `commitPoint` takes `segment.start`/`segment.end`; only `chainSegment` is unit-tested (`wall-chain-axes-meet.test.ts`),
+  the DOM flow was checked by hand in the browser.
+
+## Out of scope (decided, revisit if needed)
+
+- No migration of saved drawings: the axis gap of old collinear joints stays in the data (`wall-joints` «Оси и длины не
+  меняются» is unchanged).
+- Remove the legacy gap layer once old drawings are not supported: `collinearGapCm`, `collinearGapCap`,
+  `isCollinearGapJoint` (`src/wall-geometry.ts`), `edgeLengthCm`, `axisLengthForEdgeCm`, `endOverhangCm`
+  (`src/wall-length.ts`, used by `src/main.ts`, `src/ruler.ts`), the doorway distance below zero (`doorway`
+  «Расстояния проёма сквозь коллинеарные стены») and the matching spec requirements.

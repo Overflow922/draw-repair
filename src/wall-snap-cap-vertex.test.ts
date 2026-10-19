@@ -203,10 +203,12 @@ describe("квадрат и выбор цели считаются от плос
 })
 
 describe("свободный конец без заданного направления у торца", () => {
-  it("CV-END-1: подход вдоль оси — конец в центре квадрата, квадрат у плоскости торца", () => {
+  it("CV-END-1: подход вдоль оси — конец оси в плоскости торца, квадрат у плоскости торца (центр (110, 0))", () => {
     const walls = deepFreeze(sceneS())
     const seg = segment({ start: { x: 200, y: 0 }, ref: null, raw: { x: 106, y: 0 }, walls })
-    expectPoint(seg.end, 110, 0)
+    // collinear-axes-meet: конец оси — в плоскости торца (100, 0); точка прилипания и квадрат — по-прежнему в центре
+    expectPoint(seg.end, 100, 0)
+    expectPoint(seg.snap.point, 110, 0)
     expect(seg.snap.target).toBe("cap")
     expect(seg.dir).not.toBeNull()
     const sq = chainEndSquare(seg.end, seg.dir ?? { x: NaN, y: NaN }, seg.snap, 20)

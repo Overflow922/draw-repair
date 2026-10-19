@@ -2,7 +2,7 @@ import type { Communication, Point, Wall, WallElement } from "./types"
 import { angleReferenceRay, orthoDirection, typedDirection, wallAngleDeg } from "./wall-angle"
 import type { StartRef } from "./wall-angle"
 import { add, mul, sub } from "./wall-geometry"
-import { startOverhangCm } from "./wall-length"
+import { endInCapPlane, startInCapPlane } from "./wall-axes-meet"
 import { snapOnRay, snapVertex } from "./wall-snap"
 import type { VertexSnap } from "./wall-snap"
 import { trackFree, trackOnRay, trackingNodes } from "./wall-tracking"
@@ -65,18 +65,6 @@ function tracked(input: ChainInput, snap: VertexSnap, fixed: Point | null): { en
   return { end, tracks: [x, y].flatMap((hit) => (hit ? [{ from: hit.node, to: end }] : [])) }
 }
 
-// Введённая длина — от кромки до кромки (change fix-collinear-edge-to-edge-length, design D2): у коллинеарного
-// продолжения от торца ось короче введённого на выступ начала; значение не больше выступа не применяется
-export function chainSegment(input: ChainInput): ChainSegment {
-  const seg = segmentFor(input)
-  const { typedLengthCm, ref } = input
-  if (typedLengthCm === null || !seg.dir) return seg
-  const overhang = startOverhangCm(ref, seg.start, seg.dir)
-  if (overhang === 0) return seg
-  if (typedLengthCm <= overhang) return segmentFor({ ...input, typedLengthCm: null })
-  return { ...seg, end: add(seg.start, mul(seg.dir, typedLengthCm - overhang)) }
-}
-
 // Начало стены (change fix-corner-snap-parallel-start): у угла торца при заданном направлении вдоль оси
 // существующей стены наружу торец новой стены лежит на стороне квадрата в плоскости торца
 function wallStart(start: Point, ref: StartRef | null, fixed: Point | null): Point {
@@ -86,18 +74,21 @@ function wallStart(start: Point, ref: StartRef | null, fixed: Point | null): Poi
   return along ? parallel.start : start
 }
 
-function segmentFor(input: ChainInput): ChainSegment {
+// Оси коллинеарного продолжения сходятся (change collinear-axes-meet, design D1–D2): начало и конец оси, идущей по
+// прямой торца, лежат в плоскости торца; длина оси при этом равна длине кромка-кромка, введённая длина — по оси.
+export function chainSegment(input: ChainInput): ChainSegment {
   const { ref, raw, walls, radiusCm, gridStepCm, thicknessCm, typedLengthCm, doorways = [], communications = [] } = input
   const v = unitOrNull(sub(raw, input.start))
   const fixed = v ? constrainedDirection(input, v) : null
-  const start = wallStart(input.start, ref, fixed)
+  const placed = wallStart(input.start, ref, fixed)
   const snap = fixed
-    ? snapOnRay(raw, walls, radiusCm, gridStepCm, thicknessCm, start, fixed, doorways, communications)
+    ? snapOnRay(raw, walls, radiusCm, gridStepCm, thicknessCm, placed, fixed, doorways, communications)
     : snapVertex(raw, walls, radiusCm, gridStepCm, thicknessCm, undefined, doorways, false, communications) // без диагонали: вторая вершина
-  const track = tracked({ ...input, start }, snap, fixed)
+  const track = tracked({ ...input, start: placed }, snap, fixed)
   const target = track?.end ?? snap.point
-  const dir = fixed ?? unitOrNull(sub(target, start))
-  const end = typedLengthCm !== null && dir ? add(start, mul(dir, typedLengthCm)) : target
+  const dir = fixed ?? unitOrNull(sub(target, placed))
+  const start = dir ? startInCapPlane(placed, dir, ref) : placed
+  const end = typedLengthCm !== null && dir ? add(start, mul(dir, typedLengthCm)) : dir ? endInCapPlane(target, dir, snap) : target
   return {
     start,
     end,

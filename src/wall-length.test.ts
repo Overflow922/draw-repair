@@ -1,12 +1,13 @@
 import { describe, expect, it } from "vitest"
-import { axisLengthForEdgeCm, edgeLengthCm, endOverhangCm, previewEdgeLengthCm, startOverhangCm } from "./wall-length"
+import { axisLengthForEdgeCm, edgeLengthCm, endOverhangCm } from "./wall-length"
 import { resizeWallBounded } from "./wall-edit"
 import { FREE } from "./wall-edit.test-utils"
 import type { Wall } from "./types"
-import { CAP_REF, E, FACE_REF, N, bodyExtentAlongAxis, expectPoint, wall } from "./wall-length.test-utils"
+import { E, N, bodyExtentAlongAxis, expectPoint, wall } from "./wall-length.test-utils"
 
 // change fix-collinear-edge-to-edge-length (specs length-input «Длина стены от кромки до кромки»,
-// design D1, D2, D5): выступ торца, длина кромка-кромка, выступ начала по опоре, ввод длины выделенной стены.
+// design D1, D2, D5): выступ торца, длина кромка-кромка, ввод длины выделенной стены — для стен сохранённых
+// чертежей с зазором осей. Новые стены выступа не имеют (change collinear-axes-meet, wall-chain-axes-meet.test.ts).
 
 const rad = (deg: number): number => (deg * Math.PI) / 180
 
@@ -134,86 +135,6 @@ describe("выступ торца и длина стены от кромки д�
     const walls = [E(), c]
     expect(endOverhangCm(c, "a", walls)).toBe(0)
     expect(edgeLengthCm(c, walls)).toBeCloseTo(Math.hypot(100, 100), 6)
-  })
-})
-
-describe("живая длина превью от плоскости торца", () => {
-  const start = { x: 510, y: 0 }
-
-  it("PV-1: от опоры торца вдоль оси до (900, 0) — 400", () => {
-    expect(previewEdgeLengthCm(CAP_REF, start, { x: 900, y: 0 })).toBeCloseTo(400, 6)
-  })
-
-  it("PV-2: конец поперёк оси — длина по оси сегмента", () => {
-    expect(previewEdgeLengthCm(CAP_REF, start, { x: 510, y: 300 })).toBeCloseTo(300, 6)
-  })
-
-  it("PV-3: свободное начало без опоры — длина сегмента", () => {
-    expect(previewEdgeLengthCm(null, start, { x: 900, y: 0 })).toBeCloseTo(390, 6)
-  })
-
-  it("PV-4: опора — грань — длина сегмента", () => {
-    expect(previewEdgeLengthCm(FACE_REF, { x: 250, y: 10 }, { x: 250, y: 110 })).toBeCloseTo(100, 6)
-  })
-
-  it("PV-5: нулевой сегмент — 0", () => {
-    expect(previewEdgeLengthCm(CAP_REF, start, start)).toBe(0)
-  })
-
-  it("PV-6: сегмент назад на тело ранней стены — длина сегмента без выступа", () => {
-    expect(previewEdgeLengthCm(CAP_REF, start, { x: 400, y: 0 })).toBeCloseTo(110, 6)
-  })
-
-  it("PV-7: толщина 195 мм, конец на 151.2 от плоскости торца — 151.2", () => {
-    expect(previewEdgeLengthCm(CAP_REF, { x: 509.75, y: 0 }, { x: 651.2, y: 0 })).toBeCloseTo(151.2, 6)
-  })
-})
-
-describe("выступ начала по опоре торца", () => {
-  const start = { x: 510, y: 0 }
-
-  it("SO-1: сегмент вдоль оси от торца — выступ равен расстоянию от конца оси до вершины", () => {
-    expect(startOverhangCm(CAP_REF, start, { x: 1, y: 0 })).toBeCloseTo(10, 6)
-  })
-
-  it("SO-1a: толщина 195 мм — выступ 9.75", () => {
-    expect(startOverhangCm(CAP_REF, { x: 509.75, y: 0 }, { x: 1, y: 0 })).toBeCloseTo(9.75, 6)
-  })
-
-  it("SO-1b: сегмент в допуске 0.4° — выступ как у коллинеарного", () => {
-    const dir = { x: Math.cos(rad(0.4)), y: Math.sin(rad(0.4)) }
-    expect(startOverhangCm(CAP_REF, start, dir)).toBeCloseTo(10, 2)
-  })
-
-  it("SO-1c: сегмент за допуском (0.6°) — выступа нет", () => {
-    const dir = { x: Math.cos(rad(0.6)), y: Math.sin(rad(0.6)) }
-    expect(startOverhangCm(CAP_REF, start, dir)).toBe(0)
-  })
-
-  it("SO-1d: сегмент поперёк оси и обратно на тело ранней стены — выступа нет", () => {
-    expect(startOverhangCm(CAP_REF, start, { x: 0, y: 1 })).toBe(0)
-    expect(startOverhangCm(CAP_REF, start, { x: 0, y: -1 })).toBe(0)
-    expect(startOverhangCm(CAP_REF, start, { x: -1, y: 0 })).toBe(0)
-  })
-
-  it("SO-2: опора — грань, а не торец: выступа нет", () => {
-    expect(startOverhangCm(FACE_REF, { x: 250, y: 10 }, { x: 0, y: 1 })).toBe(0)
-  })
-
-  it("SO-3: свободное начало без опоры: выступа нет", () => {
-    expect(startOverhangCm(null, start, { x: 1, y: 0 })).toBe(0)
-  })
-
-  it("SO-4: опора торца без конца оси: выступа нет", () => {
-    expect(startOverhangCm({ kind: "cap", normal: { x: 1, y: 0 } }, start, { x: 1, y: 0 })).toBe(0)
-  })
-
-  it("SO-5: выступ — расстояние до конца оси, а не полтолщины: начало в 4 см от торца", () => {
-    expect(startOverhangCm(CAP_REF, { x: 504, y: 0 }, { x: 1, y: 0 })).toBeCloseTo(4, 6)
-  })
-
-  it("SO-6: начало в стороне от оси ранней стены — выступ равен проекции на ось (4), а не расстоянию до конца (5)", () => {
-    expect(startOverhangCm(CAP_REF, { x: 504, y: 3 }, { x: 1, y: 0 })).toBeCloseTo(4, 6)
   })
 })
 

@@ -404,7 +404,8 @@ function endNeighborsOf(wall: Wall, E: Point, walls: Wall[]): EndNeighbor[] {
 
 // Коллинеарный стык с зазором (change fix-collinear-edge-to-edge-length, design D1): стена поздняя для стыка,
 // вершина E внутри полосы соседа c, оси коллинеарны в допуске прямого угла. Тело поздней стены доводится
-// до конца оси соседа, поэтому выступает за E на расстояние до него
+// до конца оси соседа, поэтому выступает за E на расстояние до него. Только для ранее сохранённых чертежей:
+// вновь нарисованное продолжение сходится осью с торцом (change collinear-axes-meet) и такого зазора не образует
 function isCollinearGapJoint(E: Point, uIn: Point, c: Wall, walls: Wall[], iWall: number, isLatest: boolean): boolean {
   if (!isLatest && walls.indexOf(c) > iWall) return false
   const uC = unit(c.a, c.b)

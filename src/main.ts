@@ -50,7 +50,7 @@ import type { PlanId } from "./plans"
 import { loadStore, saveStore } from "./storage"
 import { placeWall, syncAutoDimensions } from "./auto-dimensions"
 import { mergeContinuation } from "./wall-merge"
-import { axisLengthForEdgeCm, edgeLengthCm, previewEdgeLengthCm } from "./wall-length"
+import { axisLengthForEdgeCm, edgeLengthCm } from "./wall-length"
 import { openWorkspace, storedContent } from "./mounting/mounting-workspace"
 import type { Workspace } from "./mounting/mounting-workspace"
 import { thicknessAllowed } from "./doorway/doorway-guard"
@@ -1145,8 +1145,8 @@ function previewLengthCm(): number | null {
   const start = wallStart()
   if (!start || !end) return null
   if (pointsEqual(start, end)) return null
-  // длина от кромки до кромки: у коллинеарного продолжения от торца учитывается выступ начала
-  return previewEdgeLengthCm(chainRef, start, end)
+  // у строящейся стены оси сходятся с соседом (change collinear-axes-meet): длина оси равна длине кромка-кромка
+  return Math.hypot(end.x - start.x, end.y - start.y)
 }
 
 // начало строящейся стены: у угла торца в параллельном направлении оно смещено от точки первого клика
