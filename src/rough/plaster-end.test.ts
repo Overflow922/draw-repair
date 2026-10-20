@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest"
+import { markDimensions } from "../demolition/mark-dimensions"
 import { isPlasterMark } from "../storage"
 import type { Drawing, PlasterMark, Point } from "../types"
 import { plasterPieces, plasterStrip } from "./plaster"
@@ -89,9 +90,19 @@ describe("полоса торца", () => {
     expect(openEndRuns(S, [wall("W", -100, 0, 100, 0), S], "a")).toEqual([])
   })
 
-  it("PE-7: размер торца — длина открытой части; у вырожденной части размера нет", () => {
-    const dim = endDimension(W(), "b", -10, 10, "cm", 2, 14)
-    expect(dim?.text).toBe("20")
+  it("PE-7: размер торца — от внешнего края полосы до внешнего, линия размера за полосой", () => {
+    const dim = endDimension(W(), "b", -10, 10, 20, "cm", 2, 14)
+    expect(dim?.text).toBe("24")
+    expect(dim && Math.min(dim.geom.p1.x, dim.geom.p2.x)).toBeGreaterThan(502)
+  })
+})
+
+describe("размер боковой полосы", () => {
+  it("PE-15: размер отсчитывается от внешней стороны полосы и лежит дальше неё", () => {
+    const piece = plasterPieces(drawing({ roughPlaster: [plaster("p", "W", 1, "a", 100, 300)] }))[0]
+    const dims = piece ? markDimensions(piece, [W()], "chain", "cm", 2, 14, 2) : []
+    const width = dims.find((d) => d.target === "width")
+    expect(width && [width.geom.a.y, width.geom.p1.y > 12]).toEqual([12, true])
   })
 })
 

@@ -206,7 +206,7 @@ export function createPlasterTool(host: PlasterToolHost): PlasterTool {
       const spots = host
         .scene()
         .pieces.filter((piece) => piece.mark.id === mark.id)
-        .flatMap((piece) => markDimensions(piece, walls, "chain", unit, k, labelPx).filter((d) => d.side === mark.face).map((d): PlasterNumberSpot => ({ ...d.spot, piece })))
+        .flatMap((piece) => markDimensions(piece, walls, "chain", unit, k, labelPx, mark.thicknessMm / 10).filter((d) => d.side === mark.face).map((d): PlasterNumberSpot => ({ ...d.spot, piece })))
       const hit = markNumberAt(p, spots, tolCm)
       return hit ? spots.find((s) => s.piece === (hit as PlasterNumberSpot).piece && s.target === hit.target && s.side === hit.side) ?? null : null
     },

@@ -239,11 +239,11 @@ export function drawRoughScene(
     const selected = scene.selectedPlasterId === piece.mark.id
     // торец — один размер, длина торца (change plaster-wall-end-face, design D7)
     if (piece.mark.face === "end") {
-      const d = endDimension(piece.wall, piece.mark.anchor, piece.from, piece.to, unit, k, m.labelPx)
+      const d = endDimension(piece.wall, piece.mark.anchor, piece.from, piece.to, piece.mark.thicknessMm, unit, k, m.labelPx)
       if (d) drawDimensionGeom(ctx, d.geom, d.text, colors.stroke, view, m, palette, false, selected, true)
       continue
     }
-    for (const d of markDimensions(piece, walls, "chain", unit, k, m.labelPx)) {
+    for (const d of markDimensions(piece, walls, "chain", unit, k, m.labelPx, piece.mark.thicknessMm / 10)) {
       if (d.side !== piece.mark.face || (!selected && d.target !== "width")) continue
       drawDimensionGeom(ctx, d.geom, d.text, colors.stroke, view, m, palette, false, selected, true)
     }

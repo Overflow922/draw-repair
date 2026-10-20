@@ -36,10 +36,11 @@ function textDirection(axis: Point): Point {
   return { x: Math.cos(angle), y: Math.sin(angle) }
 }
 
-// k — px на см чертежа, labelPx — кегль подписи; линия размера отстоит от грани на CHAIN_OFFSET_EM · кегль в сторону грани
-export function markDimensions(r: MarkSpan, walls: readonly Wall[], _mode: "chain", unit: Unit, k: number, labelPx: number): MarkDimension[] {
+// k — px на см чертежа, labelPx — кегль подписи; линия размера отстоит от грани на CHAIN_OFFSET_EM · кегль в сторону грани;
+// depthCm — толщина штукатурки у пометки: размер отсчитывается от её внешней стороны и не заходит на полосу
+export function markDimensions(r: MarkSpan, walls: readonly Wall[], _mode: "chain", unit: Unit, k: number, labelPx: number, depthCm = 0): MarkDimension[] {
   const offsetCm = (CHAIN_OFFSET_EM * labelPx) / k
-  const face = r.wall.thicknessCm / 2
+  const face = r.wall.thicknessCm / 2 + depthCm
   const lineDir = textDirection(unitVector(r.wall.a, r.wall.b))
   const up = { x: lineDir.y, y: -lineDir.x }
   const lift = (DIM_TEXT_GAP_PX + labelPx / 2) / k
