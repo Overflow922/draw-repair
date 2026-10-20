@@ -1,10 +1,11 @@
 import { EPS_CM } from "../demolition/mark-model"
 import { markNumberAt } from "../demolition/mark-numbers"
 import type { MarkNumberSpot } from "../demolition/mark-numbers"
+import { alongNodes, snapAlong } from "../demolition/mark-snap"
 import type { PlasterMark, Point, Unit } from "../types"
-import { dist, pointInPolygon } from "../wall-geometry"
+import { dist, dot, pointInPolygon, sub, unit as unitVector } from "../wall-geometry"
 import { plasterOrigins, plasterSources, plasterSpan, plasterStrip } from "./plaster"
-import type { PlasterPiece } from "./plaster"
+import type { PlasterOrigin, PlasterPiece } from "./plaster"
 import { addPlaster, addPlasterEnd, editPlasterNumber, removePlaster, samePlaster, setPlasterThickness } from "./plaster-marks"
 import { plasterDimensions } from "./plaster-dimensions"
 import { plasterTarget } from "./plaster-face"
@@ -14,8 +15,8 @@ import type { RoughScene } from "./rough-scene"
 import type { Drawing } from "../types"
 
 // Инструмент «Штукатурка», выделение пометки и правка чисел на месте (change add-rough-works-plan, design D3, D8; жест —
-// change plaster-click-whole-face): состояние наведения и выделения без DOM. Данные чертежа, история и перерисовка — через
-// явный PlasterToolHost.
+// change plaster-click-whole-face; протяжка — change plaster-partial-drag): состояние наведения, протяжки и выделения без DOM.
+// Данные чертежа, история и перерисовка — через явный PlasterToolHost.
 
 export interface PlasterToolHost {
   drawing(): Drawing
@@ -36,9 +37,13 @@ export interface PlasterNumberSpot extends MarkNumberSpot {
 
 export interface PlasterTool {
   hover(p: Point | null): void // наведение: подсвечивается цель под курсором; null — курсор ушёл с плана
-  down(px: Point): void // нажатие: запоминает экранную точку, чтобы отличить клик от перетаскивания
-  up(p: Point, px: Point): string | null // клик ставит штукатурку; идентификатор пометки под курсором; null — ничего не поставлено
-  cancel(): void
+  down(px: Point, p?: Point): void // нажатие: экранная точка (клик или протяжка) и точка мира — по ней определяется нажатая стена; без неё протяжки нет
+  move(p: Point, px: Point): void // протяжка дальше мёртвой зоны: превью участка нажатой стены
+  dragging(): boolean // идёт протяжка (нажатие на стене и сдвиг дальше мёртвой зоны)
+  // Клик ставит штукатурку на всю цель и пометку не выделяет, протяжка ставит участок нажатой стены и выделяет его пометку.
+  // Идентификатор поставленной (слитой) пометки; null — ничего не поставлено
+  up(p: Point, px: Point): string | null
+  cancel(): void // Escape: прервать протяжку и снять подсветку
   ghost(): PlasterGhost | null
   select(p: Point): boolean // без инструмента: выделить пометку под точкой; false — выделение снято
   selectedId(): string | null
@@ -57,8 +62,20 @@ const DEAD_ZONE_PX = 4
 // сигнатура цели: подсветка перерисовывается только при смене цели
 const signature = (t: PlasterTarget | null): string => (t ? t.pieces.map((x) => `${x.wall.id}:${x.face}:${x.from}:${x.to}`).join("|") : "")
 
+// участок боковой грани цели на стене подложки в координатах исходной стены: границы lo..hi от её конца a
+interface PlacedSpan {
+  origin: PlasterOrigin
+  piece: SideTargetPiece
+  lo: number
+  hi: number
+}
+
 export function createPlasterTool(host: PlasterToolHost): PlasterTool {
   let pressPx: Point | null = null
+  let pressWorld: Point | null = null
+  let pressed: SideTargetPiece | null = null // боковой кусок нажатой стены: диапазон протяжки
+  let dragging = false
+  let dragGhost: PlasterGhost | null = null
   let target: PlasterTarget | null = null
   let selected: string | null = null
 
@@ -88,7 +105,7 @@ export function createPlasterTool(host: PlasterToolHost): PlasterTool {
     const sources = plasterSources(host.drawing())
     const acting = new Set(host.scene().pieces.map((x) => x.mark.id))
     const live = marks.filter((m) => acting.has(m.id))
-    const spans = sides.flatMap((piece) => {
+    const spans = sides.flatMap((piece): PlacedSpan[] => {
       const origin = origins.get(piece.wall.id)
       return origin ? [{ origin, piece, lo: origin.start + piece.from, hi: origin.start + piece.to }] : []
     })
@@ -105,6 +122,14 @@ export function createPlasterTool(host: PlasterToolHost): PlasterTool {
     const hidden = marks.filter((m) => !acting.has(m.id))
     return { next: hidden.length === 0 ? merged : [...hidden, ...merged], spans }
   }
+
+  // действующая пометка, целиком накрывающая участок: после слияния это поставленная пометка
+  const placedAt = (next: readonly PlasterMark[], { origin, piece, lo, hi }: PlacedSpan): PlasterMark | undefined =>
+    next.find((m) => {
+      if (m.wallId !== origin.source.id || m.face !== piece.face) return false
+      const [start, end] = plasterSpan(m, origin.source)
+      return start <= lo + EPS_CM && end >= hi - EPS_CM
+    })
 
   // Постановка цели одним шагом истории: боковые куски и торцы плоскости (одна пометка на торец конца исходной стены; уже
   // оштукатуренный торец ничего не меняет). Поставленная пометка не выделяется; возвращается идентификатор пометки стены
@@ -128,11 +153,7 @@ export function createPlasterTool(host: PlasterToolHost): PlasterTool {
     const focusEnd = ends.find((x) => x.wall.id === t.focusWallId) ?? (focus ? undefined : ends[0])
     const focusEndOrigin = focusEnd && origins.get(focusEnd.wall.id)
     const placed = focus
-      ? next.find((m) => {
-          if (m.wallId !== focus.origin.source.id || m.face !== focus.piece.face) return false
-          const [start, end] = plasterSpan(m, focus.origin.source)
-          return start <= focus.lo + EPS_CM && end >= focus.hi - EPS_CM
-        })
+      ? placedAt(next, focus)
       : focusEnd && focusEndOrigin
         ? next.find((m) => m.face === "end" && m.wallId === focusEndOrigin.source.id && m.anchor === focusEnd.end)
         : undefined
@@ -140,8 +161,46 @@ export function createPlasterTool(host: PlasterToolHost): PlasterTool {
     return placed?.id ?? null
   }
 
+  // Боковой кусок нажатой стены: стена под точкой нажатия и грань нажатия из цели клика; торец и точка без цели жеста не начинают
+  const pressedPiece = (p: Point): SideTargetPiece | null => {
+    const t = targetAt(p)
+    return t?.pieces.find((x): x is SideTargetPiece => x.face !== "end" && x.wall.id === t.focusWallId) ?? null
+  }
+
+  // Кусок протяжки: границы от конца a стены подложки — проекции точки нажатия и точки p на ось с привязкой к узлам, в пределах
+  // куска нажатой стены (от стыка до стыка)
+  const dragPiece = (piece: SideTargetPiece, start: Point, p: Point): SideTargetPiece => {
+    const { wall } = piece
+    const axis = unitVector(wall.a, wall.b)
+    const { walls, doorways } = host.scene().base
+    const nodes = alongNodes(wall, walls, doorways)
+    const snapped = (q: Point): number => Math.min(Math.max(snapAlong(dot(sub(q, wall.a), axis), nodes, host.radiusCm(), dist(wall.a, wall.b)), piece.from), piece.to)
+    const t0 = snapped(start)
+    const t1 = snapped(p)
+    return { ...piece, from: Math.min(t0, t1), to: Math.max(t0, t1) }
+  }
+
+  // Постановка участка протяжки одним шагом истории: поставленная (слитая) пометка выделяется до замены списка, чтобы
+  // перерисовка уже видела выделение; null — список не изменился
+  const placeDrag = (piece: SideTargetPiece): string | null => {
+    const marks = host.marks()
+    const { next, spans } = placeSides([piece], plasterOrigins(host.drawing()), marks)
+    const span = spans[0]
+    const placed = next !== marks && span ? placedAt(next, span) : undefined
+    if (!placed) return null
+    const before = selected
+    selected = placed.id
+    if (commit(next)) return placed.id
+    selected = before
+    return null
+  }
+
   const reset = (): void => {
     pressPx = null
+    pressed = null
+    pressWorld = null
+    dragging = false
+    dragGhost = null
     target = null
   }
 
@@ -157,22 +216,44 @@ export function createPlasterTool(host: PlasterToolHost): PlasterTool {
 
   return {
     hover(p) {
+      if (dragging) return // во время протяжки подсвечивается её участок, а не цель клика
       const next = p ? targetAt(p) : null
       if (signature(next) === signature(target)) return
       target = next
       host.redraw()
     },
-    down(px) {
+    down(px, p) {
       pressPx = px
+      pressWorld = p ?? null
+      pressed = p ? pressedPiece(p) : null
+      dragging = false
+      dragGhost = null
     },
+    move(p, px) {
+      if (!pressPx || !pressed || !pressWorld) return
+      if (!dragging) {
+        if (dist(px, pressPx) <= DEAD_ZONE_PX) return
+        dragging = true
+        target = null
+      }
+      dragGhost = { pieces: [dragPiece(pressed, pressWorld, p)], thicknessMm: host.newThicknessMm(), measured: true }
+      host.redraw()
+    },
+    dragging: () => dragging,
     up(p, px) {
       const start = pressPx
-      pressPx = null
-      // участок ставит только клик; перетаскивание дальше мёртвой зоны ничего не меняет
-      if (!start || dist(px, start) > DEAD_ZONE_PX) return null
+      const piece = pressed
+      const from = pressWorld
+      reset()
+      if (!start) return null
+      // за мёртвой зоной — протяжка по куску нажатой стены; без него (торец, нет цели) ничего не ставится
+      if (dist(px, start) > DEAD_ZONE_PX) {
+        const placed = piece && from ? placeDrag(dragPiece(piece, from, p)) : null
+        host.redraw()
+        return placed
+      }
       const t = targetAt(p)
       const placed = t ? place(t) : null
-      target = null
       host.redraw()
       return placed
     },
@@ -180,7 +261,7 @@ export function createPlasterTool(host: PlasterToolHost): PlasterTool {
       reset()
       host.redraw()
     },
-    ghost: () => (target ? { pieces: target.pieces, thicknessMm: host.newThicknessMm() } : null),
+    ghost: () => dragGhost ?? (target ? { pieces: target.pieces, thicknessMm: host.newThicknessMm() } : null),
     select(p) {
       const hit = markAt(p)
       selected = hit ? hit.id : null

@@ -25,9 +25,11 @@ import { screedLabel } from "./rough-model"
 // стяжка — штриховкой помещения, штукатурка — фиолетовой полосой; блоки помещений поверх. Одна функция для холста и PDF.
 
 // подсветка цели инструмента «Штукатурка» (change plaster-click-whole-face, design D6): куски на стенах подложки
+// измеренная подсветка — превью протяжки (change plaster-partial-drag): у неё показан размер участка; у цели клика размеров нет
 export interface PlasterGhost {
   pieces: readonly PlasterTargetPiece[]
   thicknessMm: number
+  measured?: boolean
 }
 
 export interface RoughSceneView {
@@ -187,9 +189,8 @@ export function drawRoughScene(
   drawRoomBlocks(ctx, scene.blocks, null, toScreen, m, palette)
 
   const ghost = scene.ghost
-  if (ghost) {
-    for (const part of ghost.pieces) {
-      const piece: PlasterPiece = {
+  const ghostPieces: PlasterPiece[] = ghost
+    ? ghost.pieces.map((part) => ({
         mark:
           part.face === "end"
             ? { id: "ghost", wallId: part.wall.id, face: "end", anchor: part.end, thicknessMm: ghost.thicknessMm }
@@ -197,10 +198,13 @@ export function drawRoughScene(
         wall: part.wall,
         from: part.from,
         to: part.to,
-      }
+      }))
+    : []
+  if (ghost) {
+    for (const piece of ghostPieces) {
       ctx.save()
       const strip = plasterStrip(piece).map(toScreen)
-      // подсветка — полупрозрачная фиолетовая полоса с пунктирным контуром; размеров у неё нет
+      // подсветка — полупрозрачная фиолетовая полоса с пунктирным контуром; размер только у превью протяжки (ниже)
       ctx.globalAlpha = GHOST_ALPHA
       ctx.fillStyle = colors.fill
       tracePolygons(ctx, [strip])
@@ -252,6 +256,13 @@ export function drawRoughScene(
     for (const d of plasterDimensions(piece, scene.pieces, walls, unit, k, m.labelPx)) {
       if (d.side !== piece.mark.face || (!selected && d.target !== "width")) continue
       drawDimensionGeom(ctx, d.geom, d.text, colors.stroke, view, m, palette, false, selected, true)
+    }
+  }
+  // превью протяжки — ширина участка, как у невыделенной пометки
+  for (const piece of opts.dimensions === false || !ghost?.measured ? [] : ghostPieces) {
+    if (piece.mark.face === "end") continue
+    for (const d of plasterDimensions(piece, scene.pieces, walls, unit, k, m.labelPx)) {
+      if (d.side === piece.mark.face && d.target === "width") drawDimensionGeom(ctx, d.geom, d.text, colors.stroke, view, m, palette, false, false, true)
     }
   }
   ctx.restore()

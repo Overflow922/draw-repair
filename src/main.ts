@@ -822,8 +822,30 @@ const closeRoughPanels = (): void => {
   syncRoughPanels()
 }
 
+// инструмент «Штукатурка» снят протяжкой и должен вернуться, когда выделение пометки будет снято (change plaster-partial-drag)
+let resumePlaster = false
+
+// вернуть инструмент «Штукатурка», если он снят протяжкой и выделение пометки уже снято
+function resumePlasterTool(): void {
+  if (!resumesAfterSelectionCleared(resumePlaster, plasterTool.selectedId() !== null)) return
+  resumePlaster = false
+  setTool("plaster")
+}
+
+// снять инструмент «Штукатурка» после протяжки: пометка остаётся выделенной, панель открыта с её толщиной
+// (setTool выделение снимает)
+function leavePlasterTool(): void {
+  resumePlaster = true
+  tool = "none"
+  plasterPanelOpen = true
+  screedPanelOpen = false
+  syncToolUI()
+  redraw()
+}
+
 // сброс жеста, выделения, поля ввода и панелей плана «Черновые работы» (смена плана, чертежа и инструмента, отмена и повтор)
 const resetRough = (): void => {
+  resumePlaster = false
   plasterTool.cancel()
   plasterTool.clearSelection()
   screedTool.clearSelection()
@@ -1552,7 +1574,7 @@ function centerGuideTracks(): TrackLine[] | null {
 
 // нажатая кнопка мыши: рамка, перетаскивание стен или размера, протяжка пометки, сдвиг вида
 function gestureActive(): boolean {
-  return !!(marquee || marqueePending || groupMove || endpointDrag || dimDrag || doorwayTool.dragging() || communicationTool.dragging() || batteryTool.dragging() || calloutTool.dragging() || demolitionTool.dragging() || panDrag)
+  return !!(marquee || marqueePending || groupMove || endpointDrag || dimDrag || doorwayTool.dragging() || communicationTool.dragging() || batteryTool.dragging() || calloutTool.dragging() || demolitionTool.dragging() || plasterTool.dragging() || panDrag)
 }
 
 // ластик: размер → коммуникация → батарея → проём → стена (wall-deletion «Инструмент «Ластик»», «Ластик и удаление
@@ -1848,9 +1870,11 @@ canvas.addEventListener("pointermove", (e) => {
     return
   }
   if (onRough()) {
-    // «Штукатурка» подсвечивает цель под курсором (перерисовывает сама); «Линейка», «Ластик» и «Выноска» следят за курсором
-    if (tool === "plaster") plasterTool.hover(toWorld(e))
-    else if (tool === "ruler" || tool === "eraser" || tool === "callout") {
+    // «Штукатурка»: протяжка и подсветка цели под курсором перерисовывают сами; «Линейка», «Ластик» и «Выноска» следят за курсором
+    if (tool === "plaster") {
+      plasterTool.move(toWorld(e), screenPoint(e))
+      plasterTool.hover(toWorld(e))
+    } else if (tool === "ruler" || tool === "eraser" || tool === "callout") {
       cursor = toWorld(e)
       if (tool === "callout") calloutTool.hover(cursor)
       redraw()
@@ -1941,7 +1965,8 @@ canvas.addEventListener("pointerdown", (e) => {
   if (onRough()) {
     const p = toWorld(e)
     if (tool === "plaster") {
-      plasterTool.down(screenPoint(e))
+      plasterTool.down(screenPoint(e), p)
+      canvas.setPointerCapture(e.pointerId) // отпускание за пределами холста завершает протяжку
     } else if (selectionAllowed(tool)) {
       // без инструмента: выноска, иначе число выделенной пометки, подпись стяжки или пометка штукатурки под точкой
       if (calloutTool.press(p)) {
@@ -1953,6 +1978,7 @@ canvas.addEventListener("pointerdown", (e) => {
           redraw()
         }
         pressRough(p)
+        resumePlasterTool()
       }
     }
     return
@@ -2088,8 +2114,9 @@ canvas.addEventListener("pointerup", (e) => {
     return
   }
   if (onRough() && e.button === 0) {
-    // поставленная пометка не выделяется, инструмент остаётся включённым — как у «Стяжки»
-    if (tool === "plaster") plasterTool.up(toWorld(e), screenPoint(e))
+    // поставленная кликом пометка не выделяется, инструмент остаётся включённым — как у «Стяжки»; поставленная протяжкой
+    // остаётся выделенной, инструмент снимается — как у «Демонтажа» (change plaster-partial-drag)
+    if (tool === "plaster" && plasterTool.up(toWorld(e), screenPoint(e)) !== null && plasterTool.selectedId() !== null) leavePlasterTool()
     return
   }
   if (onDemolition() && e.button === 0) {
@@ -2900,7 +2927,7 @@ function stepNotes(step: typeof undoNotes): void {
 }
 
 function undo(): void {
-  if (groupMove || endpointDrag || panDrag || dimDrag || doorwayTool.dragging() || communicationTool.dragging() || batteryTool.dragging() || calloutTool.dragging() || demolitionTool.dragging()) return
+  if (groupMove || endpointDrag || panDrag || dimDrag || doorwayTool.dragging() || communicationTool.dragging() || batteryTool.dragging() || calloutTool.dragging() || demolitionTool.dragging() || plasterTool.dragging()) return
   // открытое поле ввода выноски и поле примечаний сохраняют текст до отмены
   calloutTool.commitEditor()
   commitNotes()
@@ -2938,7 +2965,7 @@ function undo(): void {
 }
 
 function redo(): void {
-  if (groupMove || endpointDrag || panDrag || dimDrag || doorwayTool.dragging() || communicationTool.dragging() || batteryTool.dragging() || calloutTool.dragging() || demolitionTool.dragging()) return
+  if (groupMove || endpointDrag || panDrag || dimDrag || doorwayTool.dragging() || communicationTool.dragging() || batteryTool.dragging() || calloutTool.dragging() || demolitionTool.dragging() || plasterTool.dragging()) return
   calloutTool.commitEditor()
   commitNotes()
   const h = activeHistory()
@@ -3055,9 +3082,11 @@ window.addEventListener("keydown", (e) => {
       return
     }
     if (onRough()) {
+      if (plasterTool.dragging()) return
       closeRoughEditor()
       if (!plasterTool.deleteSelected()) screedTool.deleteSelected()
       closeRoughPanels()
+      resumePlasterTool()
       return
     }
     if (onDemolition()) {
@@ -3074,15 +3103,17 @@ window.addEventListener("keydown", (e) => {
   if (e.key === "Escape" && onRough()) {
     const action = escapeAction({
       tool,
-      gestureActive: false,
+      gestureActive: plasterTool.dragging(),
       dimensionDraft: false,
       calloutDraft: calloutTool.hasDraft(),
       hasSelection: plasterTool.selectedId() !== null || screedTool.selectedId() !== null || calloutTool.selectedId() !== null,
     })
-    if (action === "cancel-callout-draft") calloutTool.cancelDraft()
+    if (action === "end-gesture") plasterTool.cancel()
+    else if (action === "cancel-callout-draft") calloutTool.cancelDraft()
     else if (action === "clear-selection") {
       calloutTool.deselect()
       clearRoughSelection()
+      resumePlasterTool()
     } else if (action === "deactivate-tool") setTool("none")
     return
   }

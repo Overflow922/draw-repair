@@ -992,3 +992,18 @@ Follow-ups from `plaster-flush-end-in-plane` (2026-10-20).
 ## Out of scope
 
 - [ ] A flush end of a perpendicular wall is added to the plaster target only inside a gap between two walls of the plane (`layPieces`, `src/rough/plaster-face.ts`). A flush end at the edge of the run (no plane wall on its far side) is not added; the face run normally stops at that corner anyway. Revisit if a drawing shows an unplastered flush end at a plane edge.
+
+---
+
+Follow-ups from `plaster-partial-drag` (apply, 2026-10-20).
+
+## Tests
+
+- [ ] `src/main.ts` wiring of the plaster drag has no automated test: `leavePlasterTool` / `resumePlasterTool` (tool leaves after a drag, comes back on Escape, click away and Delete), Escape and Delete during a drag, `setPointerCapture` on press. The pure rules (`resumesAfterSelectionCleared`) and the tool itself (`src/rough/plaster-drag.test.ts`) are tested; the DOM flow was checked by hand in the browser (same gap as the demolition wiring above).
+- [ ] `setup` / `px` helpers are duplicated: `src/rough/plaster-tool.test.ts` keeps its own copy, new tests use `src/rough/plaster-tool.test-utils.ts`. Merge them when the old test file may be touched (approved tests were not edited in this change).
+
+## Out of scope (decided, revisit if needed)
+
+- A drag works on the pressed wall only; a plane of several collinear walls needs one drag per wall (adjacent spans merge). A drag across the whole plane would need group selection.
+- No dragging of a selected plaster mark along the wall (openings have it, demolition and plaster marks do not); numbers are the only way to move it.
+- The project has no formatter, linter or mutation-testing tool, so those quality gates are not run; mutants were tried by hand (`plaster-tool.ts`: dead zone, pressed wall, selection, merge order).
