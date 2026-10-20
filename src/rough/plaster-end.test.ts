@@ -3,6 +3,7 @@ import { markDimensions } from "../demolition/mark-dimensions"
 import { isPlasterMark } from "../storage"
 import type { Drawing, PlasterMark, Point } from "../types"
 import { plasterPieces, plasterStrip } from "./plaster"
+import { plasterDimensions } from "./plaster-dimensions"
 import { endDimension, openEndRuns } from "./plaster-end"
 import { addPlasterEnd } from "./plaster-marks"
 import { createPlasterTool } from "./plaster-tool"
@@ -103,6 +104,31 @@ describe("размер боковой полосы", () => {
     const dims = piece ? markDimensions(piece, [W()], "chain", "cm", 2, 14, 2) : []
     const width = dims.find((d) => d.target === "width")
     expect(width && [width.geom.a.y, width.geom.p1.y > 12]).toEqual([12, true])
+  })
+})
+
+describe("размер у внутреннего угла", () => {
+  const corner = (marks: PlasterMark[]) =>
+    drawing({ walls: [wall("A", 0, 0, 500, 0), wall("B", 500, 0, 500, 400)], roughPlaster: marks })
+  const widthOf = (marks: PlasterMark[], id: string): number | undefined => {
+    const d = corner(marks)
+    const pieces = plasterPieces(d)
+    const piece = pieces.find((p) => p.mark.id === id)
+    return piece && plasterDimensions(piece, pieces, d.walls, "cm", 2, 14).find((x) => x.target === "width")?.valueCm
+  }
+
+  it("PE-16: соседняя штукатурка в углу укорачивает размер на её толщину; без неё размер идёт до угла стены", () => {
+    const alone = widthOf([plaster("p", "A", 1, "a", 0, 500)], "p")
+    const both = widthOf([plaster("p", "A", 1, "a", 0, 500), plaster("q", "B", 1, "a", 0, 400)], "p")
+    expect(alone && both && alone - both).toBeCloseTo(2)
+  })
+
+  it("PE-17: правка числа укороченного размера прибавляет укорочение", () => {
+    const marks = [plaster("p", "A", 1, "a", 0, 500), plaster("q", "B", 1, "a", 0, 400)]
+    const d = corner(marks)
+    const piece = plasterPieces(d).find((p) => p.mark.id === "p")
+    const dim = piece && plasterDimensions(piece, plasterPieces(d), d.walls, "cm", 2, 14).find((x) => x.target === "width")
+    expect(dim?.spot.trimCm).toBeCloseTo(2)
   })
 })
 

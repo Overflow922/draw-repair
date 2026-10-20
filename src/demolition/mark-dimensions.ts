@@ -38,29 +38,49 @@ function textDirection(axis: Point): Point {
 
 // k — px на см чертежа, labelPx — кегль подписи; линия размера отстоит от грани на CHAIN_OFFSET_EM · кегль в сторону грани;
 // depthCm — толщина штукатурки у пометки: размер отсчитывается от её внешней стороны и не заходит на полосу
-export function markDimensions(r: MarkSpan, walls: readonly Wall[], _mode: "chain", unit: Unit, k: number, labelPx: number, depthCm = 0): MarkDimension[] {
+// trim — укорочение цепочки у стыка (сантиметры вдоль оси): у начала цепочки грани (`from`) и у её конца (`to`)
+export type ChainTrim = (side: Side, atCm: number, end: "from" | "to") => number
+
+export function markDimensions(
+  r: MarkSpan,
+  walls: readonly Wall[],
+  _mode: "chain",
+  unit: Unit,
+  k: number,
+  labelPx: number,
+  depthCm = 0,
+  trim?: ChainTrim,
+): MarkDimension[] {
   const offsetCm = (CHAIN_OFFSET_EM * labelPx) / k
   const face = r.wall.thicknessCm / 2 + depthCm
   const lineDir = textDirection(unitVector(r.wall.a, r.wall.b))
   const up = { x: lineDir.y, y: -lineDir.x }
   const lift = (DIM_TEXT_GAP_PX + labelPx / 2) / k
   const out: MarkDimension[] = []
-  for (const item of markChains(r, walls)) {
-    if (item.lengthCm <= ZERO) continue
-    const geom = dimGeometry(hostPoint(r.wall, item.fromCm, item.side * face), hostPoint(r.wall, item.toCm, item.side * face), offsetCm * item.side)
+  const items = markChains(r, walls).filter((item) => item.lengthCm > ZERO)
+  for (const item of items) {
+    const chain = items.filter((x) => x.side === item.side)
+    const trimFrom = item === chain[0] && trim ? trim(item.side, item.fromCm, "from") : 0
+    const trimTo = item === chain[chain.length - 1] && trim ? trim(item.side, item.toCm, "to") : 0
+    const fromCm = item.fromCm + trimFrom
+    const toCm = item.toCm - trimTo
+    const lengthCm = toCm - fromCm
+    if (lengthCm <= ZERO) continue
+    const geom = dimGeometry(hostPoint(r.wall, fromCm, item.side * face), hostPoint(r.wall, toCm, item.side * face), offsetCm * item.side)
     if (!geom) continue
-    const text = formatLength(item.lengthCm, unit)
+    const text = formatLength(lengthCm, unit)
     const spot: MarkNumberSpot = {
       side: item.side,
       target: item.target,
       text,
-      valueCm: item.lengthCm,
-      center: add(hostPoint(r.wall, (item.fromCm + item.toCm) / 2, item.side * (face + offsetCm)), mul(up, lift)),
+      valueCm: lengthCm,
+      trimCm: trimFrom + trimTo,
+      center: add(hostPoint(r.wall, (fromCm + toCm) / 2, item.side * (face + offsetCm)), mul(up, lift)),
       dir: lineDir,
       widthCm: (text.length * labelPx * CHAR_WIDTH) / k,
       heightCm: labelPx / k,
     }
-    out.push({ side: item.side, target: item.target, fromCm: item.fromCm, toCm: item.toCm, text, valueCm: item.lengthCm, geom, spot })
+    out.push({ side: item.side, target: item.target, fromCm, toCm, text, valueCm: lengthCm, geom, spot })
   }
   return out
 }

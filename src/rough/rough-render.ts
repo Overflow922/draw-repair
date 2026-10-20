@@ -1,7 +1,6 @@
 import { batteryRect } from "../battery/battery-geometry"
 import { hostOfBattery } from "../battery/battery-motion"
 import { strokeCommunications } from "../communications/communications-render"
-import { markDimensions } from "../demolition/mark-dimensions"
 import { drawCallouts } from "../callout/callout-render"
 import { drawDimensionGeom, drawElementsLayer, drawRoomBlocks, drawScene, prepareCanvas, SCREEN_METRICS, tracePolygons } from "../render"
 import type { RenderMetrics } from "../render"
@@ -15,6 +14,7 @@ import type { Battery, Callout, Communication, Point, Screed, Unit, View, Wall, 
 import { SCREED_HATCH, strokeHatchSeries } from "../wall-hatch"
 import { plasterStrip } from "./plaster"
 import type { PlasterPiece } from "./plaster"
+import { plasterDimensions } from "./plaster-dimensions"
 import { endDimension } from "./plaster-end"
 import type { PlasterTargetPiece } from "./plaster-face"
 import { screedLabelBox } from "./screed-label"
@@ -243,7 +243,7 @@ export function drawRoughScene(
       if (d) drawDimensionGeom(ctx, d.geom, d.text, colors.stroke, view, m, palette, false, selected, true)
       continue
     }
-    for (const d of markDimensions(piece, walls, "chain", unit, k, m.labelPx, piece.mark.thicknessMm / 10)) {
+    for (const d of plasterDimensions(piece, scene.pieces, walls, unit, k, m.labelPx)) {
       if (d.side !== piece.mark.face || (!selected && d.target !== "width")) continue
       drawDimensionGeom(ctx, d.geom, d.text, colors.stroke, view, m, palette, false, selected, true)
     }

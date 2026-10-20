@@ -1,5 +1,4 @@
 import { EPS_CM } from "../demolition/mark-model"
-import { markDimensions } from "../demolition/mark-dimensions"
 import { markNumberAt } from "../demolition/mark-numbers"
 import type { MarkNumberSpot } from "../demolition/mark-numbers"
 import type { PlasterMark, Point, Unit } from "../types"
@@ -7,6 +6,7 @@ import { dist, pointInPolygon } from "../wall-geometry"
 import { plasterOrigins, plasterSources, plasterSpan, plasterStrip } from "./plaster"
 import type { PlasterPiece } from "./plaster"
 import { addPlaster, addPlasterEnd, editPlasterNumber, removePlaster, samePlaster, setPlasterThickness } from "./plaster-marks"
+import { plasterDimensions } from "./plaster-dimensions"
 import { plasterTarget } from "./plaster-face"
 import type { EndTargetPiece, PlasterTarget, SideTargetPiece, SourceEnd } from "./plaster-face"
 import type { PlasterGhost } from "./rough-render"
@@ -203,10 +203,10 @@ export function createPlasterTool(host: PlasterToolHost): PlasterTool {
       // размер торца не редактируется (design D7)
       if (!mark || mark.face === "end") return null
       const walls = host.scene().base.walls
-      const spots = host
-        .scene()
-        .pieces.filter((piece) => piece.mark.id === mark.id)
-        .flatMap((piece) => markDimensions(piece, walls, "chain", unit, k, labelPx, mark.thicknessMm / 10).filter((d) => d.side === mark.face).map((d): PlasterNumberSpot => ({ ...d.spot, piece })))
+      const all = host.scene().pieces
+      const spots = all
+        .filter((piece) => piece.mark.id === mark.id)
+        .flatMap((piece) => plasterDimensions(piece, all, walls, unit, k, labelPx).filter((d) => d.side === mark.face).map((d): PlasterNumberSpot => ({ ...d.spot, piece })))
       const hit = markNumberAt(p, spots, tolCm)
       return hit ? spots.find((s) => s.piece === (hit as PlasterNumberSpot).piece && s.target === hit.target && s.side === hit.side) ?? null : null
     },
@@ -214,7 +214,7 @@ export function createPlasterTool(host: PlasterToolHost): PlasterTool {
       if (selected === null) return false
       const origin = plasterOrigins(host.drawing()).get(spot.piece.wall.id)
       if (!origin) return false
-      const edited = editPlasterNumber(host.marks(), plasterSources(host.drawing()), host.scene().base.walls, spot.piece, origin.start, spot.target, valueCm)
+      const edited = editPlasterNumber(host.marks(), plasterSources(host.drawing()), host.scene().base.walls, spot.piece, origin.start, spot.target, valueCm + (spot.trimCm ?? 0))
       if (!edited || samePlaster(edited.marks, host.marks())) return false
       selected = edited.id
       return commit(edited.marks)
