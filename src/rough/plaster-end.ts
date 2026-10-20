@@ -1,4 +1,4 @@
-import { EPS_CM, MIN_WIDTH_CM } from "../demolition/mark-model"
+import { MIN_WIDTH_CM } from "../demolition/mark-model"
 import { faceRunsReaching, hostPoint } from "../doorway/doorway-faces"
 import { CHAIN_OFFSET_EM } from "../doorway/editable-numbers"
 import { formatLength } from "../format-length"
@@ -32,21 +32,13 @@ export function openEndRuns(wall: Wall, walls: readonly Wall[], end: WallEnd): [
     .filter(([from, to]) => to - from >= MIN_WIDTH_CM)
 }
 
-// поперечный размах полосы торца: открытая часть, шире на толщину штукатурки у края, дошедшего до боковой грани
-function endSpan(wall: Wall, from: number, to: number, depth: number): [number, number] {
-  const half = wall.thicknessCm / 2
-  return [from <= -half + EPS_CM ? from - depth : from, to >= half - EPS_CM ? to + depth : to]
-}
-
-// полоса торца: от конца оси наружу на толщину штукатурки, поперёк — на открытой части [from, to]; у края, дошедшего до
-// боковой грани, шире на толщину штукатурки — закрывает внешний угол
+// полоса торца: от конца оси наружу на толщину штукатурки, поперёк — на [from, to] (открытая часть, при закрытом угле шире
+// на толщину штукатурки — см. `wrapEndCorners`)
 export function endStrip(wall: Wall, end: WallEnd, from: number, to: number, thicknessMm: number): Point[] {
   const len = dist(wall.a, wall.b)
-  const depth = thicknessMm / 10
   const t0 = end === "a" ? 0 : len
-  const t1 = end === "a" ? -depth : len + depth
-  const [lo, hi] = endSpan(wall, from, to, depth)
-  return [hostPoint(wall, t0, lo), hostPoint(wall, t0, hi), hostPoint(wall, t1, hi), hostPoint(wall, t1, lo)]
+  const t1 = end === "a" ? -thicknessMm / 10 : len + thicknessMm / 10
+  return [hostPoint(wall, t0, from), hostPoint(wall, t0, to), hostPoint(wall, t1, to), hostPoint(wall, t1, from)]
 }
 
 export interface EndDimension {
@@ -58,10 +50,8 @@ export interface EndDimension {
 // CHAIN_OFFSET_EM · кегль и на полосу не заходит
 export function endDimension(wall: Wall, end: WallEnd, from: number, to: number, thicknessMm: number, unit: Unit, k: number, labelPx: number): EndDimension | null {
   const len = dist(wall.a, wall.b)
-  const depth = thicknessMm / 10
-  const outer = end === "a" ? -depth : len + depth
-  const [lo, hi] = endSpan(wall, from, to, depth)
+  const outer = end === "a" ? -thicknessMm / 10 : len + thicknessMm / 10
   const offsetCm = (CHAIN_OFFSET_EM * labelPx) / k
-  const geom = dimGeometry(hostPoint(wall, outer, lo), hostPoint(wall, outer, hi), end === "a" ? offsetCm : -offsetCm)
-  return geom ? { geom, text: formatLength(hi - lo, unit) } : null
+  const geom = dimGeometry(hostPoint(wall, outer, from), hostPoint(wall, outer, to), end === "a" ? offsetCm : -offsetCm)
+  return geom ? { geom, text: formatLength(to - from, unit) } : null
 }

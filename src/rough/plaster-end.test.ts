@@ -24,7 +24,23 @@ describe("полоса торца", () => {
     const d = drawing({ roughPlaster: [endMark("e", "W", "b")] })
     const [piece] = plasterPieces(d)
     const box = piece && boxOf([plasterStrip(piece)])
-    expect(box && [box.minX, box.maxX, box.minY, box.maxY]).toEqual([500, 502, -12, 12])
+    expect(box && [box.minX, box.maxX, box.minY, box.maxY]).toEqual([500, 502, -10, 10])
+  })
+
+  it("PE-1c: боковую полосу удалили — расширение остаётся только у стороны с оставшейся боковой полосой", () => {
+    const S = wall("S", 0, -10, 0, -30)
+    const width = (marks: PlasterMark[]): number | undefined => {
+      const d = drawing({ walls: [wall("W", -100, 0, 100, 0), S], roughPlaster: marks })
+      const end = plasterPieces(d).find((p) => p.mark.id === "e")
+      const box = end && boxOf([plasterStrip(end)])
+      return box && box.maxX - box.minX
+    }
+    const e = endMark("e", "S", "b")
+    expect([
+      width([e, plaster("l", "S", 1, "a", 0, 20), plaster("r", "S", -1, "a", 0, 20)]),
+      width([e, plaster("l", "S", 1, "a", 0, 20)]),
+      width([e]),
+    ]).toEqual([24, 22, 20])
   })
 
   it("PE-1a: внешний угол выступа — полоса торца перекрывает угловые квадраты у обеих боковых полос", () => {
@@ -41,8 +57,8 @@ describe("полоса торца", () => {
 
   it("PE-1b: у закрытого края торца расширения нет, у открытого — есть", () => {
     const abut = wall("V", 500, 4, 600, 4) // тело y −6…14 закрывает торец b стены W, открыто только −10…−6
-    const d = drawing({ walls: [W(), abut], roughPlaster: [endMark("e", "W", "b")] })
-    const [piece] = plasterPieces(d)
+    const d = drawing({ walls: [W(), abut], roughPlaster: [endMark("e", "W", "b"), plaster("s", "W", -1, "a", 0, 500)] })
+    const piece = plasterPieces(d).find((p) => p.mark.id === "e")
     const box = piece && boxOf([plasterStrip(piece)])
     expect(box && [box.minY, box.maxY]).toEqual([-12, -6])
   })
@@ -51,7 +67,7 @@ describe("полоса торца", () => {
     const d = drawing({ roughPlaster: [endMark("e", "W", "a")] })
     const [piece] = plasterPieces(d)
     const box = piece && boxOf([plasterStrip(piece)])
-    expect(box && [box.minX, box.maxX, box.minY, box.maxY]).toEqual([-2, 0, -12, 12])
+    expect(box && [box.minX, box.maxX, box.minY, box.maxY]).toEqual([-2, 0, -10, 10])
   })
 
   it("PE-3: торец, закрытый примыканием, не действует; когда стена исчезает — снова действует", () => {
@@ -92,7 +108,7 @@ describe("полоса торца", () => {
   })
 
   it("PE-7: размер торца — от внешнего края полосы до внешнего, линия размера за полосой", () => {
-    const dim = endDimension(W(), "b", -10, 10, 20, "cm", 2, 14)
+    const dim = endDimension(W(), "b", -12, 12, 20, "cm", 2, 14)
     expect(dim?.text).toBe("24")
     expect(dim && Math.min(dim.geom.p1.x, dim.geom.p2.x)).toBeGreaterThan(502)
   })

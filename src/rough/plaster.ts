@@ -83,7 +83,30 @@ export function plasterPieces(drawing: Drawing, scene: MountingScene = mountingS
       })
     }
   }
-  return pieces
+  return pieces.map((piece) => wrapEndCorners(piece, pieces))
+}
+
+// Внешний угол выступа: полоса торца шире на толщину штукатурки у края, дошедшего до боковой грани, если на этой грани у
+// этого конца есть действующая полоса — угол закрывает торец (change plaster-end-outer-corner)
+function wrapEndCorners(piece: PlasterPiece, pieces: readonly PlasterPiece[]): PlasterPiece {
+  const mark = piece.mark
+  if (mark.face !== "end") return piece
+  const half = piece.wall.thicknessCm / 2
+  const len = lengthOf(piece.wall)
+  const depth = mark.thicknessMm / 10
+  const reached = (face: Side): boolean =>
+    pieces.some(
+      (x) =>
+        x.mark.face === face &&
+        x.wall.id === piece.wall.id &&
+        (mark.anchor === "a" ? x.from <= EPS_CM : x.to >= len - EPS_CM),
+    )
+  // поперечное смещение +half — грань +1, −half — грань −1
+  return {
+    ...piece,
+    from: piece.from <= -half + EPS_CM && reached(-1) ? piece.from - depth : piece.from,
+    to: piece.to >= half - EPS_CM && reached(1) ? piece.to + depth : piece.to,
+  }
 }
 
 // куски пометки торца (change plaster-wall-end-face, design D3–D4): торец — конец исходной стены, у остатка на срезе сноса
