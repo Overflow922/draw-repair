@@ -6,9 +6,9 @@ import type { PlasterMark, Point, Unit } from "../types"
 import { dist, pointInPolygon } from "../wall-geometry"
 import { plasterOrigins, plasterSources, plasterSpan, plasterStrip } from "./plaster"
 import type { PlasterPiece } from "./plaster"
-import { addPlaster, editPlasterNumber, removePlaster, samePlaster, setPlasterThickness } from "./plaster-marks"
+import { addPlaster, addPlasterEnd, editPlasterNumber, removePlaster, samePlaster, setPlasterThickness } from "./plaster-marks"
 import { plasterTarget } from "./plaster-face"
-import type { PlasterTarget } from "./plaster-face"
+import type { EndTargetPiece, PlasterTarget, SideTargetPiece, SourceEnd } from "./plaster-face"
 import type { PlasterGhost } from "./rough-render"
 import type { RoughScene } from "./rough-scene"
 import type { Drawing } from "../types"
@@ -71,18 +71,42 @@ export function createPlasterTool(host: PlasterToolHost): PlasterTool {
     return true
   }
 
-  const targetAt = (p: Point): PlasterTarget | null => plasterTarget(p, host.scene().base.walls, host.radiusCm())
+  // торец штукатурится только у конца исходной стены: конец остатка на срезе сноса — не торец (design D4)
+  const targetAt = (p: Point): PlasterTarget | null => {
+    const origins = plasterOrigins(host.drawing())
+    const sourceEnd: SourceEnd = (wall, end) => {
+      const origin = origins.get(wall.id)
+      if (!origin) return false
+      return end === "a" ? origin.start <= EPS_CM : origin.start + dist(wall.a, wall.b) >= dist(origin.source.a, origin.source.b) - EPS_CM
+    }
+    return plasterTarget(p, host.scene().base.walls, host.radiusCm(), sourceEnd)
+  }
+
+  // Постановка торца: одна пометка на торец конца исходной стены; уже оштукатуренный торец ничего не меняет
+  const placeEnd = (piece: EndTargetPiece): string | null => {
+    const origin = plasterOrigins(host.drawing()).get(piece.wall.id)
+    if (!origin) return null
+    const next = addPlasterEnd(host.marks(), plasterSources(host.drawing()), origin.source.id, piece.end, host.newThicknessMm(), host.newId)
+    const placed = next[next.length - 1]
+    if (next === host.marks() || !placed) return null
+    selected = placed.id
+    commit(next)
+    return placed.id
+  }
 
   // Постановка цели: куски переводятся в координаты исходных стен; слияние — только с действующими пометками, скрытые остаются
   // без изменений. Участок, уже целиком лежащий в действующей пометке той же грани, не меняет ничего. Выделяется пометка
   // стены под курсором; возвращается её идентификатор.
   const place = (t: PlasterTarget): string | null => {
+    const endPiece = t.pieces.find((x): x is EndTargetPiece => x.face === "end")
+    if (endPiece) return placeEnd(endPiece)
     const origins = plasterOrigins(host.drawing())
     const sources = plasterSources(host.drawing())
     const marks = host.marks()
     const acting = new Set(host.scene().pieces.map((x) => x.mark.id))
     const live = marks.filter((m) => acting.has(m.id))
-    const spans = t.pieces.flatMap((piece) => {
+    const sides = t.pieces.filter((x): x is SideTargetPiece => x.face !== "end")
+    const spans = sides.flatMap((piece) => {
       const origin = origins.get(piece.wall.id)
       return origin ? [{ origin, piece, lo: origin.start + piece.from, hi: origin.start + piece.to }] : []
     })
@@ -176,7 +200,8 @@ export function createPlasterTool(host: PlasterToolHost): PlasterTool {
     },
     numberAt(p, unit, k, labelPx, tolCm) {
       const mark = host.marks().find((m) => m.id === selected)
-      if (!mark) return null
+      // размер торца не редактируется (design D7)
+      if (!mark || mark.face === "end") return null
       const walls = host.scene().base.walls
       const spots = host
         .scene()

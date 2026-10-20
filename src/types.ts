@@ -187,7 +187,7 @@ export interface DemolitionMark {
 // Пометка штукатурки плана «Черновые работы» (change add-rough-works-plan, design D3): участок грани стены от конца привязки,
 // как у пометки сноса; грань — знак нормали (−d.y, d.x) оси стены; толщина — целые миллиметры. Стена — стена обмера или собственная
 // стена «Монтажа», положение участка — относительно исходной стены (остатки вычисляются)
-export interface PlasterMark {
+export interface SidePlasterMark {
   id: string
   wallId: string
   face: 1 | -1
@@ -196,6 +196,18 @@ export interface PlasterMark {
   toCm: number
   thicknessMm: number
 }
+
+// Пометка торца (change plaster-wall-end-face, design D1): свободный конец исходной стены; участка вдоль оси нет,
+// длина торца — толщина стены
+export interface EndPlasterMark {
+  id: string
+  wallId: string
+  face: "end"
+  anchor: "a" | "b"
+  thicknessMm: number
+}
+
+export type PlasterMark = SidePlasterMark | EndPlasterMark
 
 // Стяжка помещения (change add-rough-works-plan, design D1, D2): опорная точка — точка клика и место подписи «h = …мм»;
 // действует, пока опорная точка лежит в помещении экспликации

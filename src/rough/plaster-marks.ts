@@ -54,8 +54,10 @@ function replaceCluster(marks: readonly PlasterMark[], wall: Wall, face: 1 | -1,
   return marks.flatMap((m, i) => (i === first ? [merged] : c.indices.includes(i) ? [] : [m]))
 }
 
-const sameMark = (a: PlasterMark, b: PlasterMark): boolean =>
-  a.id === b.id && a.wallId === b.wallId && a.face === b.face && a.anchor === b.anchor && a.fromCm === b.fromCm && a.toCm === b.toCm && a.thicknessMm === b.thicknessMm
+const sameMark = (a: PlasterMark, b: PlasterMark): boolean => {
+  const same = a.id === b.id && a.wallId === b.wallId && a.face === b.face && a.anchor === b.anchor && a.thicknessMm === b.thicknessMm
+  return a.face === "end" || b.face === "end" ? same : same && a.fromCm === b.fromCm && a.toCm === b.toCm
+}
 
 export const samePlaster = (a: readonly PlasterMark[], b: readonly PlasterMark[]): boolean =>
   a.length === b.length &&
@@ -85,6 +87,19 @@ export function addPlaster(
   return samePlaster(next, marks) ? marks : next
 }
 
+// Пометить торец конца end стены (change plaster-wall-end-face, design D6): один торец — одна пометка, повтор ничего не меняет
+export function addPlasterEnd(
+  marks: PlasterMark[],
+  walls: readonly Wall[],
+  wallId: string,
+  end: "a" | "b",
+  thicknessMm: number,
+  newId: () => string = () => crypto.randomUUID(),
+): PlasterMark[] {
+  if (!walls.some((w) => w.id === wallId) || marks.some((m) => m.face === "end" && m.wallId === wallId && m.anchor === end)) return marks
+  return [...marks, { id: newId(), wallId, face: "end", anchor: end, thicknessMm }]
+}
+
 export function removePlaster(marks: PlasterMark[], id: string): PlasterMark[] {
   return marks.some((m) => m.id === id) ? marks.filter((m) => m.id !== id) : marks
 }
@@ -102,7 +117,7 @@ export function mergeAllPlaster(marks: PlasterMark[], walls: readonly Wall[]): P
   for (let i = 0; i < list.length; ) {
     const m = list[i]
     const wall = m && walls.find((w) => w.id === m.wallId)
-    if (!m || !wall) {
+    if (!m || m.face === "end" || !wall) {
       i++
       continue
     }
@@ -131,18 +146,19 @@ export function editPlasterNumber(
   valueCm: number,
 ): { marks: PlasterMark[]; id: string } | null {
   const source = sources.find((w) => w.id === piece.mark.wallId)
-  if (!source) return null
-  const edit = editedSpan(piece, sceneWalls, which, piece.mark.face, valueCm)
+  const side = piece.mark
+  if (!source || side.face === "end") return null
+  const edit = editedSpan(piece, sceneWalls, which, side.face, valueCm)
   if (!edit) return null
   const lo = start + edit[0]
   const hi = start + edit[1]
-  const edited = markFromSpan(piece.mark.id, source, piece.mark.face, piece.mark.thicknessMm, lo, hi)
+  const edited = markFromSpan(side.id, source, side.face, side.thicknessMm, lo, hi)
   const merged = mergeAllPlaster(
-    marks.map((m) => (m.id === piece.mark.id ? edited : m)),
+    marks.map((m) => (m.id === side.id ? edited : m)),
     sources,
   )
   const result = merged.find((m) => {
-    if (m.wallId !== source.id || m.face !== piece.mark.face) return false
+    if (m.wallId !== source.id || m.face !== side.face) return false
     const [from, to] = plasterSpan(m, source)
     return from <= lo + EPS_CM && to >= hi - EPS_CM
   })

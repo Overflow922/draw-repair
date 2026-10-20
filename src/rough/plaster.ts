@@ -4,7 +4,8 @@ import type { Side } from "../doorway/doorway-faces"
 import { mountingScene } from "../mounting/mounting-scene"
 import type { MountingScene } from "../mounting/mounting-scene"
 import { remnantId, remnantSpans } from "../mounting/remnants"
-import type { Drawing, PlasterMark, Point, Wall } from "../types"
+import type { Drawing, EndPlasterMark, PlasterMark, Point, SidePlasterMark, Wall } from "../types"
+import { endStrip, openEndRuns } from "./plaster-end"
 import { planeWalls } from "./plaster-face"
 
 // Штукатурка плана «Черновые работы» (change add-rough-works-plan, design D3, D4): пометка хранит участок грани исходной
@@ -26,7 +27,7 @@ export interface PlasterOrigin {
 }
 
 // границы пометки от конца a исходной стены без обрезки
-export function plasterSpan(mark: PlasterMark, wall: Wall): [number, number] {
+export function plasterSpan(mark: SidePlasterMark, wall: Wall): [number, number] {
   const len = lengthOf(wall)
   return mark.anchor === "a" ? [mark.fromCm, mark.toCm] : [len - mark.toCm, len - mark.fromCm]
 }
@@ -56,6 +57,10 @@ export function plasterPieces(drawing: Drawing, scene: MountingScene = mountingS
     const source = drawing.walls.find((w) => w.id === mark.wallId) ?? (drawing.mounting?.walls ?? []).find((w) => w.id === mark.wallId)
     if (!source) continue
     const len = lengthOf(source)
+    if (mark.face === "end") {
+      pieces.push(...endPieces(mark, source, own.has(source.id), len, demolition, byId, scene.walls))
+      continue
+    }
     const [lo, hi] = plasterSpan(mark, source)
     const from = Math.max(0, lo)
     const to = Math.min(len, hi)
@@ -81,6 +86,24 @@ export function plasterPieces(drawing: Drawing, scene: MountingScene = mountingS
   return pieces
 }
 
+// куски пометки торца (change plaster-wall-end-face, design D3–D4): торец — конец исходной стены, у остатка на срезе сноса
+// торца для штукатурки нет; куском становится каждая открытая часть торца
+function endPieces(
+  mark: EndPlasterMark,
+  source: Wall,
+  isOwn: boolean,
+  len: number,
+  demolition: ReturnType<typeof effectiveMarks>,
+  byId: ReadonlyMap<string, Wall>,
+  sceneWalls: readonly Wall[],
+): PlasterPiece[] {
+  const spans: [number, number][] = isOwn ? [[0, len]] : remnantSpans(source, demolition)
+  const span = spans.find(([start, end]) => (mark.anchor === "a" ? start <= EPS_CM : end >= len - EPS_CM))
+  const wall = span && byId.get(isOwn ? source.id : remnantId(source.id, span[0]))
+  if (!wall) return []
+  return openEndRuns(wall, sceneWalls, mark.anchor).map(([from, to]) => ({ mark, wall, from, to }))
+}
+
 // выступ тела стены за концы оси до края открытой грани (change plaster-face-to-corners, design D2–D3); там, где плоскость
 // продолжает другая стена, выступа нет — его закрывает кусок соседа
 function overhang(wall: Wall, walls: readonly Wall[], face: Side, from: number, to: number): { a: number; b: number } {
@@ -100,6 +123,7 @@ function overhang(wall: Wall, walls: readonly Wall[], face: Side, from: number, 
 
 // полоса пометки: прямоугольник, примыкающий к грани снаружи тела стены; вглубь — на толщину
 export function plasterStrip(piece: PlasterPiece): Point[] {
+  if (piece.mark.face === "end") return endStrip(piece.wall, piece.mark.anchor, piece.from, piece.to, piece.mark.thicknessMm)
   const half = piece.wall.thicknessCm / 2
   const near = piece.mark.face * half
   const far = piece.mark.face * (half + piece.mark.thicknessMm / 10)

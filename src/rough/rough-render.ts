@@ -15,6 +15,8 @@ import type { Battery, Callout, Communication, Point, Screed, Unit, View, Wall, 
 import { SCREED_HATCH, strokeHatchSeries } from "../wall-hatch"
 import { plasterStrip } from "./plaster"
 import type { PlasterPiece } from "./plaster"
+import { endDimension } from "./plaster-end"
+import type { PlasterTargetPiece } from "./plaster-face"
 import { screedLabelBox } from "./screed-label"
 import { screedThresholds } from "./screed-threshold"
 import { screedLabel } from "./rough-model"
@@ -23,15 +25,8 @@ import { screedLabel } from "./rough-model"
 // стяжка — штриховкой помещения, штукатурка — фиолетовой полосой; блоки помещений поверх. Одна функция для холста и PDF.
 
 // подсветка цели инструмента «Штукатурка» (change plaster-click-whole-face, design D6): куски на стенах подложки
-export interface PlasterGhostPiece {
-  wall: Wall // стена подложки
-  from: number
-  to: number
-  face: 1 | -1
-}
-
 export interface PlasterGhost {
-  pieces: readonly PlasterGhostPiece[]
+  pieces: readonly PlasterTargetPiece[]
   thicknessMm: number
 }
 
@@ -191,7 +186,10 @@ export function drawRoughScene(
   if (ghost) {
     for (const part of ghost.pieces) {
       const piece: PlasterPiece = {
-        mark: { id: "ghost", wallId: part.wall.id, face: part.face, anchor: "a", fromCm: part.from, toCm: part.to, thicknessMm: ghost.thicknessMm },
+        mark:
+          part.face === "end"
+            ? { id: "ghost", wallId: part.wall.id, face: "end", anchor: part.end, thicknessMm: ghost.thicknessMm }
+            : { id: "ghost", wallId: part.wall.id, face: part.face, anchor: "a", fromCm: part.from, toCm: part.to, thicknessMm: ghost.thicknessMm },
         wall: part.wall,
         from: part.from,
         to: part.to,
@@ -239,6 +237,12 @@ export function drawRoughScene(
   ctx.font = `${m.labelPx}px ${m.font}`
   for (const piece of opts.dimensions === false ? [] : scene.pieces) {
     const selected = scene.selectedPlasterId === piece.mark.id
+    // торец — один размер, длина торца (change plaster-wall-end-face, design D7)
+    if (piece.mark.face === "end") {
+      const d = endDimension(piece.wall, piece.mark.anchor, piece.from, piece.to, unit, k, m.labelPx)
+      if (d) drawDimensionGeom(ctx, d.geom, d.text, colors.stroke, view, m, palette, false, selected, true)
+      continue
+    }
     for (const d of markDimensions(piece, walls, "chain", unit, k, m.labelPx)) {
       if (d.side !== piece.mark.face || (!selected && d.target !== "width")) continue
       drawDimensionGeom(ctx, d.geom, d.text, colors.stroke, view, m, palette, false, selected, true)

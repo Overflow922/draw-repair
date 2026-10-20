@@ -299,7 +299,8 @@ describe("правка чисел на месте", () => {
     const s = withMark()
     s.tool.select(px(150, 11))
     expect(s.tool.applyNumber(spotAt(s, "gapA")!, 150)).toBe(true)
-    const [m] = s.marks()
+    const [mark] = s.marks()
+    const m = mark?.face === "end" ? undefined : mark
     expect([m?.anchor, r6(m?.fromCm ?? 0), r6(m?.toCm ?? 0)]).toEqual(["a", 150, 240])
   })
 })

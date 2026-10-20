@@ -3,6 +3,8 @@ import { faceRunsReaching } from "../doorway/doorway-faces"
 import { wallNearBody } from "../doorway/doorway-scene"
 import type { Point, Wall } from "../types"
 import { RIGHT_COS, degenerate, dist, dot, perp, sub, unit } from "../wall-geometry"
+import { openEndRuns } from "./plaster-end"
+import type { WallEnd } from "./plaster-end"
 
 // Цель клика инструмента «Штукатурка» (changes plaster-click-whole-face, plaster-face-to-corners, design D1): плоскость стены под
 // курсором — открытый участок грани «от угла до угла», сквозь все стены, чьи грани лежат на одной линии (любой материал,
@@ -12,12 +14,26 @@ import { RIGHT_COS, degenerate, dist, dot, perp, sub, unit } from "../wall-geome
 const FACE_TOL_CM = 0.5
 
 // кусок цели на одной стене подложки: границы от конца a этой стены, грань — относительно оси этой стены
-export interface PlasterTargetPiece {
+export interface SideTargetPiece {
   wall: Wall
   face: 1 | -1
   from: number
   to: number
 }
+
+// кусок цели на торце (change plaster-wall-end-face, design D5): end — конец стены, from/to — поперечные смещения от оси
+export interface EndTargetPiece {
+  wall: Wall
+  face: "end"
+  end: WallEnd
+  from: number
+  to: number
+}
+
+export type PlasterTargetPiece = SideTargetPiece | EndTargetPiece
+
+// торец конца end стены подложки — конец исходной стены (design D4); по умолчанию любой конец
+export type SourceEnd = (wall: Wall, end: WallEnd) => boolean
 
 export interface PlasterTarget {
   pieces: PlasterTargetPiece[]
@@ -37,21 +53,36 @@ export interface PlaneWall {
 // грань, у которой лежит точка: сторона оси, на которой она находится
 export const faceOf = (wall: Wall, p: Point): 1 | -1 => (dot(sub(p, wall.a), perp(unit(wall.a, wall.b))) >= 0 ? 1 : -1)
 
-export function plasterTarget(p: Point, walls: readonly Wall[], radiusCm: number): PlasterTarget | null {
+export function plasterTarget(p: Point, walls: readonly Wall[], radiusCm: number, isSourceEnd: SourceEnd = () => true): PlasterTarget | null {
   const host = wallNearBody(p, walls, radiusCm)
   if (!host || degenerate(host)) return null
   const face = faceOf(host, p)
   const axis = unit(host.a, host.b)
   const plane = planeWalls(host, face, walls)
   const len = dist(host.a, host.b)
-  // курсор у свободного торца (за концом оси) выбирает боковую грань, ближайшую к нему
-  const t = Math.min(len, Math.max(0, dot(sub(p, host.a), axis)))
+  const along = dot(sub(p, host.a), axis)
+  const end = endTarget(host, walls, p, along, len, isSourceEnd)
+  if (end) return end
+  // курсор за свободным концом, но вне тела поперёк, выбирает боковую грань, ближайшую к нему
+  const t = Math.min(len, Math.max(0, along))
   const reachA = Math.max(0, ...plane.map((w) => -w.lo))
   const reachB = Math.max(0, ...plane.map((w) => w.hi - len))
   const run = faceRunsReaching(host, walls, face, reachA, reachB).find(([lo, hi]) => t >= lo - EPS_CM && t <= hi + EPS_CM)
   if (!run) return null
   const pieces = layPieces(plane, run)
   return pieces.length === 0 ? null : { pieces, focusWallId: host.id }
+}
+
+// Торец (design D5): проекция курсора за концом оси, а поперёк курсор в пределах тела стены; цель — открытая часть торца
+// под курсором. Закрытый торец и конец, не являющийся концом исходной стены, цели не дают — остаётся боковая грань.
+function endTarget(host: Wall, walls: readonly Wall[], p: Point, along: number, len: number, isSourceEnd: SourceEnd): PlasterTarget | null {
+  if (along >= 0 && along <= len) return null
+  const end: WallEnd = along < 0 ? "a" : "b"
+  const half = host.thicknessCm / 2
+  const lateral = dot(sub(p, host.a), perp(unit(host.a, host.b)))
+  if (Math.abs(lateral) > half || !isSourceEnd(host, end)) return null
+  const run = openEndRuns(host, walls, end).find(([from, to]) => lateral >= from - EPS_CM && lateral <= to + EPS_CM)
+  return run ? { pieces: [{ wall: host, face: "end", end, from: run[0], to: run[1] }], focusWallId: host.id } : null
 }
 
 // стены, у которых одна из граней лежит на линии грани опорной стены с той же стороны, по порядку вдоль её оси (опорная — тоже)

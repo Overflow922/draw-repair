@@ -164,9 +164,12 @@ function loadDemolition(raw: unknown, walls: Wall[]): { demolition?: DemolitionM
 export const isPlasterMark = (m: unknown): m is PlasterMark => {
   if (typeof m !== "object" || m === null) return false
   const x = m as Record<string, unknown>
-  return typeof x.id === "string" && x.id !== "" && typeof x.wallId === "string" && x.wallId !== "" &&
-    (x.face === 1 || x.face === -1) && (x.anchor === "a" || x.anchor === "b") && num(x.fromCm) && num(x.toCm) &&
-    x.fromCm >= 0 && x.toCm > x.fromCm && isThickness(x.thicknessMm, PLASTER_THICKNESS)
+  const common = typeof x.id === "string" && x.id !== "" && typeof x.wallId === "string" && x.wallId !== "" &&
+    (x.anchor === "a" || x.anchor === "b") && isThickness(x.thicknessMm, PLASTER_THICKNESS)
+  if (!common) return false
+  // торец (change plaster-wall-end-face, design D9): грань «end», участка вдоль оси нет
+  if (x.face === "end") return true
+  return (x.face === 1 || x.face === -1) && num(x.fromCm) && num(x.toCm) && x.fromCm >= 0 && x.toCm > x.fromCm
 }
 
 // стяжка: непустой идентификатор, опорная точка и целая толщина 10–200 мм
@@ -176,7 +179,10 @@ export const isScreed = (s: unknown): s is Screed => {
   return typeof x.id === "string" && x.id !== "" && isPoint(x.at) && isThickness(x.thicknessMm, SCREED_THICKNESS)
 }
 
-const copyPlaster = (m: PlasterMark): PlasterMark => ({ id: m.id, wallId: m.wallId, face: m.face, anchor: m.anchor, fromCm: m.fromCm, toCm: m.toCm, thicknessMm: m.thicknessMm })
+const copyPlaster = (m: PlasterMark): PlasterMark =>
+  m.face === "end"
+    ? { id: m.id, wallId: m.wallId, face: "end", anchor: m.anchor, thicknessMm: m.thicknessMm }
+    : { id: m.id, wallId: m.wallId, face: m.face, anchor: m.anchor, fromCm: m.fromCm, toCm: m.toCm, thicknessMm: m.thicknessMm }
 
 const copyScreed = (s: Screed): Screed => ({ id: s.id, at: { x: s.at.x, y: s.at.y }, thicknessMm: s.thicknessMm })
 
