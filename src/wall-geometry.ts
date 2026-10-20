@@ -1,3 +1,4 @@
+import { sceneMemo } from "./scene-cache"
 import type { Point, Wall } from "./types"
 
 // привязка вершины живёт в wall-snap (change fix-wall-snap-overlap, design D8);
@@ -483,7 +484,14 @@ function endShape(wall: Wall, E: Point, uIn: Point, nAB: Point, walls: Wall[], i
   return flat
 }
 
+const displayMemo = sceneMemo<Point[][]>()
+
+// кэш по значениям стен (change render-pan-perf): результат общий и защищён от записи
 export function displayPolygons(wall: Wall, walls: Wall[]): Point[][] {
+  return displayMemo(walls, wall, () => computeDisplayPolygons(wall, walls))
+}
+
+function computeDisplayPolygons(wall: Wall, walls: Wall[]): Point[][] {
   if (degenerate(wall)) return []
   const iWall = walls.indexOf(wall)
   const isLatest = iWall === -1 // превью считается позднейшей
@@ -769,7 +777,13 @@ function facesOpposite(own: Seg, ownPieces: Point[][], other: Seg, otherPieces: 
 
 // канонический контур стены: внешняя граница формы без участков, совпадающих (или почти
 // совпадающих) с внешней границей соседей того же материала — шов не рисуется (design D1, D2)
+const contourMemo = sceneMemo<Seg[]>()
+
 export function contourSegments(wall: Wall, walls: Wall[]): Seg[] {
+  return contourMemo(walls, wall, () => computeContourSegments(wall, walls))
+}
+
+function computeContourSegments(wall: Wall, walls: Wall[]): Seg[] {
   const own = displayPolygons(wall, walls)
   const neighbours = sameMaterialNeighbours(wall, walls)
   return outlineOf(own).flatMap(({ p1, p2 }) => {

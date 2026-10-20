@@ -1,11 +1,12 @@
 import polylabel from "polylabel"
 import { unionRegions } from "./polygon-union"
 import type { Region } from "./polygon-union"
+import { sceneMemo } from "./scene-cache"
 import type { Point, Wall } from "./types"
 import { displayPolygons, dist, dot, pointInPolygon, polygonArea, sub } from "./wall-geometry"
 
 // Помещения (change room-area-labels): дыры объединения отображаемых форм стен.
-// Ничего не хранится и не кэшируется — пересчёт по текущим стенам при каждом вызове.
+// В документе ничего не хранится; результат кэшируется по значениям стен (scene-cache) и пересчитывается при их изменении.
 
 export interface Room {
   outline: Point[]
@@ -80,9 +81,14 @@ function roomsOf(region: Region): Room[] {
   })
 }
 
+const roomsMemo = sceneMemo<Room[]>()
+
+// кэш по значениям стен (change render-pan-perf): результат общий и защищён от записи
 export function findRooms(walls: Wall[]): Room[] {
-  const pieces = walls.flatMap((wall) => displayPolygons(wall, walls))
-  return unionRegions(pieces, CLOSE_CM).flatMap(roomsOf)
+  return roomsMemo(walls, null, () => {
+    const pieces = walls.flatMap((wall) => displayPolygons(wall, walls))
+    return unionRegions(pieces, CLOSE_CM).flatMap(roomsOf)
+  })
 }
 
 // «14,25 м²»: округление до сотых м² в целых, без разделителя тысяч

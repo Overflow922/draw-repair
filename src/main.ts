@@ -47,6 +47,8 @@ import { fitScale, scaleLabel } from "./export/fit-scale"
 import type { PageFormat } from "./export/pdf"
 import { PLANS, activePlanOf, defaultToolOf, isPlanId, toolsOf } from "./plans"
 import type { PlanId } from "./plans"
+import { createDeferredSave } from "./deferred-save"
+import { createFrameScheduler } from "./frame-scheduler"
 import { loadStore, saveStore } from "./storage"
 import { placeWall, syncAutoDimensions } from "./auto-dimensions"
 import { mergeContinuation } from "./wall-merge"
@@ -162,6 +164,18 @@ let lengthDirty = false
 let angleDirty = false
 let view: View = current().view
 let dirty = false
+// смена вида пишется по завершении жеста, а не при каждом событии (change render-pan-perf, design D3):
+// пан — по отпусканию кнопки, колесо — после паузы, остаток — при скрытии страницы; история при этом не пишется
+const VIEW_SAVE_DELAY_MS = 300
+const viewSave = createDeferredSave(
+  () => {
+    if (!readOnly) saveStore(store)
+  },
+  VIEW_SAVE_DELAY_MS,
+  { set: (fn, ms) => window.setTimeout(fn, ms), clear: (handle) => window.clearTimeout(handle) },
+)
+// отрисовка не чаще раза за кадр: серия событий между кадрами даёт одну отрисовку (design D2)
+const frame = createFrameScheduler(drawPlan, { request: (fn) => requestAnimationFrame(fn), cancel: (handle) => cancelAnimationFrame(handle) })
 let selectedWalls: Wall[] = []
 let selectedDimensions: Dimension[] = []
 let endpointDrag: { wall: Wall; end: "a" | "b"; base: Point; snapshot: Scene; gesture: OrthoGesture } | null = null
@@ -1204,9 +1218,7 @@ function redraw(): void {
     restoreRemnants()
     if (dirty) commitMounting()
   }
-  if (onRough()) drawRoughPlan()
-  else if (onDemolition()) drawDemolitionPlan()
-  else drawMeasurePlan()
+  frame.request()
   syncRoughPanels()
   updateLengthBox()
   updateAngleBox()
@@ -1218,6 +1230,12 @@ function redraw(): void {
     if (!readOnly) saveStore(store)
     if (!readOnly && !historyReadOnly) saveHistory(historyStore)
   }
+}
+
+function drawPlan(): void {
+  if (onRough()) drawRoughPlan()
+  else if (onDemolition()) drawDemolitionPlan()
+  else drawMeasurePlan()
 }
 
 // план «Черновые работы»: подложка «Монтажа» серым, стяжка штриховкой, штукатурка полосой, блоки помещений, выделение и превью
@@ -1616,7 +1634,7 @@ canvas.addEventListener("pointermove", (e) => {
       x: panDrag.pan.x - (e.clientX - r.left - panDrag.start.x) / k,
       y: panDrag.pan.y - (e.clientY - r.top - panDrag.start.y) / k,
     }
-    dirty = true
+    viewSave.schedule()
     redraw()
     return
   }
@@ -1937,6 +1955,7 @@ canvas.addEventListener("pointerup", (e) => {
   }
   if (!panDrag || e.button !== 1) return
   panDrag = null
+  viewSave.flush()
   if (tool === "wall") updateWallCursor(e)
   else if (tool === "dimension" || tool === "ruler") cursor = toWorld(e)
   else cursor = toSnappedPoint(e)
@@ -1986,7 +2005,7 @@ canvas.addEventListener("wheel", (e) => {
   const r = canvas.getBoundingClientRect()
   view = zoomAt(view, 1.1 ** -Math.sign(e.deltaY), { x: e.clientX - r.left, y: e.clientY - r.top }, PX_PER_CM)
   current().view = view
-  dirty = true
+  viewSave.schedule()
   redraw()
 }, { passive: false })
 
@@ -2904,6 +2923,11 @@ window.addEventListener("keydown", (e) => {
 })
 
 window.addEventListener("resize", redraw)
+// не успевший записаться вид дописывается при закрытии и скрытии страницы
+window.addEventListener("pagehide", () => viewSave.flush())
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "hidden") viewSave.flush()
+})
 loadWorking()
 syncThicknessBox()
 syncToolUI()

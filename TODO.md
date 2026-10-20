@@ -939,3 +939,18 @@ Follow-ups from `wall-body-corners-snap` (2026-10-19).
 
 ## Out of scope (decided, revisit if needed)
 - Plaster-tool behaviour changes of 2026-10-20 (corner wrap, dimensions from the outer edge, no auto-select) were made as direct edits of `openspec/specs/rough-works-plan/spec.md` without separate OpenSpec changes; ghost of the end strip shows no corner wings before the side strips exist.
+
+# render-pan-perf (2026-10-20)
+
+## Tests
+- `main.ts` wiring of the pan / wheel / `pagehide` view save and of `redraw()` -> `frame.request()` has no automated test (no DOM harness): only `deferred-save.ts`, `frame-scheduler.ts` and the geometry cache are unit-tested. Checked by hand in Firefox on 2026-10-20: pan = 0 writes during the gesture and 1 on pointer-up (only `draw-repair:drawing`, no history), wheel = 1 write after a 300 ms pause, immediate reload after a wheel keeps the zoom, edit still writes drawing and history, undo + reload.
+- Scenario "Изменение вида не пишет историю" (`drawing-storage`) is covered only by that manual check: `viewSave` writes `saveStore` only, which is wiring in `main.ts`.
+
+## Bugs
+- Hover is still ~8 ms per `pointermove` on 64 walls (wall tool: snap and hover highlight in the handler, not geometry): with several events per frame the frame stretches (measured 58 ms with 5 events per frame, synthetic). Suspected cause: `updateWallCursor` / `eraserTarget` run per event; coalesce pointermove processing per frame. File: `src/main.ts` `pointermove` handler.
+
+## Out of scope (decided, revisit if needed)
+- History is unbounded and fully serialised on every edit (`src/history.ts` `serializeHistory`, called from `redraw()` when `dirty`): the cost grows with the session length; measured only with an empty history. Consider a depth limit and incremental writes.
+- Static layer (walls, hatching) on an offscreen canvas redrawn only when the scene or the view changes.
+- `cutPieces` / `cutContour` (`src/doorway/doorway-layout.ts`) are not cached: they depend on doorways and run per wall per frame; measure before caching.
+- No lint or formatter is configured in the project (see the earlier note), so the quality gates of this change were `tsc`, `vitest run` and `openspec validate`.
