@@ -1,9 +1,11 @@
 import { effectiveMarks, EPS_CM, lengthOf } from "../demolition/mark-model"
-import { hostPoint } from "../doorway/doorway-faces"
+import { faceRuns, hostPoint } from "../doorway/doorway-faces"
+import type { Side } from "../doorway/doorway-faces"
 import { mountingScene } from "../mounting/mounting-scene"
 import type { MountingScene } from "../mounting/mounting-scene"
 import { remnantId, remnantSpans } from "../mounting/remnants"
 import type { Drawing, PlasterMark, Point, Wall } from "../types"
+import { planeWalls } from "./plaster-face"
 
 // Штукатурка плана «Черновые работы» (change add-rough-works-plan, design D3, D4): пометка хранит участок грани исходной
 // стены (стена обмера или собственная стена «Монтажа») от конца привязки; на подложке (остатки, собственные стены) она
@@ -64,10 +66,36 @@ export function plasterPieces(drawing: Drawing, scene: MountingScene = mountingS
       const b = Math.min(to, end)
       if (b - a <= EPS_CM) continue
       const piece = byId.get(own.has(source.id) ? source.id : remnantId(source.id, start))
-      if (piece) pieces.push({ mark, wall: piece, from: a - start, to: b - start })
+      if (!piece) continue
+      const near = a - start
+      const far = b - start
+      const reach = overhang(piece, scene.walls, mark.face, near, far)
+      pieces.push({
+        mark,
+        wall: piece,
+        from: lo <= start + EPS_CM ? near - reach.a : near,
+        to: hi >= end - EPS_CM ? far + reach.b : far,
+      })
     }
   }
   return pieces
+}
+
+// выступ тела стены за концы оси до края открытой грани (change plaster-face-to-corners, design D2–D3); там, где плоскость
+// продолжает другая стена, выступа нет — его закрывает кусок соседа
+function overhang(wall: Wall, walls: readonly Wall[], face: Side, from: number, to: number): { a: number; b: number } {
+  const len = lengthOf(wall)
+  const run = faceRuns(wall, walls, face).reduce<[number, number] | null>(
+    (best, r) => (!best || Math.min(r[1], to) - Math.max(r[0], from) > Math.min(best[1], to) - Math.max(best[0], from) ? r : best),
+    null,
+  )
+  if (!run) return { a: 0, b: 0 }
+  const neighbours = planeWalls(wall, face, walls).filter((w) => w.wall !== wall)
+  const free = (lo: number, hi: number): boolean => !neighbours.some((w) => Math.min(w.hi, hi) - Math.max(w.lo, lo) > EPS_CM)
+  return {
+    a: run[0] < -EPS_CM && free(run[0], 0) ? -run[0] : 0,
+    b: run[1] > len + EPS_CM && free(len, run[1]) ? run[1] - len : 0,
+  }
 }
 
 // полоса пометки: прямоугольник, примыкающий к грани снаружи тела стены; вглубь — на толщину

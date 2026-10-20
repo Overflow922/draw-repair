@@ -908,3 +908,25 @@ Follow-ups from `wall-body-corners-snap` (2026-10-19).
 - [ ] `wall-drawing` «Привязка к существующим стенам» (main spec, ~line 155) still says an outer corner has no snap
   target "кроме угла свободного торца"; after `wall-body-corners-snap` the outer junction corner is a target
   («Диагональное прилипание к углу тела стены»). Reword that sentence (and the line about the end-zone window, ~157).
+
+
+## plaster-face-to-corners (apply, 2026-10-20)
+
+### Bugs
+
+- [ ] Doorway-at-joint gap (img.png) and the short-wall "no highlight" (img_2.png) did not reproduce on synthetic scenes
+  (`plaster-pipeline.test.ts` PL-1, PL-3 pass on the old code too). Needs the user's saved drawing; tasks 1.3/1.5 stay open.
+- [ ] `src/rough/plaster.ts` `overhang` extends a mark that touches a wall end to the open face end unless a coplanar
+  wall covers the zone; an offset (non-flush) neighbour or a near-parallel wall is not covered by a test.
+
+### Tests
+
+- [ ] `src/demolition/wall-edit-invariants.test.ts` INV-1/INV-2 failed at baseline in an earlier run; they passed on the
+  last full run (`vitest run --exclude ".claude/**"`), so they are flaky — investigate.
+- [ ] Vitest picks up stale `.claude/worktrees/agent-*` copies (the full run fails 6 files); add an `exclude` to the
+  vitest config or clean the worktrees.
+
+### Out of scope (decided, revisit if needed)
+
+- [ ] `chainFaceRuns` (`src/doorway/doorway-faces.ts`) is no longer called in production after the plaster rewrite;
+  only `chain-face-runs.test.ts` uses it. Remove together with its test if nothing else adopts it.

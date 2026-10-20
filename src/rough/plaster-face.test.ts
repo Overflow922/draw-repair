@@ -37,9 +37,9 @@ describe("цель клика", () => {
     expect(near).toEqual([["R1", 1, 10, 490]])
   })
 
-  it("PF-5: внешняя грань в комнате обрезается по оси стены", () => {
+  it("PF-5: внешняя грань в комнате идёт от внешнего угла до внешнего угла (change plaster-face-to-corners)", () => {
     const walls = rectWalls("R", 0, 0, 500, 300)
-    expect(summary(plasterTarget(at(250, -15), walls, R))).toEqual([["R1", -1, 0, 500]])
+    expect(summary(plasterTarget(at(250, -15), walls, R))).toEqual([["R1", -1, -10, 510]])
   })
 
   it("PF-6: примыкание торцом режет участок: цель — только часть до примыкания", () => {

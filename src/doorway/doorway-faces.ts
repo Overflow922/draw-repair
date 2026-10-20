@@ -124,6 +124,13 @@ export function chainFaceRuns(host: Wall, walls: readonly Wall[], side: Side): [
   return runsOver(host, walls, side, chains.a.extendCm, chains.b.extendCm)
 }
 
+// участки грани на отрезке опорной стены, расширенном на extendA / extendB за концы a и b (change plaster-face-to-corners,
+// design D1): плоскость из нескольких стен считается по телам стен, без цепочки осей
+export function faceRunsReaching(host: Wall, walls: readonly Wall[], side: Side, extendA: number, extendB: number): [number, number][] {
+  if (degenerate(host)) return []
+  return runsOver(host, walls, side, extendA, extendB)
+}
+
 // тело опорной стены вдоль оси: от начала первого до конца последнего участка, общего для обеих граней и лежащего на
 // стене; у конца с продолжением того же материала — не дальше конца оси (change fix-opening-reach-body-end, design D4a).
 // Выступ за ось есть там, где тело стены доходит до плоскости стыка со стеной другого материала.
