@@ -147,8 +147,9 @@ describe("pagesOf", () => {
     const dim = { from: { a: { wallId: "wa", edge: 2 }, b: { wallId: "wa", edge: 1 } }, to: { a: { wallId: "wa", edge: 3 }, b: { wallId: "wa", edge: 1 } }, offset: 30 }
     const d = drawing({ dimensions: [dim], doorways: [DOOR_A] })
     // TCR-3 (change mounting-plan): страниц три — добавлена страница плана «Монтаж» (pdf-export «Страница плана «Монтаж»»)
-    // TCR (change add-rough-works-plan): страниц четыре — добавлена страница плана «Черновые работы»
-    expect(pagesOf(d)).toHaveLength(4)
+    // TCR (change add-rough-works-plan): страниц четыре — добавлена страница плана «Черновые работы»;
+    // TCR (change reconstruction-plan): пять — добавлена страница плана «Реконструкция»
+    expect(pagesOf(d)).toHaveLength(5)
     // TCR-1 (change pdf-plan-page-names): страница плана несёт название плана для графы 5
     expect(pagesOf(d)[0]).toEqual({ walls: [WA], dimensions: [dim], doorways: [DOOR_A], title: "Обмерочный план" })
   })

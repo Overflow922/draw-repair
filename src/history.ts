@@ -1,7 +1,7 @@
 import { isNoteList } from "./notes/notes-store"
 import { historyKey } from "./plans"
 import type { PlanId } from "./plans"
-import { isBattery, isBatteryMark, isCallout, isCommunication, isDemolitionMark, isDimension, isDrawing, isPlasterMark, isRoomRecord, isScreed, isWall, isWallElement } from "./storage"
+import { isBattery, isBatteryMark, isCallout, isCommunication, isDemolitionMark, isDimension, isDrawing, isDrywallWall, isPlasterMark, isRoomRecord, isScreed, isWall, isWallElement } from "./storage"
 import type { Battery, BatteryMark, Callout, Communication, DemolitionMark, Dimension, DimPoint, Drawing, PlasterMark, RoomRecord, Screed, Wall, WallElement } from "./types"
 
 const KEY = "draw-repair:history"
@@ -67,7 +67,8 @@ const cloneDimPoint = (p: DimPoint): DimPoint => (p.kind === undefined ? { a: { 
 
 export function cloneScene(scene: Scene): Scene {
   return {
-    walls: scene.walls.map((w) => ({ id: w.id, a: { x: w.a.x, y: w.a.y }, b: { x: w.b.x, y: w.b.y }, thicknessCm: w.thicknessCm, type: w.type })),
+    // поля стены переносятся целиком: у стены ГКЛ плана «Реконструкция» есть высота (change reconstruction-plan, design D1)
+    walls: scene.walls.map((w) => ({ ...w, a: { x: w.a.x, y: w.a.y }, b: { x: w.b.x, y: w.b.y } })),
     dimensions: scene.dimensions.map((d) => ({
       from: cloneDimPoint(d.from),
       to: cloneDimPoint(d.to),
@@ -291,11 +292,17 @@ const isTrashEntry = (t: unknown): t is TrashEntry =>
   Number.isInteger((t as TrashEntry).index) && (t as TrashEntry).index >= 0 &&
   isDrawing((t as TrashEntry).drawing)
 
+// история плана «Реконструкция» (ключ «<id>:reconstruction»): стены снимков — стены ГКЛ с высотой
+// (change reconstruction-plan, design D7)
+const RECONSTRUCTION_SUFFIX = ":reconstruction"
+const isReconstructionHistory = (h: DrawingHistory): boolean =>
+  [...h.past, ...h.future].every((e) => e.kind !== "walls" || e.walls.every(isDrywallWall))
+
 const isHistoryStore = (d: unknown): d is HistoryStore => {
   if (typeof d !== "object" || d === null || (d as HistoryStore).version !== 2) return false
   const histories = (d as HistoryStore).histories
   return typeof histories === "object" && histories !== null && !Array.isArray(histories) &&
-    Object.values(histories).every(isDrawingHistory) &&
+    Object.entries(histories).every(([key, h]) => isDrawingHistory(h) && (!key.endsWith(RECONSTRUCTION_SUFFIX) || isReconstructionHistory(h))) &&
     Array.isArray((d as HistoryStore).trash) && (d as HistoryStore).trash.every(isTrashEntry)
 }
 

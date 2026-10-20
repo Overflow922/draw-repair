@@ -13,9 +13,10 @@ const drawing = (extra: Record<string, unknown> = {}): Drawing =>
 const callout: Callout = { id: "c", target: { x: 1, y: 2 }, at: { x: 3, y: 4 }, text: "Грунтовка" }
 
 describe("каталог", () => {
-  it("RW-100: «Черновые работы» (rough) — четвёртый, последний план каталога", () => {
+  // TCR (change reconstruction-plan): «Реконструкция» идёт после «Черновых работ» и становится последним планом
+  it("RW-100: «Черновые работы» (rough) — четвёртый план каталога, за ним «Реконструкция»", () => {
     expect(PLANS[3]).toEqual({ id: "rough", label: "Черновые работы" })
-    expect(PLANS.at(-1)?.id).toBe("rough")
+    expect(PLANS[4]).toEqual({ id: "reconstruction", label: "Реконструкция" })
   })
 
   it("RW-100: isPlanId принимает rough, но не другие написания", () => {

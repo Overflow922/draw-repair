@@ -55,6 +55,10 @@ export interface RoughOptions {
   theme?: Theme
   // размеры участков штукатурки (холст); в PDF их нет (spec pdf-export «Страница плана «Черновые работы»»)
   dimensions?: boolean
+  // цвет полос штукатурки вместо фиолетового (подложка плана «Реконструкция» рисует её серой, change reconstruction-plan, design D5)
+  plasterPaint?: PlasterColors
+  // слой поверх подложки и полос, под подписями стяжек и выносками (стены гипсокартона плана «Реконструкция»)
+  overlay?: (ctx: CanvasRenderingContext2D) => void
 }
 
 export interface PlasterColors {
@@ -80,7 +84,7 @@ export function drawRoughScene(
 ): void {
   const m = opts.metrics ?? SCREEN_METRICS
   const palette = opts.palette ?? LIGHT_PALETTE
-  const colors = plasterColors(opts.theme ?? "light")
+  const colors = opts.plasterPaint ?? plasterColors(opts.theme ?? "light")
   const k = PX_PER_CM * view.zoom
   const toScreen = (p: Point): Point => ({ x: (p.x - view.pan.x) * k, y: (p.y - view.pan.y) * k })
   const origin = toScreen({ x: 0, y: 0 })
@@ -209,6 +213,8 @@ export function drawRoughScene(
       ctx.restore()
     }
   }
+
+  opts.overlay?.(ctx)
 
   // подписи стяжек: подложка цвета бумаги и текст постоянного размера в опорной точке
   ctx.save()

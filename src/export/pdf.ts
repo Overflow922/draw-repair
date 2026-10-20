@@ -19,6 +19,8 @@ import { roomBlocksOf } from "../room-block"
 import { reconcileRooms } from "../room-explication"
 import type { ExplicatedRoom } from "../room-explication"
 import type { PlasterPiece } from "../rough/plaster"
+import { drawReconstructionScene } from "../reconstruction/reconstruction-render"
+import { reconstructionScene } from "../reconstruction/reconstruction-scene"
 import { drawRoughScene, roughExtent } from "../rough/rough-render"
 import { roughScene } from "../rough/rough-scene"
 import { LIGHT_PALETTE } from "../theme"
@@ -28,7 +30,7 @@ import { calloutLayout } from "../callout/callout-layout"
 import { calloutsOf } from "../callout/callout-store"
 import { notesOf } from "../notes/notes-store"
 import { CHAR_WIDTH } from "../doorway/element-label"
-import type { Battery, Callout, Communication, Dimension, Drawing, Point, Screed, Unit, Wall, WallElement } from "../types"
+import type { Battery, Callout, Communication, Dimension, Drawing, DrywallWall, Point, Screed, Unit, Wall, WallElement } from "../types"
 import { FONT_B64 } from "./font"
 import { PAGE_FORMATS_MM } from "./page-format"
 import type { PageFormat } from "./page-format"
@@ -168,11 +170,19 @@ export interface PlanPage {
   // слой плана «Черновые работы» (change add-rough-works-plan, design D6): действующие куски штукатурки и действующие стяжки с
   // помещениями; поле есть только у страницы этого плана, рядом rooms — помещения с площадью после штукатурки
   rough?: RoughLayer
+  // слой плана «Реконструкция» (change reconstruction-plan, design D5): действующие куски штукатурки подложки (серые) и стены
+  // гипсокартона; walls страницы — подложка, dimensions — размеры самого плана
+  reconstruction?: ReconstructionLayer
 }
 
 export interface RoughLayer {
   pieces: readonly PlasterPiece[]
   screeds: readonly { screed: Screed; room: Room }[]
+}
+
+export interface ReconstructionLayer {
+  pieces: readonly PlasterPiece[]
+  drywall: readonly DrywallWall[]
 }
 
 // страницы чертежа: по одной на план каталога в порядке каталога; объекты обмерочного плана лежат в прежних полях
@@ -225,6 +235,20 @@ export function pagesOf(drawing: Drawing): PlanPage[] {
           title: plan.label,
         }
       }
+      case "reconstruction": {
+        const scene = reconstructionScene(drawing, mounting)
+        return {
+          walls: scene.underlay,
+          dimensions: scene.dimensions,
+          doorways: mounting.doorways,
+          ...shared,
+          ...(mounting.batteries.length ? { batteries: mounting.batteries } : null),
+          ...callouts,
+          ...notes,
+          reconstruction: { pieces: scene.pieces, drywall: scene.own },
+          title: plan.label,
+        }
+      }
     }
   })
 }
@@ -254,8 +278,11 @@ export function pageBounds(page: PlanPage, scale: number): BBox {
   })
   // штукатурка и подписи стяжек плана «Черновые работы»
   const rough = page.rough ? roughExtent(page.rough, kMm, PDF_METRICS.labelPx) : []
-  const extra = [...marks, ...bodies, ...rects, ...calloutPoints, ...rough]
-  return wallsBBox(page.walls, page.dimensions, 0.5 * scale, page.doorways, scale, extra, batteries)
+  // штукатурка подложки плана «Реконструкция»; стены гипсокартона входят в габариты как стены
+  const reconstruction = page.reconstruction ? roughExtent({ pieces: page.reconstruction.pieces, screeds: [] }, kMm, PDF_METRICS.labelPx) : []
+  const extra = [...marks, ...bodies, ...rects, ...calloutPoints, ...rough, ...reconstruction]
+  const walls = page.reconstruction ? [...page.walls, ...page.reconstruction.drywall] : page.walls
+  return wallsBBox(walls, page.dimensions, 0.5 * scale, page.doorways, scale, extra, batteries)
 }
 
 export function placeOnPage(b: BBox, scale: number, format: PageFormat, legendMm = 0, bandMm?: number): Placement {
@@ -302,6 +329,19 @@ function drawPage(
   if (explication) drawExplication(doc, format, explication)
   const notes = pageNotes(page)
   if (notes) drawNotes(doc, format, notes)
+  if (page.reconstruction !== undefined) {
+    const scene = {
+      walls: page.walls,
+      doorways: page.doorways,
+      communications: page.communications,
+      batteries: page.batteries,
+      pieces: page.reconstruction.pieces,
+      drywall: page.reconstruction.drywall,
+      callouts: page.callouts,
+    }
+    drawReconstructionScene(ctx, w, h, scene, unit, view, { grid: false, metrics: PDF_METRICS, palette: LIGHT_PALETTE, theme: "light", dimensions: page.dimensions })
+    return
+  }
   if (page.rough !== undefined) {
     const scene = {
       walls: page.walls,

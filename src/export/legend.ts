@@ -14,6 +14,7 @@ export type LegendEntry =
   | { kind: "demolition"; label: string }
   | { kind: "plaster"; label: string }
   | { kind: "screed"; label: string }
+  | { kind: "drywall"; label: string }
 
 export const LEGEND_PAD_LEFT_MM = 8
 export const LEGEND_SAMPLE_W_MM = 16
@@ -31,9 +32,11 @@ export const LEGEND_BATTERY_THICKNESS_MM = 4
 
 // записи страницы сверху вниз: материалы стен в порядке каталога, затем батарея, стояк, воздуховод (если они нарисованы на странице),
 // затем снос, штукатурка и стяжка плана «Черновые работы» («Стяжка до N мм» — по наибольшей толщине действующих стяжек страницы,
-// change add-rough-works-plan, design D9); элементы стены (проём, дверь, окно) в легенду не входят
+// change add-rough-works-plan, design D9); на странице «Реконструкция» — штукатурка подложки и «Гипсокартон» (change
+// reconstruction-plan, design D5); стена гипсокартона материал «ГКЛ» не даёт, элементы стены (проём, дверь, окно) в легенду не входят
 export function legendEntries(page: PlanPage): LegendEntry[] {
-  if (page.walls.length === 0) return []
+  const drywall = page.reconstruction?.drywall.length ?? 0
+  if (page.walls.length === 0 && drywall === 0) return []
   const used = new Set(page.walls.map((w) => normalizeMaterial(w.type)))
   const entries: LegendEntry[] = MATERIALS.filter((m) => used.has(m.id)).map((m) => ({ kind: "material", material: m.id, label: m.label }))
   const communications = page.communications ?? []
@@ -41,9 +44,10 @@ export function legendEntries(page: PlanPage): LegendEntry[] {
   if (communications.some((c) => c.kind === "riser")) entries.push({ kind: "riser", label: "Стояк" })
   if (communications.some((c) => c.kind === "duct")) entries.push({ kind: "duct", label: "Воздуховод" })
   if ((page.demolition?.length ?? 0) > 0) entries.push({ kind: "demolition", label: "Демонтируемая стена" })
-  if ((page.rough?.pieces.length ?? 0) > 0) entries.push({ kind: "plaster", label: "Штукатурка" })
+  if ((page.rough?.pieces.length ?? 0) > 0 || (page.reconstruction?.pieces.length ?? 0) > 0) entries.push({ kind: "plaster", label: "Штукатурка" })
   const screeds = page.rough?.screeds ?? []
   if (screeds.length > 0) entries.push({ kind: "screed", label: `Стяжка до ${Math.max(...screeds.map((s) => s.screed.thicknessMm))} мм` })
+  if (drywall > 0) entries.push({ kind: "drywall", label: "Гипсокартон" })
   return entries
 }
 

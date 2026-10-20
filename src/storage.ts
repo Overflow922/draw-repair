@@ -4,7 +4,7 @@ import { isPlanId } from "./plans"
 import { mergeAllPlaster } from "./rough/plaster-marks"
 import { PLASTER_THICKNESS, SCREED_THICKNESS, isThickness } from "./rough/rough-model"
 import { isDoor, isWindow, normalizeMaterial } from "./types"
-import type { Battery, BatteryCornerPoint, BatteryMark, Callout, Communication, DemolitionMark, Dimension, DimPoint, Doorway, Drawing, DrawingStore, EdgePoint, EdgeRef, JambPoint, MountingContent, PlasterMark, Point, RoomRecord, Screed, View, Wall, WallDoor, WallElement, WallWindow } from "./types"
+import type { Battery, BatteryCornerPoint, BatteryMark, Callout, Communication, DemolitionMark, Dimension, DimPoint, Doorway, Drawing, DrawingStore, DrywallWall, EdgePoint, EdgeRef, JambPoint, MountingContent, PlasterMark, Point, ReconstructionContent, RoomRecord, Screed, View, Wall, WallDoor, WallElement, WallWindow } from "./types"
 
 const KEY = "draw-repair:drawing"
 
@@ -295,6 +295,43 @@ function loadMounting(raw: unknown): { mounting?: MountingContent } {
   }
 }
 
+// стена ГКЛ плана «Реконструкция» (change reconstruction-plan, design D7): непустой идентификатор, обе точки, толщина и высота
+// больше нуля; тип при загрузке не читается — стена всегда «ГКЛ». Идентификатор не восстанавливается: стена без него отбрасывается
+const isStoredDrywall = (w: unknown): boolean => {
+  if (typeof w !== "object" || w === null) return false
+  const x = w as Record<string, unknown>
+  return typeof x.id === "string" && x.id !== "" && isPoint(x.a) && isPoint(x.b) && num(x.thicknessCm) && x.thicknessCm > 0 && num(x.heightCm) && x.heightCm > 0
+}
+
+// стена ГКЛ в истории: та же проверка, что в документе, плюс тип «ГКЛ» снимка
+export const isDrywallWall = (w: unknown): w is DrywallWall => isStoredDrywall(w) && (w as Wall).type === "gkl"
+
+const copyDrywall = (w: DrywallWall): DrywallWall => ({
+  id: w.id,
+  a: { x: w.a.x, y: w.a.y },
+  b: { x: w.b.x, y: w.b.y },
+  thicknessCm: w.thicknessCm,
+  type: "gkl",
+  heightCm: w.heightCm,
+})
+
+// объекты плана «Реконструкция» при загрузке: некорректные стены и размеры отбрасываются по одному; размеры на отсутствующие стены
+// сохраняются; поле, не являющееся объектом, читается как отсутствующее; выноски и примечания — по общим правилам
+function loadReconstruction(raw: unknown): { reconstruction?: ReconstructionContent } {
+  if (typeof raw !== "object" || raw === null || Array.isArray(raw)) return {}
+  const x = raw as Record<string, unknown>
+  const list = (v: unknown): unknown[] => (Array.isArray(v) ? v : [])
+  const notes = loadNoteList(x.notes)
+  return {
+    reconstruction: {
+      walls: list(x.walls).filter(isStoredDrywall).map((w) => copyDrywall(w as DrywallWall)),
+      dimensions: list(x.dimensions).filter(isDimension).map(copyDimension),
+      ...(x.callouts === undefined ? null : { callouts: loadCalloutList(x.callouts) }),
+      ...(notes === undefined ? null : { notes }),
+    },
+  }
+}
+
 const emptyDrawing = (name: string): Drawing => ({
   id: crypto.randomUUID(),
   name,
@@ -359,6 +396,7 @@ export function parseStore(raw: string): LoadedStore | null {
           ...(Array.isArray(dr.roughCallouts) ? { roughCallouts: loadCalloutList(dr.roughCallouts) } : null),
           ...(roughNotes === undefined ? null : { roughNotes }),
           ...loadRooms(dr.rooms),
+          ...loadReconstruction(dr.reconstruction),
           dimensions: (Array.isArray(dr.dimensions) ? dr.dimensions : []).filter(isDimension).map(copyDimension),
         }
       })

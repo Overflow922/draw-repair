@@ -954,3 +954,14 @@ Follow-ups from `wall-body-corners-snap` (2026-10-19).
 - Static layer (walls, hatching) on an offscreen canvas redrawn only when the scene or the view changes.
 - `cutPieces` / `cutContour` (`src/doorway/doorway-layout.ts`) are not cached: they depend on doorways and run per wall per frame; measure before caching.
 - No lint or formatter is configured in the project (see the earlier note), so the quality gates of this change were `tsc`, `vitest run` and `openspec validate`.
+
+# reconstruction-plan (2026-10-20)
+
+## Bugs
+- A drywall wall whose axis lies exactly on a substrate wall's axis, ends inside that wall, cannot be moved along it (`moveWallsBounded` returns 0): the engine reads such ends as T-attachments (`teeEndAttached`, `src/geometry.ts`) and pins them. The spec «Границы правки стен гипсокартона» says an overlap drawn earlier must not block editing. Not reachable by snapping (drywall sits on the plaster/wall face), so only a hand-placed or loaded document hits it. `RC-47` in `src/reconstruction/reconstruction-snap.test.ts` covers the overlap offset from the axis (y = 3); the on-axis case (y = 0) is untested.
+
+## Tests
+- The «Реконструкция» wiring in `src/main.ts` (tool, panel, selection, eraser, Delete, dimensions, plan switch) has no automated test: `main.ts` is not unit-testable. Checked by hand in Firefox: drawing, save, reload, panel on selection, thickness edit, undo and redo. Not checked by hand: eraser, Delete, dimensions between substrate and drywall, dark theme (the PDF of the fifth page is covered by `src/export/reconstruction-pdf.test.ts`).
+
+## Out of scope (decided, revisit if needed)
+- Openings (doorway, door, window) in drywall walls: not in the first version of the «Реконструкция» plan (user decision, 2026-10-20).

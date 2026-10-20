@@ -63,9 +63,10 @@ const near = (a: readonly number[], b: readonly number[]): boolean => a.every((v
 const purpleFills = (doc: jsPDF, page: number) => parsePaint(doc, page).filter((op) => op.kind === "fill" && near(op.color, PURPLE))
 
 describe("pagesOf: страница «Черновые работы»", () => {
-  it("RW-110: страниц четыре; четвёртая — «Черновые работы» с подложкой «Монтажа», без размеров и пометок сноса", () => {
+  // TCR (change reconstruction-plan): после «Черновых работ» в каталоге пятый план, страниц пять
+  it("RW-110: страниц пять; четвёртая — «Черновые работы» с подложкой «Монтажа», без размеров и пометок сноса", () => {
     const pages = pagesOf(rough({ roughPlaster: ALL_FACES }))
-    expect(pages).toHaveLength(4)
+    expect(pages).toHaveLength(5)
     const fourth = pages[3]
     expect(fourth?.title).toBe("Черновые работы")
     expect(fourth?.walls.map((w) => w.id)).toEqual(["k1~0", "k2~0", "k3~0", "k4~0"])
@@ -105,11 +106,12 @@ describe("pagesOf: страница «Черновые работы»", () => {
 })
 
 describe("страница «Черновые работы» в документе PDF", () => {
-  it("RW-120: PDF содержит четыре страницы; штукатурка фиолетовая только на четвёртой", () => {
+  // TCR (change reconstruction-plan): страниц пять; на пятой штукатурка серая, фиолетового нет и там
+  it("RW-120: PDF содержит пять страниц; штукатурка фиолетовая только на четвёртой", () => {
     const doc = build(rough({ roughPlaster: ALL_FACES }))
-    expect(doc.getNumberOfPages()).toBe(4)
+    expect(doc.getNumberOfPages()).toBe(5)
     expect(purpleFills(doc, 4).length).toBeGreaterThan(0)
-    for (const n of [1, 2, 3]) expect(purpleFills(doc, n), `страница ${n}`).toEqual([])
+    for (const n of [1, 2, 3, 5]) expect(purpleFills(doc, n), `страница ${n}`).toEqual([])
   })
 
   it("RW-121: толщина штукатурки 20 мм при 1:50 — полоса шириной 0,4 мм на листе", () => {
@@ -122,8 +124,8 @@ describe("страница «Черновые работы» в документ
   it("RW-122: стяжка в PDF — подпись «h = 65мм» на четвёртой странице; на остальных её нет", () => {
     const doc = build(rough({ roughScreeds: [screed("s", 200, 260, 65)] }))
     expect(textsOn(4)).toContain("h = 65мм")
-    for (const n of [1, 2, 3]) expect(textsOn(n).includes("h = 65мм"), `страница ${n}`).toBe(false)
-    expect(doc.getNumberOfPages()).toBe(4)
+    for (const n of [1, 2, 3, 5]) expect(textsOn(n).includes("h = 65мм"), `страница ${n}`).toBe(false)
+    expect(doc.getNumberOfPages()).toBe(5) // TCR (change reconstruction-plan)
   })
 
   it("RW-123: стяжка штрихует помещение: на четвёртой странице больше диагональных штрихов, чем без стяжки", () => {

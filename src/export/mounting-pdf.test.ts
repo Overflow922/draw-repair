@@ -74,7 +74,8 @@ describe("pagesOf: страница «Монтаж»", () => {
   it("MP-80: страниц три; третья — «Монтаж» из остатков и собственных стен, без пометок сноса", () => {
     const pages = pagesOf(withMounting())
     // TCR (change add-rough-works-plan): страниц четыре — четвёртая «Черновые работы»; третья по-прежнему «Монтаж»
-    expect(pages).toHaveLength(4)
+    // TCR (change reconstruction-plan): страниц пять — пятая «Реконструкция»
+    expect(pages).toHaveLength(5)
     const third = pages[2]
     expect(third?.title).toBe("Монтаж")
     expect(third?.walls.map((w) => w.id)).toEqual(["W~0", "W~1900", "N"])
@@ -100,7 +101,7 @@ describe("pagesOf: страница «Монтаж»", () => {
 
   it("MP-81: чертёж без поля mounting — третья страница из одних остатков", () => {
     const pages = pagesOf(drawing({ demolition: [MARK] }))
-    expect(pages).toHaveLength(4) // TCR (change add-rough-works-plan)
+    expect(pages).toHaveLength(5) // TCR (change add-rough-works-plan, reconstruction-plan)
     expect(pages[2]?.walls.map((w) => w.id)).toEqual(["W~0", "W~1900"])
     expect(pages[2]?.dimensions).toEqual([])
   })
@@ -120,7 +121,7 @@ describe("pagesOf: страница «Монтаж»", () => {
 
   it("MP-84: чертёж без стен — третья страница пуста, но остаётся", () => {
     const pages = pagesOf(drawing({ walls: [] }))
-    expect(pages).toHaveLength(4) // TCR (change add-rough-works-plan)
+    expect(pages).toHaveLength(5) // TCR (change add-rough-works-plan, reconstruction-plan)
     expect(pages[2]?.walls).toEqual([])
   })
 })
@@ -128,7 +129,7 @@ describe("pagesOf: страница «Монтаж»", () => {
 describe("третья страница в документе PDF", () => {
   it("MP-85: в PDF три страницы; красного (сноса) на третьей нет", () => {
     const doc = build(withMounting())
-    expect(doc.getNumberOfPages()).toBe(4) // TCR (change add-rough-works-plan): четвёртая страница «Черновые работы»
+    expect(doc.getNumberOfPages()).toBe(5) // TCR (change add-rough-works-plan, reconstruction-plan): четвёртая «Черновые работы», пятая «Реконструкция»
     expect(parseColoredStrokes(doc, 3).filter((s) => isRed(s.color))).toEqual([])
   })
 
@@ -155,7 +156,7 @@ describe("третья страница в документе PDF", () => {
   it("MP-87: размер собственных объектов нарисован на третьей странице, размер обмера — нет", () => {
     const measureDim = dimension(["W", 2], ["W", 1], ["W", 3], ["W", 1], 60)
     const bare = build(drawing({ demolition: [MARK], mounting: { walls: [N], dimensions: [] } }))
-    expect(bare.getNumberOfPages()).toBe(4) // TCR (change add-rough-works-plan)
+    expect(bare.getNumberOfPages()).toBe(5) // TCR (change add-rough-works-plan, reconstruction-plan)
     const bareThird = numeric(textsOn(3))
     build(drawing({ demolition: [MARK], dimensions: [measureDim], mounting: { walls: [N], dimensions: [] } }))
     expect(numeric(textsOn(3))).toEqual(bareThird)
@@ -202,8 +203,8 @@ describe("третья страница в документе PDF", () => {
 
   it("MP-89: у третьей страницы те же рамка, формат и масштаб, что у остальных", () => {
     const doc = build(withMounting(), 50, "A3")
-    expect(doc.getNumberOfPages()).toBe(4) // TCR (change add-rough-works-plan)
-    for (const n of [1, 2, 3, 4]) expect(textsOn(n), `страница ${n}`).toContain("1:50")
+    expect(doc.getNumberOfPages()).toBe(5) // TCR (change add-rough-works-plan, reconstruction-plan)
+    for (const n of [1, 2, 3, 4, 5]) expect(textsOn(n), `страница ${n}`).toContain("1:50")
   })
 })
 

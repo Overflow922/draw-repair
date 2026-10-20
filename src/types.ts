@@ -246,6 +246,21 @@ export interface MountingContent {
   notes?: string[]
 }
 
+// Стена гипсокартона плана «Реконструкция» (change reconstruction-plan, design D1): стена с высотой; материал всегда «ГКЛ»,
+// при загрузке тип не читается. Координаты абсолютные: от подложки стена не зависит
+export interface DrywallWall extends Wall {
+  type: "gkl"
+  heightCm: number
+}
+
+// Собственные объекты плана «Реконструкция» (change reconstruction-plan, design D1): стены ГКЛ и их размеры, выноски и примечания
+export interface ReconstructionContent {
+  walls: DrywallWall[]
+  dimensions: Dimension[]
+  callouts?: Callout[]
+  notes?: string[]
+}
+
 export interface Drawing {
   id: string
   name: string
@@ -284,6 +299,8 @@ export interface Drawing {
   roughScreeds?: Screed[]
   roughCallouts?: Callout[]
   roughNotes?: string[]
+  // объекты плана «Реконструкция»; отсутствие — пустой план, при загрузке не дописывается (reconstruction-plan design D1)
+  reconstruction?: ReconstructionContent
   view: View
 }
 

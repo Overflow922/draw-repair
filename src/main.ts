@@ -49,7 +49,16 @@ import { PLANS, activePlanOf, defaultToolOf, isPlanId, toolsOf } from "./plans"
 import type { PlanId } from "./plans"
 import { createDeferredSave } from "./deferred-save"
 import { createFrameScheduler } from "./frame-scheduler"
-import { loadStore, saveStore } from "./storage"
+import { UNIT_TO_CM } from "./format-length"
+import { isDrywallWall, loadStore, saveStore } from "./storage"
+import { DRYWALL_DEFAULTS, editParams, newDrywallWall, panelValues, parseLengthField } from "./reconstruction/drywall-params"
+import type { DrywallParams } from "./reconstruction/drywall-params"
+import { PLASTER_OBSTACLE_PREFIX } from "./reconstruction/plaster-obstacles"
+import { renderReconstruction } from "./reconstruction/reconstruction-render"
+import { reconstructionScene } from "./reconstruction/reconstruction-scene"
+import type { ReconstructionScene } from "./reconstruction/reconstruction-scene"
+import { openReconstruction, storedReconstruction } from "./reconstruction/reconstruction-workspace"
+import type { Workspace as ReconstructionWorkspace } from "./reconstruction/reconstruction-workspace"
 import { placeWall, syncAutoDimensions } from "./auto-dimensions"
 import { mergeContinuation } from "./wall-merge"
 import { axisLengthForEdgeCm, edgeLengthCm } from "./wall-length"
@@ -73,7 +82,7 @@ import { afterPlace, escapeAction, resumesAfterSelectionCleared, selectionAllowe
 import { loadThemeChoice, paletteOf, resolveTheme, saveThemeChoice, themeToggleTitle, toggledTheme } from "./theme"
 import type { Theme } from "./theme"
 import { GRID_STEP_CM, MATERIALS, PX_PER_CM } from "./types"
-import type { Battery, BatteryMark, Communication, DemolitionMark, Dimension, DimPoint, Drawing, Material, PlasterMark, Point, RoomRecord, Screed, Unit, View, Wall, WallElement } from "./types"
+import type { Battery, BatteryMark, Communication, DemolitionMark, Dimension, DimPoint, Drawing, DrywallWall, Material, PlasterMark, Point, RoomRecord, Screed, Unit, View, Wall, WallElement } from "./types"
 
 const canvas = document.querySelector<HTMLCanvasElement>("#canvas")!
 const canvasWrap = document.querySelector<HTMLElement>("#canvas-wrap")!
@@ -103,6 +112,12 @@ const screedPanel = document.querySelector<HTMLElement>("#screed-panel")!
 const screedThicknessInput = document.querySelector<HTMLInputElement>("#screed-thickness")!
 const toolbar = document.querySelector<HTMLElement>("#toolbar")!
 const wallPanel = document.querySelector<HTMLElement>("#wall-panel")!
+const toolDrywallBtn = document.querySelector<HTMLButtonElement>("#tool-drywall")!
+const drywallPanel = document.querySelector<HTMLElement>("#drywall-panel")!
+const drywallThicknessInput = document.querySelector<HTMLInputElement>("#drywall-thickness")!
+const drywallHeightInput = document.querySelector<HTMLInputElement>("#drywall-height")!
+const drywallThicknessUnit = document.querySelector<HTMLElement>("#drywall-thickness-unit")!
+const drywallHeightUnit = document.querySelector<HTMLElement>("#drywall-height-unit")!
 const roomEditor = document.querySelector<HTMLElement>("#room-editor")!
 const roomNameInput = document.querySelector<HTMLInputElement>("#room-name")!
 const roomHeightInput = document.querySelector<HTMLInputElement>("#room-height")!
@@ -144,6 +159,14 @@ let selectedBatteries: Battery[] = []
 // «остатки + собственные объекты», а в чертёж пишется хранимое представление; null на остальных планах
 let workspace: Workspace | null = null
 let remnantHome = new Map<string, { a: Point; b: Point }>() // исходные концы остатков: остатки не двигаются
+// рабочий набор плана «Реконструкция» (change reconstruction-plan, design D2): walls — подложка и стены гипсокартона, полосы
+// штукатурки лежат отдельно как виртуальные стены-препятствия; в чертёж пишутся только стены гипсокартона и размеры
+let reconWorkspace: ReconstructionWorkspace | null = null
+let obstacles: Wall[] = []
+let reconCache: ReconstructionScene | null = null
+// толщина и высота новых стен гипсокартона: запоминаются в сеансе, в чертёж не входят
+let drywallParams: DrywallParams = { ...DRYWALL_DEFAULTS }
+let drywallPanelOpen = false
 let selectedDoorways: WallElement[] = []
 // выделенная коммуникация (change add-communications): выделяется только на обмерочном плане, ровно одна
 let selectedCommunication: Communication | null = null
@@ -227,6 +250,11 @@ const activeHistory = () => planHistory(historyStore, store.activeId, activePlan
 // сцена в представлении чертежа и истории: на плане «Монтаж» — только собственные объекты, без остатков и старых
 // элементов (design D6); на остальных планах — сама сцена
 const historyOf = (s: Scene): Scene => {
+  // на плане «Реконструкция» — только стены гипсокартона и размеры плана (design D7)
+  if (reconWorkspace) {
+    const stored = storedReconstruction(s, reconWorkspace, current())
+    return { walls: stored.walls, dimensions: stored.dimensions }
+  }
   if (!workspace) return s
   const stored = storedContent(s, workspace, current())
   // данные помещений — часть шага истории «Монтажа»: снимок берётся до операции, записи ещё не пересмотрены (design D2)
@@ -323,7 +351,7 @@ const pushRecord = (): void => {
 // список проёмов заменяется целиком: правки проёма возвращают новый объект
 function setDoorways(next: WallElement[]): void {
   doorways = next
-  if (!workspace) current().doorways = next
+  if (!workspace && !reconWorkspace) current().doorways = next
   selectedDoorways = selectedDoorways.filter((d) => next.includes(d))
 }
 
@@ -331,12 +359,17 @@ function setDoorways(next: WallElement[]): void {
 // батареи нет (отмена удаления возвращает и пометку)
 function setBatteries(next: Battery[]): void {
   batteries = next
-  if (!workspace) current().batteries = next
+  if (!workspace && !reconWorkspace) current().batteries = next
   selectedBatteries = selectedBatteries.filter((b) => next.includes(b))
 }
 
 // список размеров заменяется целиком; размеры плана «Монтаж» пишутся в чертёж при фиксации (commitMounting)
 function setDimensions(next: Dimension[]): void {
+  // размеры плана «Реконструкция» пишутся в чертёж при фиксации (commitReconstruction)
+  if (reconWorkspace) {
+    dimensions = next
+    return
+  }
   if (!workspace) {
     dimensions = next
     current().dimensions = next
@@ -351,6 +384,24 @@ function setDimensions(next: Dimension[]): void {
 function loadWorking(): void {
   const d = current()
   roughCache = null
+  reconCache = null
+  reconWorkspace = null
+  obstacles = []
+  if (activePlanOf(d) === "reconstruction") {
+    // подложка — результат «Черновых работ» без стяжки, только для чтения; стены гипсокартона правятся как стены
+    const opened = openReconstruction(d)
+    const isObstacle = (w: Wall): boolean => w.id.startsWith(PLASTER_OBSTACLE_PREFIX)
+    const base = reconNow().base
+    obstacles = opened.scene.walls.filter(isObstacle)
+    walls = opened.scene.walls.filter((w) => !isObstacle(w))
+    dimensions = opened.scene.dimensions
+    doorways = base.doorways
+    batteries = base.batteries
+    workspace = null
+    reconWorkspace = opened.workspace
+    remnantHome = new Map(walls.filter((w) => opened.workspace.readOnlyIds.has(w.id)).map((w) => [w.id, { a: { ...w.a }, b: { ...w.b } }]))
+    return
+  }
   if (activePlanOf(d) === "rough") {
     // подложка «Черновых работ» — результат «Монтажа», только для чтения: инструменты плана правят свои списки, а не стены
     const base = roughNow().base
@@ -390,6 +441,20 @@ function commitMounting(): void {
   drawing.mounting = next
 }
 
+// запись стен гипсокартона и размеров плана «Реконструкция» в чертёж; пока их нет и поля не было, оно не создаётся
+function commitReconstruction(): void {
+  const drawing = store.drawings.find((d) => d.id === store.activeId)
+  if (!reconWorkspace || !drawing) return // вкладка уже закрыта — писать некуда
+  const next = storedReconstruction({ walls, dimensions }, reconWorkspace, drawing)
+  if (next.walls.length === 0 && next.dimensions.length === 0 && drawing.reconstruction === undefined) return
+  drawing.reconstruction = next
+}
+
+const commitWorking = (): void => {
+  commitMounting()
+  commitReconstruction()
+}
+
 // остатки и старые элементы только для чтения: правка соседа не должна сдвигать остаток
 function restoreRemnants(): void {
   for (const w of walls) {
@@ -401,9 +466,17 @@ function restoreRemnants(): void {
   }
 }
 
-const editableWall = (w: Wall): boolean => !workspace?.remnantIds.has(w.id)
-const editableElement = (e: WallElement): boolean => !workspace?.oldElementIds.has(e.id)
-const editableBattery = (b: Battery): boolean => !workspace?.oldBatteryIds.has(b.id)
+const editableWall = (w: Wall): boolean => !workspace?.remnantIds.has(w.id) && !reconWorkspace?.readOnlyIds.has(w.id)
+// на плане «Реконструкция» элементы и батареи — подложка, их правят на своих планах
+const editableElement = (e: WallElement): boolean => reconWorkspace === null && !workspace?.oldElementIds.has(e.id)
+const editableBattery = (b: Battery): boolean => reconWorkspace === null && !workspace?.oldBatteryIds.has(b.id)
+
+// стены, которые видят привязка и ограничения правки: стены плана и полосы штукатурки подложки (design D3)
+const solid = (): Wall[] => (obstacles.length ? [...walls, ...obstacles] : walls)
+
+// «Гипсокартон» рисуется теми же жестами, что «Стена» (spec reconstruction-plan «Рисование стен гипсокартона»); толщина — из своей панели
+const isWallTool = (): boolean => tool === "wall" || tool === "drywall"
+const newWallThickness = (): number => (tool === "drywall" ? drywallParams.thicknessCm : thicknessCm)
 
 function replaceDoorway(prev: WallElement, next: WallElement): void {
   selectedDoorways = selectedDoorways.map((d) => (d === prev ? next : d))
@@ -668,6 +741,8 @@ function pressDemolitionNumber(p: Point): boolean {
 // план «Черновые работы» (change add-rough-works-plan, design D8): штукатурка и стяжки лежат в чертеже; сцена (подложка,
 // куски штукатурки, действующие стяжки, помещения) вычисляется и держится в кэше до изменения данных или смены плана
 const onRough = (): boolean => activePlanOf(current()) === "rough"
+const onReconstruction = (): boolean => activePlanOf(current()) === "reconstruction"
+const reconNow = (): ReconstructionScene => (reconCache ??= reconstructionScene(current()))
 const NO_PLASTER: PlasterMark[] = []
 const NO_SCREEDS: Screed[] = []
 let roughCache: RoughScene | null = null
@@ -971,9 +1046,56 @@ const pushSnapshot = (snapshot: Scene): void => {
   recordSnapshot(activeHistory(), historyOf(snapshot))
 }
 
+// панель выделенной стены: на плане «Реконструкция» это панель «Гипсокартон», на остальных — панель «Стена»
 function setWallPanel(open: boolean): void {
+  if (onReconstruction()) {
+    drywallPanelOpen = open
+    syncDrywallPanel()
+    return
+  }
   wallPanelOpen = open
   wallPanel.classList.toggle("open", open)
+}
+
+// выделенная стена гипсокартона: ровно одна, не подложка
+const selectedDrywall = (): DrywallWall | null => {
+  const only = selectedWalls.length === 1 ? selectedWalls[0] : null
+  return only && isDrywallWall(only) ? only : null
+}
+
+// панель «Гипсокартон»: значения выделенной стены, иначе значения для новых; единицы — текущие (spec reconstruction-plan)
+function syncDrywallPanel(): void {
+  drywallPanel.classList.toggle("open", drywallPanelOpen)
+  toolDrywallBtn.classList.toggle("active", tool === "drywall")
+  drywallThicknessUnit.textContent = `Толщина, ${UNIT_LABEL[unit]}`
+  drywallHeightUnit.textContent = `Высота, ${UNIT_LABEL[unit]}`
+  const shown = panelValues(drywallParams, selectedDrywall())
+  if (document.activeElement !== drywallThicknessInput) drywallThicknessInput.value = formatCm(shown.thicknessCm, unit)
+  if (document.activeElement !== drywallHeightInput) drywallHeightInput.value = formatCm(shown.heightCm, unit)
+}
+
+// стена гипсокартона заменяется новым объектом одним шагом истории
+function replaceDrywall(prev: DrywallWall, next: DrywallWall): void {
+  pushRecord()
+  walls[walls.indexOf(prev)] = next
+  selectedWalls = selectedWalls.map((w) => (w === prev ? next : w))
+  dirty = true
+  redraw()
+}
+
+// правка поля панели: выделенная стена меняется одним шагом, иначе меняются значения для новых; недопустимое значение не применяется
+function applyDrywallField(field: keyof DrywallParams, input: HTMLInputElement): void {
+  const cm = parseLengthField(input.value, unit)
+  const selected = selectedDrywall()
+  if (cm !== null) {
+    const edited = editParams(drywallParams, selected, { [field]: cm })
+    drywallParams = edited.params
+    if (selected && edited.wall) replaceDrywall(selected, edited.wall)
+  }
+  input.blur()
+  syncDrywallPanel()
+  refreshWallCursor()
+  redraw()
 }
 
 function selectDimension(dim: Dimension): void {
@@ -1003,7 +1125,8 @@ function selectWall(wall: Wall): void {
   selectedDoorways = []
   lengthDirty = false
   syncThicknessBox()
-  setWallMaterial(wall.type)
+  // у стены гипсокартона материала нет: панель «Гипсокартон» открывается сама, материал стены новым стенам не передаётся
+  if (!onReconstruction()) setWallMaterial(wall.type)
   setWallPanel(true)
 }
 
@@ -1043,6 +1166,7 @@ function syncToolUI(): void {
   syncNotesUI()
   toolDemolitionBtn.classList.toggle("active", tool === "demolition")
   syncRoughPanels()
+  syncDrywallPanel()
   syncOpeningsUI()
   syncCommunicationsUI()
   syncToolbar()
@@ -1111,7 +1235,6 @@ function leaveCommunicationPlacing(): void {
   redraw()
 }
 
-const UNIT_TO_CM: Record<Unit, number> = { m: 100, cm: 1, mm: 0.1 }
 const UNIT_LABEL: Record<Unit, string> = { m: "м", cm: "см", mm: "мм" }
 
 function formatCm(cm: number, u: Unit): string {
@@ -1175,7 +1298,7 @@ function resizeSelected(): void {
   const len = axisLengthForEdgeCm(selectedWalls[0], walls, typed)
   if (len === null) return
   const before = cloneScene(scene())
-  const result = resizeWallBounded(walls, selectedWalls[0], len, { ortho, doorways, communications: communicationsOf(), batteries })
+  const result = resizeWallBounded(solid(), selectedWalls[0], len, { ortho, doorways, communications: communicationsOf(), batteries })
   if (result.kind === "rejected") return
   pushSnapshot(before)
   dirty = true
@@ -1190,7 +1313,7 @@ function updateLengthBox(): void {
 
 // поле угла активно только при построении от стены примыкания
 function updateAngleBox(): void {
-  const active = tool === "wall" && chainStart !== null && chainRef !== null
+  const active = isWallTool() && chainStart !== null && chainRef !== null
   angleInput.disabled = !active
   if (!active) {
     angleInput.value = ""
@@ -1217,9 +1340,13 @@ function redraw(): void {
   if (workspace) {
     restoreRemnants()
     if (dirty) commitMounting()
+  } else if (reconWorkspace) {
+    restoreRemnants()
+    if (dirty) commitReconstruction()
   }
   frame.request()
   syncRoughPanels()
+  syncDrywallPanel()
   updateLengthBox()
   updateAngleBox()
   syncHistoryButtons()
@@ -1233,9 +1360,73 @@ function redraw(): void {
 }
 
 function drawPlan(): void {
-  if (onRough()) drawRoughPlan()
+  if (onReconstruction()) drawReconstructionPlan()
+  else if (onRough()) drawRoughPlan()
   else if (onDemolition()) drawDemolitionPlan()
   else drawMeasurePlan()
+}
+
+// план «Реконструкция»: подложка «Черновых работ» серым, стены гипсокартона зелёным, размеры и жесты построения как на обмере
+function drawReconstructionPlan(): void {
+  const palette = paletteOf(theme)
+  const underlay = walls.filter((w) => reconWorkspace?.readOnlyIds.has(w.id) === true)
+  const own = walls.filter(isDrywallWall)
+  const erasingCallout = tool === "eraser" && hoverWorld ? calloutTool.pick(hoverWorld) : null
+  const target = tool === "eraser" && cursor && !erasingCallout ? eraserTarget(cursor) : { wall: null, dim: null, doorway: null, communication: null, battery: null }
+  const draft = dimDraftGeometry()
+  const snapHit = tool === "dimension" && cursor && (!dimDraft.a || !dimDraft.b) ? nearestDimAnchor(cursor, walls, doorways, radiusCm(), []) : null
+  const outlines: { wall: DrywallWall; color: string }[] = []
+  for (const wall of own) {
+    if (target.wall === wall) outlines.push({ wall, color: palette.erase })
+    else if (selectedWalls.includes(wall)) outlines.push({ wall, color: palette.selection })
+    else if (marqueeHits?.walls.includes(wall)) outlines.push({ wall, color: palette.marqueeWall })
+  }
+  const start = wallStart()
+  const p = chainStart && segment ? segment.end : null
+  const preview = start && p ? newDrywallWall("", start, p, drywallParams) : null
+  let square: Point[] | null = null
+  if (tool === "drywall" && cursor) {
+    if (chainStart && p && segment?.dir) square = chainEndSquare(p, segment.dir, segment.snap, newWallThickness())
+    else if (!chainStart && cursorSnap) square = placementSquare(cursorSnap, newWallThickness())
+  }
+  const only = selectedWalls.length === 1 ? selectedWalls[0] : null
+  renderReconstruction(
+    canvas,
+    {
+      walls: underlay,
+      doorways,
+      communications: communicationsOf(),
+      batteries,
+      pieces: reconNow().pieces,
+      drywall: own,
+      preview,
+      outlines,
+      handles: only && isDrywallWall(only) && selectedDimensions.length === 0 ? only : null,
+      callouts: calloutTool.displayList(),
+      selectedCalloutId: calloutTool.selectedId(),
+      erasingCalloutId: erasingCallout?.id ?? null,
+    },
+    unit,
+    view,
+    {
+      palette,
+      theme,
+      dimensions,
+      dimDraft: draft,
+      dimRubber: !dimDraft.a || dimDraft.b || !cursor ? null : draftRubber(snapHit?.point ?? cursor),
+      dimSnap: snapHit?.point ?? null,
+      selectedDims: selectedDimensions,
+      hoverDim: target.dim,
+      marqueeHits,
+      marquee,
+      square,
+      angle:
+        chainStart && segment?.dir && segment.refRay && segment.angleDeg !== null
+          ? { at: segment.start, from: segment.refRay, to: segment.dir, deg: segment.angleDeg }
+          : null,
+      ruler: tool === "ruler" && cursor && !gestureActive() ? rulerReading(cursor, walls) : null,
+    },
+  )
 }
 
 // план «Черновые работы»: подложка «Монтажа» серым, стяжка штриховкой, штукатурка полосой, блоки помещений, выделение и превью
@@ -1438,7 +1629,7 @@ function snapWallCursor(raw: Point): void {
   wallCursorRaw = raw
   if (!chainStart) {
     // до первого клика — квадрат установки у грани/торца или на сетке
-    const r = snapStartVertex(raw, walls, snapRadiusCm(view.zoom), GRID_STEP_CM, thicknessCm, doorways, communicationsOf())
+    const r = snapStartVertex(raw, solid(), snapRadiusCm(view.zoom), GRID_STEP_CM, newWallThickness(), doorways, communicationsOf())
     cursor = r.point
     cursorSnap = r
     segment = null
@@ -1450,10 +1641,10 @@ function snapWallCursor(raw: Point): void {
     start: chainStart,
     ref: chainRef,
     raw,
-    walls,
+    walls: solid(),
     radiusCm: snapRadiusCm(view.zoom),
     gridStepCm: GRID_STEP_CM,
-    thicknessCm,
+    thicknessCm: newWallThickness(),
     ortho,
     typedAngleDeg: typedAngleDeg(),
     typedLengthCm: lengthDirty ? typedLengthCm() : null,
@@ -1462,8 +1653,8 @@ function snapWallCursor(raw: Point): void {
   })
   // конец стены, налагающийся на коммуникацию, обрезается до касания; нулевая стена не ставится (spec wall-collision
   // «Стены не налагаются на коммуникации»)
-  const byCommunications = limitNewWall(computed.start, computed.end, thicknessCm, communicationsOf())
-  const limited = byCommunications && limitNewWallByBatteries(computed.start, byCommunications, thicknessCm, walls, batteries)
+  const byCommunications = limitNewWall(computed.start, computed.end, newWallThickness(), communicationsOf())
+  const limited = byCommunications && limitNewWallByBatteries(computed.start, byCommunications, newWallThickness(), walls, batteries)
   endBlocked = limited === null
   segment = limited === null ? { ...computed, end: computed.start } : pointsEqual(limited, computed.end) ? computed : { ...computed, end: limited }
   cursor = segment.snap.point
@@ -1472,14 +1663,31 @@ function snapWallCursor(raw: Point): void {
 
 // пересчёт привязки без движения курсора (изменились ввод, толщина, орто)
 function refreshWallCursor(): void {
-  if (tool === "wall" && wallCursorRaw) snapWallCursor(wallCursorRaw)
+  if (isWallTool() && wallCursorRaw) snapWallCursor(wallCursorRaw)
+}
+
+// стена гипсокартона: продолжение свободного конца своей стены той же толщины и высоты удлиняет её, иначе добавляется новая стена;
+// автоматических размеров у стен гипсокартона нет — размеры ставятся инструментом «Размер»
+function placeDrywall(a: Point, end: Point): void {
+  const wall = newDrywallWall(crypto.randomUUID(), a, end, drywallParams)
+  const own = walls.filter(isDrywallWall).filter((w) => w.heightCm === wall.heightCm)
+  const merge = mergeContinuation({ walls: own, dimensions: [] }, wall)
+  pushRecord()
+  dirty = true
+  if (merge.kind === "merged") {
+    merge.scene.walls.forEach((w, i) => {
+      walls[walls.indexOf(own[i])] = w
+    })
+    return
+  }
+  walls.push(wall)
 }
 
 function commitPoint(): void {
   if (!chainStart) {
     if (!cursor) return
     // квадрат установки, налагающийся на коммуникацию, начала стены не фиксирует
-    const startSquare = cursorSnap ? placementSquare(cursorSnap, thicknessCm) : null
+    const startSquare = cursorSnap ? placementSquare(cursorSnap, newWallThickness()) : null
     if (startSquare && !(squareAllowed(startSquare, communicationsOf()) && squareAllowedForBatteries(startSquare, walls, batteries))) return
     chainStart = cursor
     chainRef = cursorSnap ? startRefOf(cursorSnap) : null
@@ -1493,7 +1701,8 @@ function commitPoint(): void {
   const a = segment?.start ?? chainStart
   const end = segment?.end ?? cursor ?? chainStart
   if (endBlocked) return
-  if (!pointsEqual(a, end)) {
+  if (!pointsEqual(a, end) && tool === "drywall") placeDrywall(a, end)
+  else if (!pointsEqual(a, end)) {
     const wall: Wall = { id: crypto.randomUUID(), a, b: end, thicknessCm, type: wallMaterial }
     // продолжение свободного конца стены той же толщины и материала удлиняет её (change merge-collinear-walls)
     const merge = mergeContinuation(scene(), wall)
@@ -1585,12 +1794,12 @@ canvas.addEventListener("pointermove", (e) => {
     restoreWalls(snapshot)
     if (ortho) {
       // ось жеста защёлкивается при первом смещении до отпускания (change ortho-axis-lock, design D2)
-      const step = orthoGestureStep(groupMove.gesture, p, walls, { kind: "walls", walls: group }, GRID_STEP_CM, radiusCm())
+      const step = orthoGestureStep(groupMove.gesture, p, solid(), { kind: "walls", walls: group }, GRID_STEP_CM, radiusCm())
       groupMove.gesture = step.gesture
-      if (step.target) moveWallsBounded(walls, group, { x: step.target.point.x - baseA.x, y: step.target.point.y - baseA.y }, editMode(step.target))
+      if (step.target) moveWallsBounded(solid(), group, { x: step.target.point.x - baseA.x, y: step.target.point.y - baseA.y }, editMode(step.target))
     } else {
       const target = snapWithSource({ x: baseA.x + p.x - grab.x, y: baseA.y + p.y - grab.y }, others, GRID_STEP_CM, radiusCm())
-      moveWallsBounded(walls, group, { x: target.point.x - baseA.x, y: target.point.y - baseA.y }, editMode(target))
+      moveWallsBounded(solid(), group, { x: target.point.x - baseA.x, y: target.point.y - baseA.y }, editMode(target))
     }
     dirty = true
     redraw()
@@ -1618,11 +1827,11 @@ canvas.addEventListener("pointermove", (e) => {
     let target: SnapResult | null
     if (ortho) {
       // ось через противоположный конец, защёлкнута до отпускания (change ortho-axis-lock, design D2)
-      const step = orthoGestureStep(endpointDrag.gesture, p, walls, { kind: "end", wall, end }, GRID_STEP_CM, radiusCm())
+      const step = orthoGestureStep(endpointDrag.gesture, p, solid(), { kind: "end", wall, end }, GRID_STEP_CM, radiusCm())
       endpointDrag.gesture = step.gesture
       target = step.target
-    } else target = snapWithSource(p, walls.filter((w) => w !== wall), GRID_STEP_CM, radiusCm())
-    if (target && !pointsEqual(target.point, other)) moveEndpointBounded(walls, wall, end, target.point, editMode(target))
+    } else target = snapWithSource(p, solid().filter((w) => w !== wall), GRID_STEP_CM, radiusCm())
+    if (target && !pointsEqual(target.point, other)) moveEndpointBounded(solid(), wall, end, target.point, editMode(target))
     dirty = true
     redraw()
     return
@@ -1670,7 +1879,7 @@ canvas.addEventListener("pointermove", (e) => {
     }
     return
   }
-  if (tool === "wall") updateWallCursor(e)
+  if (isWallTool()) updateWallCursor(e)
   else if (tool === "dimension" || tool === "ruler") cursor = toWorld(e)
   else if (tool === "callout") {
     cursor = toWorld(e)
@@ -1705,7 +1914,7 @@ function startGroupMove(pressed: Wall, p: Point, e: PointerEvent): void {
     pressed,
     baseA: { ...pressed.a },
     grab: p,
-    others: snapOthers(walls, group),
+    others: snapOthers(solid(), group),
     snapshot: cloneScene(scene()),
     gesture: startOrthoGesture("move", p, { ...pressed.a }),
   }
@@ -1956,7 +2165,7 @@ canvas.addEventListener("pointerup", (e) => {
   if (!panDrag || e.button !== 1) return
   panDrag = null
   viewSave.flush()
-  if (tool === "wall") updateWallCursor(e)
+  if (isWallTool()) updateWallCursor(e)
   else if (tool === "dimension" || tool === "ruler") cursor = toWorld(e)
   else cursor = toSnappedPoint(e)
   redraw()
@@ -1992,7 +2201,7 @@ function finishMarquee(rect: { x1: number; y1: number; x2: number; y2: number },
   closeNumberEditor()
   if (!selectedDoorways.length && !selectedBatteries.length && selectedWalls.length === 1 && !selectedDimensions.length) {
     syncThicknessBox()
-    setWallMaterial(selectedWalls[0].type)
+    if (!onReconstruction()) setWallMaterial(selectedWalls[0].type)
     setWallPanel(true)
   } else setWallPanel(false)
   redraw()
@@ -2088,8 +2297,8 @@ canvas.addEventListener("click", (e) => {
   }
   // остался инструмент «Стена» (линейка не кликает): тело существующей стены стену не выделяет и не начинает,
   // прилипший квадрат рисует (change select-only-without-tool, spec wall-drawing «Квадрат при установке стены»)
-  if (tool !== "wall") return
-  if (!chainStart && wallClickAction(raw, snapStartVertex(raw, walls, radiusCm(), GRID_STEP_CM, thicknessCm, doorways, communicationsOf()), walls, radiusCm()).kind === "select") return
+  if (!isWallTool()) return
+  if (!chainStart && wallClickAction(raw, snapStartVertex(raw, solid(), radiusCm(), GRID_STEP_CM, newWallThickness(), doorways, communicationsOf()), walls, radiusCm()).kind === "select") return
   updateWallCursor(e)
   commitPoint()
 })
@@ -2355,6 +2564,23 @@ toolWallBtn.addEventListener("click", () => {
   } else setWallPanel(!wallPanelOpen)
 })
 
+// «Гипсокартон»: кнопка включает инструмент и открывает панель, повторный клик по активному — переключает панель (как «Стена»)
+toolDrywallBtn.addEventListener("click", () => {
+  if (tool !== "drywall") {
+    setTool("drywall")
+    setWallPanel(true)
+  } else setWallPanel(!drywallPanelOpen)
+})
+// поля панели применяются по фиксации ввода: выделенная стена меняется одним шагом истории; клавиши поля не доходят до холста
+drywallThicknessInput.addEventListener("change", () => applyDrywallField("thicknessCm", drywallThicknessInput))
+drywallHeightInput.addEventListener("change", () => applyDrywallField("heightCm", drywallHeightInput))
+for (const input of [drywallThicknessInput, drywallHeightInput]) {
+  input.addEventListener("keydown", (e) => {
+    e.stopPropagation()
+    if (e.key === "Enter" || e.key === "Escape") input.blur()
+  })
+}
+
 toolDimensionBtn.addEventListener("click", () => setTool("dimension"))
 
 toolEraserBtn.addEventListener("click", () => setTool("eraser"))
@@ -2480,7 +2706,7 @@ function setPlan(id: PlanId): void {
   // набранный текст выноски и примечаний сохраняется на прежнем плане
   calloutTool.commitEditor()
   closeNotesPanel() // панель закрывается до смены плана: поле показывает список прежнего плана
-  commitMounting()
+  commitWorking()
   current().activePlan = id
   activate(store.activeId)
 }
@@ -2505,8 +2731,9 @@ function newDrawing(): void {
 function activate(id: string): void {
   calloutTool.commitEditor()
   closeNotesPanel()
-  commitMounting()
+  commitWorking()
   store.activeId = id
+  drywallPanelOpen = false
   loadWorking()
   view = current().view
   tool = defaultToolOf(activePlanOf(current()))
@@ -2609,6 +2836,18 @@ function stepRough(step: typeof undoRough): void {
 // сцена из записи истории: на плане «Монтаж» запись хранит содержимое «Монтажа» — рабочая сцена строится заново
 // (остатки берутся по текущему обмеру и демонтажу), на остальных планах запись подставляется как есть
 function restoreScene(e: Scene): void {
+  if (reconWorkspace) {
+    // запись плана «Реконструкция» хранит стены гипсокартона и размеры; выноски и примечания в ней не хранятся (у них свои записи)
+    const stored = current().reconstruction
+    current().reconstruction = {
+      walls: e.walls.filter(isDrywallWall),
+      dimensions: e.dimensions,
+      ...(stored?.callouts ? { callouts: stored.callouts } : null),
+      ...(stored?.notes ? { notes: stored.notes } : null),
+    }
+    loadWorking()
+    return
+  }
   if (workspace) {
     // выноски «Монтажа» в записи истории не хранятся (у них свои записи): список остаётся как есть
     // примечания «Монтажа» — тоже (change add-plan-notes, design D3)
@@ -2908,7 +3147,7 @@ window.addEventListener("keydown", (e) => {
       : { x: step, y: 0 }
     // запись истории открывает только нажатие, давшее сдвиг (design D8)
     const before = cloneScene(scene())
-    const applied = moveWallsBounded(walls, selectedWalls, delta, { ortho, doorways, communications: communicationsOf(), batteries })
+    const applied = moveWallsBounded(solid(), selectedWalls, delta, { ortho, doorways, communications: communicationsOf(), batteries })
     if (applied.x === 0 && applied.y === 0) return
     if (!nudgeBurst) pushSnapshot(before)
     nudgeBurst = true
@@ -2917,6 +3156,8 @@ window.addEventListener("keydown", (e) => {
     return
   }
   if (e.key !== "ArrowUp" && e.key !== "ArrowDown") return
+  // у стен гипсокартона материала нет: без выделения стрелки на плане «Реконструкция» ничего не меняют
+  if (onReconstruction()) return
   const delta = e.key === "ArrowUp" ? -1 : 1
   const idx = MATERIALS.findIndex((m) => m.id === wallMaterial)
   setWallMaterial(MATERIALS[(idx + delta + MATERIALS.length) % MATERIALS.length].id)

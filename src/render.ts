@@ -224,6 +224,22 @@ export function drawScene(
   for (const wall of walls) drawWall(ctx, wall, sceneWalls, 1, toScreen, o, m, p, doorways)
   if (preview) drawWall(ctx, preview, sceneWalls, 0.4, toScreen, o, m, p, [])
   if (singleWalls) drawHandles(ctx, selectedWalls[0], toScreen, p)
+  drawPlacementHints(ctx, toScreen, opts, m, p)
+  if (opts.roomRecords) drawRoomBlocks(ctx, roomBlocksOf(reconcileRooms(rooms, opts.roomRecords)), opts.selectedRoom ?? null, toScreen, m, p)
+  else if (!opts.underlay) drawRoomLabels(ctx, rooms, toScreen, m, p.ink)
+  ctx.font = `${m.labelPx}px ${m.font}`
+  ctx.textAlign = "center"
+  ctx.textBaseline = "bottom"
+  if (!opts.underlay) drawDoorways(ctx, walls, rooms, unit, view, m, p, opts, selectedWalls.length > 0 || selectedDims.length > 0)
+  drawCommunicationLayer(ctx, walls, unit, view, m, p, opts)
+  drawBatteryLayer(ctx, walls, unit, view, m, p, opts)
+  drawDimensionsLayer(ctx, walls, unit, view, opts, singleDim)
+  if (opts.callouts?.length) drawCallouts(ctx, opts.callouts, view, m, p, { selected: opts.selectedCallout, erasing: opts.erasingCallout })
+  drawGestureOverlays(ctx, toScreen, unit, view, opts, m, p)
+}
+
+// квадрат установки, риска центровки и угол к стене примыкания (после тел стен, до подписей)
+export function drawPlacementHints(ctx: CanvasRenderingContext2D, toScreen: (p: Point) => Point, opts: RenderOptions, m: RenderMetrics, p: Palette): void {
   if (opts.square) {
     const corners = opts.square.map(toScreen)
     ctx.save()
@@ -236,21 +252,18 @@ export function drawScene(
   }
   if (opts.tracks?.length) drawTracks(ctx, opts.tracks, toScreen, p.track)
   if (opts.angle) drawAngle(ctx, opts.angle, toScreen, m, p)
-  if (opts.roomRecords) drawRoomBlocks(ctx, roomBlocksOf(reconcileRooms(rooms, opts.roomRecords)), opts.selectedRoom ?? null, toScreen, m, p)
-  else if (!opts.underlay) drawRoomLabels(ctx, rooms, toScreen, m, p.ink)
-  ctx.font = `${m.labelPx}px ${m.font}`
-  ctx.textAlign = "center"
-  ctx.textBaseline = "bottom"
-  if (!opts.underlay) drawDoorways(ctx, walls, rooms, unit, view, m, p, opts, selectedWalls.length > 0 || selectedDims.length > 0)
-  drawCommunicationLayer(ctx, walls, unit, view, m, p, opts)
-  drawBatteryLayer(ctx, walls, unit, view, m, p, opts)
-  const batteries = opts.batteries ?? []
-  for (const dim of opts.dimensions ?? []) drawDimension(ctx, dim, walls, unit, p.ink, view, m, p, doorways, batteries)
-  for (const dim of opts.marqueeHits?.dims ?? [])
-    if (!selectedDims.includes(dim)) drawDimension(ctx, dim, walls, unit, p.marqueeDim, view, m, p, doorways, batteries)
-  for (const dim of selectedDims) drawDimension(ctx, dim, walls, unit, p.selectedDim, view, m, p, doorways, batteries, singleDim)
-  if (opts.hoverDim) drawDimension(ctx, opts.hoverDim, walls, unit, p.erase, view, m, p, doorways, batteries)
-  if (opts.callouts?.length) drawCallouts(ctx, opts.callouts, view, m, p, { selected: opts.selectedCallout, erasing: opts.erasingCallout })
+}
+
+// замеры линейки, рамка выделения и построение размера — поверх всего чертежа
+export function drawGestureOverlays(
+  ctx: CanvasRenderingContext2D,
+  toScreen: (p: Point) => Point,
+  unit: Unit,
+  view: View,
+  opts: RenderOptions,
+  m: RenderMetrics,
+  p: Palette,
+): void {
   if (opts.ruler) drawRuler(ctx, opts.ruler, unit, view, toScreen, m, p)
   if (opts.marquee) {
     const { x1, y1, x2, y2 } = opts.marquee
@@ -291,6 +304,28 @@ export function drawScene(
     ctx.strokeStyle = p.paper
     ctx.stroke()
   }
+}
+
+// Слой размеров чертежа: обычные, найденные рамкой, выделенные и подсвеченные ластиком. Отдельно от стен, чтобы план с
+// подложкой (стены другого цвета) рисовал размеры по полному списку стен (change reconstruction-plan, design D5).
+export function drawDimensionsLayer(
+  ctx: CanvasRenderingContext2D,
+  walls: Wall[],
+  unit: Unit,
+  view: View,
+  opts: RenderOptions,
+  singleDim: boolean,
+): void {
+  const m = opts.metrics ?? SCREEN_METRICS
+  const p = opts.palette ?? LIGHT_PALETTE
+  const doorways = opts.doorways ?? []
+  const batteries = opts.batteries ?? []
+  const selectedDims = opts.selectedDims ?? []
+  for (const dim of opts.dimensions ?? []) drawDimension(ctx, dim, walls, unit, p.ink, view, m, p, doorways, batteries)
+  for (const dim of opts.marqueeHits?.dims ?? [])
+    if (!selectedDims.includes(dim)) drawDimension(ctx, dim, walls, unit, p.marqueeDim, view, m, p, doorways, batteries)
+  for (const dim of selectedDims) drawDimension(ctx, dim, walls, unit, p.selectedDim, view, m, p, doorways, batteries, singleDim)
+  if (opts.hoverDim) drawDimension(ctx, opts.hoverDim, walls, unit, p.erase, view, m, p, doorways, batteries)
 }
 
 // подпись в системе текста: начало — центр подписи, ось x — направление текста вдоль стены (design D6)
@@ -871,7 +906,7 @@ function drawOutline(
   ctx.lineCap = "butt"
 }
 
-function drawHandles(ctx: CanvasRenderingContext2D, wall: Wall, toScreen: (p: Point) => Point, palette: Palette): void {
+export function drawHandles(ctx: CanvasRenderingContext2D, wall: Wall, toScreen: (p: Point) => Point, palette: Palette): void {
   ctx.fillStyle = palette.paper
   ctx.strokeStyle = palette.handleStroke
   ctx.lineWidth = 1.5

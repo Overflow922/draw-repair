@@ -84,8 +84,9 @@ describe("страницы PDF", () => {
   it("CF-01: коммуникации лежат на каждой странице pagesOf", () => {
     const list = [riser(250, 150, 11), duct(100, 150)]
     const pages = pagesOf(base(list))
-    // TCR (change add-rough-works-plan): страниц четыре — коммуникации лежат и на странице «Черновые работы»
-    expect(pages).toHaveLength(4)
+    // TCR (change add-rough-works-plan): страниц четыре — коммуникации лежат и на странице «Черновые работы»;
+    // TCR (change reconstruction-plan): пять — и на странице «Реконструкция»
+    expect(pages).toHaveLength(5)
     for (const p of pages) expect(p.communications).toEqual(list)
   })
 

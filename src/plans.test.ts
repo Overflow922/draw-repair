@@ -12,12 +12,14 @@ describe("каталог планов", () => {
   // TCR-1 (change demolition-plan): каталог содержит два плана; прежнее ожидание — единственный план measure
   // TCR-1 (change mounting-plan): каталог содержит три плана — «Монтаж» добавлен третьим (drawing-plans «Каталог планов»)
   // TCR (change add-rough-works-plan): четвёртым добавлен план «Черновые работы» (rough)
-  it("PL-01: каталог содержит «Обмерочный план» (measure), «Демонтаж» (demolition), «Монтаж» (mounting) и «Черновые работы» (rough) в этом порядке", () => {
+  // TCR (change reconstruction-plan): пятым добавлена «Реконструкция» (reconstruction)
+  it("PL-01: каталог содержит «Обмерочный план» (measure), «Демонтаж» (demolition), «Монтаж» (mounting), «Черновые работы» (rough) и «Реконструкцию» (reconstruction) в этом порядке", () => {
     expect(PLANS).toEqual([
       { id: "measure", label: "Обмерочный план" },
       { id: "demolition", label: "Демонтаж" },
       { id: "mounting", label: "Монтаж" },
       { id: "rough", label: "Черновые работы" },
+      { id: "reconstruction", label: "Реконструкция" },
     ])
   })
 

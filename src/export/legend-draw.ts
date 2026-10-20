@@ -7,6 +7,7 @@ import { LIGHT_PALETTE } from "../theme"
 import type { Palette } from "../theme"
 import { PX_PER_CM } from "../types"
 import type { Battery, Communication, Point, View, Wall } from "../types"
+import { drywallColors } from "../reconstruction/reconstruction-render"
 import { plasterColors } from "../rough/rough-render"
 import { DEMOLITION_HATCH, SCREED_HATCH, strokeHatchSeries } from "../wall-hatch"
 import {
@@ -65,10 +66,22 @@ function sampleRect(origin: Point): Point[] {
   ]
 }
 
-// образец «Штукатурка»: фиолетовая заливка и тёмный контур, как на чертеже
-function drawPlasterSample(ctx: CanvasRenderingContext2D, origin: Point): void {
+// образец «Гипсокартон»: зелёная заливка и тёмный контур, как на чертеже плана «Реконструкция»
+function drawDrywallSample(ctx: CanvasRenderingContext2D, origin: Point): void {
+  const colors = drywallColors("light")
+  const poly = sampleRect(origin)
+  ctx.fillStyle = colors.fill
+  tracePolygons(ctx, [poly])
+  ctx.fill()
+  ctx.strokeStyle = colors.stroke
+  ctx.lineWidth = PDF_METRICS.contourPx
+  ctx.stroke()
+}
+
+// образец «Штукатурка»: фиолетовая заливка и тёмный контур, как на чертеже; на плане «Реконструкция» штукатурка серая
+function drawPlasterSample(ctx: CanvasRenderingContext2D, origin: Point, grey: boolean): void {
   const m = PDF_METRICS
-  const colors = plasterColors("light")
+  const colors = grey ? { fill: LIGHT_PALETTE.muted, stroke: LIGHT_PALETTE.muted } : plasterColors("light")
   const poly = sampleRect(origin)
   ctx.fillStyle = colors.fill
   tracePolygons(ctx, [poly])
@@ -120,7 +133,7 @@ function drawCommunicationSample(ctx: CanvasRenderingContext2D, entry: LegendEnt
   strokeCommunications(ctx, [sample], mmView(origin), LIGHT_PALETTE.ink, PDF_METRICS.contourPx, LIGHT_PALETTE.concreteFill)
 }
 
-function drawSample(ctx: CanvasRenderingContext2D, entry: LegendEntry, origin: Point, palette: Palette): void {
+function drawSample(ctx: CanvasRenderingContext2D, entry: LegendEntry, origin: Point, palette: Palette, greyPlaster: boolean): void {
   switch (entry.kind) {
     case "material":
       return drawLegendSample(ctx, entry.material, origin, PDF_METRICS, palette)
@@ -132,21 +145,23 @@ function drawSample(ctx: CanvasRenderingContext2D, entry: LegendEntry, origin: P
     case "demolition":
       return drawDemolitionSample(ctx, origin)
     case "plaster":
-      return drawPlasterSample(ctx, origin)
+      return drawPlasterSample(ctx, origin, greyPlaster)
     case "screed":
       return drawScreedSample(ctx, origin)
+    case "drywall":
+      return drawDrywallSample(ctx, origin)
   }
 }
 
 // столбец легенды страницы: записи сверху вниз с верхнего края столбца; на странице «Демонтаж» образцы материалов серые,
 // как подложка. Образец стоит по центру блока строк подписи.
 export function drawLegend(doc: jsPDF, ctx: CanvasRenderingContext2D, page: PlanPage, column: Rect): void {
-  const underlay = page.demolition !== undefined || page.rough !== undefined
+  const underlay = page.demolition !== undefined || page.rough !== undefined || page.reconstruction !== undefined
   const palette: Palette = underlay ? { ...LIGHT_PALETTE, ink: LIGHT_PALETTE.muted } : LIGHT_PALETTE
   legendEntries(page).forEach((entry, i) => {
     const centerY = column.y + LEGEND_ROW_PITCH_MM * (i + 0.5)
     const origin: Point = { x: column.x + LEGEND_PAD_LEFT_MM, y: centerY }
-    drawSample(ctx, entry, origin, palette)
+    drawSample(ctx, entry, origin, palette, page.reconstruction !== undefined)
     // рендер образца меняет состояние шрифта документа, поэтому шрифт задаётся после образца
     doc.setFont(PDF_METRICS.font, "normal")
     doc.setTextColor(0, 0, 0)
