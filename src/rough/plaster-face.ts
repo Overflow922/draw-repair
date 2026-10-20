@@ -69,8 +69,41 @@ export function plasterTarget(p: Point, walls: readonly Wall[], radiusCm: number
   const reachB = Math.max(0, ...plane.map((w) => w.hi - len))
   const run = faceRunsReaching(host, walls, face, reachA, reachB).find(([lo, hi]) => t >= lo - EPS_CM && t <= hi + EPS_CM)
   if (!run) return null
-  const pieces = layPieces(plane, run)
+  const pieces = layPieces(plane, run, flushEnds(host, face, walls, isSourceEnd))
   return pieces.length === 0 ? null : { pieces, focusWallId: host.id }
+}
+
+// Торец перпендикулярной стены, лежащий в плоскости (change plaster-flush-end-in-plane, design D1): открытые части торца,
+// переведённые на ось опорной стены. Торец принадлежит щели плоскости, если её закрывает только он.
+interface FlushEnd {
+  piece: EndTargetPiece
+  lo: number // протяжённость торца на оси опорной стены
+  hi: number
+}
+
+function flushEnds(host: Wall, face: 1 | -1, walls: readonly Wall[], isSourceEnd: SourceEnd): FlushEnd[] {
+  const axis = unit(host.a, host.b)
+  const outward = perp(axis)
+  const out: FlushEnd[] = []
+  for (const s of walls) {
+    if (s === host || degenerate(s)) continue
+    const dir = unit(s.a, s.b)
+    if (Math.abs(dot(dir, outward)) < RIGHT_COS) continue
+    for (const end of ["a", "b"] as const) {
+      const point = end === "a" ? s.a : s.b
+      // тело стены лежит с внутренней стороны плоскости, а торец — на линии грани опорной стены
+      const inward = end === "a" ? dir : { x: -dir.x, y: -dir.y }
+      if (face * dot(inward, outward) >= 0) continue
+      if (Math.abs(face * dot(sub(point, host.a), outward) - host.thicknessCm / 2) > FACE_TOL_CM || !isSourceEnd(s, end)) continue
+      const centre = dot(sub(point, host.a), axis)
+      const sign = Math.sign(dot(perp(dir), axis))
+      for (const [from, to] of openEndRuns(s, walls, end)) {
+        const [lo, hi] = sign > 0 ? [centre + from, centre + to] : [centre - to, centre - from]
+        out.push({ piece: { wall: s, face: "end", end, from, to }, lo, hi })
+      }
+    }
+  }
+  return out
 }
 
 // Торец (design D5): проекция курсора за концом оси, а поперёк курсор в пределах тела стены; цель — открытая часть торца
@@ -108,8 +141,9 @@ export function planeWalls(host: Wall, face: 1 | -1, walls: readonly Wall[]): Pl
 }
 
 // участок run раскладывается по стенам плоскости без щелей и наложений: граница двух соседних стен — середина между
-// концом предыдущей и началом следующей; первая стена начинается в начале участка, последняя кончается в его конце
-function layPieces(plane: readonly PlaneWall[], run: [number, number]): PlasterTargetPiece[] {
+// концом предыдущей и началом следующей (щель, закрытая торцом перпендикулярной стены в плоскости, — самим торцом); первая
+// стена начинается в начале участка, последняя кончается в его конце
+function layPieces(plane: readonly PlaneWall[], run: [number, number], ends: readonly FlushEnd[]): PlasterTargetPiece[] {
   const [runLo, runHi] = run
   const inRun = plane.filter((w) => Math.min(w.hi, runHi) - Math.max(w.lo, runLo) > MIN_WIDTH_CM)
   const chain: PlaneWall[] = []
@@ -126,11 +160,25 @@ function layPieces(plane: readonly PlaneWall[], run: [number, number]): PlasterT
   let pos = snap(runLo, first?.lo)
   chain.forEach((w, i) => {
     const next = chain[i + 1]
-    const end = next ? Math.min(endHi, Math.max(pos, (w.hi + next.lo) / 2)) : endHi
+    // щель между стенами, закрытая торцами перпендикулярных стен в плоскости, отдаётся этим торцам: боковые куски доходят
+    // до концов своих граней, а не до середины щели
+    const gap = next ? ends.flatMap((e) => clipEnd(e, w.hi, next.lo)) : []
+    const end = next ? Math.min(endHi, gap.length > 0 ? Math.max(pos, w.hi) : Math.max(pos, (w.hi + next.lo) / 2)) : endHi
     if (end - pos >= MIN_WIDTH_CM) pieces.push(pieceOn(w, pos, end))
-    pos = end
+    pieces.push(...gap)
+    pos = next && gap.length > 0 ? Math.max(end, next.lo) : end
   })
   return pieces
+}
+
+// часть торца в щели [lo, hi] оси опорной стены, в поперечных смещениях торца; пусто, если перекрытие меньше MIN_WIDTH_CM
+function clipEnd(e: FlushEnd, lo: number, hi: number): EndTargetPiece[] {
+  const from = Math.max(e.lo, lo)
+  const to = Math.min(e.hi, hi)
+  if (to - from < MIN_WIDTH_CM) return []
+  const near = e.piece.from + (from - e.lo) * ((e.piece.to - e.piece.from) / (e.hi - e.lo))
+  const far = e.piece.from + (to - e.lo) * ((e.piece.to - e.piece.from) / (e.hi - e.lo))
+  return [{ ...e.piece, from: Math.min(near, far), to: Math.max(near, far) }]
 }
 
 // часть участка [lo, hi] (по оси опорной стены) на стене w, в координатах w

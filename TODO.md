@@ -983,3 +983,12 @@ Follow-ups from `wall-body-corners-snap` (2026-10-19).
 ### Docs
 - [ ] Face number on the side where a wall abuts T is shorter than the wall (1043 vs 1113 in the user drawing): typing it
   gives the span up to the junction, not the whole wall. Spec says width = extent of the zone on the face; confirm that is wanted.
+
+
+---
+
+Follow-ups from `plaster-flush-end-in-plane` (2026-10-20).
+
+## Out of scope
+
+- [ ] A flush end of a perpendicular wall is added to the plaster target only inside a gap between two walls of the plane (`layPieces`, `src/rough/plaster-face.ts`). A flush end at the edge of the run (no plane wall on its far side) is not added; the face run normally stops at that corner anyway. Revisit if a drawing shows an unplastered flush end at a plane edge.

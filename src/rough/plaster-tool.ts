@@ -82,29 +82,12 @@ export function createPlasterTool(host: PlasterToolHost): PlasterTool {
     return plasterTarget(p, host.scene().base.walls, host.radiusCm(), sourceEnd)
   }
 
-  // Постановка торца: одна пометка на торец конца исходной стены; уже оштукатуренный торец ничего не меняет
-  const placeEnd = (piece: EndTargetPiece): string | null => {
-    const origin = plasterOrigins(host.drawing()).get(piece.wall.id)
-    if (!origin) return null
-    const next = addPlasterEnd(host.marks(), plasterSources(host.drawing()), origin.source.id, piece.end, host.newThicknessMm(), host.newId)
-    const placed = next[next.length - 1]
-    if (next === host.marks() || !placed) return null
-    commit(next)
-    return placed.id
-  }
-
-  // Постановка цели: куски переводятся в координаты исходных стен; слияние — только с действующими пометками, скрытые остаются
-  // без изменений. Участок, уже целиком лежащий в действующей пометке той же грани, не меняет ничего. Поставленная пометка не
-  // выделяется; возвращается идентификатор пометки стены под курсором.
-  const place = (t: PlasterTarget): string | null => {
-    const endPiece = t.pieces.find((x): x is EndTargetPiece => x.face === "end")
-    if (endPiece) return placeEnd(endPiece)
-    const origins = plasterOrigins(host.drawing())
+  // Боковые куски цели: переводятся в координаты исходных стен; слияние — только с действующими пометками, скрытые остаются
+  // без изменений. Участок, уже целиком лежащий в действующей пометке той же грани, не меняет ничего (тот же массив).
+  const placeSides = (sides: readonly SideTargetPiece[], origins: ReturnType<typeof plasterOrigins>, marks: PlasterMark[]) => {
     const sources = plasterSources(host.drawing())
-    const marks = host.marks()
     const acting = new Set(host.scene().pieces.map((x) => x.mark.id))
     const live = marks.filter((m) => acting.has(m.id))
-    const sides = t.pieces.filter((x): x is SideTargetPiece => x.face !== "end")
     const spans = sides.flatMap((piece) => {
       const origin = origins.get(piece.wall.id)
       return origin ? [{ origin, piece, lo: origin.start + piece.from, hi: origin.start + piece.to }] : []
@@ -116,19 +99,43 @@ export function createPlasterTool(host: PlasterToolHost): PlasterTool {
         return start <= lo + EPS_CM && end >= hi - EPS_CM
       }),
     )
-    if (spans.length === 0 || covered) return null
+    if (spans.length === 0 || covered) return { next: marks, spans }
     const merged = spans.reduce((acc, { origin, piece, lo, hi }) => addPlaster(acc, sources, origin.source.id, piece.face, lo, hi, host.newThicknessMm(), host.newId), live)
-    if (merged === live) return null
+    if (merged === live) return { next: marks, spans }
     const hidden = marks.filter((m) => !acting.has(m.id))
-    const next = hidden.length === 0 ? merged : [...hidden, ...merged]
+    return { next: hidden.length === 0 ? merged : [...hidden, ...merged], spans }
+  }
+
+  // Постановка цели одним шагом истории: боковые куски и торцы плоскости (одна пометка на торец конца исходной стены; уже
+  // оштукатуренный торец ничего не меняет). Поставленная пометка не выделяется; возвращается идентификатор пометки стены
+  // под курсором.
+  const place = (t: PlasterTarget): string | null => {
+    const origins = plasterOrigins(host.drawing())
+    const sources = plasterSources(host.drawing())
+    const marks = host.marks()
+    const { next: withSides, spans } = placeSides(
+      t.pieces.filter((x): x is SideTargetPiece => x.face !== "end"),
+      origins,
+      marks,
+    )
+    const ends = t.pieces.filter((x): x is EndTargetPiece => x.face === "end")
+    const next = ends.reduce((acc, piece) => {
+      const origin = origins.get(piece.wall.id)
+      return origin ? addPlasterEnd(acc, sources, origin.source.id, piece.end, host.newThicknessMm(), host.newId) : acc
+    }, withSides)
+    if (next === marks) return null
     const focus = spans.find(({ piece }) => piece.wall.id === t.focusWallId) ?? spans[0]
+    const focusEnd = ends.find((x) => x.wall.id === t.focusWallId) ?? (focus ? undefined : ends[0])
+    const focusEndOrigin = focusEnd && origins.get(focusEnd.wall.id)
     const placed = focus
       ? next.find((m) => {
           if (m.wallId !== focus.origin.source.id || m.face !== focus.piece.face) return false
           const [start, end] = plasterSpan(m, focus.origin.source)
           return start <= focus.lo + EPS_CM && end >= focus.hi - EPS_CM
         })
-      : undefined
+      : focusEnd && focusEndOrigin
+        ? next.find((m) => m.face === "end" && m.wallId === focusEndOrigin.source.id && m.anchor === focusEnd.end)
+        : undefined
     commit(next)
     return placed?.id ?? null
   }
