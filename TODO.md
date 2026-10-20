@@ -930,3 +930,12 @@ Follow-ups from `wall-body-corners-snap` (2026-10-19).
 
 - [ ] `chainFaceRuns` (`src/doorway/doorway-faces.ts`) is no longer called in production after the plaster rewrite;
   only `chain-face-runs.test.ts` uses it. Remove together with its test if nothing else adopts it.
+
+# plaster tool follow-ups (direct spec edits, 2026-10-20)
+
+## Tests
+- `main.ts` pointerup path: the plaster tool stays active and nothing is selected after a click (only `plaster-tool` is unit-tested); `applyNumber` with `spot.trimCm` (inner/outer corner dimensions) is checked only through `trimCm` in `plaster-end.test.ts` PE-16..18.
+- Browser checks not done for: end-strip wings, side/end dimensions at inner and outer corners, tool staying active after a click (user checked wings and dimensions visually).
+
+## Out of scope (decided, revisit if needed)
+- Plaster-tool behaviour changes of 2026-10-20 (corner wrap, dimensions from the outer edge, no auto-select) were made as direct edits of `openspec/specs/rough-works-plan/spec.md` without separate OpenSpec changes; ghost of the end strip shows no corner wings before the side strips exist.
