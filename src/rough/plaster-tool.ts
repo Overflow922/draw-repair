@@ -1,21 +1,21 @@
 import { EPS_CM } from "../demolition/mark-model"
-import { markNumberAt } from "../demolition/mark-numbers"
-import type { MarkNumberSpot } from "../demolition/mark-numbers"
 import { alongNodes, snapAlong } from "../demolition/mark-snap"
 import type { PlasterMark, Point, Unit } from "../types"
 import { dist, dot, pointInPolygon, sub, unit as unitVector } from "../wall-geometry"
 import { plasterOrigins, plasterSources, plasterSpan, plasterStrip } from "./plaster"
-import type { PlasterOrigin, PlasterPiece } from "./plaster"
-import { addPlaster, addPlasterEnd, editPlasterNumber, removePlaster, samePlaster, setPlasterThickness } from "./plaster-marks"
-import { plasterDimensions } from "./plaster-dimensions"
+import type { PlasterOrigin } from "./plaster"
+import { markNumberAt } from "../demolition/mark-numbers"
+import { addPlaster, addPlasterEnd, removePlaster, samePlaster, setPlasterThickness } from "./plaster-marks"
 import { plasterTarget } from "./plaster-face"
+import { plasterRunDimensions } from "./plaster-dimensions"
 import type { EndTargetPiece, PlasterTarget, SideTargetPiece, SourceEnd } from "./plaster-face"
 import type { PlasterGhost } from "./rough-render"
 import type { RoughScene } from "./rough-scene"
 import type { Drawing } from "../types"
 
-// Инструмент «Штукатурка», выделение пометки и правка чисел на месте (change add-rough-works-plan, design D3, D8; жест —
-// change plaster-click-whole-face; протяжка — change plaster-partial-drag): состояние наведения, протяжки и выделения без DOM.
+// Инструмент «Штукатурка» и выделение пометки (change add-rough-works-plan, design D3, D8; жест — change plaster-click-whole-face;
+// протяжка — change plaster-partial-drag; числа размеров не правятся — change plaster-dimension-corner-to-corner, design D5):
+// состояние наведения, протяжки и выделения без DOM.
 // Данные чертежа, история и перерисовка — через явный PlasterToolHost.
 
 export interface PlasterToolHost {
@@ -29,10 +29,6 @@ export interface PlasterToolHost {
   radiusCm(): number
   newId(): string
   newThicknessMm(): number // толщина из панели инструмента — для новых пометок
-}
-
-export interface PlasterNumberSpot extends MarkNumberSpot {
-  piece: PlasterPiece
 }
 
 export interface PlasterTool {
@@ -51,8 +47,7 @@ export interface PlasterTool {
   clearSelection(): void
   deleteSelected(): boolean
   setSelectedThickness(mm: number): boolean
-  numberAt(p: Point, unit: Unit, k: number, labelPx: number, tolCm: number): PlasterNumberSpot | null
-  applyNumber(spot: PlasterNumberSpot, valueCm: number): boolean
+  dimensionAt(p: Point, unit: Unit, k: number, labelPx: number, tolCm: number): boolean // под точкой число размера выделенной пометки (оно не правится)
   erase(p: Point): boolean
   eraseTarget(p: Point): string | null
 }
@@ -284,29 +279,16 @@ export function createPlasterTool(host: PlasterToolHost): PlasterTool {
       if (selected === null) return false
       return commit(setPlasterThickness(host.marks(), selected, mm))
     },
-    numberAt(p, unit, k, labelPx, tolCm) {
+    dimensionAt(p, unit, k, labelPx, tolCm) {
       const mark = host.marks().find((m) => m.id === selected)
-      // размер торца не редактируется (design D7)
-      if (!mark || mark.face === "end") return null
-      const walls = host.scene().base.walls
-      const all = host.scene().pieces
-      const spots = all
-        .filter((piece) => piece.mark.id === mark.id)
-        .flatMap((piece) => plasterDimensions(piece, all, walls, unit, k, labelPx).filter((d) => d.side === mark.face).map((d): PlasterNumberSpot => ({ ...d.spot, piece })))
-      const hit = markNumberAt(p, spots, tolCm)
-      return hit ? spots.find((s) => s.piece === (hit as PlasterNumberSpot).piece && s.target === hit.target && s.side === hit.side) ?? null : null
+      if (!mark) return false
+      const { pieces, base } = host.scene()
+      const spots = plasterRunDimensions(pieces, base.walls, base.doorways, unit, k, labelPx)
+        .filter((run) => run.markIds.includes(mark.id))
+        .flatMap((run) => run.dimensions.map((d) => d.spot))
+      return markNumberAt(p, spots, tolCm) !== null
     },
-    applyNumber(spot, valueCm) {
-      if (selected === null) return false
-      const origin = plasterOrigins(host.drawing()).get(spot.piece.wall.id)
-      if (!origin) return false
-      const edited = editPlasterNumber(host.marks(), plasterSources(host.drawing()), host.scene().base.walls, spot.piece, origin.start, spot.target, valueCm + (spot.trimCm ?? 0))
-      if (!edited || samePlaster(edited.marks, host.marks())) return false
-      selected = edited.id
-      return commit(edited.marks)
-    },
-    erase(p) {
-      const hit = markAt(p)
+    erase(p) {      const hit = markAt(p)
       if (!hit) return false
       if (hit.id === selected) selected = null
       return commit(removePlaster(host.marks(), hit.id))

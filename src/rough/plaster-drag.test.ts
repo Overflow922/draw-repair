@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest"
-import { markDimensions } from "../demolition/mark-dimensions"
 import { door } from "../doorway/doorway.test-utils"
 import type { Point } from "../types"
+import { plasterRunDimensions } from "./plaster-dimensions"
 import { px, setup } from "./plaster-tool.test-utils"
 import type { Setup } from "./plaster-tool.test-utils"
 import { roughScene } from "./rough-scene"
@@ -251,29 +251,21 @@ describe("режим правки после протяжки", () => {
     drag(s, at(100), at(300))
     return s
   }
-  // числа цепочки грани +1 выделенной пометки на свободной стене: 100, 200, 200
-  const spotAt = (s: Setup, target: "gapA" | "width" | "gapB") => {
-    const scene = roughScene(s.drawing())
-    const piece = scene.pieces[0]!
-    const d = markDimensions(piece, scene.base.walls, "chain", "cm", 2, 14).find((x) => x.side === 1 && x.target === target)!
-    return s.tool.numberAt(d.spot.center, "cm", 2, 14, 0)
-  }
-
-  it("PD-30: сразу после протяжки правимы числа цепочки «100 | 200 | 200»", () => {
+  it("PD-30: сразу после протяжки показана цепочка «100 | 200 | 200» без правки чисел", () => {
     const s = placed()
-    expect(spotAt(s, "gapA")?.text).toBe("100")
-    expect(spotAt(s, "width")?.text).toBe("200")
-    expect(spotAt(s, "gapB")?.text).toBe("200")
+    const scene = roughScene(s.drawing())
+    const [run] = plasterRunDimensions(scene.pieces, scene.base.walls, scene.base.doorways, "cm", 2, 14)
+    expect(run?.dimensions.map((d) => d.text)).toEqual(["100", "200", "200"])
+    expect(Object.keys(s.tool)).not.toContain("numberAt")
+    expect(Object.keys(s.tool)).not.toContain("applyNumber")
   })
 
-  it("PD-31: правка расстояния до стыка в сторону a (50) — участок 50–250 одним шагом; пометка остаётся выделенной", () => {
+  it("PD-31: после протяжки участок остаётся 100–300, шага истории кроме постановки нет; пометка выделена", () => {
     const s = placed()
-    expect(s.tool.applyNumber(spotAt(s, "gapA")!, 50)).toBe(true)
-    expect(s.marks()).toEqual([plaster("n1", "W", 1, "a", 50, 250, 20)])
-    expect(s.log.records).toBe(2) // постановка и правка
+    expect(s.marks()).toEqual([plaster("n1", "W", 1, "a", 100, 300, 20)])
+    expect(s.log.records).toBe(1)
     expect(s.tool.selectedId()).toBe("n1")
   })
-
   it("PD-32: Delete удаляет пометку протяжки и снимает выделение; Escape (clearSelection) снимает выделение без удаления", () => {
     const s = placed()
     expect(s.tool.deleteSelected()).toBe(true)

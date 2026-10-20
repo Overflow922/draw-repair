@@ -1,5 +1,4 @@
 import { describe, expect, it } from "vitest"
-import { markDimensions } from "../demolition/mark-dimensions"
 import { isPlasterMark } from "../storage"
 import type { Drawing, PlasterMark, Point } from "../types"
 import { plasterPieces, plasterStrip } from "./plaster"
@@ -116,8 +115,9 @@ describe("полоса торца", () => {
 
 describe("размер боковой полосы", () => {
   it("PE-15: размер отсчитывается от внешней стороны полосы и лежит дальше неё", () => {
-    const piece = plasterPieces(drawing({ roughPlaster: [plaster("p", "W", 1, "a", 100, 300)] }))[0]
-    const dims = piece ? markDimensions(piece, [W()], "chain", "cm", 2, 14, 2) : []
+    const pieces = plasterPieces(drawing({ roughPlaster: [plaster("p", "W", 1, "a", 100, 300)] }))
+    const piece = pieces[0]
+    const dims = piece ? plasterDimensions(piece, pieces, [W()], "cm", 2, 14) : []
     const width = dims.find((d) => d.target === "width")
     expect(width && [width.geom.a.y, width.geom.p1.y > 12]).toEqual([12, true])
   })
@@ -138,14 +138,6 @@ describe("размер у внутреннего угла", () => {
     const both = widthOf([plaster("p", "A", 1, "a", 0, 500), plaster("q", "B", 1, "a", 0, 400)], "p")
     expect(alone && both && alone - both).toBeCloseTo(2)
   })
-
-  it("PE-17: правка числа укороченного размера прибавляет укорочение", () => {
-    const marks = [plaster("p", "A", 1, "a", 0, 500), plaster("q", "B", 1, "a", 0, 400)]
-    const d = corner(marks)
-    const piece = plasterPieces(d).find((p) => p.mark.id === "p")
-    const dim = piece && plasterDimensions(piece, plasterPieces(d), d.walls, "cm", 2, 14).find((x) => x.target === "width")
-    expect(dim?.spot.trimCm).toBeCloseTo(2)
-  })
 })
 
 describe("размер у внешнего угла выступа", () => {
@@ -161,7 +153,6 @@ describe("размер у внешнего угла выступа", () => {
     const alone = widthOf([side])
     const wrapped = widthOf([side, endMark("e", "S", "b")])
     expect(alone && wrapped && wrapped.valueCm - alone.valueCm).toBeCloseTo(2)
-    expect(wrapped?.spot.trimCm).toBeCloseTo(-2)
   })
 })
 
@@ -234,11 +225,10 @@ describe("инструмент: торец", () => {
     expect(s.marks()[0]?.face).toBe(1)
   })
 
-  it("PE-12: размер торца не редактируется; Delete и правка толщины работают", () => {
+  it("PE-12: Delete и правка толщины пометки торца работают", () => {
     const s = setup(drawing(), 20)
     click(s, 503, 0)
     s.tool.select(px(501, 0))
-    expect(s.tool.numberAt(px(500, 0), "cm", 2, 14, 100)).toBeNull()
     expect(s.tool.setSelectedThickness(40)).toBe(true)
     expect(s.marks()[0]?.thicknessMm).toBe(40)
     expect(s.tool.deleteSelected()).toBe(true)

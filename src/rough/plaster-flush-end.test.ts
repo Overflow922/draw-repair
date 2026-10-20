@@ -126,7 +126,7 @@ describe("постановка: торец в плоскости", () => {
 })
 
 describe("размеры и подсветка: торец в плоскости", () => {
-  it("FE-11: боковые полосы не заходят на торец: куски по 490 см, ширина в цепочке — до внешней стороны полосы торца (492 см)", () => {
+  it("FE-11: боковые полосы не заходят на торец: куски по 490 см, а размер участка один — от x = 0 до x = 1000 (1000 см)", () => {
     const widthOf = (walls: Wall[], id: string): number | undefined => {
       const s = setup(drawing({ walls }))
       s.click(at(100, -8))
@@ -135,10 +135,10 @@ describe("размеры и подсветка: торец в плоскости
       const piece = pieces.find((p) => p.wall.id.startsWith(`${id}~`) && p.mark.face === -1)
       return piece && plasterDimensions(piece, pieces, d.walls, "cm", 2, 14).find((x) => x.side === -1 && x.target === "width")?.valueCm
     }
-    expect(widthOf(ROW, "H1")).toBeCloseTo(492)
-    expect(widthOf(ROW, "H2")).toBeCloseTo(492)
+    expect(widthOf(ROW, "H1")).toBeCloseTo(1000)
+    expect(widthOf(ROW, "H2")).toBeCloseTo(1000)
     // ширина не зависит от самой толстой стены чертежа (раньше на неё влияло окно поиска грани)
-    expect(widthOf([...ROW, wall("far", 0, 1000, 300, 1000, 60)], "H1")).toBeCloseTo(492)
+    expect(widthOf([...ROW, wall("far", 0, 1000, 300, 1000, 60)], "H1")).toBeCloseTo(1000)
   })
 
   it("FE-12: подсветка цели равна поставленным полосам", () => {

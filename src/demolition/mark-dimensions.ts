@@ -30,17 +30,13 @@ export interface MarkDimension {
 const ZERO = 1e-6
 
 // направление текста вдоль оси слева направо (как у чисел размеров и проёма)
-function textDirection(axis: Point): Point {
+export function textDirection(axis: Point): Point {
   let angle = Math.atan2(axis.y, axis.x)
   if (angle > Math.PI / 2 || angle < -Math.PI / 2) angle += Math.PI
   return { x: Math.cos(angle), y: Math.sin(angle) }
 }
 
-// k — px на см чертежа, labelPx — кегль подписи; линия размера отстоит от грани на CHAIN_OFFSET_EM · кегль в сторону грани;
-// depthCm — толщина штукатурки у пометки: размер отсчитывается от её внешней стороны и не заходит на полосу
-// trim — укорочение цепочки у стыка (сантиметры вдоль оси): у начала цепочки грани (`from`) и у её конца (`to`)
-export type ChainTrim = (side: Side, atCm: number, end: "from" | "to") => number
-
+// k — px на см чертежа, labelPx — кегль подписи; линия размера отстоит от грани на CHAIN_OFFSET_EM · кегль в сторону грани
 export function markDimensions(
   r: MarkSpan,
   walls: readonly Wall[],
@@ -48,24 +44,17 @@ export function markDimensions(
   unit: Unit,
   k: number,
   labelPx: number,
-  depthCm = 0,
-  trim?: ChainTrim,
   boundsOf?: FaceBoundsOf,
 ): MarkDimension[] {
   const offsetCm = (CHAIN_OFFSET_EM * labelPx) / k
-  const face = r.wall.thicknessCm / 2 + depthCm
+  const face = r.wall.thicknessCm / 2
   const lineDir = textDirection(unitVector(r.wall.a, r.wall.b))
   const up = { x: lineDir.y, y: -lineDir.x }
   const lift = (DIM_TEXT_GAP_PX + labelPx / 2) / k
   const out: MarkDimension[] = []
   const items = markChains(r, walls, boundsOf).filter((item) => item.lengthCm > ZERO)
   for (const item of items) {
-    const chain = items.filter((x) => x.side === item.side)
-    const trimFrom = item === chain[0] && trim ? trim(item.side, item.fromCm, "from") : 0
-    const trimTo = item === chain[chain.length - 1] && trim ? trim(item.side, item.toCm, "to") : 0
-    const fromCm = item.fromCm + trimFrom
-    const toCm = item.toCm - trimTo
-    const lengthCm = toCm - fromCm
+    const { fromCm, toCm, lengthCm } = item
     if (lengthCm <= ZERO) continue
     const geom = dimGeometry(hostPoint(r.wall, fromCm, item.side * face), hostPoint(r.wall, toCm, item.side * face), offsetCm * item.side)
     if (!geom) continue
@@ -75,7 +64,6 @@ export function markDimensions(
       target: item.target,
       text,
       valueCm: lengthCm,
-      trimCm: trimFrom + trimTo,
       center: add(hostPoint(r.wall, (fromCm + toCm) / 2, item.side * (face + offsetCm)), mul(up, lift)),
       dir: lineDir,
       widthCm: (text.length * labelPx * CHAR_WIDTH) / k,
@@ -91,7 +79,7 @@ export function markDimensions(
 export function markDimensionExtent(r: MarkSpan, walls: readonly Wall[], k: number, m: RenderMetrics): Point[] {
   const beyond = m.dimOvershootPx / k
   const points: Point[] = []
-  for (const d of markDimensions(r, walls, "chain", "cm", k, m.labelPx, 0, undefined, clippedFaceBounds)) {
+  for (const d of markDimensions(r, walls, "chain", "cm", k, m.labelPx, clippedFaceBounds)) {
     const shift = { x: d.geom.nx * beyond * d.side, y: d.geom.ny * beyond * d.side }
     points.push(add(d.geom.p1, shift), add(d.geom.p2, shift))
     const { center, dir, widthCm, heightCm } = d.spot

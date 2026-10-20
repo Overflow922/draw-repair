@@ -1,10 +1,6 @@
 import { EPS_CM, MIN_WIDTH_CM, lengthOf } from "../demolition/mark-model"
-import { editedSpan } from "../demolition/mark-numbers"
-import type { NumberTarget } from "../demolition/mark-numbers"
 import type { PlasterMark, Wall } from "../types"
 import { plasterSpan } from "./plaster"
-import type { PlasterPiece } from "./plaster"
-import { pieceFaceBounds } from "./plaster-face-bounds"
 
 // Операции над списком пометок штукатурки (change add-rough-works-plan, design D3). Входы не мутируются; если операция
 // ничего не изменила, возвращается тот же массив — по нему инструмент решает, писать ли шаг истории.
@@ -111,7 +107,7 @@ export function setPlasterThickness(marks: PlasterMark[], id: string, thicknessM
   return marks.map((m) => (m.id === id ? { ...m, thicknessMm } : m))
 }
 
-// Слияние пересекающихся и соприкасающихся пометок каждой существующей стены и грани (загрузка документа, правка чисел);
+// Слияние пересекающихся и соприкасающихся пометок каждой существующей стены и грани (загрузка документа);
 // пометки на отсутствующие стены не трогаются; слитая пометка сохраняет толщину первой.
 export function mergeAllPlaster(marks: PlasterMark[], walls: readonly Wall[]): PlasterMark[] {
   let list = marks
@@ -132,36 +128,4 @@ export function mergeAllPlaster(marks: PlasterMark[], walls: readonly Wall[]): P
     i = 0
   }
   return list
-}
-
-// Правка числа цепочки куска пометки (числа считаются на стене подложки): участок пересчитывается по правилам пометок сноса,
-// затем переводится в координаты исходной стены (start — начало стены подложки на ней) и сливается с соседними. null —
-// недопустимый ввод или стена без граней; id — идентификатор пометки, в которую влился участок.
-export function editPlasterNumber(
-  marks: readonly PlasterMark[],
-  sources: readonly Wall[],
-  sceneWalls: readonly Wall[],
-  piece: PlasterPiece,
-  start: number,
-  which: NumberTarget,
-  valueCm: number,
-): { marks: PlasterMark[]; id: string } | null {
-  const source = sources.find((w) => w.id === piece.mark.wallId)
-  const side = piece.mark
-  if (!source || side.face === "end") return null
-  const edit = editedSpan(piece, sceneWalls, which, side.face, valueCm, pieceFaceBounds)
-  if (!edit) return null
-  const lo = start + edit[0]
-  const hi = start + edit[1]
-  const edited = markFromSpan(side.id, source, side.face, side.thicknessMm, lo, hi)
-  const merged = mergeAllPlaster(
-    marks.map((m) => (m.id === side.id ? edited : m)),
-    sources,
-  )
-  const result = merged.find((m) => {
-    if (m.wallId !== source.id || m.face !== side.face) return false
-    const [from, to] = plasterSpan(m, source)
-    return from <= lo + EPS_CM && to >= hi - EPS_CM
-  })
-  return result ? { marks: merged, id: result.id } : null
 }

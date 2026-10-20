@@ -75,19 +75,18 @@ describe("оси стен плоскости оканчиваются на гр�
     expectContinuous(runsAlong(plasterPieces(s.drawing()), -7), 0, 1000)
   })
 
-  it("TG-2: сохранённые пометки без клика дают ту же сплошную полосу и не рвут цепочку размеров", () => {
+  it("TG-2: сохранённые пометки без клика дают ту же сплошную полосу и один размер на весь участок", () => {
     const d = drawing({ walls: [W1, W2, S], roughPlaster: [plaster("m1", "W1", -1, "a", 0, 490), plaster("m2", "W2", -1, "a", 0, 490)] })
     const pieces = plasterPieces(d)
     expectContinuous(runsAlong(pieces, -7), 0, 1000)
-    // цепочка не разрывается: линия размера W1 доходит до начала линии размера W2 (совпадение границ — change plaster-dimension-collinear-joint)
-    const extent = (id: string): readonly [number, number] => {
+    // размер один и не делится на ширине S (change plaster-dimension-corner-to-corner)
+    const widths = (id: string): number[] => {
       const piece = pieces.find((p) => base(p.wall.id) === id)
-      const xs = piece ? plasterDimensions(piece, pieces, d.walls, "cm", 2, 14).filter((x) => x.side === -1 && x.target === "width").flatMap((x) => [x.geom.p1.x, x.geom.p2.x]) : []
-      return [Math.min(...xs), Math.max(...xs)]
+      return piece ? plasterDimensions(piece, pieces, d.walls, "cm", 2, 14).filter((x) => x.target === "width").map((x) => x.valueCm) : []
     }
-    expect(extent("W1")[1]).toBeGreaterThanOrEqual(extent("W2")[0] - 1e-6)
+    expect(widths("W1")).toEqual([1000])
+    expect(widths("W2")).toEqual([1000])
   })
-
   it("TG-5: площадь штукатурки включает щель на ширине S: 1000 × 2 см", () => {
     const d = drawing({ walls: [W1, W2, S], roughPlaster: [plaster("m1", "W1", -1, "a", 0, 490), plaster("m2", "W2", -1, "a", 0, 490)] })
     expect(areaOf(plasterPieces(d).map(plasterStrip))).toBeCloseTo(1000 * 2, 6)

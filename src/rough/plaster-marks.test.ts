@@ -1,8 +1,6 @@
 import { describe, expect, it } from "vitest"
-import { mountingScene } from "../mounting/mounting-scene"
-import { addPlaster, editPlasterNumber, mergeAllPlaster, removePlaster, setPlasterThickness } from "./plaster-marks"
-import { plasterPieces } from "./plaster"
-import { W, deepFreeze, drawing, idGen, plaster, wall } from "./rough.test-utils"
+import { addPlaster, mergeAllPlaster, removePlaster, setPlasterThickness } from "./plaster-marks"
+import { W, deepFreeze, idGen, plaster } from "./rough.test-utils"
 
 // change add-rough-works-plan: операции над списком пометок штукатурки
 // (spec rough-works-plan «Участки штукатурки одной грани не пересекаются», «Инструмент «Штукатурка»», «Выделение штукатурки и правка на месте»)
@@ -100,62 +98,5 @@ describe("слияние при загрузке", () => {
   it("RW-29: пометки разных граней и пометки на отсутствующие стены не трогаются", () => {
     const marks = [plaster("p", "W", 1, "a", 100, 200), plaster("q", "W", -1, "a", 150, 300), plaster("g", "gone", 1, "a", 0, 10), plaster("h", "gone", 1, "a", 5, 20)]
     expect(mergeAllPlaster(marks, walls)).toEqual(marks)
-  })
-})
-
-describe("правка чисел участка", () => {
-  const scene = (marks: ReturnType<typeof plaster>[]) => {
-    const d = drawing({ roughPlaster: marks })
-    const s = mountingScene(d)
-    return { d, s, pieces: plasterPieces(d, s) }
-  }
-
-  it("RW-30: ширина 200 на свободной стене — участок 100–300", () => {
-    const { s, pieces } = scene([plaster("p", "W", 1, "a", 100, 190)])
-    const edited = editPlasterNumber([plaster("p", "W", 1, "a", 100, 190)], walls, s.walls, pieces[0]!, 0, "width", 200)
-    expect(edited?.marks).toEqual([plaster("p", "W", 1, "a", 100, 300)])
-    expect(edited?.id).toBe("p")
-  })
-
-  it("RW-30: отступ до конца a: ввод 150 — участок 150–240 (ширина 90)", () => {
-    const { s, pieces } = scene([plaster("p", "W", 1, "a", 100, 190)])
-    const edited = editPlasterNumber([plaster("p", "W", 1, "a", 100, 190)], walls, s.walls, pieces[0]!, 0, "gapA", 150)
-    expect(edited?.marks).toEqual([plaster("p", "W", 1, "a", 150, 240)])
-  })
-
-  it("RW-30: отступ до конца b: ввод 50 — участок 360–450", () => {
-    const { s, pieces } = scene([plaster("p", "W", 1, "a", 100, 190)])
-    const edited = editPlasterNumber([plaster("p", "W", 1, "a", 100, 190)], walls, s.walls, pieces[0]!, 0, "gapB", 50)
-    expect(edited?.marks).toEqual([plaster("p", "W", 1, "b", 50, 140)])
-  })
-
-  it("RW-31: значение за стеной принимается ближайшим допустимым: ширина 900 — участок 100–500", () => {
-    const { s, pieces } = scene([plaster("p", "W", 1, "a", 100, 190)])
-    const edited = editPlasterNumber([plaster("p", "W", 1, "a", 100, 190)], walls, s.walls, pieces[0]!, 0, "width", 900)
-    // участок 100–500 хранится от конца b (середина 300 > 250): 0–400
-    expect(edited?.marks).toEqual([plaster("p", "W", 1, "b", 0, 400)])
-  })
-
-  it.each([["abc", Number.NaN], ["отрицательный отступ", -5], ["ширина 0", 0]])("RW-32: недопустимый ввод (%s) ничего не меняет", (_n, v) => {
-    const { s, pieces } = scene([plaster("p", "W", 1, "a", 100, 190)])
-    const which = _n === "ширина 0" ? "width" : "gapA"
-    expect(editPlasterNumber([plaster("p", "W", 1, "a", 100, 190)], walls, s.walls, pieces[0]!, 0, which, v)).toBeNull()
-  })
-
-  it("RW-33: после правки участок сливается с соседними: 100–190 и 250–300, ширина первого 200", () => {
-    const marks = [plaster("p", "W", 1, "a", 100, 190), plaster("q", "W", 1, "a", 250, 300)]
-    const { s, pieces } = scene(marks)
-    const edited = editPlasterNumber(marks, walls, s.walls, pieces[0]!, 0, "width", 200)
-    expect(edited?.marks).toEqual([plaster("p", "W", 1, "a", 100, 300)])
-  })
-
-  it("RW-34: правка на стене с остатком — участок переводится в координаты исходной стены", () => {
-    const d = drawing({ walls: [wall("W", 0, 0, 500, 0)], demolition: [{ id: "m", wallId: "W", anchor: "a", fromCm: 0, toCm: 200 }], roughPlaster: [plaster("p", "W", 1, "a", 250, 330)] })
-    const s = mountingScene(d)
-    const pieces = plasterPieces(d, s)
-    // остаток 200–500: участок на нём 50–130, ширина 80 → ввод 100 даёт 250–350 в координатах исходной стены
-    const edited = editPlasterNumber(d.roughPlaster ?? [], d.walls, s.walls, pieces[0]!, 200, "width", 100)
-    // участок 250–350 хранится от конца b (середина 300 > 250): 150–250
-    expect(edited?.marks).toEqual([plaster("p", "W", 1, "b", 150, 250)])
   })
 })

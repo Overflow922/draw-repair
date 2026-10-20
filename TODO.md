@@ -1020,3 +1020,16 @@ Follow-ups from `plaster-t-gap-opposite-face` and `plaster-dimension-collinear-j
 ## Out of scope (decided, revisit if needed)
 
 - A gap wider than the search window of `faceRuns` (largest wall thickness + 1 cm) is not bridged; the window is shared with demolition and openings and was not changed.
+---
+
+Follow-ups from `plaster-dimension-corner-to-corner` (2026-10-20).
+
+## Tests
+
+- [ ] Manual browser check of the plaster dimensions (task 5.2) was not done: a plane of several walls, an opening in the middle, an opening at a joint, a room drawn wall by wall. Only unit and render tests cover it (`plaster-corner-dimensions.test.ts`, `plaster-corner-render.test.ts`).
+- [ ] Mutation testing was not run for `src/rough/plaster-chain.ts` and `src/rough/plaster-dimensions.ts` (no mutation tooling in the repo).
+
+## Out of scope
+
+- No formatter or linter is configured (no eslint/prettier config, no `lint` script), so quality gates 1–2 were not run; `tsc` and the full `vitest` suite pass.
+- An end strip that touches two parallel plaster planes within 0.5 cm joins both runs; not seen in real drawings (`plaster-chain.ts`).

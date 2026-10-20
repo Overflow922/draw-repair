@@ -178,7 +178,7 @@ export function createDemolitionTool(host: DemolitionToolHost): DemolitionTool {
     },
     numberAt(p, unit, k, labelPx, tolCm) {
       const r = selectedMark()
-      return r ? markNumberAt(p, markDimensions(r, host.walls(), "chain", unit, k, labelPx, 0, undefined, clippedFaceBounds).map((d) => d.spot), tolCm) : null
+      return r ? markNumberAt(p, markDimensions(r, host.walls(), "chain", unit, k, labelPx, clippedFaceBounds).map((d) => d.spot), tolCm) : null
     },
     erase(p) {
       const hit = markAt(p, effectiveMarks(host.marks(), host.walls(), host.elements()), host.walls())

@@ -21,7 +21,6 @@ export interface NumberRef {
 export interface MarkNumberSpot extends NumberRef {
   text: string
   valueCm: number
-  trimCm?: number // на сколько показанный размер короче размера по граням: правка прибавляет его к введённому числу
   center: Point // центр текста, мировые координаты
   dir: Point // единичное направление текста слева направо
   widthCm: number

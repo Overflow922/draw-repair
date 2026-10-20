@@ -1,11 +1,11 @@
 import { describe, expect, it } from "vitest"
-import { markDimensions } from "../demolition/mark-dimensions"
 import { door } from "../doorway/doorway.test-utils"
 import type { Drawing, PlasterMark, Point } from "../types"
+import { plasterRunDimensions } from "./plaster-dimensions"
 import { createPlasterTool } from "./plaster-tool"
 import type { PlasterToolHost } from "./plaster-tool"
 import { roughScene } from "./rough-scene"
-import { demolitionMark, drawing, idGen, plaster, r6, wall } from "./rough.test-utils"
+import { demolitionMark, drawing, idGen, plaster, wall } from "./rough.test-utils"
 
 // change add-rough-works-plan, plaster-click-whole-face: инструмент «Штукатурка» — наведение и клик по грани, выделение, числа, ластик
 // (spec rough-works-plan «Постановка штукатурки кликом по грани», «Выделение штукатурки и правка на месте», «Ластик на плане «Черновые работы»»)
@@ -256,51 +256,42 @@ describe("выделение, толщина и снятие", () => {
   })
 })
 
-describe("правка чисел на месте", () => {
+describe("числа размеров не правятся", () => {
   const withMark = () => setup(drawing({ roughPlaster: [plaster("p", "W", 1, "a", 100, 190, 20)] }))
-  // числа цепочки грани +1 выделенной пометки на свободной стене: 100, 90, 310
-  const spotAt = (s: ReturnType<typeof withMark>, target: "gapA" | "width" | "gapB") => {
+
+  it("RW-170: у выделенной пометки показана цепочка «100 | 90 | 310», невыделенные показывают тот же участок как ширину", () => {
+    const s = withMark()
+    s.tool.select(px(150, 11))
     const scene = roughScene(s.drawing())
-    const piece = scene.pieces[0]!
-    const d = markDimensions(piece, scene.base.walls, "chain", "cm", 2, 14).find((x) => x.side === 1 && x.target === target)!
-    return s.tool.numberAt(d.spot.center, "cm", 2, 14, 0)
-  }
-
-  it("RW-170: числа есть только у выделенной пометки", () => {
-    const s = withMark()
-    expect(spotAt(s, "width")).toBeNull()
-    s.tool.select(px(150, 11))
-    expect(spotAt(s, "width")?.text).toBe("90")
-    expect(spotAt(s, "gapA")?.text).toBe("100")
-    expect(spotAt(s, "gapB")?.text).toBe("310")
+    const [run] = plasterRunDimensions(scene.pieces, scene.base.walls, scene.base.doorways, "cm", 2, 14)
+    expect(run?.dimensions.map((d) => [d.target, d.text])).toEqual([
+      ["gapA", "100"],
+      ["width", "90"],
+      ["gapB", "310"],
+    ])
   })
 
-  it("RW-171: ширина 200 — участок 100–300 одним шагом истории; пометка остаётся выделенной", () => {
+  it("RW-172: число размера выделенной пометки распознаётся как число (клик по нему выделения не снимает), невыделенной и мимо — нет", () => {
     const s = withMark()
+    const scene = roughScene(s.drawing())
+    const [run] = plasterRunDimensions(scene.pieces, scene.base.walls, scene.base.doorways, "cm", 2, 14)
+    const width = run?.dimensions.find((d) => d.target === "width")
+    const at = width?.spot.center ?? px(-1000, -1000)
+    expect(s.tool.dimensionAt(at, "cm", 2, 14, 0)).toBe(false)
     s.tool.select(px(150, 11))
-    const spot = spotAt(s, "width")!
-    expect(s.tool.applyNumber(spot, 200)).toBe(true)
-    expect(s.marks()).toEqual([plaster("p", "W", 1, "a", 100, 300, 20)])
-    expect(s.log.records).toBe(1)
+    expect(s.tool.dimensionAt(at, "cm", 2, 14, 0)).toBe(true)
+    expect(s.tool.dimensionAt(px(450, 200), "cm", 2, 14, 0)).toBe(false)
     expect(s.tool.selectedId()).toBe("p")
-  })
-
-  it("RW-172: недопустимый ввод — участок не изменился, шага нет", () => {
-    const s = withMark()
-    s.tool.select(px(150, 11))
-    const spot = spotAt(s, "width")!
-    expect(s.tool.applyNumber(spot, Number.NaN)).toBe(false)
-    expect(s.tool.applyNumber(spot, 0)).toBe(false)
-    expect(s.marks()).toEqual([plaster("p", "W", 1, "a", 100, 190, 20)])
     expect(s.log.records).toBe(0)
   })
 
-  it("RW-173: отступ до конца a: ввод 150 — участок 150–240", () => {
+  it("RW-171: у инструмента нет правки числа: выделение и клики по размерам участок и историю не меняют", () => {
     const s = withMark()
     s.tool.select(px(150, 11))
-    expect(s.tool.applyNumber(spotAt(s, "gapA")!, 150)).toBe(true)
-    const [mark] = s.marks()
-    const m = mark?.face === "end" ? undefined : mark
-    expect([m?.anchor, r6(m?.fromCm ?? 0), r6(m?.toCm ?? 0)]).toEqual(["a", 150, 240])
+    expect(Object.keys(s.tool)).not.toContain("numberAt")
+    expect(Object.keys(s.tool)).not.toContain("applyNumber")
+    expect(s.marks()).toEqual([plaster("p", "W", 1, "a", 100, 190, 20)])
+    expect(s.log.records).toBe(0)
+    expect(s.tool.selectedId()).toBe("p")
   })
 })

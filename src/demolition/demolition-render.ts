@@ -78,7 +78,7 @@ export function drawDemolitionScene(
   // цепочка размеров пометки как у проёма (changes demolition-doorway-sizes, demolition-corner-dimensions): размеры чертежа
   // с выносными линиями, нулевые опущены; underline — правимые числа выделенной пометки
   const drawDimensions = (span: MarkSpan, underline: boolean): void => {
-    for (const d of markDimensions(span, scene.walls, "chain", unit, k, m.labelPx, 0, undefined, clippedFaceBounds)) drawDimensionGeom(ctx, d.geom, d.text, opts.color, view, m, palette, false, underline)
+    for (const d of markDimensions(span, scene.walls, "chain", unit, k, m.labelPx, clippedFaceBounds)) drawDimensionGeom(ctx, d.geom, d.text, opts.color, view, m, palette, false, underline)
   }
   // штриховка линиями 135° (общий генератор линий wall-hatch): фаза — от начала координат экрана
   const origin = toScreen({ x: 0, y: 0 })

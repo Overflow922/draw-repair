@@ -14,7 +14,7 @@ import type { Battery, Callout, Communication, Point, Screed, Unit, View, Wall, 
 import { SCREED_HATCH, strokeHatchSeries } from "../wall-hatch"
 import { plasterStrip } from "./plaster"
 import type { PlasterPiece } from "./plaster"
-import { plasterDimensions } from "./plaster-dimensions"
+import { plasterDimensions, plasterRunDimensions } from "./plaster-dimensions"
 import { endDimension } from "./plaster-end"
 import type { PlasterTargetPiece } from "./plaster-face"
 import { screedLabelBox } from "./screed-label"
@@ -242,27 +242,31 @@ export function drawRoughScene(
 
   if (scene.callouts?.length) drawCallouts(ctx, scene.callouts, view, m, palette, { selected: scene.selectedCalloutId, erasing: scene.erasingCalloutId })
 
-  // размеры участков — поверх всего чертежа; у выделенной пометки — цепочка своей грани, у остальных — только ширина
+  // размеры участков — поверх всего чертежа; один размер на непрерывную полосу плоскости (сегменты ширины по проёмам); у выделенной
+  // пометки к нему добавлены расстояния до стыков, у остальных — только ширина
   ctx.save()
   ctx.font = `${m.labelPx}px ${m.font}`
-  for (const piece of opts.dimensions === false ? [] : scene.pieces) {
-    const selected = scene.selectedPlasterId === piece.mark.id
-    // торец — один размер, длина торца (change plaster-wall-end-face, design D7)
-    if (piece.mark.face === "end") {
+  if (opts.dimensions !== false) {
+    const runs = plasterRunDimensions(scene.pieces, walls, scene.doorways, unit, k, m.labelPx)
+    const inRun = new Set(runs.flatMap((run) => run.endPieces))
+    // торец — один размер, длина торца (change plaster-wall-end-face, design D7); торец в плоскости входит в размер участка
+    for (const piece of scene.pieces) {
+      if (piece.mark.face !== "end" || inRun.has(piece)) continue
       const d = endDimension(piece.wall, piece.mark.anchor, piece.from, piece.to, piece.mark.thicknessMm, unit, k, m.labelPx)
-      if (d) drawDimensionGeom(ctx, d.geom, d.text, colors.stroke, view, m, palette, false, selected, true)
-      continue
+      if (d) drawDimensionGeom(ctx, d.geom, d.text, colors.stroke, view, m, palette, false, scene.selectedPlasterId === piece.mark.id, true)
     }
-    for (const d of plasterDimensions(piece, scene.pieces, walls, unit, k, m.labelPx)) {
-      if (d.side !== piece.mark.face || (!selected && d.target !== "width")) continue
-      drawDimensionGeom(ctx, d.geom, d.text, colors.stroke, view, m, palette, false, selected, true)
+    for (const run of runs) {
+      const selected = scene.selectedPlasterId !== null && scene.selectedPlasterId !== undefined && run.markIds.includes(scene.selectedPlasterId)
+      for (const d of run.dimensions) {
+        if (selected || d.target === "width") drawDimensionGeom(ctx, d.geom, d.text, colors.stroke, view, m, palette, false, selected, true)
+      }
     }
   }
   // превью протяжки — ширина участка, как у невыделенной пометки
   for (const piece of opts.dimensions === false || !ghost?.measured ? [] : ghostPieces) {
     if (piece.mark.face === "end") continue
-    for (const d of plasterDimensions(piece, scene.pieces, walls, unit, k, m.labelPx)) {
-      if (d.side === piece.mark.face && d.target === "width") drawDimensionGeom(ctx, d.geom, d.text, colors.stroke, view, m, palette, false, false, true)
+    for (const d of plasterDimensions(piece, scene.pieces, walls, unit, k, m.labelPx, scene.doorways)) {
+      if (d.target === "width") drawDimensionGeom(ctx, d.geom, d.text, colors.stroke, view, m, palette, false, false, true)
     }
   }
   ctx.restore()

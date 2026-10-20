@@ -861,28 +861,6 @@ function clearRoughSelection(): void {
   closeRoughPanels()
 }
 
-// нажатие на правимое число выделенной пометки штукатурки — поле ввода на месте; Enter применяет
-function pressPlasterNumber(p: Point): boolean {
-  const k = PX_PER_CM * view.zoom
-  const spot = plasterTool.numberAt(p, unit, k, SCREEN_METRICS.labelPx, NUMBER_HIT_PX / k)
-  if (!spot) return false
-  closeRoughEditor()
-  const at = { x: (spot.center.x - view.pan.x) * k, y: (spot.center.y - view.pan.y) * k }
-  roughEditor = openNumberEditor(
-    canvasWrap,
-    at,
-    formatCm(spot.valueCm, unit),
-    (text) => {
-      plasterTool.applyNumber(spot, parseFloat(text.replace(",", ".")) * UNIT_TO_CM[unit])
-      redraw()
-    },
-    () => {
-      roughEditor = null
-    },
-  )
-  return true
-}
-
 // нажатие на подпись стяжки выделяет её и открывает на месте поле толщины; Enter применяет значение из допустимых
 function pressScreedLabel(p: Point): boolean {
   const screed = screedTool.labelAt(p)
@@ -911,9 +889,12 @@ function pressScreedLabel(p: Point): boolean {
   return true
 }
 
-// выделение на плане «Черновые работы» без инструмента: число выделенной пометки, подпись стяжки, пометка штукатурки, иначе снятие
+// выделение на плане «Черновые работы» без инструмента: подпись стяжки, число размера (выделение остаётся), пометка штукатурки, иначе снятие
 function pressRough(p: Point): void {
-  if (pressPlasterNumber(p) || pressScreedLabel(p)) return
+  if (pressScreedLabel(p)) return
+  // клик по числу размера выделенной пометки штукатурки ничего не меняет: число не правится, выделение остаётся
+  const k = PX_PER_CM * view.zoom
+  if (plasterTool.dimensionAt(p, unit, k, SCREEN_METRICS.labelPx, NUMBER_HIT_PX / k)) return
   closeRoughEditor()
   if (plasterTool.select(p)) {
     screedTool.clearSelection()
