@@ -132,6 +132,23 @@ describe("размер у внутреннего угла", () => {
   })
 })
 
+describe("размер у внешнего угла выступа", () => {
+  it("PE-18: с полосой торца размер боковой полосы длиннее на её толщину; без неё — до торца стены", () => {
+    const S = wall("S", 0, -10, 0, -30)
+    const side = plaster("l", "S", 1, "a", 0, 20)
+    const widthOf = (marks: PlasterMark[]) => {
+      const d = drawing({ walls: [wall("W", -100, 0, 100, 0), S], roughPlaster: marks })
+      const pieces = plasterPieces(d)
+      const piece = pieces.find((p) => p.mark.id === "l")
+      return piece && plasterDimensions(piece, pieces, d.walls, "cm", 2, 14).find((x) => x.target === "width")
+    }
+    const alone = widthOf([side])
+    const wrapped = widthOf([side, endMark("e", "S", "b")])
+    expect(alone && wrapped && wrapped.valueCm - alone.valueCm).toBeCloseTo(2)
+    expect(wrapped?.spot.trimCm).toBeCloseTo(-2)
+  })
+})
+
 describe("пометка торца", () => {
   it("PE-8: торец не сливается с продольной гранью", () => {
     const marks = mergeAllPlaster([plaster("p", "W", 1, "a", 0, 500), endMark("e", "W", "b")], [W()])

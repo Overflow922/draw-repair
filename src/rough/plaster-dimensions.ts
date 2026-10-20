@@ -12,14 +12,22 @@ import type { PlasterPiece } from "./plaster"
 // пробный отступ внутрь полосы от её конца и от внешней стороны, см
 const PROBE_CM = 0.05
 
-// укорочение цепочки грани у стыка: толщина полосы соседней пометки, перекрывающей внешний угол этой полосы
+// Поправка цепочки грани у стыка (см вдоль оси). Внутренний угол: полоса соседней пометки перекрывает конец этой полосы —
+// цепочка короче на толщину соседней. Внешний угол: за концом полосы стоит торцевая полоса, закрывающая угол, — цепочка
+// длиннее на её толщину (отрицательная поправка).
 function junctionTrim(piece: PlasterPiece, pieces: readonly PlasterPiece[], depthCm: number): ChainTrim {
   const lateral = piece.wall.thicknessCm / 2 + depthCm - PROBE_CM
   const others = pieces.filter((x) => x.mark.id !== piece.mark.id)
+  const coverAt = (side: 1 | -1, alongCm: number, endsOnly: boolean): PlasterPiece | undefined => {
+    const probe = hostPoint(piece.wall, alongCm, side * lateral)
+    return others.find((x) => (!endsOnly || x.mark.face === "end") && pointInPolygon(probe, plasterStrip(x)))
+  }
   return (side, atCm, end) => {
-    const probe = hostPoint(piece.wall, end === "from" ? atCm + PROBE_CM : atCm - PROBE_CM, side * lateral)
-    const cover = others.find((x) => pointInPolygon(probe, plasterStrip(x)))
-    return cover ? cover.mark.thicknessMm / 10 : 0
+    const inward = end === "from" ? PROBE_CM : -PROBE_CM
+    const inner = coverAt(side, atCm + inward, false)
+    if (inner) return inner.mark.thicknessMm / 10
+    const outer = coverAt(side, atCm - inward, true)
+    return outer ? -outer.mark.thicknessMm / 10 : 0
   }
 }
 
