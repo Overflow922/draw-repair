@@ -1,10 +1,10 @@
 import { effectiveMarks, EPS_CM, lengthOf } from "../demolition/mark-model"
-import { faceRuns, hostPoint } from "../doorway/doorway-faces"
+import { faceRuns, hostOf, hostPoint, jambsT } from "../doorway/doorway-faces"
 import type { Side } from "../doorway/doorway-faces"
 import { mountingScene } from "../mounting/mounting-scene"
 import type { MountingScene } from "../mounting/mounting-scene"
 import { remnantId, remnantSpans } from "../mounting/remnants"
-import type { Drawing, EndPlasterMark, PlasterMark, Point, SidePlasterMark, Wall } from "../types"
+import type { Drawing, EndPlasterMark, PlasterMark, Point, RevealPlasterMark, SidePlasterMark, Wall, WallElement } from "../types"
 import { bridgeJoints } from "./plaster-bridge"
 import { endStrip, openEndRuns } from "./plaster-end"
 import { planeWalls } from "./plaster-face"
@@ -47,6 +47,22 @@ export function plasterOrigins(drawing: Drawing): Map<string, PlasterOrigin> {
   return origins
 }
 
+// кусок откоса (change plaster-opening-reveals, design D2): от откоса вглубь проёма на толщину, но не больше половины ширины
+// проёма; элемент берётся из сцены «Монтажа» — снесённого или стёртого элемента там нет, и пометка не действует
+export function revealSpan(element: WallElement, wall: Wall, jamb: "a" | "b", thicknessMm: number): [number, number] | null {
+  const [near, far] = jambsT(element, wall)
+  const depth = Math.min(thicknessMm / 10, (far - near) / 2)
+  if (depth <= EPS_CM) return null
+  return jamb === "a" ? [near, near + depth] : [far - depth, far]
+}
+
+function revealPiece(mark: RevealPlasterMark, scene: MountingScene): PlasterPiece | null {
+  const element = scene.doorways.find((d) => d.id === mark.elementId)
+  const wall = element && hostOf(element, scene.walls)
+  const span = element && wall && revealSpan(element, wall, mark.jamb, mark.thicknessMm)
+  return wall && span ? { mark, wall, from: span[0], to: span[1] } : null
+}
+
 // действующие куски пометок: участок, обрезанный по исходной стене, по оставшимся (не снесённым) частям; пометка стены,
 // которой нет, не действует, но остаётся в хранилище
 export function plasterPieces(drawing: Drawing, scene: MountingScene = mountingScene(drawing)): PlasterPiece[] {
@@ -55,6 +71,11 @@ export function plasterPieces(drawing: Drawing, scene: MountingScene = mountingS
   const own = new Set((drawing.mounting?.walls ?? []).map((w) => w.id))
   const pieces: PlasterPiece[] = []
   for (const mark of drawing.roughPlaster ?? []) {
+    if (mark.face === "reveal") {
+      const piece = revealPiece(mark, scene)
+      if (piece) pieces.push(piece)
+      continue
+    }
     const source = drawing.walls.find((w) => w.id === mark.wallId) ?? (drawing.mounting?.walls ?? []).find((w) => w.id === mark.wallId)
     if (!source) continue
     const len = lengthOf(source)
@@ -149,6 +170,11 @@ function overhang(wall: Wall, walls: readonly Wall[], face: Side, from: number, 
 // полоса пометки: прямоугольник, примыкающий к грани снаружи тела стены; вглубь — на толщину
 export function plasterStrip(piece: PlasterPiece): Point[] {
   if (piece.mark.face === "end") return endStrip(piece.wall, piece.mark.anchor, piece.from, piece.to, piece.mark.thicknessMm)
+  if (piece.mark.face === "reveal") {
+    // откос лежит внутри тела стены: поперёк оси от грани до грани
+    const half = piece.wall.thicknessCm / 2
+    return [hostPoint(piece.wall, piece.from, -half), hostPoint(piece.wall, piece.to, -half), hostPoint(piece.wall, piece.to, half), hostPoint(piece.wall, piece.from, half)]
+  }
   const half = piece.wall.thicknessCm / 2
   const near = piece.mark.face * half
   const far = piece.mark.face * (half + piece.mark.thicknessMm / 10)

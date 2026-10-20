@@ -1,7 +1,7 @@
 import { EPS_CM, MIN_WIDTH_CM } from "../demolition/mark-model"
-import { faceRunsReaching } from "../doorway/doorway-faces"
+import { faceRunsReaching, hostOf, jambsT } from "../doorway/doorway-faces"
 import { wallNearBody } from "../doorway/doorway-scene"
-import type { Point, Wall } from "../types"
+import type { Point, Wall, WallElement } from "../types"
 import { RIGHT_COS, degenerate, dist, dot, perp, sub, unit } from "../wall-geometry"
 import { openEndRuns } from "./plaster-end"
 import type { WallEnd } from "./plaster-end"
@@ -30,7 +30,18 @@ export interface EndTargetPiece {
   to: number
 }
 
-export type PlasterTargetPiece = SideTargetPiece | EndTargetPiece
+// кусок цели на откосе (change plaster-opening-reveals, design D3): элемент стены и его откос; from = to — положение откоса вдоль
+// оси стены (протяжённость полосы зависит от толщины из панели и определяется при отрисовке)
+export interface RevealTargetPiece {
+  wall: Wall
+  face: "reveal"
+  element: WallElement
+  jamb: "a" | "b"
+  from: number
+  to: number
+}
+
+export type PlasterTargetPiece = SideTargetPiece | EndTargetPiece | RevealTargetPiece
 
 // торец конца end стены подложки — конец исходной стены (design D4); по умолчанию любой конец
 export type SourceEnd = (wall: Wall, end: WallEnd) => boolean
@@ -53,7 +64,35 @@ export interface PlaneWall {
 // грань, у которой лежит точка: сторона оси, на которой она находится
 export const faceOf = (wall: Wall, p: Point): 1 | -1 => (dot(sub(p, wall.a), perp(unit(wall.a, wall.b))) >= 0 ? 1 : -1)
 
-export function plasterTarget(p: Point, walls: readonly Wall[], radiusCm: number, isSourceEnd: SourceEnd = () => true): PlasterTarget | null {
+// Откос (design D3): курсор в пределах тела опорной стены, а его проекция на ось отстоит от линии откоса не дальше радиуса;
+// из нескольких откосов выбирается ближайший. Вне тела (дальше граней) откосы не ищутся.
+function revealTarget(p: Point, openings: readonly WallElement[], walls: readonly Wall[], radiusCm: number): PlasterTarget | null {
+  let best: { piece: RevealTargetPiece; gap: number } | null = null
+  for (const element of openings) {
+    const wall = hostOf(element, walls)
+    if (!wall) continue
+    const axis = unit(wall.a, wall.b)
+    const lateral = dot(sub(p, wall.a), perp(axis))
+    if (Math.abs(lateral) > wall.thicknessCm / 2) continue
+    const along = dot(sub(p, wall.a), axis)
+    const [near, far] = jambsT(element, wall)
+    for (const [jamb, at] of [["a", near], ["b", far]] as const) {
+      const gap = Math.abs(along - at)
+      if (gap <= radiusCm && (!best || gap < best.gap)) best = { piece: { wall, face: "reveal", element, jamb, from: at, to: at }, gap }
+    }
+  }
+  return best ? { pieces: [best.piece], focusWallId: best.piece.wall.id } : null
+}
+
+export function plasterTarget(
+  p: Point,
+  walls: readonly Wall[],
+  radiusCm: number,
+  isSourceEnd: SourceEnd = () => true,
+  openings: readonly WallElement[] = [],
+): PlasterTarget | null {
+  const reveal = revealTarget(p, openings, walls, radiusCm)
+  if (reveal) return reveal
   const host = wallNearBody(p, walls, radiusCm)
   if (!host || degenerate(host)) return null
   const face = faceOf(host, p)

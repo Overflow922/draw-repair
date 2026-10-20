@@ -3,6 +3,7 @@ import { faceRuns } from "../doorway/doorway-faces"
 import type { Wall } from "../types"
 import { dist } from "../wall-geometry"
 import type { PlasterPiece } from "./plaster"
+import { isSideMark } from "./rough-model"
 import { flushEnds, planeWalls } from "./plaster-face"
 import type { PlaneWall } from "./plaster-face"
 
@@ -47,8 +48,8 @@ function gapIsOpenFace(piece: PlasterPiece, face: 1 | -1, walls: readonly Wall[]
 
 export function bridgeJoints(pieces: readonly PlasterPiece[], walls: readonly Wall[]): PlasterPiece[] {
   return pieces.map((piece) => {
+    if (!isSideMark(piece.mark)) return piece
     const face = piece.mark.face
-    if (face === "end") return piece
     const len = dist(piece.wall.a, piece.wall.b)
     const plane = planeWalls(piece.wall, face, walls)
     const reach = (end: "a" | "b"): number => {

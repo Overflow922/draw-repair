@@ -164,6 +164,11 @@ function loadDemolition(raw: unknown, walls: Wall[]): { demolition?: DemolitionM
 export const isPlasterMark = (m: unknown): m is PlasterMark => {
   if (typeof m !== "object" || m === null) return false
   const x = m as Record<string, unknown>
+  // откос (change plaster-opening-reveals, design D6): элемент стены и откос вместо стены и конца привязки
+  if (x.face === "reveal") {
+    return typeof x.id === "string" && x.id !== "" && typeof x.elementId === "string" && x.elementId !== "" &&
+      (x.jamb === "a" || x.jamb === "b") && isThickness(x.thicknessMm, PLASTER_THICKNESS)
+  }
   const common = typeof x.id === "string" && x.id !== "" && typeof x.wallId === "string" && x.wallId !== "" &&
     (x.anchor === "a" || x.anchor === "b") && isThickness(x.thicknessMm, PLASTER_THICKNESS)
   if (!common) return false
@@ -179,10 +184,12 @@ export const isScreed = (s: unknown): s is Screed => {
   return typeof x.id === "string" && x.id !== "" && isPoint(x.at) && isThickness(x.thicknessMm, SCREED_THICKNESS)
 }
 
-const copyPlaster = (m: PlasterMark): PlasterMark =>
-  m.face === "end"
+const copyPlaster = (m: PlasterMark): PlasterMark => {
+  if (m.face === "reveal") return { id: m.id, face: "reveal", elementId: m.elementId, jamb: m.jamb, thicknessMm: m.thicknessMm }
+  return m.face === "end"
     ? { id: m.id, wallId: m.wallId, face: "end", anchor: m.anchor, thicknessMm: m.thicknessMm }
     : { id: m.id, wallId: m.wallId, face: m.face, anchor: m.anchor, fromCm: m.fromCm, toCm: m.toCm, thicknessMm: m.thicknessMm }
+}
 
 const copyScreed = (s: Screed): Screed => ({ id: s.id, at: { x: s.at.x, y: s.at.y }, thicknessMm: s.thicknessMm })
 

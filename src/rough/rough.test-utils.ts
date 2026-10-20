@@ -25,6 +25,43 @@ export const plaster = (
   thicknessMm = 20,
 ): PlasterMark => ({ id, wallId, face, anchor, fromCm, toCm, thicknessMm })
 
+// откос элемента стены (change plaster-opening-reveals)
+export const reveal = (id: string, elementId: string, jamb: "a" | "b", thicknessMm = 20): PlasterMark => ({ id, face: "reveal", elementId, jamb, thicknessMm })
+
+// окно на стене wallId: откосы offsetCm и offsetCm + widthCm от конца anchor
+export const windowOn = (id: string, wallId: string, offsetCm: number, widthCm: number, anchor: "a" | "b" = "a"): WallElement => ({
+  kind: "window",
+  id,
+  wallId,
+  anchor,
+  offsetCm,
+  widthCm,
+  heightCm: 150,
+  sillCm: 85,
+})
+
+// проём без вида и дверь на стене wallId
+export const openingOn = (id: string, wallId: string, offsetCm: number, widthCm: number, anchor: "a" | "b" = "a"): WallElement => ({
+  id,
+  wallId,
+  anchor,
+  offsetCm,
+  widthCm,
+  heightCm: 210,
+})
+
+export const doorOn = (id: string, wallId: string, offsetCm: number, widthCm: number, anchor: "a" | "b" = "a"): WallElement => ({
+  kind: "door",
+  id,
+  wallId,
+  anchor,
+  offsetCm,
+  widthCm,
+  heightCm: 210,
+  hinge: "a",
+  swing: "left",
+})
+
 export const screed = (id: string, x: number, y: number, thicknessMm = 50): Screed => ({ id, at: { x, y }, thicknessMm })
 
 export const demolitionMark = (id: string, wallId: string, anchor: "a" | "b", fromCm: number, toCm: number): DemolitionMark => ({ id, wallId, anchor, fromCm, toCm })

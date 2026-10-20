@@ -5,10 +5,10 @@ import { dist, dot, pointInPolygon, sub, unit as unitVector } from "../wall-geom
 import { plasterOrigins, plasterSources, plasterSpan, plasterStrip } from "./plaster"
 import type { PlasterOrigin } from "./plaster"
 import { markNumberAt } from "../demolition/mark-numbers"
-import { addPlaster, addPlasterEnd, removePlaster, samePlaster, setPlasterThickness } from "./plaster-marks"
+import { addPlaster, addPlasterEnd, addPlasterReveal, removePlaster, samePlaster, setPlasterThickness } from "./plaster-marks"
 import { plasterTarget } from "./plaster-face"
 import { plasterRunDimensions } from "./plaster-dimensions"
-import type { EndTargetPiece, PlasterTarget, SideTargetPiece, SourceEnd } from "./plaster-face"
+import type { EndTargetPiece, PlasterTarget, PlasterTargetPiece, RevealTargetPiece, SideTargetPiece, SourceEnd } from "./plaster-face"
 import type { PlasterGhost } from "./rough-render"
 import type { RoughScene } from "./rough-scene"
 import type { Drawing } from "../types"
@@ -54,8 +54,11 @@ export interface PlasterTool {
 
 const DEAD_ZONE_PX = 4
 
+const isSidePiece = (x: PlasterTargetPiece): x is SideTargetPiece => x.face === 1 || x.face === -1
+
 // сигнатура цели: подсветка перерисовывается только при смене цели
-const signature = (t: PlasterTarget | null): string => (t ? t.pieces.map((x) => `${x.wall.id}:${x.face}:${x.from}:${x.to}`).join("|") : "")
+const signature = (t: PlasterTarget | null): string =>
+  t ? t.pieces.map((x) => (x.face === "reveal" ? `${x.element.id}:reveal:${x.jamb}` : `${x.wall.id}:${x.face}:${x.from}:${x.to}`)).join("|") : ""
 
 // участок боковой грани цели на стене подложки в координатах исходной стены: границы lo..hi от её конца a
 interface PlacedSpan {
@@ -91,7 +94,8 @@ export function createPlasterTool(host: PlasterToolHost): PlasterTool {
       if (!origin) return false
       return end === "a" ? origin.start <= EPS_CM : origin.start + dist(wall.a, wall.b) >= dist(origin.source.a, origin.source.b) - EPS_CM
     }
-    return plasterTarget(p, host.scene().base.walls, host.radiusCm(), sourceEnd)
+    const { walls, doorways } = host.scene().base
+    return plasterTarget(p, walls, host.radiusCm(), sourceEnd, doorways)
   }
 
   // Боковые куски цели: переводятся в координаты исходных стен; слияние — только с действующими пометками, скрытые остаются
@@ -133,17 +137,16 @@ export function createPlasterTool(host: PlasterToolHost): PlasterTool {
     const origins = plasterOrigins(host.drawing())
     const sources = plasterSources(host.drawing())
     const marks = host.marks()
-    const { next: withSides, spans } = placeSides(
-      t.pieces.filter((x): x is SideTargetPiece => x.face !== "end"),
-      origins,
-      marks,
-    )
+    const { next: withSides, spans } = placeSides(t.pieces.filter(isSidePiece), origins, marks)
     const ends = t.pieces.filter((x): x is EndTargetPiece => x.face === "end")
-    const next = ends.reduce((acc, piece) => {
+    const withEnds = ends.reduce((acc, piece) => {
       const origin = origins.get(piece.wall.id)
       return origin ? addPlasterEnd(acc, sources, origin.source.id, piece.end, host.newThicknessMm(), host.newId) : acc
     }, withSides)
+    const reveals = t.pieces.filter((x): x is RevealTargetPiece => x.face === "reveal")
+    const next = reveals.reduce((acc, piece) => addPlasterReveal(acc, piece.element.id, piece.jamb, host.newThicknessMm(), host.newId), withEnds)
     if (next === marks) return null
+    const revealed = reveals[0] && next.find((m) => m.face === "reveal" && m.elementId === reveals[0]?.element.id && m.jamb === reveals[0].jamb)
     const focus = spans.find(({ piece }) => piece.wall.id === t.focusWallId) ?? spans[0]
     const focusEnd = ends.find((x) => x.wall.id === t.focusWallId) ?? (focus ? undefined : ends[0])
     const focusEndOrigin = focusEnd && origins.get(focusEnd.wall.id)
@@ -153,13 +156,13 @@ export function createPlasterTool(host: PlasterToolHost): PlasterTool {
         ? next.find((m) => m.face === "end" && m.wallId === focusEndOrigin.source.id && m.anchor === focusEnd.end)
         : undefined
     commit(next)
-    return placed?.id ?? null
+    return placed?.id ?? revealed?.id ?? null
   }
 
   // Боковой кусок нажатой стены: стена под точкой нажатия и грань нажатия из цели клика; торец и точка без цели жеста не начинают
   const pressedPiece = (p: Point): SideTargetPiece | null => {
     const t = targetAt(p)
-    return t?.pieces.find((x): x is SideTargetPiece => x.face !== "end" && x.wall.id === t.focusWallId) ?? null
+    return t?.pieces.filter(isSidePiece).find((x) => x.wall.id === t.focusWallId) ?? null
   }
 
   // Кусок протяжки: границы от конца a стены подложки — проекции точки нажатия и точки p на ось с привязкой к узлам, в пределах

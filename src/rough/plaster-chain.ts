@@ -4,6 +4,7 @@ import { RIGHT_COS, dot, mul, perp, sub, unit } from "../wall-geometry"
 import { plasterStrip } from "./plaster"
 import type { PlasterPiece } from "./plaster"
 import { FACE_TOL_CM } from "./plaster-face"
+import { isSideMark } from "./rough-model"
 
 // Участок штукатурки одной плоскости (change plaster-dimension-corner-to-corner, design D1): куски одной грани, лежащие на одной
 // линии и образующие непрерывную полосу, — стык коллинеарных стен любой толщины, T-примыкание, полоса торца в плоскости, —
@@ -32,7 +33,7 @@ interface Plane {
   sides: PlasterPiece[]
 }
 
-const sideFace = (piece: PlasterPiece): 1 | -1 | null => (piece.mark.face === "end" ? null : piece.mark.face)
+const sideFace = (piece: PlasterPiece): 1 | -1 | null => (isSideMark(piece.mark) ? piece.mark.face : null)
 
 // плоскость бокового куска: наружная нормаль грани и положение грани по ней
 function planeOf(piece: PlasterPiece, face: 1 | -1): { normal: Point; line: number } {

@@ -15,6 +15,7 @@ import type { PlasterPiece } from "./plaster"
 import { plasterRuns } from "./plaster-chain"
 import type { PlasterRun, PlasterRunItem } from "./plaster-chain"
 import { pieceFaceBounds } from "./plaster-face-bounds"
+import { isSideMark } from "./rough-model"
 
 // Размеры участка штукатурки (change plaster-dimension-corner-to-corner): один размер от угла до угла на непрерывную полосу
 // плоскости, ширина делится по откосам проёмов; отсчёт от внешней стороны полосы; у внутреннего угла внешние поверхности двух
@@ -83,9 +84,9 @@ interface RunEnd {
 
 function endOf(run: PlasterRun, at: "lo" | "hi"): RunEnd | null {
   const edge = at === "lo" ? run.lo : run.hi
-  const item = run.items.find((x: PlasterRunItem) => x.piece.mark.face !== "end" && Math.abs((at === "lo" ? x.lo : x.hi) - edge) <= EPS_CM)
-  const face = item?.piece.mark.face
-  return item && face !== undefined && face !== "end" ? { piece: item.piece, face, frame: frameOf(item.piece, run) } : null
+  const item = run.items.find((x: PlasterRunItem) => isSideMark(x.piece.mark) && Math.abs((at === "lo" ? x.lo : x.hi) - edge) <= EPS_CM)
+  const mark = item?.piece.mark
+  return item && mark && isSideMark(mark) ? { piece: item.piece, face: mark.face, frame: frameOf(item.piece, run) } : null
 }
 
 // Конец участка (координаты вдоль оси опорной стены): граница ширины на грани не дальше стыка (грань упирается в соседнюю стену),

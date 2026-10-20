@@ -207,7 +207,18 @@ export interface EndPlasterMark {
   thicknessMm: number
 }
 
-export type PlasterMark = SidePlasterMark | EndPlasterMark
+// Пометка откоса (change plaster-opening-reveals, design D1): откос элемента стены (проём, дверь, окно); jamb — откос,
+// ближний к концу a или b оси опорной стены. Стены и участка вдоль оси у пометки нет: она едет вместе с элементом
+export interface RevealPlasterMark {
+  id: string
+  wallId?: undefined // у откоса стены нет: общий код читает wallId пометки и получает «нет стены»
+  face: "reveal"
+  elementId: string
+  jamb: "a" | "b"
+  thicknessMm: number
+}
+
+export type PlasterMark = SidePlasterMark | EndPlasterMark | RevealPlasterMark
 
 // Стяжка помещения (change add-rough-works-plan, design D1, D2): опорная точка — точка клика и место подписи «h = …мм»;
 // действует, пока опорная точка лежит в помещении экспликации

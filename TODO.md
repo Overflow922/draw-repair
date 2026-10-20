@@ -1033,3 +1033,14 @@ Follow-ups from `plaster-dimension-corner-to-corner` (2026-10-20).
 
 - No formatter or linter is configured (no eslint/prettier config, no `lint` script), so quality gates 1–2 were not run; `tsc` and the full `vitest` suite pass.
 - An end strip that touches two parallel plaster planes within 0.5 cm joins both runs; not seen in real drawings (`plaster-chain.ts`).
+
+
+---
+
+Follow-ups from `plaster-opening-reveals` (2026-10-20).
+
+## Out of scope (decided, revisit if needed)
+
+- Drywall on the «Реконструкция» plan does not snap to opening reveals: `plasterObstacles` skips them (`src/reconstruction/plaster-obstacles.ts`). Reveals are shown there as part of the grey plaster underlay only.
+- Reveals are only the two side jambs seen on the plan; head and sill plaster are not modelled.
+- A click on the wall body within the hit radius of an opening jamb now targets the reveal instead of the face; the face stays reachable outside the body and elsewhere along the wall.

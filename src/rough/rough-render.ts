@@ -12,7 +12,8 @@ import type { Palette, Theme } from "../theme"
 import { PX_PER_CM } from "../types"
 import type { Battery, Callout, Communication, Point, Screed, Unit, View, Wall, WallElement } from "../types"
 import { SCREED_HATCH, strokeHatchSeries } from "../wall-hatch"
-import { plasterStrip } from "./plaster"
+import { plasterStrip, revealSpan } from "./plaster"
+import { revealDimension } from "./plaster-reveal"
 import type { PlasterPiece } from "./plaster"
 import { plasterDimensions, plasterRunDimensions } from "./plaster-dimensions"
 import { endDimension } from "./plaster-end"
@@ -30,6 +31,17 @@ export interface PlasterGhost {
   pieces: readonly PlasterTargetPiece[]
   thicknessMm: number
   measured?: boolean
+}
+
+// кусок подсветки как кусок пометки той же толщины; откос без протяжённости (проём уже половины толщины) не подсвечивается
+function ghostPiece(part: PlasterTargetPiece, thicknessMm: number): PlasterPiece[] {
+  const id = "ghost"
+  if (part.face === "end") return [{ mark: { id, wallId: part.wall.id, face: "end", anchor: part.end, thicknessMm }, wall: part.wall, from: part.from, to: part.to }]
+  if (part.face === "reveal") {
+    const span = revealSpan(part.element, part.wall, part.jamb, thicknessMm)
+    return span ? [{ mark: { id, face: "reveal", elementId: part.element.id, jamb: part.jamb, thicknessMm }, wall: part.wall, from: span[0], to: span[1] }] : []
+  }
+  return [{ mark: { id, wallId: part.wall.id, face: part.face, anchor: "a", fromCm: part.from, toCm: part.to, thicknessMm }, wall: part.wall, from: part.from, to: part.to }]
 }
 
 export interface RoughSceneView {
@@ -133,17 +145,20 @@ export function drawRoughScene(
       tracePolygons(c, [batteryRect(battery, host).map(toScreen)])
       c.fill()
     }
-    for (const piece of scene.pieces) {
-      const poly = plasterStrip(piece).map(toScreen)
-      c.fillStyle = colors.fill
-      tracePolygons(c, [poly])
-      c.fill()
-      c.strokeStyle = colors.stroke
-      c.lineWidth = m.hatchPx
-      c.stroke()
-      if (scene.erasing?.kind === "plaster" && scene.erasing.id === piece.mark.id) highlight([poly], palette.erase)
-      else if (scene.selectedPlasterId === piece.mark.id) highlight([poly], palette.selection)
-    }
+    for (const piece of scene.pieces) if (piece.mark.face !== "reveal") paintPiece(c, piece)
+  }
+
+  // полоса штукатурки с подсветкой выделения и ластика
+  const paintPiece = (c: CanvasRenderingContext2D, piece: PlasterPiece): void => {
+    const poly = plasterStrip(piece).map(toScreen)
+    c.fillStyle = colors.fill
+    tracePolygons(c, [poly])
+    c.fill()
+    c.strokeStyle = colors.stroke
+    c.lineWidth = m.hatchPx
+    c.stroke()
+    if (scene.erasing?.kind === "plaster" && scene.erasing.id === piece.mark.id) highlight([poly], palette.erase)
+    else if (scene.selectedPlasterId === piece.mark.id) highlight([poly], palette.selection)
   }
 
   // порог проёма — часть пола: рисуется слоем элементов поверх закраски проёма бумагой (иначе закраска стирает штриховку);
@@ -183,23 +198,15 @@ export function drawRoughScene(
   })
 
   drawElementsLayer(ctx, walls, unit, view, { metrics: m, palette: grey, doorways: [...scene.doorways], openingFloor })
+  // откос лежит в проёме: слой элементов закрашивает проём бумагой, поэтому откосы рисуются поверх него
+  for (const piece of scene.pieces) if (piece.mark.face === "reveal") paintPiece(ctx, piece)
   strokeCommunications(ctx, scene.communications ?? [], view, palette.ink, m.contourPx, palette.concreteFill)
 
   // блоки помещений — обычным цветом, поверх штриховки и полос
   drawRoomBlocks(ctx, scene.blocks, null, toScreen, m, palette)
 
   const ghost = scene.ghost
-  const ghostPieces: PlasterPiece[] = ghost
-    ? ghost.pieces.map((part) => ({
-        mark:
-          part.face === "end"
-            ? { id: "ghost", wallId: part.wall.id, face: "end", anchor: part.end, thicknessMm: ghost.thicknessMm }
-            : { id: "ghost", wallId: part.wall.id, face: part.face, anchor: "a", fromCm: part.from, toCm: part.to, thicknessMm: ghost.thicknessMm },
-        wall: part.wall,
-        from: part.from,
-        to: part.to,
-      }))
-    : []
+  const ghostPieces: PlasterPiece[] = ghost ? ghost.pieces.flatMap((part) => ghostPiece(part, ghost.thicknessMm)) : []
   if (ghost) {
     for (const piece of ghostPieces) {
       ctx.save()
@@ -253,6 +260,11 @@ export function drawRoughScene(
     for (const piece of scene.pieces) {
       if (piece.mark.face !== "end" || inRun.has(piece)) continue
       const d = endDimension(piece.wall, piece.mark.anchor, piece.from, piece.to, piece.mark.thicknessMm, unit, k, m.labelPx)
+      if (d) drawDimensionGeom(ctx, d.geom, d.text, colors.stroke, view, m, palette, false, scene.selectedPlasterId === piece.mark.id, true)
+    }
+    // откос — один размер, толщина стены (change plaster-opening-reveals, design D5)
+    for (const piece of scene.pieces) {
+      const d = revealDimension(piece, unit, k, m.labelPx)
       if (d) drawDimensionGeom(ctx, d.geom, d.text, colors.stroke, view, m, palette, false, scene.selectedPlasterId === piece.mark.id, true)
     }
     for (const run of runs) {

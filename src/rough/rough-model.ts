@@ -1,6 +1,8 @@
 // Толщины слоёв плана «Черновые работы» (change add-rough-works-plan, spec rough-works-plan «Параметры инструментов»):
 // целые миллиметры в диапазоне; значения для новых объектов в чертёж не входят.
 
+import type { PlasterMark, SidePlasterMark } from "../types"
+
 export interface ThicknessRange {
   min: number
   max: number
@@ -9,6 +11,9 @@ export interface ThicknessRange {
 
 export const PLASTER_THICKNESS: ThicknessRange = { min: 5, max: 100, default: 20 }
 export const SCREED_THICKNESS: ThicknessRange = { min: 10, max: 200, default: 50 }
+
+// пометка продольной грани (не торец и не откос)
+export const isSideMark = (m: PlasterMark): m is SidePlasterMark => m.face === 1 || m.face === -1
 
 export const isThickness = (value: unknown, range: ThicknessRange): value is number =>
   typeof value === "number" && Number.isInteger(value) && value >= range.min && value <= range.max

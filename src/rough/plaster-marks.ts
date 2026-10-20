@@ -1,6 +1,7 @@
 import { EPS_CM, MIN_WIDTH_CM, lengthOf } from "../demolition/mark-model"
 import type { PlasterMark, Wall } from "../types"
 import { plasterSpan } from "./plaster"
+import { isSideMark } from "./rough-model"
 
 // Операции над списком пометок штукатурки (change add-rough-works-plan, design D3). Входы не мутируются; если операция
 // ничего не изменила, возвращается тот же массив — по нему инструмент решает, писать ли шаг истории.
@@ -27,7 +28,7 @@ function clusterOf(marks: readonly PlasterMark[], wall: Wall, face: 1 | -1, lo: 
   for (let grew = true; grew; ) {
     grew = false
     marks.forEach((m, i) => {
-      if (hit.has(i) || m.wallId !== wall.id || m.face !== face) return
+      if (hit.has(i) || !isSideMark(m) || m.wallId !== wall.id || m.face !== face) return
       const [start, end] = plasterSpan(m, wall)
       if (start > high + EPS_CM || end < low - EPS_CM) return
       hit.add(i)
@@ -52,6 +53,9 @@ function replaceCluster(marks: readonly PlasterMark[], wall: Wall, face: 1 | -1,
 }
 
 const sameMark = (a: PlasterMark, b: PlasterMark): boolean => {
+  if (a.face === "reveal" || b.face === "reveal") {
+    return a.face === "reveal" && b.face === "reveal" && a.id === b.id && a.elementId === b.elementId && a.jamb === b.jamb && a.thicknessMm === b.thicknessMm
+  }
   const same = a.id === b.id && a.wallId === b.wallId && a.face === b.face && a.anchor === b.anchor && a.thicknessMm === b.thicknessMm
   return a.face === "end" || b.face === "end" ? same : same && a.fromCm === b.fromCm && a.toCm === b.toCm
 }
@@ -97,6 +101,18 @@ export function addPlasterEnd(
   return [...marks, { id: newId(), wallId, face: "end", anchor: end, thicknessMm }]
 }
 
+// Пометить откос jamb элемента стены (change plaster-opening-reveals, design D4): один откос — одна пометка, повтор ничего не меняет
+export function addPlasterReveal(
+  marks: PlasterMark[],
+  elementId: string,
+  jamb: "a" | "b",
+  thicknessMm: number,
+  newId: () => string = () => crypto.randomUUID(),
+): PlasterMark[] {
+  if (marks.some((m) => m.face === "reveal" && m.elementId === elementId && m.jamb === jamb)) return marks
+  return [...marks, { id: newId(), face: "reveal", elementId, jamb, thicknessMm }]
+}
+
 export function removePlaster(marks: PlasterMark[], id: string): PlasterMark[] {
   return marks.some((m) => m.id === id) ? marks.filter((m) => m.id !== id) : marks
 }
@@ -114,7 +130,7 @@ export function mergeAllPlaster(marks: PlasterMark[], walls: readonly Wall[]): P
   for (let i = 0; i < list.length; ) {
     const m = list[i]
     const wall = m && walls.find((w) => w.id === m.wallId)
-    if (!m || m.face === "end" || !wall) {
+    if (!m || !isSideMark(m) || !wall) {
       i++
       continue
     }

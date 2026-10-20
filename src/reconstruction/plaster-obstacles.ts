@@ -11,8 +11,9 @@ const len = (p: Point, q: Point): number => Math.hypot(q.x - p.x, q.y - p.y)
 
 export const PLASTER_OBSTACLE_PREFIX = "plaster:"
 
+// Откос проёма (change plaster-opening-reveals, design D7) поверхностью привязки не является и препятствия не даёт.
 export function plasterObstacles(pieces: readonly PlasterPiece[]): Wall[] {
-  return pieces.map((piece): Wall => {
+  return pieces.filter((piece) => piece.mark.face !== "reveal").map((piece): Wall => {
     const [p0, p1, p2, p3] = plasterStrip(piece)
     if (!p0 || !p1 || !p2 || !p3) throw new Error("полоса штукатурки не прямоугольник")
     const alongFirst = len(p0, p1) >= len(p1, p2)

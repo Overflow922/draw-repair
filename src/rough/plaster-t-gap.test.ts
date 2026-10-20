@@ -67,7 +67,7 @@ describe("оси стен плоскости оканчиваются на гр�
   it("TG-1: после клика пометки в пределах осей, а полоса непрерывна от x = 0 до x = 1000", () => {
     const s = clickSetup(drawing({ walls: [W1, W2, S] }))
     s.click(at(100, -4))
-    const marks = (s.drawing().roughPlaster ?? []).flatMap((m) => (m.face === "end" ? [] : [[m.wallId, m.face, m.fromCm, m.toCm]]))
+    const marks = (s.drawing().roughPlaster ?? []).flatMap((m) => (m.face === 1 || m.face === -1 ? [[m.wallId, m.face, m.fromCm, m.toCm]] : []))
     expect(marks).toEqual([
       ["W1", -1, 0, 490],
       ["W2", -1, 0, 490],
