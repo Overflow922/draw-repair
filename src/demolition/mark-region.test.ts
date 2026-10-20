@@ -92,30 +92,45 @@ describe("markRegion в стыках", () => {
   const corner = [wall(0, 0, 500, 0, "W"), wall(0, 0, 0, 400, "V")]
 
   // угловой квадрат (−10…10 × −10…10) в форме W занимает только x ≥ 0, часть x < 0 принадлежит форме V:
-  // область сноса доходящего до угла участка включает и её (spec «Угол соседней стены входит в область»)
-  it("RG-06: целая стена в углу — область равна форме стены плюс угловая часть соседней стены (площадь +200)", () => {
+  // область сноса W заканчивается у ближней грани V (x = 10) и не заходит в её тело (change demolition-no-neighbor-overlap)
+  it("RG-06: целая стена в углу — область заканчивается у ближней грани соседа (x ≥ 10), угловой части соседа нет", () => {
     const [r] = effectiveMarks([mk("m", "W", "a", 0, 500)], corner)
     const polys = markRegion(r!, corner)
     const shape = displayPolygons(corner[0]!, corner)
-    expect(areaOf(polys)).toBeCloseTo(areaOf(shape) + 200, 6)
-    expect(boxOf(polys).minX).toBeCloseTo(-10, 6)
+    expect(areaOf(polys)).toBeCloseTo(areaOf(shape) - 200, 6)
+    expect(boxOf(polys).minX).toBeCloseTo(10, 6)
   })
 
-  it("RG-06: участок у угла (from = 0) включает угловую часть соседней стены, участок вдали — нет", () => {
+  it("RG-06: у угла (from = 0) область W начинается у грани соседа, вдали — у границы участка", () => {
     const [near] = effectiveMarks([mk("m", "W", "a", 0, 190)], corner)
     const [far] = effectiveMarks([mk("m", "W", "a", 100, 190)], corner)
-    expect(boxOf(markRegion(near!, corner)).minX).toBeCloseTo(-10, 6)
+    expect(boxOf(markRegion(near!, corner)).minX).toBeCloseTo(10, 6)
     expect(boxOf(markRegion(far!, corner)).minX).toBeCloseTo(100, 6)
   })
 
   // у угла (0,0) стена W позже V: угловой квадрат за концом оси V принадлежит форме W
-  it("RG-07: целая стена V, чей угол принадлежит форме W, включает весь угловой квадрат за концом оси", () => {
+  it("RG-07: целая стена V, чей угол принадлежит форме W, заканчивается у ближней грани W (y = 10), угла W в области нет", () => {
     const walls = [wall(0, 400, 0, 0, "V"), wall(0, 0, 500, 0, "W")]
     const [r] = effectiveMarks([mk("m", "V", "a", 0, 400)], walls)
     const box = boxOf(markRegion(r!, walls))
-    expect(box.minY).toBeCloseTo(-10, 6)
+    expect(box.minY).toBeCloseTo(10, 6)
     expect(box.minX).toBeCloseTo(-10, 6)
     expect(box.maxX).toBeCloseTo(10, 6)
+    expect(box.maxY).toBeCloseTo(400, 6)
+  })
+
+  // V (ось (0,0)-(0,1113), 25 см) доходит до осей T и B: её форма заходит в их тело
+  it("RG-08: стена, концы которой лежат на осях соседей T и B, ограничена их ближними гранями (12,5 ≤ y ≤ 1100,5)", () => {
+    for (const order of [0, 1]) {
+      const V = wall(0, 0, 0, 1113, "V", "brick", 25)
+      const T = wall(0, 0, 312, 0, "T", "brick", 25)
+      const B = wall(-300, 1113, 300, 1113, "B", "brick", 25)
+      const walls = order === 0 ? [V, T, B] : [T, B, V]
+      const [r] = effectiveMarks([mk("m", "V", "a", 0, 1113)], walls)
+      const box = boxOf(markRegion(r!, walls))
+      expect(box.minY).toBeCloseTo(12.5, 6)
+      expect(box.maxY).toBeCloseTo(1100.5, 6)
+    }
   })
 
   it("RG-07: участок в стороне от угла угловой квадрат соседа не захватывает", () => {

@@ -55,15 +55,16 @@ describe("правка расстояний по граням (комната с
     expect(spans(edit(room(), "width", -1, 120)?.marks, room())).toEqual([[100, 220]])
   })
 
-  it("SZ-23: пометка на всю стену, ширина на грани +1 = 100 → 0–110 (начало на стыке 10), на грани −1 → 0–90 (начало на стыке −10)", () => {
+  // область не заходит в тело соседей (change demolition-no-neighbor-overlap): ширина отсчитывается от начала области, x = 10
+  it("SZ-23: пометка на всю стену, ширина на любой грани = 100 → 0–110 (начало области на x = 10)", () => {
     const whole = [mk("m", "W", "a", 0, 500)]
     expect(spans(edit(room(), "width", 1, 100, whole)?.marks, room())).toEqual([[0, 110]])
-    expect(spans(edit(room(), "width", -1, 100, whole)?.marks, room())).toEqual([[0, 90]])
+    expect(spans(edit(room(), "width", -1, 100, whole)?.marks, room())).toEqual([[0, 110]])
   })
 
-  it("SZ-23: ширина, уводящая конец левее начала, принимается как наименьшая допустимая — 1 см", () => {
+  it("SZ-23: ширина, уводящая конец левее начала, принимается как наименьшая допустимая — 1 см (у начала области x = 10: конец не раньше 11)", () => {
     const whole = [mk("m", "W", "a", 0, 500)]
-    expect(spans(edit(room(), "width", -1, 5, whole)?.marks, room())).toEqual([[0, 1]])
+    expect(spans(edit(room(), "width", -1, 1, whole)?.marks, room())).toEqual([[0, 11]])
   })
 
   it("SZ-20: возвращается идентификатор пометки", () => {

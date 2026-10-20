@@ -965,3 +965,21 @@ Follow-ups from `wall-body-corners-snap` (2026-10-19).
 
 ## Out of scope (decided, revisit if needed)
 - Openings (doorway, door, window) in drywall walls: not in the first version of the «Реконструкция» plan (user decision, 2026-10-20).
+
+## Leftovers from `demolition-no-neighbor-overlap` (2026-10-20)
+
+### Bugs
+- [ ] **Corner square is demolished by neither wall.** The cut at the neighbour's near face is symmetric: in an L corner
+  both zones stop at each other's faces, so the shared corner square stays after both walls are demolished. Decide
+  whether one wall (the one whose shape owns the square) should take it. `src/demolition/mark-ends.ts` (`neighborCuts`).
+- [ ] **Overhang stubs on the mounting plan are not checked in the browser.** `remnantWalls` adds `<id>^a` / `<id>^b`
+  stub walls (`src/mounting/remnants.ts`); outlines and hatching where a stub meets a remnant (seams inside the stub)
+  are only checked by point-coverage tests.
+
+### Tests
+- [ ] PDF export of the demolition and mounting pages on the scene from `src/mounting/remnants-overhang.test.ts`
+  (task 3.2 of the change).
+
+### Docs
+- [ ] Face number on the side where a wall abuts T is shorter than the wall (1043 vs 1113 in the user drawing): typing it
+  gives the span up to the junction, not the whole wall. Spec says width = extent of the zone on the face; confirm that is wanted.

@@ -2,6 +2,7 @@ import { wallNearBody } from "../doorway/doorway-scene"
 import type { DemolitionMark, Point, Unit, Wall, WallElement } from "../types"
 import { dist, dot, sub, unit as unitVector } from "../wall-geometry"
 import { alongNodes, snapAlong } from "./mark-snap"
+import { clippedFaceBounds } from "./mark-chains"
 import { markDimensions } from "./mark-dimensions"
 import { editNumber, markNumberAt } from "./mark-numbers"
 import type { MarkNumberSpot, NumberRef } from "./mark-numbers"
@@ -177,7 +178,7 @@ export function createDemolitionTool(host: DemolitionToolHost): DemolitionTool {
     },
     numberAt(p, unit, k, labelPx, tolCm) {
       const r = selectedMark()
-      return r ? markNumberAt(p, markDimensions(r, host.walls(), "chain", unit, k, labelPx).map((d) => d.spot), tolCm) : null
+      return r ? markNumberAt(p, markDimensions(r, host.walls(), "chain", unit, k, labelPx, 0, undefined, clippedFaceBounds).map((d) => d.spot), tolCm) : null
     },
     erase(p) {
       const hit = markAt(p, effectiveMarks(host.marks(), host.walls(), host.elements()), host.walls())

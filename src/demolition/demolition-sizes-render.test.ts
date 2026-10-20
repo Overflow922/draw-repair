@@ -156,14 +156,17 @@ describe("цепочки выделенной пометки на обеих г�
     expect(underline).toEqual([])
   })
 
-  it("CD-07: пометка на всю стену в комнате: на внутренней грани только 480, на наружной только 520; стрелок четыре; выносные линии в x = 10, 490 и −10, 510", () => {
+  // область не заходит в угловые части соседей (change demolition-no-neighbor-overlap): на наружной грани — 20, 480, 20
+  it("CD-07: пометка на всю стену в комнате: на внутренней грани только 480, на наружной 20, 480, 20; выносные линии в x = 10, 490 и −10, 10, 490, 510", () => {
     const ws = room()
     const ops = render({ walls: ws, marks: marksOn(ws, [mk("m", "W", "a", 0, 500)]), selectedId: "m" }, { walls: ws })
-    expect(sortedTexts(ops)).toEqual(["480", "520"])
-    expect(arrows(ops)).toHaveLength(4)
+    expect(sortedTexts(ops)).toEqual(["20", "20", "480", "480"])
+    expect(arrows(ops)).toHaveLength(8)
     expect(extensionAt(ops, 10, 10, LINE_P)).toBe(true)
     expect(extensionAt(ops, 490, 10, LINE_P)).toBe(true)
     expect(extensionAt(ops, -10, -10, LINE_M)).toBe(true)
+    expect(extensionAt(ops, 10, -10, LINE_M)).toBe(true)
+    expect(extensionAt(ops, 490, -10, LINE_M)).toBe(true)
     expect(extensionAt(ops, 510, -10, LINE_M)).toBe(true)
   })
   it("SZ-51: единицы: в метрах числа «1», «0,9», «3,1»", () => {

@@ -8,8 +8,8 @@ import type { DimGeometry } from "../geometry"
 import type { RenderMetrics } from "../render"
 import type { Point, Unit, Wall } from "../types"
 import { add, mul, unit as unitVector } from "../wall-geometry"
-import { markChains } from "./mark-chains"
-import type { NumberTarget } from "./mark-chains"
+import { clippedFaceBounds, markChains } from "./mark-chains"
+import type { FaceBoundsOf, NumberTarget } from "./mark-chains"
 import type { MarkSpan } from "./mark-model"
 import type { MarkNumberSpot } from "./mark-numbers"
 
@@ -50,6 +50,7 @@ export function markDimensions(
   labelPx: number,
   depthCm = 0,
   trim?: ChainTrim,
+  boundsOf?: FaceBoundsOf,
 ): MarkDimension[] {
   const offsetCm = (CHAIN_OFFSET_EM * labelPx) / k
   const face = r.wall.thicknessCm / 2 + depthCm
@@ -57,7 +58,7 @@ export function markDimensions(
   const up = { x: lineDir.y, y: -lineDir.x }
   const lift = (DIM_TEXT_GAP_PX + labelPx / 2) / k
   const out: MarkDimension[] = []
-  const items = markChains(r, walls).filter((item) => item.lengthCm > ZERO)
+  const items = markChains(r, walls, boundsOf).filter((item) => item.lengthCm > ZERO)
   for (const item of items) {
     const chain = items.filter((x) => x.side === item.side)
     const trimFrom = item === chain[0] && trim ? trim(item.side, item.fromCm, "from") : 0
@@ -90,7 +91,7 @@ export function markDimensions(
 export function markDimensionExtent(r: MarkSpan, walls: readonly Wall[], k: number, m: RenderMetrics): Point[] {
   const beyond = m.dimOvershootPx / k
   const points: Point[] = []
-  for (const d of markDimensions(r, walls, "chain", "cm", k, m.labelPx)) {
+  for (const d of markDimensions(r, walls, "chain", "cm", k, m.labelPx, 0, undefined, clippedFaceBounds)) {
     const shift = { x: d.geom.nx * beyond * d.side, y: d.geom.ny * beyond * d.side }
     points.push(add(d.geom.p1, shift), add(d.geom.p2, shift))
     const { center, dir, widthCm, heightCm } = d.spot

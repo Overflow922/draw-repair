@@ -1,8 +1,8 @@
 import type { Side } from "../doorway/doorway-faces"
 import type { DemolitionMark, Point, Wall } from "../types"
 import { dot, sub } from "../wall-geometry"
-import { faceBounds } from "./mark-chains"
-import type { NumberTarget } from "./mark-chains"
+import { clippedFaceBounds, faceBounds } from "./mark-chains"
+import type { FaceBoundsOf, NumberTarget } from "./mark-chains"
 import { EPS_CM, MIN_WIDTH_CM, effectiveMarks, lengthOf, span } from "./mark-model"
 import type { MarkSpan } from "./mark-model"
 import { markFromSpan, mergeAll } from "./marks"
@@ -37,10 +37,19 @@ const clamp = (v: number, lo: number, hi: number): number => Math.min(Math.max(v
 // Границы участка r после правки числа which на грани side (общая арифметика пометок сноса и штукатурки): отступы сдвигают
 // участок с сохранением ширины, ширина сохраняет начало; значение за допустимым зажимается; null — недопустимый ввод или
 // стена без граней.
-export function editedSpan(r: MarkSpan, walls: readonly Wall[], which: NumberTarget, side: Side, valueCm: number): [number, number] | null {
+// bounds — границы пометки на грани (по умолчанию faceBounds; план «Демонтаж» передаёт границы, зажатые срезами у соседей).
+// Ширина, доходящая до конца грани у конца b стены (bounds.reach), ставит конец участка в конец стены: целая стена.
+export function editedSpan(
+  r: MarkSpan,
+  walls: readonly Wall[],
+  which: NumberTarget,
+  side: Side,
+  valueCm: number,
+  boundsOf: FaceBoundsOf = faceBounds,
+): [number, number] | null {
   if (!Number.isFinite(valueCm)) return null
   if (which === "width" ? valueCm < MIN_WIDTH_CM : valueCm < 0) return null
-  const bounds = faceBounds(r, walls, side)
+  const bounds = boundsOf(r, walls, side)
   if (!bounds) return null
   const len = lengthOf(r.wall)
   const width = r.to - r.from
@@ -52,7 +61,9 @@ export function editedSpan(r: MarkSpan, walls: readonly Wall[], which: NumberTar
     const start = clamp(bounds.j1 - valueCm - width, 0, len - width)
     return [start, start + width]
   }
-  return [r.from, clamp(bounds.start + valueCm, r.from + MIN_WIDTH_CM, len)]
+  const end = bounds.start + valueCm
+  if (bounds.reach !== undefined && end >= bounds.reach - EPS_CM) return [r.from, len]
+  return [r.from, clamp(end, r.from + MIN_WIDTH_CM, len)]
 }
 
 export function editNumber(
@@ -65,7 +76,7 @@ export function editNumber(
 ): { marks: DemolitionMark[]; id: string } | null {
   const r = effectiveMarks(marks, walls).find((x) => x.mark.id === id)
   if (!r) return null
-  const edit = editedSpan(r, walls, which, side, valueCm)
+  const edit = editedSpan(r, walls, which, side, valueCm, clippedFaceBounds)
   if (!edit) return null
   const [start, end] = edit
   const edited = markFromSpan(id, r.wall, start, end)

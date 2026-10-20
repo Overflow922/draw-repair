@@ -1,6 +1,7 @@
 import { faceRuns } from "../doorway/doorway-faces"
 import type { Side } from "../doorway/doorway-faces"
 import type { Wall } from "../types"
+import { faceLimits, neighborCuts } from "./mark-ends"
 import { EPS_CM, lengthOf } from "./mark-model"
 import type { MarkSpan } from "./mark-model"
 
@@ -15,7 +16,10 @@ export interface FaceBounds {
   j1: number
   start: number
   end: number
+  reach?: number // только у clippedFaceBounds: наибольшая координата конца участка на грани, не дальше среза у соседа
 }
+
+export type FaceBoundsOf = (r: MarkSpan, walls: readonly Wall[], side: Side) => FaceBounds | null
 
 export interface MarkChainItem {
   side: Side // +1 — грань со стороны нормали (−d.y, d.x) оси a → b, −1 — противоположная
@@ -53,11 +57,30 @@ export function faceBounds(r: MarkSpan, walls: readonly Wall[], side: Side): Fac
   return { j0, j1, start, end }
 }
 
+// Границы пометки на грани для плана «Демонтаж»: faceBounds, зажатые срезами по ближним граням соседних стен
+// (область не заходит в их тело, change demolition-no-neighbor-overlap, design D3).
+export function clippedFaceBounds(r: MarkSpan, walls: readonly Wall[], side: Side): FaceBounds | null {
+  const bounds = faceBounds(r, walls, side)
+  if (!bounds) return null
+  const [lo, hi] = faceLimits(r.wall, side, neighborCuts(r.wall, walls))
+  const start = Math.min(bounds.j1, Math.max(bounds.start, lo))
+  const end = Math.min(bounds.j1, Math.max(start, Math.min(bounds.end, hi)))
+  const len = lengthOf(r.wall)
+  // грань доходит до конца b стены: её конец j1 или срез у соседа; иначе (Т-примыкание на грани) до конца стены не дойти
+  const endsAtWall = bounds.j1 >= len - EPS_CM || Math.abs(hi - bounds.j1) <= EPS_CM
+  return { ...bounds, start, end, ...(endsAtWall ? { reach: Math.min(bounds.j1, Math.max(start, hi)) } : {}) }
+}
+
 // шесть размеров: грань +1 (gapA, width, gapB), затем грань −1; у стены без граней — пусто
-export function markChains(r: MarkSpan, walls: readonly Wall[]): MarkChainItem[] {
+// boundsOf — границы пометки на грани: по умолчанию faceBounds, план «Демонтаж» передаёт clippedFaceBounds
+export function markChains(
+  r: MarkSpan,
+  walls: readonly Wall[],
+  boundsOf: FaceBoundsOf = faceBounds,
+): MarkChainItem[] {
   const out: MarkChainItem[] = []
   for (const side of [1, -1] as const) {
-    const bounds = faceBounds(r, walls, side)
+    const bounds = boundsOf(r, walls, side)
     if (!bounds) continue
     for (const [target, fromCm, toCm] of [
       ["gapA", bounds.j0, bounds.start],
