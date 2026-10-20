@@ -89,14 +89,13 @@ export function createPlasterTool(host: PlasterToolHost): PlasterTool {
     const next = addPlasterEnd(host.marks(), plasterSources(host.drawing()), origin.source.id, piece.end, host.newThicknessMm(), host.newId)
     const placed = next[next.length - 1]
     if (next === host.marks() || !placed) return null
-    selected = placed.id
     commit(next)
     return placed.id
   }
 
   // Постановка цели: куски переводятся в координаты исходных стен; слияние — только с действующими пометками, скрытые остаются
-  // без изменений. Участок, уже целиком лежащий в действующей пометке той же грани, не меняет ничего. Выделяется пометка
-  // стены под курсором; возвращается её идентификатор.
+  // без изменений. Участок, уже целиком лежащий в действующей пометке той же грани, не меняет ничего. Поставленная пометка не
+  // выделяется; возвращается идентификатор пометки стены под курсором.
   const place = (t: PlasterTarget): string | null => {
     const endPiece = t.pieces.find((x): x is EndTargetPiece => x.face === "end")
     if (endPiece) return placeEnd(endPiece)
@@ -130,7 +129,6 @@ export function createPlasterTool(host: PlasterToolHost): PlasterTool {
           return start <= focus.lo + EPS_CM && end >= focus.hi - EPS_CM
         })
       : undefined
-    if (placed) selected = placed.id
     commit(next)
     return placed?.id ?? null
   }

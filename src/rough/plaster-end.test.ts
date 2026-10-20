@@ -223,7 +223,7 @@ describe("инструмент: торец", () => {
     expect(click(s, 503, 0)).toBe("n1")
     expect(s.marks()).toEqual([endMark("n1", "W", "b", 30)])
     expect(s.log.records).toBe(1)
-    expect(s.tool.selectedId()).toBe("n1")
+    expect(s.tool.selectedId()).toBeNull()
     expect(click(s, 503, 0)).toBeNull()
     expect(s.log.records).toBe(1)
   })
@@ -237,6 +237,7 @@ describe("инструмент: торец", () => {
   it("PE-12: размер торца не редактируется; Delete и правка толщины работают", () => {
     const s = setup(drawing(), 20)
     click(s, 503, 0)
+    s.tool.select(px(501, 0))
     expect(s.tool.numberAt(px(500, 0), "cm", 2, 14, 100)).toBeNull()
     expect(s.tool.setSelectedThickness(40)).toBe(true)
     expect(s.marks()[0]?.thicknessMm).toBe(40)

@@ -665,8 +665,6 @@ let plasterThicknessMm: number = PLASTER_THICKNESS.default
 let screedThicknessMm: number = SCREED_THICKNESS.default
 let plasterPanelOpen = false
 let screedPanelOpen = false
-// инструмент «Штукатурка» снят постановкой пометки и должен вернуться, когда выделение будет снято
-let resumePlaster = false
 
 const recordRoughStep = (): void => {
   nudgeBurst = false
@@ -737,30 +735,11 @@ const closeRoughPanels = (): void => {
 
 // сброс жеста, выделения, поля ввода и панелей плана «Черновые работы» (смена плана, чертежа и инструмента, отмена и повтор)
 const resetRough = (): void => {
-  resumePlaster = false
   plasterTool.cancel()
   plasterTool.clearSelection()
   screedTool.clearSelection()
   closeRoughEditor()
   closeRoughPanels()
-}
-
-// вернуть инструмент «Штукатурка», если он снят постановкой и выделение пометки уже снято
-function resumePlasterTool(): void {
-  if (!resumesAfterSelectionCleared(resumePlaster, plasterTool.selectedId() !== null)) return
-  resumePlaster = false
-  setTool("plaster")
-  plasterPanelOpen = true
-  syncRoughPanels()
-}
-
-// снять инструмент «Штукатурка» без сброса выделения (setTool выделение снимает); панель показывает значение пометки
-function leavePlasterTool(): void {
-  resumePlaster = true
-  tool = "none"
-  plasterPanelOpen = true
-  syncToolUI()
-  redraw()
 }
 
 // снять выделение штукатурки и стяжки (Escape, клик мимо, Delete)
@@ -769,7 +748,6 @@ function clearRoughSelection(): void {
   plasterTool.clearSelection()
   screedTool.clearSelection()
   closeRoughPanels()
-  resumePlasterTool()
 }
 
 // нажатие на правимое число выделенной пометки штукатурки — поле ввода на месте; Enter применяет
@@ -1883,8 +1861,8 @@ canvas.addEventListener("pointerup", (e) => {
     return
   }
   if (onRough() && e.button === 0) {
-    // поставленная пометка остаётся выделенной, инструмент снимается — как у «Демонтажа»
-    if (tool === "plaster" && plasterTool.up(toWorld(e), screenPoint(e)) !== null) leavePlasterTool()
+    // поставленная пометка не выделяется, инструмент остаётся включённым — как у «Стяжки»
+    if (tool === "plaster") plasterTool.up(toWorld(e), screenPoint(e))
     return
   }
   if (onDemolition() && e.button === 0) {
@@ -2822,7 +2800,6 @@ window.addEventListener("keydown", (e) => {
       closeRoughEditor()
       if (!plasterTool.deleteSelected()) screedTool.deleteSelected()
       closeRoughPanels()
-      resumePlasterTool()
       return
     }
     if (onDemolition()) {

@@ -53,7 +53,7 @@ describe("клик по грани", () => {
     expect(click(s, 100)).toBe("n1")
     expect(s.marks()).toEqual([plaster("n1", "W", 1, "a", 0, 500, 30)])
     expect(s.log.records).toBe(1)
-    expect(s.tool.selectedId()).toBe("n1")
+    expect(s.tool.selectedId()).toBeNull()
   })
 
   it("RW-141: грань определяется стороной курсора: со стороны y < 0 — грань −1", () => {
@@ -147,11 +147,11 @@ describe("клик по грани", () => {
     expect(s.marks()).toEqual([plaster("n1", "own", 1, "a", 0, 300, 20)])
   })
 
-  it("RW-152: пересекающаяся частичная пометка сливается, слитая пометка выделена и берёт толщину из панели", () => {
+  it("RW-152: пересекающаяся частичная пометка сливается, слитая пометка не выделена и берёт толщину из панели", () => {
     const s = setup(drawing({ roughPlaster: [plaster("p", "W", 1, "a", 100, 200, 20)] }), 30)
     expect(click(s, 400)).toBe("p")
     expect(s.marks()).toEqual([plaster("p", "W", 1, "a", 0, 500, 30)])
-    expect(s.tool.selectedId()).toBe("p")
+    expect(s.tool.selectedId()).toBeNull()
   })
 
   it("RW-153: скрытая (недействующая) пометка в слиянии не участвует и остаётся без изменений", () => {
@@ -189,7 +189,7 @@ describe("клик по грани", () => {
     expect(s.marks()).toEqual([plaster("n1", "W1", 1, "a", 0, 300, 20), plaster("n2", "W2", 1, "a", 0, 300, 20)])
     expect(s.log.records).toBe(1)
     expect(s.log.changes).toBe(1)
-    expect(s.tool.selectedId()).toBe("n2")
+    expect(s.tool.selectedId()).toBeNull()
   })
 
   it("RW-158: цепочка, в которой один отрезок уже оштукатурен, добавляет только недостающий; шаг истории один", () => {
