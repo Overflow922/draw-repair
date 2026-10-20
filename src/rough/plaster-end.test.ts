@@ -22,14 +22,34 @@ describe("полоса торца", () => {
     const d = drawing({ roughPlaster: [endMark("e", "W", "b")] })
     const [piece] = plasterPieces(d)
     const box = piece && boxOf([plasterStrip(piece)])
-    expect(box && [box.minX, box.maxX, box.minY, box.maxY]).toEqual([500, 502, -10, 10])
+    expect(box && [box.minX, box.maxX, box.minY, box.maxY]).toEqual([500, 502, -12, 12])
+  })
+
+  it("PE-1a: внешний угол выступа — полоса торца перекрывает угловые квадраты у обеих боковых полос", () => {
+    const S = wall("S", 0, -10, 0, -30)
+    const d = drawing({
+      walls: [wall("W", -100, 0, 100, 0), S],
+      roughPlaster: [endMark("e", "S", "b"), plaster("l", "S", 1, "a", 0, 20), plaster("r", "S", -1, "a", 0, 20)],
+    })
+    const end = plasterPieces(d).find((p) => p.mark.id === "e")
+    const box = end && boxOf([plasterStrip(end)])
+    // ось S идёт вверх (−y): поперёк x, торец на y = −30…−32; ширина 20 + 2·2 см
+    expect(box && [box.minX, box.maxX, box.minY, box.maxY]).toEqual([-12, 12, -32, -30])
+  })
+
+  it("PE-1b: у закрытого края торца расширения нет, у открытого — есть", () => {
+    const abut = wall("V", 500, 4, 600, 4) // тело y −6…14 закрывает торец b стены W, открыто только −10…−6
+    const d = drawing({ walls: [W(), abut], roughPlaster: [endMark("e", "W", "b")] })
+    const [piece] = plasterPieces(d)
+    const box = piece && boxOf([plasterStrip(piece)])
+    expect(box && [box.minY, box.maxY]).toEqual([-12, -6])
   })
 
   it("PE-2: торец a — вне тела с другой стороны, x −2…0", () => {
     const d = drawing({ roughPlaster: [endMark("e", "W", "a")] })
     const [piece] = plasterPieces(d)
     const box = piece && boxOf([plasterStrip(piece)])
-    expect(box && [box.minX, box.maxX, box.minY, box.maxY]).toEqual([-2, 0, -10, 10])
+    expect(box && [box.minX, box.maxX, box.minY, box.maxY]).toEqual([-2, 0, -12, 12])
   })
 
   it("PE-3: торец, закрытый примыканием, не действует; когда стена исчезает — снова действует", () => {

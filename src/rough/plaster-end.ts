@@ -1,4 +1,4 @@
-import { MIN_WIDTH_CM } from "../demolition/mark-model"
+import { EPS_CM, MIN_WIDTH_CM } from "../demolition/mark-model"
 import { faceRunsReaching, hostPoint } from "../doorway/doorway-faces"
 import { CHAIN_OFFSET_EM } from "../doorway/editable-numbers"
 import { formatLength } from "../format-length"
@@ -32,12 +32,17 @@ export function openEndRuns(wall: Wall, walls: readonly Wall[], end: WallEnd): [
     .filter(([from, to]) => to - from >= MIN_WIDTH_CM)
 }
 
-// полоса торца: от конца оси наружу на толщину штукатурки, поперёк — на открытой части [from, to]
+// полоса торца: от конца оси наружу на толщину штукатурки, поперёк — на открытой части [from, to]; у края, дошедшего до
+// боковой грани, шире на толщину штукатурки — закрывает внешний угол
 export function endStrip(wall: Wall, end: WallEnd, from: number, to: number, thicknessMm: number): Point[] {
   const len = dist(wall.a, wall.b)
+  const half = wall.thicknessCm / 2
+  const depth = thicknessMm / 10
   const t0 = end === "a" ? 0 : len
-  const t1 = end === "a" ? -thicknessMm / 10 : len + thicknessMm / 10
-  return [hostPoint(wall, t0, from), hostPoint(wall, t0, to), hostPoint(wall, t1, to), hostPoint(wall, t1, from)]
+  const t1 = end === "a" ? -depth : len + depth
+  const lo = from <= -half + EPS_CM ? from - depth : from
+  const hi = to >= half - EPS_CM ? to + depth : to
+  return [hostPoint(wall, t0, lo), hostPoint(wall, t0, hi), hostPoint(wall, t1, hi), hostPoint(wall, t1, lo)]
 }
 
 export interface EndDimension {
