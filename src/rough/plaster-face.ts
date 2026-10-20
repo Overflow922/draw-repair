@@ -75,13 +75,13 @@ export function plasterTarget(p: Point, walls: readonly Wall[], radiusCm: number
 
 // Торец перпендикулярной стены, лежащий в плоскости (change plaster-flush-end-in-plane, design D1): открытые части торца,
 // переведённые на ось опорной стены. Торец принадлежит щели плоскости, если её закрывает только он.
-interface FlushEnd {
+export interface FlushEnd {
   piece: EndTargetPiece
   lo: number // протяжённость торца на оси опорной стены
   hi: number
 }
 
-function flushEnds(host: Wall, face: 1 | -1, walls: readonly Wall[], isSourceEnd: SourceEnd): FlushEnd[] {
+export function flushEnds(host: Wall, face: 1 | -1, walls: readonly Wall[], isSourceEnd: SourceEnd): FlushEnd[] {
   const axis = unit(host.a, host.b)
   const outward = perp(axis)
   const out: FlushEnd[] = []

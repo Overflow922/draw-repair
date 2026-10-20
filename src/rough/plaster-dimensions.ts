@@ -4,6 +4,7 @@ import { hostPoint } from "../doorway/doorway-faces"
 import type { Unit, Wall } from "../types"
 import { pointInPolygon } from "../wall-geometry"
 import { plasterStrip } from "./plaster"
+import { pieceFaceBounds } from "./plaster-face-bounds"
 import type { PlasterPiece } from "./plaster"
 
 // Размеры боковой полосы штукатурки (change plaster-dimensions-outside): отсчёт от внешней стороны полосы; у внутреннего угла
@@ -33,5 +34,5 @@ function junctionTrim(piece: PlasterPiece, pieces: readonly PlasterPiece[], dept
 
 export function plasterDimensions(piece: PlasterPiece, pieces: readonly PlasterPiece[], walls: readonly Wall[], unit: Unit, k: number, labelPx: number): MarkDimension[] {
   const depthCm = piece.mark.thicknessMm / 10
-  return markDimensions(piece, walls, "chain", unit, k, labelPx, depthCm, junctionTrim(piece, pieces, depthCm))
+  return markDimensions(piece, walls, "chain", unit, k, labelPx, depthCm, junctionTrim(piece, pieces, depthCm), pieceFaceBounds)
 }

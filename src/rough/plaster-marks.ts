@@ -4,6 +4,7 @@ import type { NumberTarget } from "../demolition/mark-numbers"
 import type { PlasterMark, Wall } from "../types"
 import { plasterSpan } from "./plaster"
 import type { PlasterPiece } from "./plaster"
+import { pieceFaceBounds } from "./plaster-face-bounds"
 
 // Операции над списком пометок штукатурки (change add-rough-works-plan, design D3). Входы не мутируются; если операция
 // ничего не изменила, возвращается тот же массив — по нему инструмент решает, писать ли шаг истории.
@@ -148,7 +149,7 @@ export function editPlasterNumber(
   const source = sources.find((w) => w.id === piece.mark.wallId)
   const side = piece.mark
   if (!source || side.face === "end") return null
-  const edit = editedSpan(piece, sceneWalls, which, side.face, valueCm)
+  const edit = editedSpan(piece, sceneWalls, which, side.face, valueCm, pieceFaceBounds)
   if (!edit) return null
   const lo = start + edit[0]
   const hi = start + edit[1]

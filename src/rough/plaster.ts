@@ -5,6 +5,7 @@ import { mountingScene } from "../mounting/mounting-scene"
 import type { MountingScene } from "../mounting/mounting-scene"
 import { remnantId, remnantSpans } from "../mounting/remnants"
 import type { Drawing, EndPlasterMark, PlasterMark, Point, SidePlasterMark, Wall } from "../types"
+import { bridgeJoints } from "./plaster-bridge"
 import { endStrip, openEndRuns } from "./plaster-end"
 import { planeWalls } from "./plaster-face"
 
@@ -83,7 +84,8 @@ export function plasterPieces(drawing: Drawing, scene: MountingScene = mountingS
       })
     }
   }
-  return pieces.map((piece) => wrapEndCorners(piece, pieces))
+  const bridged = bridgeJoints(pieces, scene.walls)
+  return bridged.map((piece) => wrapEndCorners(piece, bridged))
 }
 
 // Внешний угол выступа: полоса торца шире на толщину штукатурки у края, дошедшего до боковой грани, если на этой грани у

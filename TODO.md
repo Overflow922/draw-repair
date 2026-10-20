@@ -1007,3 +1007,16 @@ Follow-ups from `plaster-partial-drag` (apply, 2026-10-20).
 - A drag works on the pressed wall only; a plane of several collinear walls needs one drag per wall (adjacent spans merge). A drag across the whole plane would need group selection.
 - No dragging of a selected plaster mark along the wall (openings have it, demolition and plaster marks do not); numbers are the only way to move it.
 - The project has no formatter, linter or mutation-testing tool, so those quality gates are not run; mutants were tried by hand (`plaster-tool.ts`: dead zone, pressed wall, selection, merge order).
+
+---
+
+Follow-ups from `plaster-t-gap-opposite-face` and `plaster-dimension-collinear-joint` (apply, 2026-10-20).
+
+## Tests
+
+- [ ] `src/rough/plaster-bridge.ts`: no test for a neighbour drawn in the opposite direction (`entry.same === false`, `reachesGap`), found by hand mutation; add a W2 with `a`/`b` swapped to `src/rough/plaster-t-gap.test.ts`.
+- [ ] The browser check of both changes on the user's drawing ("Чертёж 2", corridor and kitchen) was not run; accepted on the tests that use its coordinates (`TG-4`, `DJ-5`).
+
+## Out of scope (decided, revisit if needed)
+
+- A gap wider than the search window of `faceRuns` (largest wall thickness + 1 cm) is not bridged; the window is shared with demolition and openings and was not changed.
