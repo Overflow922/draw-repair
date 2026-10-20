@@ -113,14 +113,31 @@ function endChain(run: PlasterRun, at: "lo" | "hi", pieces: readonly PlasterPiec
   return { edge, gap, trim }
 }
 
-// откосы проёмов стен участка на его оси
-function jambsOf(run: PlasterRun, walls: readonly Wall[], doorways: readonly WallElement[]): number[] {
+// глубина действующей полосы откоса jamb элемента: на неё граница сегмента сдвигается от откоса вглубь проёма (change
+// plaster-reveal-dimensions); у откоса без действующего куска сдвига нет
+function revealDepth(pieces: readonly PlasterPiece[], elementId: string, jamb: "a" | "b"): number {
+  const piece = pieces.find((p) => p.mark.face === "reveal" && p.mark.elementId === elementId && p.mark.jamb === jamb)
+  return piece ? piece.to - piece.from : 0
+}
+
+// откос проёма на оси участка и граница сегмента у него: у оштукатуренного откоса — внутренняя сторона его полосы
+interface JambCut {
+  jamb: number
+  cut: number
+}
+
+function jambsOf(run: PlasterRun, pieces: readonly PlasterPiece[], walls: readonly Wall[], doorways: readonly WallElement[]): JambCut[] {
   return doorways.flatMap((d) => {
     const host = hostOf(d, walls)
     const item = host && run.items.find((x) => x.piece.mark.face !== "end" && x.piece.wall.id === host.id)
     if (!host || !item) return []
     const { sign, start } = frameOf(item.piece, run)
-    return jambsT(d, host).map((t) => (sign > 0 ? start + t : start - t))
+    const onAxis = (t: number): number => (sign > 0 ? start + t : start - t)
+    const [near, far] = jambsT(d, host)
+    return [
+      { jamb: onAxis(near), cut: onAxis(near + revealDepth(pieces, d.id, "a")) },
+      { jamb: onAxis(far), cut: onAxis(far - revealDepth(pieces, d.id, "b")) },
+    ]
   })
 }
 
@@ -163,8 +180,11 @@ function runDimensions(
   // поправка у стыка относится к первому размеру цепочки: расстоянию до стыка, а без него — ширине
   const widthFrom = lo.gap > ZERO ? lo.edge : lo.edge + lo.trim
   const widthTo = hi.gap > ZERO ? hi.edge : hi.edge - hi.trim
-  const cuts = jambsOf(run, walls, doorways)
-    .filter((t) => t > widthFrom + ZERO && t < widthTo - ZERO)
+  // откос на краю цепочки границы не создаёт: участка грани перед ним нет
+  const inside = (t: number): boolean => t > widthFrom + ZERO && t < widthTo - ZERO
+  const cuts = jambsOf(run, pieces, walls, doorways)
+    .filter((x) => inside(x.jamb) && inside(x.cut))
+    .map((x) => x.cut)
     .sort((a, b) => a - b)
   const bounds = [widthFrom, ...cuts, widthTo]
   return [
