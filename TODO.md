@@ -732,11 +732,6 @@ Follow-ups from `add-rough-works-plan` (2026-10-18).
 
 ## Bugs
 
-- [ ] **Plaster mark over a demolished gap loses its other pieces when a number is edited.** If demolition later cuts a
-  section out of the middle of a plastered face, the mark has two pieces; editing a number of one piece replaces the
-  mark with that piece's span (`editPlasterNumber`, `src/rough/plaster-marks.ts`). Marks placed by the tool always lie on one
-  piece, so this only shows after demolition is edited under an existing mark. Repro: plaster 100-300 on W, then demolish
-  150-250 on the demolition plan, select the mark, edit its width.
 - [ ] **The screed label hides the room block when the click was near the room centre.** The label is drawn over the
   block (`src/rough/rough-render.ts`), the user can place it elsewhere but cannot move it afterwards (anchor point is not draggable,
   design D2). Revisit if users complain: draw the block above the label or allow moving the label.
@@ -744,7 +739,7 @@ Follow-ups from `add-rough-works-plan` (2026-10-18).
 ## Tests
 
 - [ ] `src/main.ts` wiring of the rough plan has no automated test: pointer handlers (`onRough()` branches), panel sync
-  (`syncRoughPanels`), in-place editors (`pressPlasterNumber`, `pressScreedLabel`), Delete / Escape, undo and redo
+  (`syncRoughPanels`), in-place editor (`pressScreedLabel`), Delete / Escape, undo and redo
   (`stepRough`). The pure parts (tools, scene, history, storage, PDF) are unit-tested; the DOM flow was checked by hand in the browser.
 
 ## Docs
@@ -844,7 +839,7 @@ Follow-ups from `wall-body-corners-snap` (2026-10-19).
 # plaster tool follow-ups (direct spec edits, 2026-10-20)
 
 ## Tests
-- `main.ts` pointerup path: the plaster tool stays active and nothing is selected after a click (only `plaster-tool` is unit-tested); `applyNumber` with `spot.trimCm` (inner/outer corner dimensions) is checked only through `trimCm` in `plaster-end.test.ts` PE-16..18.
+- `main.ts` pointerup path: the plaster tool stays active and nothing is selected after a click (only `plaster-tool` is unit-tested).
 - Browser checks not done for: end-strip wings, side/end dimensions at inner and outer corners, tool staying active after a click (user checked wings and dimensions visually).
 
 ## Out of scope (decided, revisit if needed)
