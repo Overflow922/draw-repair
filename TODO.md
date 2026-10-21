@@ -719,10 +719,6 @@ Follow-ups from `add-plan-notes` (2026-10-15).
 - [ ] The `src/main.ts` wiring of the notes panel (`commitNotes`, `stepNotes`, `closeNotesPanel` in `setTool`/`setPlan`/`activate`, `pagehide`) has no automated test; checked by hand in Firefox (input, normalisation, save, undo/redo, plan switch, Esc, reload, canvas click with the tool active). Not checked: dark theme, switching drawing tabs with an open panel, history of the «Монтаж» undo keeping its notes.
 - [ ] Test validation (independent) of `add-plan-notes` not run; mutation survivors unknown.
 
-## Docs
-
-- [ ] `drawing-plans` «Инструменты плана» still lists tool sets without «Примечания» (same drift as with «Выноска»; the new tool is specified in `plan-notes`).
-
 ## Out of scope (decided, revisit if needed)
 
 - Notes alone do not enable the PDF export button (a page with only notes is not "filled"); limits 15 items × 300 chars are unvalidated defaults.
