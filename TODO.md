@@ -949,3 +949,16 @@ Follow-ups from `plaster-opening-reveals` (2026-10-20).
 - Drywall on the «Реконструкция» plan does not snap to opening reveals: `plasterObstacles` skips them (`src/reconstruction/plaster-obstacles.ts`). Reveals are shown there as part of the grey plaster underlay only.
 - Reveals are only the two side jambs seen on the plan; head and sill plaster are not modelled.
 - A click on the wall body within the hit radius of an opening jamb now targets the reveal instead of the face; the face stays reachable outside the body and elsewhere along the wall.
+
+
+---
+
+Follow-ups from `plaster-corner-wrap` (2026-10-21).
+
+## Bugs
+
+- [ ] Screenshot `img_1.png` (inner plaster corner) showed two different numbers, 108 (vertical, selected strip) and 112 (horizontal text at the top right), that the corner change does not explain. Not reproduced on synthetic L-corners (inner and outer corners now give strip and dimension that agree); needs the user's drawing to find where 112 comes from.
+
+## Out of scope (decided, revisit if needed)
+
+- The leading strip at an outer corner is the one whose wall comes first in `plasterSources` order (walls of the survey, then own «Монтаж» walls); there is no UI to choose it (`wrapSideCorners` in `src/rough/plaster.ts`).

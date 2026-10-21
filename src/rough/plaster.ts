@@ -5,13 +5,18 @@ import { mountingScene } from "../mounting/mounting-scene"
 import type { MountingScene } from "../mounting/mounting-scene"
 import { remnantId, remnantSpans } from "../mounting/remnants"
 import type { Drawing, EndPlasterMark, PlasterMark, Point, RevealPlasterMark, SidePlasterMark, Wall, WallElement } from "../types"
+import { degenerate, pointInPolygon } from "../wall-geometry"
 import { bridgeJoints } from "./plaster-bridge"
 import { endStrip, openEndRuns } from "./plaster-end"
 import { planeWalls } from "./plaster-face"
+import { isSideMark } from "./rough-model"
 
 // Штукатурка плана «Черновые работы» (change add-rough-works-plan, design D3, D4): пометка хранит участок грани исходной
 // стены (стена обмера или собственная стена «Монтажа») от конца привязки; на подложке (остатки, собственные стены) она
 // действует кусками — участок за вычетом снесённого. Чистые функции, входы не мутируются.
+
+// пробный отступ от края куска и от линии грани при поиске соседней полосы у угла, см
+const PROBE_CM = 0.05
 
 // кусок действующей пометки на стене подложки: границы — от конца a стены подложки
 export interface PlasterPiece {
@@ -106,7 +111,33 @@ export function plasterPieces(drawing: Drawing, scene: MountingScene = mountingS
     }
   }
   const bridged = bridgeJoints(pieces, scene.walls)
-  return bridged.map((piece) => wrapEndCorners(piece, bridged))
+  const rank = new Map(plasterSources(drawing).map((w, i) => [w.id, i]))
+  const wrapped = bridged.map((piece) => wrapSideCorners(piece, bridged, rank))
+  return wrapped.map((piece) => wrapEndCorners(piece, wrapped))
+}
+
+// Внешний угол двух боковых полос (change plaster-corner-wrap, design D2–D3): угловой квадрат между внешними поверхностями
+// закрывает ведущая полоса — полоса стены, стоящей в чертеже раньше: она продлевается за край грани на толщину соседней полосы.
+// Сосед — боковой кусок, чья полоса примыкает к линии грани этого куска сразу за его краем, со стороны тела стены.
+function wrapSideCorners(piece: PlasterPiece, pieces: readonly PlasterPiece[], rank: ReadonlyMap<string, number>): PlasterPiece {
+  const mark = piece.mark
+  if (!isSideMark(mark) || degenerate(piece.wall)) return piece
+  const len = lengthOf(piece.wall)
+  const half = piece.wall.thicknessCm / 2
+  const probeLateral = mark.face * (half - PROBE_CM)
+  const neighbour = (edge: number, outward: 1 | -1): PlasterPiece | undefined => {
+    const probe = hostPoint(piece.wall, edge + outward * PROBE_CM, probeLateral)
+    return pieces.find((x) => x.mark.id !== mark.id && isSideMark(x.mark) && pointInPolygon(probe, plasterStrip(x)))
+  }
+  const leads = (other: PlasterPiece): boolean =>
+    isSideMark(other.mark) && (rank.get(mark.wallId) ?? Infinity) < (rank.get(other.mark.wallId) ?? Infinity)
+  const atA = piece.from <= -EPS_CM ? neighbour(piece.from, -1) : undefined
+  const atB = piece.to >= len + EPS_CM ? neighbour(piece.to, 1) : undefined
+  return {
+    ...piece,
+    from: atA && leads(atA) ? piece.from - atA.mark.thicknessMm / 10 : piece.from,
+    to: atB && leads(atB) ? piece.to + atB.mark.thicknessMm / 10 : piece.to,
+  }
 }
 
 // Внешний угол выступа: полоса торца шире на толщину штукатурки у края, дошедшего до боковой грани, если на этой грани у
@@ -162,9 +193,26 @@ function overhang(wall: Wall, walls: readonly Wall[], face: Side, from: number, 
   const neighbours = planeWalls(wall, face, walls).filter((w) => w.wall !== wall)
   const free = (lo: number, hi: number): boolean => !neighbours.some((w) => Math.min(w.hi, hi) - Math.max(w.lo, lo) > EPS_CM)
   return {
-    a: run[0] < -EPS_CM && free(run[0], 0) ? -run[0] : 0,
-    b: run[1] > len + EPS_CM && free(len, run[1]) ? run[1] - len : 0,
+    a: run[0] < -EPS_CM ? (free(run[0], 0) ? -run[0] : trimA(wall, walls, face, from, to)) : trimA(wall, walls, face, from, to),
+    b: run[1] > len + EPS_CM ? (free(len, run[1]) ? run[1] - len : 0) : trimB(wall, walls, face, from, to),
   }
+}
+
+// Внутренний угол (change plaster-corner-wrap, design D1): грань начинается дальше оси, и край куска у конца оси ставится на
+// грань соседней стены, а не на ось в её теле. Возвращает отрицательный выступ; промежуточные участки грани (Т-примыкание
+// внутри участка) край не меняют — полоса идёт сквозь них, как и раньше.
+function overlapping(wall: Wall, walls: readonly Wall[], face: Side, from: number, to: number): [number, number][] {
+  return faceRuns(wall, walls, face).filter((r) => Math.min(r[1], to) - Math.max(r[0], from) > EPS_CM)
+}
+
+function trimA(wall: Wall, walls: readonly Wall[], face: Side, from: number, to: number): number {
+  const first = Math.min(...overlapping(wall, walls, face, from, to).map((r) => r[0]))
+  return first > EPS_CM && first < Infinity ? -first : 0
+}
+
+function trimB(wall: Wall, walls: readonly Wall[], face: Side, from: number, to: number): number {
+  const last = Math.max(...overlapping(wall, walls, face, from, to).map((r) => r[1]))
+  return last < lengthOf(wall) - EPS_CM && last > -Infinity ? last - lengthOf(wall) : 0
 }
 
 // полоса пометки: прямоугольник, примыкающий к грани снаружи тела стены; вглубь — на толщину

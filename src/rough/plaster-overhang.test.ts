@@ -37,9 +37,9 @@ describe("выступ тела за ось", () => {
     expect(span(d)).toEqual([["R1", 100, 300]])
   })
 
-  it("PO-4: внутренняя грань комнаты выступа не имеет", () => {
+  it("PO-4: внутренняя грань комнаты выступа не имеет и не заходит в тела соседних стен (change plaster-corner-wrap)", () => {
     const d = drawing({ walls: rectWalls("R", 0, 0, 500, 300), roughPlaster: [plaster("p", "R1", 1, "a", 0, 500)] })
-    expect(span(d)).toEqual([["R1", 0, 500]])
+    expect(span(d)).toEqual([["R1", 10, 490]])
   })
 
   it("PO-5: привязка к концу b даёт тот же участок", () => {
