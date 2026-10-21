@@ -61,7 +61,7 @@ const reach = (wall: Wall, points: readonly Point[]): [number, number] => {
 const axisPoint = (wall: Wall, t: number): Point => add(wall.a, mul(unit(wall.a, wall.b), t))
 
 function overhangStubs(walls: readonly Wall[], marks: readonly ResolvedMark[], base: readonly Wall[]): Wall[] {
-  const regions = marks.flatMap((m) => markRegion(m, walls))
+  const regions = marks.flatMap((m) => markRegion(m, walls, marks))
   const shapes = new Map<string, Point[][]>()
   const shapeOf = (r: Wall): Point[][] => {
     const known = shapes.get(r.id)

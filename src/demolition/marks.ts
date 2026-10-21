@@ -117,7 +117,7 @@ export function mergeAll(marks: DemolitionMark[], walls: readonly Wall[]): Demol
 export function markAt(p: Point, resolved: readonly ResolvedMark[], walls: readonly Wall[]): ResolvedMark | null {
   for (let i = resolved.length - 1; i >= 0; i--) {
     const r = resolved[i]
-    if (r && markRegion(r, walls).some((poly) => pointInPolygon(p, poly))) return r
+    if (r && markRegion(r, walls, resolved).some((poly) => pointInPolygon(p, poly))) return r
   }
   return null
 }

@@ -83,7 +83,7 @@ export function drawDemolitionScene(
   // штриховка линиями 135° (общий генератор линий wall-hatch): фаза — от начала координат экрана
   const origin = toScreen({ x: 0, y: 0 })
   for (const r of scene.marks) {
-    const polygons = markRegion(r, walls).map((poly) => poly.map(toScreen))
+    const polygons = markRegion(r, walls, scene.marks).map((poly) => poly.map(toScreen))
     ctx.save()
     ctx.fillStyle = palette.paper
     tracePolygons(ctx, polygons)
@@ -138,7 +138,7 @@ export function drawDemolitionScene(
     ctx.strokeStyle = opts.color
     ctx.lineWidth = m.contourPx
     ctx.setLineDash(GHOST_DASH)
-    for (const poly of markRegion(span, walls)) {
+    for (const poly of markRegion(span, walls, scene.marks)) {
       tracePolygons(ctx, [poly.map(toScreen)])
       ctx.stroke()
     }

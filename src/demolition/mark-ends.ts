@@ -51,8 +51,46 @@ function holdsEnd(c: Wall, wall: Wall, E: Point, faceDepth: number): boolean {
   return gap < half - TOUCH_CM || faceDepth <= TOUCH_CM
 }
 
+// Владеет ли стена угловым квадратом стыка с соседом c у конца E: область сноса такой стены включает квадрат и по c не
+// срезается (change demolition-corner-owner, design D1, D2); решает вызывающий (markRegion)
+export type CornerOwner = (c: Wall, E: Point) => boolean
+
+// Угловой квадрат (параллелограмм пересечения полос стен) у конца стены, которым она владеет; end — конец оси стены
+export interface CornerCell {
+  end: "a" | "b"
+  cell: Point[]
+}
+
+export function cornerCells(wall: Wall, walls: readonly Wall[], owns: CornerOwner): CornerCell[] {
+  const u = unit(wall.a, wall.b)
+  const nw = perp(u)
+  const cells: CornerCell[] = []
+  for (const [end, E, inward] of [
+    ["a", wall.a, u],
+    ["b", wall.b, mul(u, -1)],
+  ] as const) {
+    for (const c of walls) {
+      if (c === wall) continue
+      const nc = perp(unit(c.a, c.b))
+      const k = dot(inward, nc)
+      if (Math.abs(k) < PARALLEL_COS) continue
+      const normal = mul(nc, Math.sign(k))
+      const origin = add(c.a, mul(normal, c.thicknessCm / 2))
+      if (!holdsEnd(c, wall, E, dot(sub(origin, E), inward)) || !owns(c, E)) continue
+      const det = nw.x * nc.y - nw.y * nc.x
+      const solve = (s: number, t: number): Point => {
+        const a = (s * wall.thicknessCm) / 2
+        const b = (t * c.thicknessCm) / 2
+        return add(E, { x: (a * nc.y - b * nw.y) / det, y: (nw.x * b - nc.x * a) / det })
+      }
+      cells.push({ end, cell: [solve(1, 1), solve(1, -1), solve(-1, -1), solve(-1, 1)] })
+    }
+  }
+  return cells
+}
+
 // срезы по ближним граням соседей у обоих концов стены
-export function neighborCuts(wall: Wall, walls: readonly Wall[]): NeighborCut[] {
+export function neighborCuts(wall: Wall, walls: readonly Wall[], owns: CornerOwner = () => false): NeighborCut[] {
   const u = unit(wall.a, wall.b)
   const cuts: NeighborCut[] = []
   for (const [E, inward] of [
@@ -66,7 +104,7 @@ export function neighborCuts(wall: Wall, walls: readonly Wall[]): NeighborCut[] 
       if (Math.abs(k) < PARALLEL_COS) continue
       const normal = mul(n, Math.sign(k))
       const origin = add(c.a, mul(normal, c.thicknessCm / 2))
-      if (holdsEnd(c, wall, E, dot(sub(origin, E), inward))) cuts.push({ origin, normal })
+      if (holdsEnd(c, wall, E, dot(sub(origin, E), inward)) && !owns(c, E)) cuts.push({ origin, normal })
     }
   }
   return cuts

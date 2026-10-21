@@ -874,9 +874,9 @@ Follow-ups from `wall-body-corners-snap` (2026-10-19).
 ## Leftovers from `demolition-no-neighbor-overlap` (2026-10-20)
 
 ### Bugs
-- [ ] **Corner square is demolished by neither wall.** The cut at the neighbour's near face is symmetric: in an L corner
-  both zones stop at each other's faces, so the shared corner square stays after both walls are demolished. Decide
-  whether one wall (the one whose shape owns the square) should take it. `src/demolition/mark-ends.ts` (`neighborCuts`).
+- [ ] (demolition-corner-owner, 2026-10-21) The corner square now goes to the later-drawn wall when both walls of an L are
+  marked, but the dimension chain of that wall (`clippedFaceBounds`, `markChains`) still measures to the neighbour's near
+  face, so the number and the region differ by the square. Not checked in the browser (task 4.4).
 - [ ] **Overhang stubs on the mounting plan are not checked in the browser.** `remnantWalls` adds `<id>^a` / `<id>^b`
   stub walls (`src/mounting/remnants.ts`); outlines and hatching where a stub meets a remnant (seams inside the stub)
   are only checked by point-coverage tests.
