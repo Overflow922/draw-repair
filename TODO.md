@@ -306,10 +306,6 @@ Follow-ups from the change `auto-wall-dimensions` (model of visible face pieces,
 - [ ] `src/main.ts` wiring of `placeWall`/`syncAutoDimensions` in `commitPoint` (one `pushRecord()`, `dimensions` replaced by the result) and the `delete dragged.auto` on dragging a dimension line have no automated test; checked by hand in the browser (single wall: four dimensions; stem on a bar: eight, the bar's face dimension replaced; undo and redo as one step). Dragging a dimension to clear `auto` was not exercised in the browser.
 - [ ] Test validation of `auto-wall-dimensions` stopped after two FAIL rounds without PASS (agreed limit); tests were then checked with 35 mutants of the real implementation (see `openspec/changes/auto-wall-dimensions/test-validation.md`). Survivors left as notes: array position of the placed wall, anchor-radius and key-scale constants, `-0` in the geometry key.
 
-## Docs
-
-- [ ] `openspec/specs/wall-dimensions` Purpose says automatic dimensioning of walls was removed; after `auto-wall-dimensions` it is outdated (dimensions are created when a wall is placed and recomputed for touched walls). Reword the Purpose.
-
 ## Out of scope (decided, revisit if needed)
 
 - Dimensions of the wall pieces on both sides of a doorway (chain with a total, as in the reference drawing `img.png`): separate change, needs a new anchor kind for doorway reveals in `dimension-tool`, storage and following the doorway.
