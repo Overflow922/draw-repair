@@ -32,6 +32,8 @@ export const LEGEND_RISER_DIAMETER_MM = 8
 export const LEGEND_DUCT_WIDTH_MM = 16
 export const LEGEND_DUCT_DEPTH_MM = 8
 export const LEGEND_BATTERY_THICKNESS_MM = 4
+// образец вида мебели (change furniture-line-drawings, design D4): детали рисунка в постоянном масштабе, под образец подгоняются габариты
+export const LEGEND_ITEM_MM_PER_CM = 0.2
 
 // записи страницы сверху вниз: материалы стен в порядке каталога, затем батарея, стояк, воздуховод (если они нарисованы на странице),
 // затем снос, штукатурка и стяжка плана «Черновые работы» («Стяжка до N мм» — по наибольшей толщине действующих стяжек страницы,

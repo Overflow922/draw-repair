@@ -37,6 +37,14 @@ export function itemCorners(t: FurnitureItem): [Point, Point, Point, Point] {
   return [at(-1, -1), at(1, -1), at(1, 1), at(-1, 1)]
 }
 
+// точка из системы предмета (начало — левый верхний угол при угле 0, ось X — ширина, Y — длина, в см) в чертёж
+export function itemLocalToWorld(t: FurnitureItem, p: Point): Point {
+  const { u, v } = axes(t)
+  const dx = p.x - t.widthCm / 2
+  const dy = p.y - t.lengthCm / 2
+  return { x: t.x + dx * u.x + dy * v.x, y: t.y + dx * u.y + dy * v.y }
+}
+
 // точка внутри тела стола (с допуском tolCm наружу): точка переводится в систему стола обратным поворотом
 export function hitItem(t: FurnitureItem, p: Point, tolCm = 0): boolean {
   const { u, v } = axes(t)

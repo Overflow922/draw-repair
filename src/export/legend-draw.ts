@@ -7,7 +7,8 @@ import { LIGHT_PALETTE } from "../theme"
 import type { Palette } from "../theme"
 import { PX_PER_CM } from "../types"
 import type { Battery, Communication, Point, View, Wall } from "../types"
-import { itemColors } from "../furniture/furniture-render"
+import { traceLines } from "../furniture/furniture-render"
+import { kindEntry } from "../furniture/furniture-kinds"
 import type { FurnitureKind } from "../furniture/furniture-kinds"
 import { drywallColors } from "../reconstruction/reconstruction-render"
 import { plasterColors } from "../rough/rough-render"
@@ -18,6 +19,7 @@ import {
   LEGEND_DUCT_WIDTH_MM,
   LEGEND_FONT_MM,
   LEGEND_GAP_MM,
+  LEGEND_ITEM_MM_PER_CM,
   LEGEND_LINE_PITCH_MM,
   LEGEND_PAD_LEFT_MM,
   LEGEND_RISER_DIAMETER_MM,
@@ -80,14 +82,28 @@ function drawDrywallSample(ctx: CanvasRenderingContext2D, origin: Point): void {
   ctx.stroke()
 }
 
-// образец предмета мебели: цвета вида светлой схемы, как на чертеже
+// образец вида мебели (change furniture-line-drawings, design D4): рисунок вида в постоянном масштабе легенды, детали вместе с
+// габаритами не уменьшаются; под образец подгоняются только габариты — размеры по умолчанию, уменьшенные в одном отношении
+// настолько, чтобы рисунок поместился; вытянутый предмет повёрнут на 90° по часовой, чтобы длинная сторона шла вдоль образца;
+// стоит по центру образца; линии цвета контуров светлой схемы, без заливки
 function drawItemSample(ctx: CanvasRenderingContext2D, origin: Point, kind: FurnitureKind): void {
-  const colors = itemColors(kind, "light")
-  ctx.fillStyle = colors.fill
-  tracePolygons(ctx, [sampleRect(origin)])
-  ctx.fill()
-  ctx.strokeStyle = colors.stroke
+  const { defaults, drawing } = kindEntry(kind)
+  const turned = defaults.lengthCm > defaults.widthCm
+  const longCm = turned ? defaults.lengthCm : defaults.widthCm
+  const shortCm = turned ? defaults.widthCm : defaults.lengthCm
+  const fit = Math.min(1, SAMPLE_LENGTH_MM / (LEGEND_ITEM_MM_PER_CM * longCm), SAMPLE_THICKNESS_MM / (LEGEND_ITEM_MM_PER_CM * shortCm))
+  const size = { widthCm: defaults.widthCm * fit, lengthCm: defaults.lengthCm * fit }
+  const wMm = (turned ? size.lengthCm : size.widthCm) * LEGEND_ITEM_MM_PER_CM
+  const hMm = (turned ? size.widthCm : size.lengthCm) * LEGEND_ITEM_MM_PER_CM
+  const left = origin.x + (SAMPLE_LENGTH_MM - wMm) / 2
+  const top = origin.y - hMm / 2
+  const toSheet = (p: Point): Point => {
+    const q = turned ? { x: size.lengthCm - p.y, y: p.x } : p
+    return { x: left + q.x * LEGEND_ITEM_MM_PER_CM, y: top + q.y * LEGEND_ITEM_MM_PER_CM }
+  }
+  ctx.strokeStyle = LIGHT_PALETTE.ink
   ctx.lineWidth = PDF_METRICS.contourPx
+  traceLines(ctx, drawing(size, 1).lines.map((line) => line.map(toSheet)))
   ctx.stroke()
 }
 

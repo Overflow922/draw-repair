@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest"
 import type { FurnitureItem } from "../types"
-import { hitItem, newItem, normalizeAngle, itemCorners } from "./item"
+import { hitItem, newItem, normalizeAngle, itemCorners, itemLocalToWorld } from "./item"
 
 // change furniture-plan-table: стол (spec furniture-plan «Стол»). Числа выведены из спецификации, а не из модуля.
 // TCR (change furniture-items-catalog): стол стал предметом мебели (Table → FurnitureItem, tables → items, table*.ts → item*.ts) с видом «table»; меняются только имена и вид в данных, утверждения о поведении не менялись
@@ -71,6 +71,33 @@ describe("угол", () => {
       widthCm: 80,
       lengthCm: 160,
       angleDeg: 90,
+    })
+  })
+})
+
+// change furniture-line-drawings: точки рисунка вида переводятся из системы предмета в чертёж
+// (spec furniture-plan «Каталог видов мебели»: рисунок поворачивается и смещается вместе с предметом)
+describe("точка предмета в чертёж", () => {
+  it("ID-30: при угле 0 углы системы предмета — углы прямоугольника", () => {
+    const t = table(0)
+    expect(itemLocalToWorld(t, { x: 0, y: 0 })).toEqual({ x: 160, y: 20 })
+    expect(itemLocalToWorld(t, { x: 80, y: 160 })).toEqual({ x: 240, y: 180 })
+    expect(itemLocalToWorld(t, { x: 40, y: 80 })).toEqual({ x: 200, y: 100 })
+  })
+
+  it("ID-31: при угле 90 верх предмета (y = 0) смотрит вправо от центра", () => {
+    const p = itemLocalToWorld(table(90), { x: 40, y: 0 })
+    expect(p.x).toBeCloseTo(280, 9)
+    expect(p.y).toBeCloseTo(100, 9)
+  })
+
+  it("ID-32: совпадает с углами itemCorners", () => {
+    const t = table(30)
+    const [a, b, c, d] = itemCorners(t)
+    const local = [{ x: 0, y: 0 }, { x: 80, y: 0 }, { x: 80, y: 160 }, { x: 0, y: 160 }].map((p) => itemLocalToWorld(t, p))
+    ;[a, b, c, d].forEach((corner, i) => {
+      expect(local[i]?.x).toBeCloseTo(corner.x, 9)
+      expect(local[i]?.y).toBeCloseTo(corner.y, 9)
     })
   })
 })

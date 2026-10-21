@@ -1,9 +1,10 @@
 import { readFileSync } from "node:fs"
 import type { jsPDF } from "jspdf"
 import { describe, expect, it } from "vitest"
-import { conflictColor, itemColors } from "../furniture/furniture-render"
+import { conflictColor } from "../furniture/furniture-render"
 import { drywallColors } from "../reconstruction/reconstruction-render"
 import { content, drawing, drywall, plaster, rectWalls, wall } from "../reconstruction/reconstruction.test-utils"
+import { LIGHT_PALETTE } from "../theme"
 import type { Battery, Communication, Drawing, FurnitureItem } from "../types"
 import { LEGEND_ROW_PITCH_MM, legendEntries } from "./legend"
 import type { PageFormat } from "./page-format"
@@ -28,14 +29,34 @@ const G = (): ReturnType<typeof drywall> => drywall("g", 20, 30, 220, 30, 10, 27
 const PLAN = (): Drawing => drawing({ walls: ROOM(), roughPlaster: [plaster("a", "k1", 1, "a", 0, 420, 20)], reconstruction: content([G()]) })
 
 const rgbOf = (hex: string): readonly [number, number, number] => {
-  const h = hex.replace("#", "")
+  const short = hex.replace("#", "")
+  const h = short.length === 3 ? [...short].map((c) => c + c).join("") : short
   return [0, 2, 4].map((i) => parseInt(h.slice(i, i + 2), 16) / 255) as unknown as readonly [number, number, number]
 }
 const near = (a: readonly number[], b: readonly number[]): boolean => a.every((v, i) => Math.abs(v - (b[i] ?? 0)) < 0.01)
 const fillsOf = (doc: jsPDF, page: number, color: readonly number[]): Extract<PaintOp, { kind: "fill" }>[] =>
   parsePaint(doc, page).filter((op): op is Extract<PaintOp, { kind: "fill" }> => op.kind === "fill" && near(op.color, color))
-const TABLE_COLOR = rgbOf(itemColors("table", "light").fill)
+// TCR (change furniture-line-drawings): предмет — линии рисунка цвета контуров светлой схемы без заливки (цвет вида в спеке снят):
+// FP-400…FP-403 ищут обводку предмета (внешний контур рисунка заданных габаритов), а не заливку цвета стола
+const INK = rgbOf(LIGHT_PALETTE.ink)
 const GREEN = rgbOf(drywallColors("light").fill)
+type Stroke = Extract<PaintOp, { kind: "stroke" }>
+const boxOf = (pts: readonly { x: number; y: number }[]): { x: number; y: number; w: number; h: number } => {
+  const xs = pts.map((p) => p.x)
+  const ys = pts.map((p) => p.y)
+  return { x: Math.min(...xs), y: Math.min(...ys), w: Math.max(...xs) - Math.min(...xs), h: Math.max(...ys) - Math.min(...ys) }
+}
+// штрихи цвета контуров, у которых внешний (первый) контур имеет габариты w × h мм
+const inkStrokesOfSize = (doc: jsPDF, page: number, w: number, h: number): Stroke[] =>
+  parsePaint(doc, page).filter((op): op is Stroke => {
+    if (op.kind !== "stroke" || !near(op.color, INK)) return false
+    const first = op.subpaths[0]
+    if (!first || first.length < 3) return false
+    const b = boxOf(first)
+    return Math.abs(b.w - w) < 0.1 && Math.abs(b.h - h) < 0.1
+  })
+const fillsOfSize = (doc: jsPDF, page: number, w: number, h: number): number =>
+  parsePaint(doc, page).filter((op) => op.kind === "fill" && op.box !== null && Math.abs(op.box.w - w) < 0.1 && Math.abs(op.box.h - h) < 0.1).length
 const labels = (page: PlanPage): string[] => legendEntries(page).map((e) => e.label)
 const must = (page: PlanPage | undefined): PlanPage => {
   if (!page) throw new Error("страницы нет")
@@ -43,36 +64,42 @@ const must = (page: PlanPage | undefined): PlanPage => {
 }
 
 describe("страница «Мебель» в PDF", () => {
-  it("FP-400: страниц шесть; шестая — «Мебель» со столом цвета стола и зелёным гипсокартоном; на остальных стола нет", () => {
+  it("FP-400: страниц шесть; шестая — «Мебель» со столом линиями без заливки и зелёным гипсокартоном; на остальных стола нет", () => {
     const d = withTables(PLAN(), [table("t", 200, 260)])
     const pages = pagesOf(d)
     expect(pages).toHaveLength(6)
     expect(must(pages[5]).title).toBe("Мебель")
     const doc = build(d)
     expect(doc.getNumberOfPages()).toBe(6)
-    expect(fillsOf(doc, 6, TABLE_COLOR).length).toBeGreaterThan(0)
+    expect(inkStrokesOfSize(doc, 6, 16, 32).length).toBeGreaterThan(0)
+    expect(fillsOfSize(doc, 6, 16, 32)).toBe(0)
     expect(fillsOf(doc, 6, GREEN).length).toBeGreaterThan(0)
-    for (let i = 1; i <= 5; i++) expect(fillsOf(doc, i, TABLE_COLOR)).toEqual([])
+    for (let i = 1; i <= 5; i++) expect(inkStrokesOfSize(doc, i, 16, 32)).toEqual([])
   })
 
-  it("FP-401: стол 80×160 с углом 90 при масштабе 1:50 — прямоугольник 32 мм по горизонтали и 16 мм по вертикали", () => {
+  it("FP-401: стол 80×160 с углом 90 при масштабе 1:50 — габариты рисунка 32 мм по горизонтали и 16 мм по вертикали, скругление 2 мм, кромка 1,2 мм", () => {
     const doc = build(withTables(PLAN(), [table("t", 200, 260, 90)]), 50)
-    // образец легенды — тоже цвета стола; стол чертежа — самая большая заливка
-    const biggest = fillsOf(doc, 6, TABLE_COLOR).map((f) => f.box).filter((b): b is NonNullable<typeof b> => b !== null).sort((a, b) => b.w * b.h - a.w * a.h)[0]
-    expect(biggest?.w).toBeCloseTo(32, 1)
-    expect(biggest?.h).toBeCloseTo(16, 1)
+    const s = inkStrokesOfSize(doc, 6, 32, 16)
+    expect(s).toHaveLength(1)
+    const [outer, inner] = s[0]?.subpaths ?? []
+    const o = boxOf(outer ?? [])
+    // скругление: на верхней стороне контур начинается на 2 мм правее левого края
+    const topLeft = Math.min(...(outer ?? []).filter((p) => Math.abs(p.y - o.y) < 1e-6).map((p) => p.x)) - o.x
+    expect(topLeft).toBeCloseTo(2, 2)
+    const i = boxOf(inner ?? [])
+    expect(i.x - o.x).toBeCloseTo(1.2, 2)
+    expect(i.y - o.y).toBeCloseTo(1.2, 2)
+    expect(i.w).toBeCloseTo(32 - 2.4, 2)
   })
 
   it("FP-402: стол без угла — 16 мм по горизонтали и 32 мм по вертикали", () => {
     const doc = build(withTables(PLAN(), [table("t", 200, 260, 0)]), 50)
-    const biggest = fillsOf(doc, 6, TABLE_COLOR).map((f) => f.box).filter((b): b is NonNullable<typeof b> => b !== null).sort((a, b) => b.w * b.h - a.w * a.h)[0]
-    expect(biggest?.w).toBeCloseTo(16, 1)
-    expect(biggest?.h).toBeCloseTo(32, 1)
+    expect(inkStrokesOfSize(doc, 6, 16, 32)).toHaveLength(1)
   })
 
   it("FP-403: стол пересекает стену — стол нарисован, красной подсветки нет", () => {
     const doc = build(withTables(PLAN(), [table("t", 0, 260)]))
-    expect(fillsOf(doc, 6, TABLE_COLOR).length).toBeGreaterThan(0)
+    expect(inkStrokesOfSize(doc, 6, 16, 32).length).toBeGreaterThan(0)
     const [r, g, b] = (conflictColor("light").match(/[\d.]+/g) ?? []).map(Number)
     const red = [(r ?? 0) / 255, (g ?? 0) / 255, (b ?? 0) / 255]
     expect(fillsOf(doc, 6, red)).toEqual([])
@@ -114,6 +141,39 @@ describe("легенда страницы «Мебель»", () => {
 
   it("FP-412: столов нет — записи «Стол» нет", () => {
     expect(labels(must(pagesOf(withObjects([]))[5]))).not.toContain("Стол")
+  })
+
+  // change furniture-line-drawings (spec pdf-export «Легенда на странице PDF», сценарий «Образец вида мебели — рисунок»)
+  const chair = (id: string, x: number, y: number): FurnitureItem => ({ id, kind: "chair", x, y, widthCm: 45, lengthCm: 45, angleDeg: 0 })
+
+  it("FP-415: стол и стул — записи «Стол», «Стул» в порядке каталога после «Гипсокартона»", () => {
+    expect(labels(must(pagesOf(withObjects([chair("c", 300, 260), table("t", 200, 260)]))[5]))).toEqual(["Кирпич", "Штукатурка", "Гипсокартон", "Стол", "Стул"])
+  })
+
+  it("FP-416: образцы стола и стула — миниатюры рисунков: стол 16×8 мм повёрнут вдоль образца, стул 8×8 мм, линии без заливки", () => {
+    const doc = build(withObjects([table("t", 200, 260), chair("c", 300, 260)]))
+    const tableSample = inkStrokesOfSize(doc, 6, 16, 8)
+    expect(tableSample).toHaveLength(1)
+    // детали в масштабе легенды 0,2 мм/см и не уменьшаются вместе с габаритами: скругление 10 см — 2 мм, кромка 6 см — 1,2 мм
+    const [outer, inner] = tableSample[0]?.subpaths ?? []
+    const o = boxOf(outer ?? [])
+    const i = boxOf(inner ?? [])
+    expect(i.x - o.x).toBeCloseTo(1.2, 2)
+    expect(i.y - o.y).toBeCloseTo(1.2, 2)
+    expect(Math.min(...(outer ?? []).filter((p) => Math.abs(p.y - o.y) < 1e-6).map((p) => p.x)) - o.x).toBeCloseTo(2, 2)
+    const chairSample = inkStrokesOfSize(doc, 6, 8, 8)
+    expect(chairSample).toHaveLength(1)
+    expect(chairSample[0]?.subpaths).toHaveLength(3)
+    // подлокотники 7 см — 1,4 мм от боков (линия спинки — второй подконтур)
+    const chairOuter = boxOf(chairSample[0]?.subpaths[0] ?? [])
+    expect(boxOf(chairSample[0]?.subpaths[1] ?? []).x - chairOuter.x).toBeCloseTo(1.4, 2)
+    // под образцами заливки нет: ни одной заливки, чей габарит лежит в габарите образца (образцы других записей — другие строки)
+    const within = (inner: { x: number; y: number; w: number; h: number }, outerBox: { x: number; y: number; w: number; h: number }): boolean =>
+      inner.x >= outerBox.x - 0.05 && inner.y >= outerBox.y - 0.05 && inner.x + inner.w <= outerBox.x + outerBox.w + 0.05 && inner.y + inner.h <= outerBox.y + outerBox.h + 0.05
+    const tableBox = o
+    const chairBox = boxOf(chairSample[0]?.subpaths[0] ?? [])
+    const filled = parsePaint(doc, 6).filter((op) => op.kind === "fill" && op.box !== null && (within(op.box, tableBox) || within(op.box, chairBox)))
+    expect(filled).toEqual([])
   })
 
   it("FP-413: «Гипсокартон» на «Реконструкции» и «Мебели», в первых четырёх страницах нет; без стен ГКЛ записи нет", () => {
