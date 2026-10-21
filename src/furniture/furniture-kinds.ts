@@ -34,6 +34,14 @@ export const FURNITURE_KINDS = {
     colors: { light: { fill: "#e0b46c", stroke: "#6b4510" }, dark: { fill: "#b8863f", stroke: "#f3dcae" } },
     icon: '<rect x="3" y="7" width="18" height="5" rx="1"/><path d="M6 12v7M18 12v7"/>',
   },
+  chair: {
+    label: "Стул",
+    plaqueWord: "стул",
+    defaults: { widthCm: 45, lengthCm: 45, angleDeg: 0 },
+    // синяя заливка с тёмным контуром, отличная от стола, подложки, гипсокартона и красной подсветки
+    colors: { light: { fill: "#8fb4d9", stroke: "#1f4f7a" }, dark: { fill: "#4f7fae", stroke: "#cfe3f5" } },
+    icon: '<path d="M7 3v9M7 12h10M17 12v9M7 12v9M7 3h6"/>',
+  },
 } as const satisfies Record<string, FurnitureKindEntry>
 
 export type FurnitureKind = keyof typeof FURNITURE_KINDS

@@ -31,7 +31,8 @@ describe("разметка группы «Мебель»", () => {
     expect(panel).toMatch(/id="furniture-kinds" class="group-tools"/)
     expect([...panel.matchAll(/<button/g)]).toHaveLength(0)
     expect(toolbar).not.toContain("tool-furniture-")
-    expect(FURNITURE_KIND_ORDER).toEqual(["table"])
+    // TCR (change add-furniture-chair): в каталоге новый вид
+    expect(FURNITURE_KIND_ORDER).toEqual(["table", "chair"])
     expect(main).toContain("FURNITURE_KIND_ORDER.map((kind)")
     expect(main).toContain("button.id = `tool-furniture-${kind}`")
     expect(main).toContain('button.className = "group-tool"')
