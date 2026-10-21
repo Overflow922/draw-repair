@@ -60,7 +60,7 @@ export interface RightAngleGhost {
   strips: readonly Point[][]
 }
 
-const ARM_LABEL_RATIO = 0.8
+const ARM_LABEL_RATIO = 1.6
 
 export const rightAngleArmPx = (m: RenderMetrics): number => m.labelPx * ARM_LABEL_RATIO
 

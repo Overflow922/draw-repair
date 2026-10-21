@@ -26,7 +26,7 @@ const room = (parts: RoughParts = {}): Drawing => drawing({ walls: rectWalls("k"
 const build = (d: Drawing, scale = 50): jsPDF => buildPdfPages(pagesOf(d), "cm", scale, "A3", font, d.name, NOW)
 
 const ROUGH_PAGE = 4
-const ARM_MM = PDF_METRICS.labelPx * 0.8
+const ARM_MM = PDF_METRICS.labelPx * 1.6
 
 // скобка знака: ломаная из трёх точек с плечами по ARM_MM
 const brackets = (doc: jsPDF, page = ROUGH_PAGE) =>
