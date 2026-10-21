@@ -489,10 +489,6 @@ Follow-ups from `pdf-legend` (2026-10-11). Non-blocking.
 
 Follow-ups from `auto-fit-scale` (apply, 2026-10-11).
 
-## Docs
-
-- [ ] (auto-fit-scale, 2026-10-11) Specs `wall-joints` (line ~370) and `wall-types` (line ~46) say «изменяет масштаб чертежа» but mean the on-screen zoom; since `auto-fit-scale` «масштаб чертежа» is the print scale (`drawing-scale`), so the wording is now ambiguous. Replace with «масштаб вида (зум)». `demolition-plan` line ~346 («вид и масштаб чертежа общие») already means both and is fine.
-
 Follow-ups from `fix-diagonal-corner-block-snap-and-dimensions` (2026-10-12).
 
 ## Bugs
