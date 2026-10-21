@@ -343,8 +343,6 @@ Follow-ups from the change `auto-wall-dimensions` (model of visible face pieces,
 
 ### Docs
 
-- [ ] Three scenario titles in the delta specs keep the old, now false wording because `openspec validate` requires a MODIFIED requirement to keep all current scenario titles: `door` «Клик по окну в инструменте «Дверь» выделяет окно», `window` «Клик по проёму в инструменте «Окно» выделяет проём», `wall-drawing` «Клик по телу стены выделяет, клик по квадрату рисует» (also `canvas-app` «Выделение двери при инструменте группы деактивирует его», true only for placement). Rename them after archiving.
-
 ### Out of scope (decided, revisit if needed)
 
 - Selection is only possible in the «Без инструмента» state. Editing a wall during drawing requires Esc first (user decision, 2026-10-09).
