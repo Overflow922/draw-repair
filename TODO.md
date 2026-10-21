@@ -955,10 +955,6 @@ Follow-ups from `plaster-opening-reveals` (2026-10-20).
 
 Follow-ups from `plaster-corner-wrap` (2026-10-21).
 
-## Bugs
-
-- [ ] Screenshot `img_1.png` (inner plaster corner) showed two different numbers, 108 (vertical, selected strip) and 112 (horizontal text at the top right), that the corner change does not explain. Not reproduced on synthetic L-corners (inner and outer corners now give strip and dimension that agree); needs the user's drawing to find where 112 comes from.
-
 ## Out of scope (decided, revisit if needed)
 
 - The leading strip at an outer corner is the one whose wall comes first in `plasterSources` order (walls of the survey, then own «Монтаж» walls); there is no UI to choose it (`wrapSideCorners` in `src/rough/plaster.ts`).
@@ -969,12 +965,7 @@ Follow-ups from `plaster-single-contour` (2026-10-21).
 
 ## Tests
 
-- [ ] Browser check was done on a reduced copy of «Чертёж 2» (walls `a0048405`, `9f8296c0`, `cd0c4bed` and their plaster marks), not on the whole drawing; the end strip at 14 mm and 14/30 mm side strips is covered by `src/rough/plaster-single-contour.test.ts`.
 - [ ] No formatter, linter or mutation tool in the repo; only one mutant was tried by hand (`min` → `max` at the `to` edge of `endDimensionBounds`, caught by SC-10); probe depth, edge choice and `x.wall.id !== wall.id` were not.
-
-## Bugs
-
-- [ ] `108` / `112` on `img_1.png` (inner plaster corner) is still unexplained; it is not the end strip case fixed here (see also `plaster-corner-wrap` above). Needs the exact pair of walls from the user's drawing.
 
 ## Out of scope (decided, revisit if needed)
 
