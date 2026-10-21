@@ -7,6 +7,7 @@ import { LIGHT_PALETTE } from "../theme"
 import type { Palette } from "../theme"
 import { PX_PER_CM } from "../types"
 import type { Battery, Communication, Point, View, Wall } from "../types"
+import { tableColors } from "../furniture/furniture-render"
 import { drywallColors } from "../reconstruction/reconstruction-render"
 import { plasterColors } from "../rough/rough-render"
 import { DEMOLITION_HATCH, SCREED_HATCH, strokeHatchSeries } from "../wall-hatch"
@@ -72,6 +73,17 @@ function drawDrywallSample(ctx: CanvasRenderingContext2D, origin: Point): void {
   const poly = sampleRect(origin)
   ctx.fillStyle = colors.fill
   tracePolygons(ctx, [poly])
+  ctx.fill()
+  ctx.strokeStyle = colors.stroke
+  ctx.lineWidth = PDF_METRICS.contourPx
+  ctx.stroke()
+}
+
+// образец «Стол»: цвета стола светлой схемы, как на чертеже
+function drawTableSample(ctx: CanvasRenderingContext2D, origin: Point): void {
+  const colors = tableColors("light")
+  ctx.fillStyle = colors.fill
+  tracePolygons(ctx, [sampleRect(origin)])
   ctx.fill()
   ctx.strokeStyle = colors.stroke
   ctx.lineWidth = PDF_METRICS.contourPx
@@ -150,6 +162,8 @@ function drawSample(ctx: CanvasRenderingContext2D, entry: LegendEntry, origin: P
       return drawScreedSample(ctx, origin)
     case "drywall":
       return drawDrywallSample(ctx, origin)
+    case "table":
+      return drawTableSample(ctx, origin)
   }
 }
 

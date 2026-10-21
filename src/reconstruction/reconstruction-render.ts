@@ -31,6 +31,8 @@ export interface ReconstructionView extends Omit<RoughSceneView, "screeds" | "bl
   outlines?: readonly { wall: DrywallWall; color: string }[]
   // стена с маркерами правки (одиночное выделение)
   handles?: DrywallWall | null
+  // слой поверх стен гипсокартона и под размерами: столы плана «Мебель» (change furniture-plan-table, design D3)
+  above?: (ctx: CanvasRenderingContext2D, toScreen: (p: Point) => Point) => void
 }
 
 // опции холста и PDF: жесты построения (квадрат установки, размеры, рамка, линейка) приходят теми же полями, что у обмерочного плана
@@ -102,6 +104,7 @@ export function drawReconstructionScene(
       drawDrywallWall(c, scene.preview, drywallScene, toScreen, colors, m.contourPx)
       c.globalAlpha = 1
     }
+    scene.above?.(c, toScreen)
     if (scene.handles) drawHandles(c, scene.handles, toScreen, palette)
     drawPlacementHints(c, toScreen, drawn, m, palette)
     // размеры плана — по полному списку стен: подложка и гипсокартон

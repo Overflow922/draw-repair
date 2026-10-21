@@ -15,6 +15,7 @@ export type LegendEntry =
   | { kind: "plaster"; label: string }
   | { kind: "screed"; label: string }
   | { kind: "drywall"; label: string }
+  | { kind: "table"; label: string }
 
 export const LEGEND_PAD_LEFT_MM = 8
 export const LEGEND_SAMPLE_W_MM = 16
@@ -48,6 +49,7 @@ export function legendEntries(page: PlanPage): LegendEntry[] {
   const screeds = page.rough?.screeds ?? []
   if (screeds.length > 0) entries.push({ kind: "screed", label: `Стяжка до ${Math.max(...screeds.map((s) => s.screed.thicknessMm))} мм` })
   if (drywall > 0) entries.push({ kind: "drywall", label: "Гипсокартон" })
+  if ((page.furniture?.tables.length ?? 0) > 0) entries.push({ kind: "table", label: "Стол" })
   return entries
 }
 

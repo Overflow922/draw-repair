@@ -321,6 +321,24 @@ body {
   width: 44px;
 }
 
+/* плашка пересечений плана «Мебель» (change furniture-plan-table, design D8): остров в правом верхнем углу, клики не перехватывает */
+#furniture-warning {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  z-index: 10;
+  padding: 6px 10px;
+  font-size: 13px;
+  color: var(--popup-text);
+  background: var(--popup-bg);
+  border-color: var(--popup-border);
+  pointer-events: none;
+}
+
+#furniture-warning[hidden] {
+  display: none;
+}
+
 /* панель «Примечания» (change add-plan-notes): заголовок и многострочное поле, как поле толщины по стилю */
 #notes-label {
   font-size: 10px;

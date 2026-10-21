@@ -1,8 +1,8 @@
 import { isNoteList } from "./notes/notes-store"
 import { historyKey } from "./plans"
 import type { PlanId } from "./plans"
-import { isBattery, isBatteryMark, isCallout, isCommunication, isDemolitionMark, isDimension, isDrawing, isDrywallWall, isPlasterMark, isRightAngle, isRoomRecord, isScreed, isWall, isWallElement } from "./storage"
-import type { Battery, BatteryMark, Callout, Communication, DemolitionMark, Dimension, DimPoint, Drawing, PlasterMark, RightAngleMark, RoomRecord, Screed, Wall, WallElement } from "./types"
+import { isBattery, isBatteryMark, isCallout, isCommunication, isDemolitionMark, isDimension, isDrawing, isDrywallWall, isPlasterMark, isRightAngle, isRoomRecord, isScreed, isTable, isWall, isWallElement } from "./storage"
+import type { Battery, BatteryMark, Callout, Communication, DemolitionMark, Dimension, DimPoint, Drawing, PlasterMark, RightAngleMark, RoomRecord, Screed, Table, Wall, WallElement } from "./types"
 
 const KEY = "draw-repair:history"
 export const HISTORY_LIMIT = 50
@@ -33,6 +33,8 @@ export type HistoryEntry =
   // шаг плана «Черновые работы» (change add-rough-works-plan, design D7): списки штукатурки и стяжек до операции
   // и прямых углов (change plaster-right-angle, design D4); у записи, сохранённой до введения углов, поля нет
   | { kind: "rough"; plaster: PlasterMark[]; screeds: Screed[]; angles?: RightAngleMark[] }
+  // шаг плана «Мебель» (change furniture-plan-table, design D9): столы и размеры плана до операции
+  | { kind: "furniture"; tables: Table[]; dimensions: Dimension[] }
 
 export interface DrawingHistory {
   past: HistoryEntry[]
@@ -191,6 +193,42 @@ export function redoRough(history: DrawingHistory, current: RoughState): RoughSt
   return copyRough(e)
 }
 
+// Столы и размеры плана «Мебель» (change furniture-plan-table, design D9): как у «Черновых работ» — работают только с верхней
+// записью вида «furniture», при другой записи возвращают null и стеки не меняют; прежние функции отмены её не забирают
+export interface FurnitureState {
+  tables: Table[]
+  dimensions: Dimension[]
+}
+
+const copyFurniture = (state: FurnitureState): FurnitureState => ({
+  tables: state.tables.map((t) => ({ ...t })),
+  dimensions: cloneScene({ walls: [], dimensions: state.dimensions }).dimensions,
+})
+
+const furnitureEntry = (state: FurnitureState): HistoryEntry => ({ kind: "furniture", ...copyFurniture(state) })
+
+export function recordFurniture(history: DrawingHistory, state: FurnitureState): void {
+  history.past.push(furnitureEntry(state))
+  if (history.past.length > HISTORY_LIMIT) history.past.shift()
+  history.future = []
+}
+
+export function undoFurniture(history: DrawingHistory, current: FurnitureState): FurnitureState | null {
+  const e = history.past[history.past.length - 1]
+  if (!e || e.kind !== "furniture") return null
+  history.past.pop()
+  history.future.push(furnitureEntry(current))
+  return copyFurniture(e)
+}
+
+export function redoFurniture(history: DrawingHistory, current: FurnitureState): FurnitureState | null {
+  const e = history.future[history.future.length - 1]
+  if (!e || e.kind !== "furniture") return null
+  history.future.pop()
+  history.past.push(furnitureEntry(current))
+  return copyFurniture(e)
+}
+
 // отмена: снимок из past возвращается, текущие пометки кладутся в future (в истории плана «Демонтаж» только такие записи)
 export function undoMarks(history: DrawingHistory, current: readonly DemolitionMark[]): DemolitionMark[] | null {
   const e = history.past[history.past.length - 1]
@@ -248,7 +286,7 @@ export function redoDemolition(history: DrawingHistory, current: DemolitionState
 
 export function undoEntry(history: DrawingHistory, scene: Scene): HistoryEntry | null {
   const e = history.past[history.past.length - 1]
-  if (!e || e.kind === "callouts" || e.kind === "notes" || e.kind === "rough") return null
+  if (!e || e.kind === "callouts" || e.kind === "notes" || e.kind === "rough" || e.kind === "furniture") return null
   history.past.pop()
   history.future.push(e.kind === "walls" ? { kind: "walls", ...cloneScene(scene) } : e)
   return e
@@ -256,7 +294,7 @@ export function undoEntry(history: DrawingHistory, scene: Scene): HistoryEntry |
 
 export function redoEntry(history: DrawingHistory, scene: Scene): HistoryEntry | null {
   const e = history.future[history.future.length - 1]
-  if (!e || e.kind === "callouts" || e.kind === "notes" || e.kind === "rough") return null
+  if (!e || e.kind === "callouts" || e.kind === "notes" || e.kind === "rough" || e.kind === "furniture") return null
   history.future.pop()
   history.past.push(e.kind === "walls" ? { kind: "walls", ...cloneScene(scene) } : e)
   return e
@@ -288,6 +326,7 @@ const isHistoryEntry = (e: unknown): e is HistoryEntry => {
   if (x.kind === "rough")
     return Array.isArray(x.plaster) && x.plaster.every(isPlasterMark) && Array.isArray(x.screeds) && x.screeds.every(isScreed) &&
       (x.angles === undefined || (Array.isArray(x.angles) && x.angles.every(isRightAngle)))
+  if (x.kind === "furniture") return Array.isArray(x.tables) && x.tables.every(isTable) && Array.isArray(x.dimensions) && x.dimensions.every(isDimension)
   return x.kind === "close" && typeof x.drawingId === "string" &&
     typeof x.index === "number" && Number.isInteger(x.index) && x.index >= 0
 }

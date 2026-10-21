@@ -88,6 +88,7 @@ describe("легенда: объекты на страницах докумен�
       ["Кирпич", "Батарея", "Стояк"],
       ["Кирпич", "Батарея", "Стояк"],
       ["Кирпич", "Батарея", "Стояк"],
+      ["Кирпич", "Батарея", "Стояк"], // TCR (change furniture-plan-table): шестая страница «Мебель»
     ])
   })
 
@@ -95,6 +96,6 @@ describe("легенда: объекты на страницах докумен�
   it("единственная батарея, помеченная сносом: на «Демонтаже» запись есть, на «Монтаже», «Черновых работах» и «Реконструкции» нет", () => {
     const pages = pagesOf(drawing({ batteries: [BATTERY], batteryDemolition: [{ id: "bm", batteryId: "b1" }] }))
     // TCR (change reconstruction-plan): пятая страница «Реконструкция» — подложка из тех же видимых батарей, что у «Монтажа»
-    expect(pages.map((p) => labels(p).includes("Батарея"))).toEqual([true, true, false, false, false])
+    expect(pages.map((p) => labels(p).includes("Батарея"))).toEqual([true, true, false, false, false, false]) // TCR (change furniture-plan-table): «Мебель» — как «Реконструкция»
   })
 })

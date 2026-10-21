@@ -50,7 +50,9 @@ describe("разметка панелей", () => {
   it("PB-UI-02: панели есть только у «Стена», групп «Проёмы» и «Коммуникации» и «Примечаний»; удалённых полей и панелей нет", () => {
     // TCR (change add-rough-works-plan, canvas-app «Вспомогательная панель инструмента»): добавлены панели «Штукатурка» и «Стяжка»
     // TCR (change reconstruction-plan, canvas-app «Вспомогательная панель инструмента»): добавлена панель «Гипсокартон»
-    expect(count(toolbar, /class="[^"]*\btool-panel\b/g)).toBe(7)
+    // TCR (change furniture-plan-table, canvas-app «Вспомогательная панель инструмента»): добавлена панель группы «Мебель»
+    expect(count(toolbar, /class="[^"]*\btool-panel\b/g)).toBe(8)
+    expect(panel("furniture-panel").length).toBeGreaterThan(0)
     expect(panel("drywall-panel").length).toBeGreaterThan(0)
     expect(panel("wall-panel").length).toBeGreaterThan(0)
     expect(panel("openings-panel").length).toBeGreaterThan(0)

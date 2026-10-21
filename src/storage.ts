@@ -1,10 +1,11 @@
 import { mergeAll } from "./demolition/marks"
+import { normalizeAngle } from "./furniture/table"
 import { loadNoteList } from "./notes/notes-store"
 import { isPlanId } from "./plans"
 import { mergeAllPlaster } from "./rough/plaster-marks"
 import { PLASTER_THICKNESS, SCREED_THICKNESS, isThickness } from "./rough/rough-model"
 import { isDoor, isWindow, normalizeMaterial } from "./types"
-import type { Battery, BatteryCornerPoint, BatteryMark, Callout, Communication, CornerRef, DemolitionMark, Dimension, DimPoint, Doorway, Drawing, DrawingStore, DrywallWall, EdgePoint, EdgeRef, JambPoint, MountingContent, PlasterMark, Point, ReconstructionContent, RightAngleMark, RoomRecord, Screed, View, Wall, WallDoor, WallElement, WallWindow } from "./types"
+import type { Battery, BatteryCornerPoint, BatteryMark, Callout, Communication, CornerRef, DemolitionMark, Dimension, DimPoint, Doorway, Drawing, DrawingStore, DrywallWall, EdgePoint, EdgeRef, FurnitureContent, JambPoint, MountingContent, PlasterMark, Point, ReconstructionContent, RightAngleMark, RoomRecord, Screed, Table, View, Wall, WallDoor, WallElement, WallWindow } from "./types"
 
 const KEY = "draw-repair:drawing"
 
@@ -365,6 +366,33 @@ function loadReconstruction(raw: unknown): { reconstruction?: ReconstructionCont
   }
 }
 
+// стол плана «Мебель» (change furniture-plan-table, design D9): непустой идентификатор, числа центра и угла, ширина и длина больше нуля
+export const isTable = (t: unknown): t is Table => {
+  if (typeof t !== "object" || t === null) return false
+  const x = t as Record<string, unknown>
+  return typeof x.id === "string" && x.id !== "" && num(x.x) && num(x.y) && num(x.angleDeg) && num(x.widthCm) && x.widthCm > 0 && num(x.lengthCm) && x.lengthCm > 0
+}
+
+// угол вне диапазона [0, 360) приводится при загрузке
+const copyTable = (t: Table): Table => ({ id: t.id, x: t.x, y: t.y, widthCm: t.widthCm, lengthCm: t.lengthCm, angleDeg: normalizeAngle(t.angleDeg) })
+
+// объекты плана «Мебель» при загрузке: некорректные столы и размеры отбрасываются по одному; размеры на отсутствующие стены
+// сохраняются; поле, не являющееся объектом, читается как отсутствующее; выноски и примечания — по общим правилам
+function loadFurniture(raw: unknown): { furniture?: FurnitureContent } {
+  if (typeof raw !== "object" || raw === null || Array.isArray(raw)) return {}
+  const x = raw as Record<string, unknown>
+  const list = (v: unknown): unknown[] => (Array.isArray(v) ? v : [])
+  const notes = loadNoteList(x.notes)
+  return {
+    furniture: {
+      tables: list(x.tables).filter(isTable).map(copyTable),
+      dimensions: list(x.dimensions).filter(isDimension).map(copyDimension),
+      ...(x.callouts === undefined ? null : { callouts: loadCalloutList(x.callouts) }),
+      ...(notes === undefined ? null : { notes }),
+    },
+  }
+}
+
 const emptyDrawing = (name: string): Drawing => ({
   id: crypto.randomUUID(),
   name,
@@ -431,6 +459,7 @@ export function parseStore(raw: string): LoadedStore | null {
           ...(roughNotes === undefined ? null : { roughNotes }),
           ...loadRooms(dr.rooms),
           ...loadReconstruction(dr.reconstruction),
+          ...loadFurniture(dr.furniture),
           dimensions: (Array.isArray(dr.dimensions) ? dr.dimensions : []).filter(isDimension).map(copyDimension),
         }
       })

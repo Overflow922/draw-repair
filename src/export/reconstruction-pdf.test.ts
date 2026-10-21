@@ -73,7 +73,7 @@ const PLASTERED = [plaster("a", "k1", 1, "a", 0, 420, 30)]
 describe("pagesOf: страница «Реконструкция»", () => {
   it("RC-120: страниц пять; пятая — «Реконструкция» с подложкой «Черновых работ» и стенами ГКЛ, без помещений и размеров подложки", () => {
     const pages = pagesOf(recon({ roughPlaster: PLASTERED, reconstruction: content([G()]) }))
-    expect(pages).toHaveLength(5)
+    expect(pages).toHaveLength(6) // TCR (change furniture-plan-table): шесть
     const fifth = pages[4]
     expect(fifth?.title).toBe("Реконструкция")
     expect(fifth?.walls.map((w) => w.id)).toEqual(["k1~0", "k2~0", "k3~0", "k4~0"])
@@ -120,7 +120,7 @@ describe("pagesOf: страница «Реконструкция»", () => {
 
   it("RC-125: страница без объектов подложки и собственных объектов пуста, но остаётся в документе", () => {
     const pages = pagesOf({ ...drawing({ walls: [] }) })
-    expect(pages).toHaveLength(5)
+    expect(pages).toHaveLength(6) // TCR (change furniture-plan-table): шесть
     expect(pages[4]?.walls).toEqual([])
   })
 })
@@ -128,7 +128,7 @@ describe("pagesOf: страница «Реконструкция»", () => {
 describe("страница «Реконструкция» в документе PDF", () => {
   it("RC-130: PDF содержит пять страниц; зелёная заливка — только на пятой", () => {
     const doc = build(recon({ reconstruction: content([G()]) }))
-    expect(doc.getNumberOfPages()).toBe(5)
+    expect(doc.getNumberOfPages()).toBe(6) // TCR (change furniture-plan-table): шесть
     expect(greenFills(doc, 5).length).toBeGreaterThan(0)
     for (const n of [1, 2, 3, 4]) expect(greenFills(doc, n), `страница ${n}`).toEqual([])
   })

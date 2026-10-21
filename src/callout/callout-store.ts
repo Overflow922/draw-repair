@@ -8,6 +8,7 @@ export const calloutsOf = (drawing: Drawing, plan: PlanId): Callout[] => {
   if (plan === "demolition") return drawing.demolitionCallouts ?? []
   if (plan === "rough") return drawing.roughCallouts ?? []
   if (plan === "reconstruction") return drawing.reconstruction?.callouts ?? []
+  if (plan === "furniture") return drawing.furniture?.callouts ?? []
   return drawing.mounting?.callouts ?? []
 }
 
@@ -17,6 +18,7 @@ export function withCallouts(drawing: Drawing, plan: PlanId, list: Callout[]): D
   if (plan === "demolition") return { ...drawing, demolitionCallouts: list }
   if (plan === "rough") return { ...drawing, roughCallouts: list }
   if (plan === "reconstruction") return { ...drawing, reconstruction: { ...(drawing.reconstruction ?? { walls: [], dimensions: [] }), callouts: list } }
+  if (plan === "furniture") return { ...drawing, furniture: { ...(drawing.furniture ?? { tables: [], dimensions: [] }), callouts: list } }
   const mounting = drawing.mounting ?? { walls: [], dimensions: [] }
   return { ...drawing, mounting: { ...mounting, callouts: list } }
 }

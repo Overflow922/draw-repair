@@ -288,6 +288,25 @@ export interface ReconstructionContent {
   notes?: string[]
 }
 
+// Стол плана «Мебель» (change furniture-plan-table, design D2): прямоугольник с центром (x, y); ширина вдоль оси X и длина вдоль
+// оси Y при угле 0; угол в градусах по часовой на экране, диапазон [0, 360), вращение вокруг центра
+export interface Table {
+  id: string
+  x: number
+  y: number
+  widthCm: number
+  lengthCm: number
+  angleDeg: number
+}
+
+// Собственные объекты плана «Мебель» (change furniture-plan-table, design D2): столы и размеры плана, выноски и примечания
+export interface FurnitureContent {
+  tables: Table[]
+  dimensions: Dimension[]
+  callouts?: Callout[]
+  notes?: string[]
+}
+
 export interface Drawing {
   id: string
   name: string
@@ -329,6 +348,8 @@ export interface Drawing {
   roughNotes?: string[]
   // объекты плана «Реконструкция»; отсутствие — пустой план, при загрузке не дописывается (reconstruction-plan design D1)
   reconstruction?: ReconstructionContent
+  // объекты плана «Мебель»; отсутствие — пустой план, при загрузке не дописывается (furniture-plan-table design D2)
+  furniture?: FurnitureContent
   view: View
 }
 

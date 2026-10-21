@@ -19,6 +19,9 @@ import { roomBlocksOf } from "../room-block"
 import { reconcileRooms } from "../room-explication"
 import type { ExplicatedRoom } from "../room-explication"
 import type { PlasterPiece } from "../rough/plaster"
+import { drawFurnitureScene } from "../furniture/furniture-render"
+import { furnitureScene } from "../furniture/furniture-scene"
+import { tableCorners } from "../furniture/table"
 import { drawReconstructionScene } from "../reconstruction/reconstruction-render"
 import { reconstructionScene } from "../reconstruction/reconstruction-scene"
 import { drawRoughScene, roughExtent } from "../rough/rough-render"
@@ -31,7 +34,7 @@ import { calloutLayout } from "../callout/callout-layout"
 import { calloutsOf } from "../callout/callout-store"
 import { notesOf } from "../notes/notes-store"
 import { CHAR_WIDTH } from "../doorway/element-label"
-import type { Battery, Callout, Communication, Dimension, Drawing, DrywallWall, Point, Screed, Unit, Wall, WallElement } from "../types"
+import type { Battery, Callout, Communication, Dimension, Drawing, DrywallWall, Point, Screed, Table, Unit, Wall, WallElement } from "../types"
 import { FONT_B64 } from "./font"
 import { PAGE_FORMATS_MM } from "./page-format"
 import type { PageFormat } from "./page-format"
@@ -174,6 +177,8 @@ export interface PlanPage {
   // слой плана «Реконструкция» (change reconstruction-plan, design D5): действующие куски штукатурки подложки (серые) и стены
   // гипсокартона; walls страницы — подложка, dimensions — размеры самого плана
   reconstruction?: ReconstructionLayer
+  // столы плана «Мебель» (change furniture-plan-table, design D9): у страницы этого плана рядом лежит и reconstruction (подложка)
+  furniture?: { tables: readonly Table[] }
 }
 
 export interface RoughLayer {
@@ -259,6 +264,21 @@ export function pagesOf(drawing: Drawing): PlanPage[] {
           title: plan.label,
         }
       }
+      case "furniture": {
+        const scene = furnitureScene(drawing, reconstructionScene(drawing, mounting))
+        return {
+          walls: scene.base.underlay,
+          dimensions: scene.dimensions,
+          doorways: mounting.doorways,
+          ...shared,
+          ...(mounting.batteries.length ? { batteries: mounting.batteries } : null),
+          ...callouts,
+          ...notes,
+          reconstruction: { pieces: scene.base.pieces, drywall: scene.base.own },
+          furniture: { tables: scene.tables },
+          title: plan.label,
+        }
+      }
     }
   })
 }
@@ -290,7 +310,9 @@ export function pageBounds(page: PlanPage, scale: number): BBox {
   const rough = page.rough ? roughExtent(page.rough, kMm, PDF_METRICS.labelPx) : []
   // штукатурка подложки плана «Реконструкция»; стены гипсокартона входят в габариты как стены
   const reconstruction = page.reconstruction ? roughExtent({ pieces: page.reconstruction.pieces, screeds: [] }, kMm, PDF_METRICS.labelPx) : []
-  const extra = [...marks, ...bodies, ...rects, ...calloutPoints, ...rough, ...reconstruction]
+  // углы столов плана «Мебель»
+  const tables = (page.furniture?.tables ?? []).flatMap(tableCorners)
+  const extra = [...marks, ...bodies, ...rects, ...calloutPoints, ...rough, ...reconstruction, ...tables]
   const walls = page.reconstruction ? [...page.walls, ...page.reconstruction.drywall] : page.walls
   return wallsBBox(walls, page.dimensions, 0.5 * scale, page.doorways, scale, extra, batteries)
 }
@@ -349,7 +371,10 @@ function drawPage(
       drywall: page.reconstruction.drywall,
       callouts: page.callouts,
     }
-    drawReconstructionScene(ctx, w, h, scene, unit, view, { grid: false, metrics: PDF_METRICS, palette: LIGHT_PALETTE, theme: "light", dimensions: page.dimensions })
+    const opts = { grid: false, metrics: PDF_METRICS, palette: LIGHT_PALETTE, theme: "light", dimensions: page.dimensions } as const
+    // страница «Мебель»: подложка и столы без подсветки пересечений
+    if (page.furniture !== undefined) drawFurnitureScene(ctx, w, h, { ...scene, tables: page.furniture.tables }, unit, view, opts)
+    else drawReconstructionScene(ctx, w, h, scene, unit, view, opts)
     return
   }
   if (page.rough !== undefined) {

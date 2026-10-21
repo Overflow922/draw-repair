@@ -86,7 +86,7 @@ describe("страницы PDF", () => {
     const pages = pagesOf(base(list))
     // TCR (change add-rough-works-plan): страниц четыре — коммуникации лежат и на странице «Черновые работы»;
     // TCR (change reconstruction-plan): пять — и на странице «Реконструкция»
-    expect(pages).toHaveLength(5)
+    expect(pages).toHaveLength(6) // TCR (change furniture-plan-table): шесть — и на странице «Мебель»
     for (const p of pages) expect(p.communications).toEqual(list)
   })
 

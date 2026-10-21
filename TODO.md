@@ -979,3 +979,16 @@ Follow-ups from exploring `plaster-right-angle` (2026-10-21).
 
 - Corners of opening reveals with the side strip of the wall are not plaster corners for the «Прямой угол» tool (`rough-works-plan` «Угол контура штукатурки»); the reveal strip does not join the wall strips into one contour.
 - The PDF legend gets no «Прямой угол» entry: the legend height guard (`pdf-export` «Легенда на странице PDF») is tuned for at most nine entries on A4, and the sign is drawn without a legend entry.
+
+---
+
+Follow-ups from `furniture-plan-table` (2026-10-21).
+
+## Tests
+
+- [ ] `src/main.ts` wiring of the «Мебель» plan (press/drag/arrows/Delete/eraser/marquee, panel fields, plaque, undo/redo of `furniture` steps) has no automated test; only the pure parts (`table-tool`, `table-edit`, `table-params`, `overlap`, `warning`, markup) are unit-tested. The DOM flow was checked by hand in the browser (place, overlap plaque, drag, angle field, arrows series, undo/redo, Delete, eraser, plan switch, dark theme).
+
+## Out of scope (decided, revisit if needed)
+
+- Dimensions and the ruler have no anchors on tables: «Размер» measures only between faces of the underlay (`furniture-plan` «Инструменты плана «Мебель»»).
+- The door swing area is not an obstacle for tables: a table may stand where a door opens without a highlight or plaque.
