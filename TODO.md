@@ -791,9 +791,6 @@ Follow-ups from `plaster-click-whole-face` (2026-10-19).
 ## Tests
 
 - [ ] `src/main.ts` wiring of the plaster hover/click (`pointermove` → `hover`, `pointerleave` → `hover(null)`, `pointerdown`/`pointerup` → `down`/`up`) has no automated test; checked by hand in the browser (highlight, click, opening, collinear chain, drag places nothing, Escape, undo).
-## Docs
-
-- [ ] Other specs still describe a plaster drag that no longer exists: `openspec/specs/drawing-plans/spec.md` line 50 («незавершённая протяжка пометки (сноса или штукатурки)») and the scenario at lines 65–66 («идёт протяжка штукатурки, и план переключается»); check `drawing-history/spec.md` lines 307 and 322 («новая протяжка слила две пометки») for plaster. Demolition drag is unchanged, so only the plaster mentions need rewording (the plaster gesture is now a click with a hover highlight; switching plans just drops the highlight).
 
 Follow-ups from `screed-floor-layers` (2026-10-19).
 
