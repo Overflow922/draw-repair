@@ -508,10 +508,6 @@ Follow-ups from `new-wall-materials` (2026-10-12).
 - [ ] Ghost (preview) wall of concrete: the fill is drawn under `globalAlpha` 0.4 together with the hatching; no test pins this (the spec has no scenario for it).
 - [ ] `src/main.ts` swatch click / arrow keys / selected-wall material change have no automated test (no DOM environment); checked by hand (`new-wall-materials` tasks section 7). Add tests when a DOM environment appears.
 
-## Docs
-
-- [ ] `openspec/specs/wall-types`: "Штриховка стены по материалу" says a selected wall changes material "by swatch or arrows", while "Выбор типа стены" forbids arrows from switching the material when something is selected (inherited inconsistency, found by test validation round 2).
-
 ---
 
 Follow-ups from exploring `add-communications` (2026-10-12).
