@@ -22,6 +22,7 @@ import type { PlasterPiece } from "../rough/plaster"
 import { drawReconstructionScene } from "../reconstruction/reconstruction-render"
 import { reconstructionScene } from "../reconstruction/reconstruction-scene"
 import { drawRoughScene, roughExtent } from "../rough/rough-render"
+import type { RightAngleSign } from "../rough/rough-render"
 import { roughScene } from "../rough/rough-scene"
 import { LIGHT_PALETTE } from "../theme"
 import { cross, dot, sub } from "../wall-geometry"
@@ -176,6 +177,8 @@ export interface PlanPage {
 }
 
 export interface RoughLayer {
+  // знаки действующих пометок прямых углов (change plaster-right-angle, design D4)
+  rightAngles?: readonly RightAngleSign[]
   pieces: readonly PlasterPiece[]
   screeds: readonly { screed: Screed; room: Room }[]
 }
@@ -231,7 +234,14 @@ export function pagesOf(drawing: Drawing): PlanPage[] {
           ...callouts,
           ...notes,
           rooms: rough.netItems,
-          rough: { pieces: rough.pieces, screeds: rough.screeds.map((a) => ({ screed: a.screed, room: a.item.room })) },
+          rough: {
+            pieces: rough.pieces,
+            screeds: rough.screeds.map((a) => ({ screed: a.screed, room: a.item.room })),
+            // поле только при действующих пометках: страница без них та же, что до введения прямых углов
+            ...(rough.rightAngles.length > 0
+              ? { rightAngles: rough.rightAngles.map((a) => ({ id: a.mark.id, point: a.corner.point, arms: a.corner.arms })) }
+              : null),
+          },
           title: plan.label,
         }
       }
@@ -350,6 +360,7 @@ function drawPage(
       batteries: page.batteries,
       pieces: page.rough.pieces,
       screeds: page.rough.screeds,
+      rightAngles: page.rough.rightAngles,
       blocks: roomBlocksOf(page.rooms ?? []),
       callouts: page.callouts,
     }

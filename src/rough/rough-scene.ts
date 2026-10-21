@@ -7,6 +7,10 @@ import type { Drawing, Point } from "../types"
 import { netItems } from "./net-area"
 import { plasterPieces, plasterStrip } from "./plaster"
 import type { PlasterPiece } from "./plaster"
+import { plasterCorners } from "./plaster-corner"
+import type { PlasterCorner } from "./plaster-corner"
+import { activeRightAngles } from "./right-angle"
+import type { ActiveRightAngle } from "./right-angle"
 import { activeScreeds } from "./screed"
 import type { ActiveScreed } from "./screed"
 
@@ -22,11 +26,24 @@ export interface RoughScene {
   items: ExplicatedRoom[]
   netItems: ExplicatedRoom[]
   screeds: ActiveScreed[]
+  // углы контура штукатурки и действующие пометки прямых углов (change plaster-right-angle, design D4)
+  corners: PlasterCorner[]
+  rightAngles: ActiveRightAngle[]
 }
 
 export function roughScene(drawing: Drawing, base: MountingScene = mountingScene(drawing)): RoughScene {
   const pieces = plasterPieces(drawing, base)
   const strips = pieces.map(plasterStrip)
   const items = reconcileRooms(findRooms(base.walls), drawing.rooms ?? [])
-  return { base, pieces, strips, items, netItems: netItems(items, strips), screeds: activeScreeds(items, drawing.roughScreeds ?? []) }
+  const corners = plasterCorners(pieces, base.walls)
+  return {
+    base,
+    pieces,
+    strips,
+    items,
+    netItems: netItems(items, strips),
+    screeds: activeScreeds(items, drawing.roughScreeds ?? []),
+    corners,
+    rightAngles: activeRightAngles(corners, drawing.roughAngles ?? []),
+  }
 }

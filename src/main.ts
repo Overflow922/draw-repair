@@ -33,9 +33,12 @@ import type { DemolitionToolHost } from "./demolition/demolition-tool"
 import { createPlasterTool } from "./rough/plaster-tool"
 import type { PlasterToolHost } from "./rough/plaster-tool"
 import { PLASTER_THICKNESS, SCREED_THICKNESS, parseThickness } from "./rough/rough-model"
-import { renderRough } from "./rough/rough-render"
+import { renderRough, rightAngleArmPx } from "./rough/rough-render"
 import { roughScene } from "./rough/rough-scene"
 import type { RoughScene } from "./rough/rough-scene"
+import { cornerStrips } from "./rough/right-angle"
+import { createRightAngleTool } from "./rough/right-angle-tool"
+import type { RightAngleToolHost } from "./rough/right-angle-tool"
 import { createScreedTool } from "./rough/screed-tool"
 import type { ScreedToolHost } from "./rough/screed-tool"
 import { findRooms } from "./room-area"
@@ -82,7 +85,7 @@ import { afterPlace, escapeAction, resumesAfterSelectionCleared, selectionAllowe
 import { loadThemeChoice, paletteOf, resolveTheme, saveThemeChoice, themeToggleTitle, toggledTheme } from "./theme"
 import type { Theme } from "./theme"
 import { GRID_STEP_CM, MATERIALS, PX_PER_CM } from "./types"
-import type { Battery, BatteryMark, Communication, DemolitionMark, Dimension, DimPoint, Drawing, DrywallWall, Material, PlasterMark, Point, RoomRecord, Screed, Unit, View, Wall, WallElement } from "./types"
+import type { Battery, BatteryMark, Communication, DemolitionMark, Dimension, DimPoint, Drawing, DrywallWall, Material, PlasterMark, Point, RightAngleMark, RoomRecord, Screed, Unit, View, Wall, WallElement } from "./types"
 
 const canvas = document.querySelector<HTMLCanvasElement>("#canvas")!
 const canvasWrap = document.querySelector<HTMLElement>("#canvas-wrap")!
@@ -107,6 +110,7 @@ const toolDemolitionBtn = document.querySelector<HTMLButtonElement>("#tool-demol
 const toolPlasterBtn = document.querySelector<HTMLButtonElement>("#tool-plaster")!
 const plasterPanel = document.querySelector<HTMLElement>("#plaster-panel")!
 const plasterThicknessInput = document.querySelector<HTMLInputElement>("#plaster-thickness")!
+const toolRightAngleBtn = document.querySelector<HTMLButtonElement>("#tool-right-angle")!
 const toolScreedBtn = document.querySelector<HTMLButtonElement>("#tool-screed")!
 const screedPanel = document.querySelector<HTMLElement>("#screed-panel")!
 const screedThicknessInput = document.querySelector<HTMLInputElement>("#screed-thickness")!
@@ -745,10 +749,12 @@ const onReconstruction = (): boolean => activePlanOf(current()) === "reconstruct
 const reconNow = (): ReconstructionScene => (reconCache ??= reconstructionScene(current()))
 const NO_PLASTER: PlasterMark[] = []
 const NO_SCREEDS: Screed[] = []
+const NO_ANGLES: RightAngleMark[] = []
 let roughCache: RoughScene | null = null
 const roughNow = (): RoughScene => (roughCache ??= roughScene(current()))
 const plasterOf = (): PlasterMark[] => current().roughPlaster ?? NO_PLASTER
 const screedsOf = (): Screed[] => current().roughScreeds ?? NO_SCREEDS
+const anglesOf = (): RightAngleMark[] => current().roughAngles ?? NO_ANGLES
 // толщины для новых объектов: запоминаются в сеансе, в чертёж не входят
 let plasterThicknessMm: number = PLASTER_THICKNESS.default
 let screedThicknessMm: number = SCREED_THICKNESS.default
@@ -757,7 +763,7 @@ let screedPanelOpen = false
 
 const recordRoughStep = (): void => {
   nudgeBurst = false
-  recordRough(activeHistory(), { plaster: plasterOf(), screeds: screedsOf() })
+  recordRough(activeHistory(), { plaster: plasterOf(), screeds: screedsOf(), angles: anglesOf() })
 }
 
 const plasterHost: PlasterToolHost = {
@@ -798,6 +804,24 @@ const screedHost: ScreedToolHost = {
 }
 const screedTool = createScreedTool(screedHost)
 
+const rightAngleHost: RightAngleToolHost = {
+  scene: roughNow,
+  marks: anglesOf,
+  setMarks: (next) => {
+    current().roughAngles = next
+    roughCache = null
+  },
+  record: recordRoughStep,
+  changed: () => {
+    dirty = true
+  },
+  redraw: () => redraw(),
+  radiusCm: () => radiusCm(),
+  armCm: () => rightAngleArmPx(SCREEN_METRICS) / (PX_PER_CM * view.zoom),
+  newId: () => crypto.randomUUID(),
+}
+const rightAngleTool = createRightAngleTool(rightAngleHost)
+
 let roughEditor: NumberEditor | null = null
 
 const closeRoughEditor = (): void => {
@@ -811,6 +835,7 @@ function syncRoughPanels(): void {
   plasterPanel.classList.toggle("open", plasterPanelOpen)
   screedPanel.classList.toggle("open", screedPanelOpen)
   toolPlasterBtn.classList.toggle("active", tool === "plaster")
+  toolRightAngleBtn.classList.toggle("active", tool === "rightAngle")
   toolScreedBtn.classList.toggle("active", tool === "screed")
   if (document.activeElement !== plasterThicknessInput) plasterThicknessInput.value = String(plasterTool.selectedMark()?.thicknessMm ?? plasterThicknessMm)
   if (document.activeElement !== screedThicknessInput) screedThicknessInput.value = String(screedTool.selected()?.thicknessMm ?? screedThicknessMm)
@@ -849,15 +874,18 @@ const resetRough = (): void => {
   plasterTool.cancel()
   plasterTool.clearSelection()
   screedTool.clearSelection()
+  rightAngleTool.cancel()
+  rightAngleTool.clearSelection()
   closeRoughEditor()
   closeRoughPanels()
 }
 
-// снять выделение штукатурки и стяжки (Escape, клик мимо, Delete)
+// снять выделение штукатурки, стяжки и прямого угла (Escape, клик мимо, Delete)
 function clearRoughSelection(): void {
   closeRoughEditor()
   plasterTool.clearSelection()
   screedTool.clearSelection()
+  rightAngleTool.clearSelection()
   closeRoughPanels()
 }
 
@@ -867,6 +895,7 @@ function pressScreedLabel(p: Point): boolean {
   if (!screed) return false
   closeRoughEditor()
   plasterTool.clearSelection()
+  rightAngleTool.clearSelection()
   screedTool.select(p)
   screedPanelOpen = true
   plasterPanelOpen = false
@@ -896,8 +925,16 @@ function pressRough(p: Point): void {
   const k = PX_PER_CM * view.zoom
   if (plasterTool.dimensionAt(p, unit, k, SCREEN_METRICS.labelPx, NUMBER_HIT_PX / k)) return
   closeRoughEditor()
+  // знак прямого угла лежит над полосой штукатурки: его нажатие главнее; у пометки нет параметров, панели нет
+  if (rightAngleTool.select(p)) {
+    plasterTool.clearSelection()
+    screedTool.clearSelection()
+    closeRoughPanels()
+    return
+  }
   if (plasterTool.select(p)) {
     screedTool.clearSelection()
+    rightAngleTool.clearSelection()
     plasterPanelOpen = true
     screedPanelOpen = false
     syncRoughPanels()
@@ -974,6 +1011,8 @@ const calloutHost: CalloutToolHost = {
     demolitionTool.clearSelection()
     plasterTool.clearSelection()
     screedTool.clearSelection()
+    rightAngleTool.cancel()
+    rightAngleTool.clearSelection()
     closeRoughEditor()
     closeRoughPanels()
     setWallPanel(false)
@@ -1437,8 +1476,11 @@ function drawRoughPlan(): void {
   const s = roughNow()
   // выноска главнее остальных объектов под курсором ластика, затем штукатурка, затем стяжка (spec rough-works-plan «Ластик»)
   const erasingCallout = tool === "eraser" && cursor ? calloutTool.pick(cursor) : null
-  const erasePlaster = tool === "eraser" && cursor && !erasingCallout ? plasterTool.eraseTarget(cursor) : null
-  const eraseScreed = tool === "eraser" && cursor && !erasingCallout && !erasePlaster ? screedTool.eraseTarget(cursor) : null
+  // порядок под курсором ластика: выноска, прямой угол, штукатурка, стяжка
+  const eraseAngle = tool === "eraser" && cursor && !erasingCallout ? rightAngleTool.eraseTarget(cursor) : null
+  const erasePlaster = tool === "eraser" && cursor && !erasingCallout && !eraseAngle ? plasterTool.eraseTarget(cursor) : null
+  const eraseScreed = tool === "eraser" && cursor && !erasingCallout && !eraseAngle && !erasePlaster ? screedTool.eraseTarget(cursor) : null
+  const angleGhost = rightAngleTool.ghost()
   renderRough(
     canvas,
     {
@@ -1453,7 +1495,16 @@ function drawRoughPlan(): void {
       selectedScreedId: screedTool.selectedId(),
       ghost: plasterTool.ghost(),
       ruler: tool === "ruler" && cursor && !gestureActive() ? rulerReading(cursor, s.base.walls) : null,
-      erasing: erasePlaster ? { kind: "plaster", id: erasePlaster } : eraseScreed ? { kind: "screed", id: eraseScreed } : null,
+      rightAngles: s.rightAngles.map((a) => ({ id: a.mark.id, point: a.corner.point, arms: a.corner.arms })),
+      selectedRightAngleId: rightAngleTool.selectedId(),
+      angleGhost: angleGhost && tool === "rightAngle" ? { point: angleGhost.point, arms: angleGhost.arms, strips: cornerStrips(angleGhost, s.pieces) } : null,
+      erasing: eraseAngle
+        ? { kind: "angle", id: eraseAngle }
+        : erasePlaster
+          ? { kind: "plaster", id: erasePlaster }
+          : eraseScreed
+            ? { kind: "screed", id: eraseScreed }
+            : null,
       callouts: calloutTool.displayList(),
       selectedCalloutId: calloutTool.selectedId(),
       erasingCalloutId: erasingCallout?.id ?? null,
@@ -1855,6 +1906,8 @@ canvas.addEventListener("pointermove", (e) => {
     if (tool === "plaster") {
       plasterTool.move(toWorld(e), screenPoint(e))
       plasterTool.hover(toWorld(e))
+    } else if (tool === "rightAngle") {
+      rightAngleTool.hover(toWorld(e))
     } else if (tool === "ruler" || tool === "eraser" || tool === "callout") {
       cursor = toWorld(e)
       if (tool === "callout") calloutTool.hover(cursor)
@@ -1907,6 +1960,7 @@ canvas.addEventListener("pointermove", (e) => {
 canvas.addEventListener("pointerleave", () => {
   hoverWorld = null
   if (tool === "plaster") plasterTool.hover(null)
+  if (tool === "rightAngle") rightAngleTool.hover(null)
   if ((tool === "ruler" || (tool === "eraser" && (onDemolition() || onRough()))) && cursor) cursor = null
   redraw()
 })
@@ -2236,7 +2290,8 @@ canvas.addEventListener("click", (e) => {
     const at = toWorld(e)
     if (tool === "callout") calloutTool.click(at)
     else if (tool === "screed") screedTool.place(at)
-    else if (tool === "eraser" && !calloutTool.eraseAt(at) && !plasterTool.erase(at)) screedTool.erase(at)
+    else if (tool === "rightAngle") rightAngleTool.place(at)
+    else if (tool === "eraser" && !calloutTool.eraseAt(at) && !rightAngleTool.erase(at) && !plasterTool.erase(at)) screedTool.erase(at)
     return
   }
   // на плане «Демонтаж» жесты разбирает адаптер по нажатию и отпусканию (change demolition-plan, design D10);
@@ -2635,6 +2690,8 @@ toolPlasterBtn.addEventListener("click", () => {
   } else plasterPanelOpen = !plasterPanelOpen
   syncRoughPanels()
 })
+// «Прямой угол» без параметров: кнопка только включает инструмент, панели нет
+toolRightAngleBtn.addEventListener("click", () => setTool("rightAngle"))
 toolScreedBtn.addEventListener("click", () => {
   if (tool !== "screed") {
     setTool("screed")
@@ -2831,10 +2888,12 @@ function stepMarks(step: typeof undoDemolition): void {
 
 // отмена или повтор шага плана «Черновые работы» (change add-rough-works-plan, design D7): подставляются оба списка до операции
 function stepRough(step: typeof undoRough): void {
-  const next = step(activeHistory(), { plaster: plasterOf(), screeds: screedsOf() })
+  const next = step(activeHistory(), { plaster: plasterOf(), screeds: screedsOf(), angles: anglesOf() })
   if (!next) return
   current().roughPlaster = next.plaster
   current().roughScreeds = next.screeds
+  // запись, сохранённая до введения прямых углов, поля не имеет: список остаётся как есть
+  if (next.angles) current().roughAngles = next.angles
   roughCache = null
   dirty = true
   resetEditing()
@@ -3065,7 +3124,7 @@ window.addEventListener("keydown", (e) => {
     if (onRough()) {
       if (plasterTool.dragging()) return
       closeRoughEditor()
-      if (!plasterTool.deleteSelected()) screedTool.deleteSelected()
+      if (!plasterTool.deleteSelected() && !rightAngleTool.deleteSelected()) screedTool.deleteSelected()
       closeRoughPanels()
       resumePlasterTool()
       return
@@ -3087,7 +3146,7 @@ window.addEventListener("keydown", (e) => {
       gestureActive: plasterTool.dragging(),
       dimensionDraft: false,
       calloutDraft: calloutTool.hasDraft(),
-      hasSelection: plasterTool.selectedId() !== null || screedTool.selectedId() !== null || calloutTool.selectedId() !== null,
+      hasSelection: plasterTool.selectedId() !== null || screedTool.selectedId() !== null || rightAngleTool.selectedId() !== null || calloutTool.selectedId() !== null,
     })
     if (action === "end-gesture") plasterTool.cancel()
     else if (action === "cancel-callout-draft") calloutTool.cancelDraft()

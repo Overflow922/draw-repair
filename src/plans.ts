@@ -32,7 +32,8 @@ const PLAN_TOOLS: Record<PlanId, readonly [Tool, ...Tool[]]> = {
   // «Монтаж» (change mounting-plan, design D5): набор обмерочного плана
   mounting: ["wall", "doorway", "door", "window", "battery", "dimension", "callout", "ruler", "notes", "eraser"],
   // «Черновые работы» (change add-rough-works-plan, design D8): штукатурка и стяжка поверх подложки «Монтажа»
-  rough: ["plaster", "screed", "callout", "ruler", "notes", "eraser"],
+  // «Прямой угол» (change plaster-right-angle, design D4) — сразу после «Штукатурки»
+  rough: ["plaster", "rightAngle", "screed", "callout", "ruler", "notes", "eraser"],
   // «Реконструкция» (change reconstruction-plan, design D9): стены гипсокартона поверх подложки «Черновых работ»
   reconstruction: ["drywall", "dimension", "callout", "ruler", "notes", "eraser"],
 }

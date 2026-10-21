@@ -4,7 +4,7 @@ import { isPlanId } from "./plans"
 import { mergeAllPlaster } from "./rough/plaster-marks"
 import { PLASTER_THICKNESS, SCREED_THICKNESS, isThickness } from "./rough/rough-model"
 import { isDoor, isWindow, normalizeMaterial } from "./types"
-import type { Battery, BatteryCornerPoint, BatteryMark, Callout, Communication, DemolitionMark, Dimension, DimPoint, Doorway, Drawing, DrawingStore, DrywallWall, EdgePoint, EdgeRef, JambPoint, MountingContent, PlasterMark, Point, ReconstructionContent, RoomRecord, Screed, View, Wall, WallDoor, WallElement, WallWindow } from "./types"
+import type { Battery, BatteryCornerPoint, BatteryMark, Callout, Communication, CornerRef, DemolitionMark, Dimension, DimPoint, Doorway, Drawing, DrawingStore, DrywallWall, EdgePoint, EdgeRef, JambPoint, MountingContent, PlasterMark, Point, ReconstructionContent, RightAngleMark, RoomRecord, Screed, View, Wall, WallDoor, WallElement, WallWindow } from "./types"
 
 const KEY = "draw-repair:drawing"
 
@@ -184,6 +184,26 @@ export const isScreed = (s: unknown): s is Screed => {
   return typeof x.id === "string" && x.id !== "" && isPoint(x.at) && isThickness(x.thicknessMm, SCREED_THICKNESS)
 }
 
+const isCornerRef = (r: unknown): r is CornerRef => {
+  if (typeof r !== "object" || r === null) return false
+  const x = r as Record<string, unknown>
+  return typeof x.markId === "string" && x.markId !== "" && (x.at === "from" || x.at === "to" || x.at === "through")
+}
+
+// пометка прямого угла (change plaster-right-angle, design D3): идентификатор и две ссылки на пометки штукатурки, не более одной сквозной
+export const isRightAngle = (a: unknown): a is RightAngleMark => {
+  if (typeof a !== "object" || a === null) return false
+  const x = a as Record<string, unknown>
+  if (typeof x.id !== "string" || x.id === "" || !Array.isArray(x.corner) || x.corner.length !== 2) return false
+  const [first, second] = x.corner
+  return isCornerRef(first) && isCornerRef(second) && !(first.at === "through" && second.at === "through")
+}
+
+const copyRightAngle = (a: RightAngleMark): RightAngleMark => ({
+  id: a.id,
+  corner: [{ markId: a.corner[0].markId, at: a.corner[0].at }, { markId: a.corner[1].markId, at: a.corner[1].at }],
+})
+
 const copyPlaster = (m: PlasterMark): PlasterMark => {
   if (m.face === "reveal") return { id: m.id, face: "reveal", elementId: m.elementId, jamb: m.jamb, thicknessMm: m.thicknessMm }
   return m.face === "end"
@@ -203,6 +223,12 @@ function loadPlaster(raw: unknown, sources: readonly Wall[]): { roughPlaster?: P
 function loadScreeds(raw: unknown): { roughScreeds?: Screed[] } {
   if (!Array.isArray(raw)) return {}
   return { roughScreeds: raw.filter(isScreed).map(copyScreed) }
+}
+
+// прямые углы при загрузке: корректные пометки; ссылки на отсутствующую штукатурку сохраняются; отсутствие поля и не-список — отсутствие
+function loadRightAngles(raw: unknown): { roughAngles?: RightAngleMark[] } {
+  if (!Array.isArray(raw)) return {}
+  return { roughAngles: raw.filter(isRightAngle).map(copyRightAngle) }
 }
 
 // батарея (change add-battery, design D1): непустые id и стена, грань 1/-1, привязка a/b, конечное расстояние,
@@ -400,6 +426,7 @@ export function parseStore(raw: string): LoadedStore | null {
           ...(demolitionNotes === undefined ? null : { demolitionNotes }),
           ...loadPlaster(dr.roughPlaster, [...walls, ...(mountingPart.mounting?.walls ?? [])]),
           ...loadScreeds(dr.roughScreeds),
+          ...loadRightAngles(dr.roughAngles),
           ...(Array.isArray(dr.roughCallouts) ? { roughCallouts: loadCalloutList(dr.roughCallouts) } : null),
           ...(roughNotes === undefined ? null : { roughNotes }),
           ...loadRooms(dr.rooms),

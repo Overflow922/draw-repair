@@ -970,3 +970,12 @@ Follow-ups from `plaster-single-contour` (2026-10-21).
 ## Out of scope (decided, revisit if needed)
 
 - The end strip is not trimmed by a neighbour's strip at an inner corner: the strips overlap in the corner square (like side strips); only the dimension starts at the neighbour's outer surface.
+
+---
+
+Follow-ups from exploring `plaster-right-angle` (2026-10-21).
+
+## Out of scope (decided, revisit if needed)
+
+- Corners of opening reveals with the side strip of the wall are not plaster corners for the «Прямой угол» tool (`rough-works-plan` «Угол контура штукатурки»); the reveal strip does not join the wall strips into one contour.
+- The PDF legend gets no «Прямой угол» entry: the legend height guard (`pdf-export` «Легенда на странице PDF») is tuned for at most nine entries on A4, and the sign is drawn without a legend entry.

@@ -45,6 +45,25 @@ function ghostPiece(part: PlasterTargetPiece, thicknessMm: number): PlasterPiece
   return [{ mark: { id, wallId: part.wall.id, face: part.face, anchor: "a", fromCm: part.from, toCm: part.to, thicknessMm }, wall: part.wall, from: part.from, to: part.to }]
 }
 
+// знак прямого угла (change plaster-right-angle, design D4): вершина и единичные направления плеч; на холсте и в PDF плечо
+// постоянного размера — доля кегля подписи (пиксели экрана или миллиметры бумаги)
+export interface RightAngleSign {
+  id: string
+  point: Point
+  arms: readonly [Point, Point]
+}
+
+// подсветка цели инструмента «Прямой угол»: превью знака и полосы угла (мировые координаты)
+export interface RightAngleGhost {
+  point: Point
+  arms: readonly [Point, Point]
+  strips: readonly Point[][]
+}
+
+const ARM_LABEL_RATIO = 0.8
+
+export const rightAngleArmPx = (m: RenderMetrics): number => m.labelPx * ARM_LABEL_RATIO
+
 export interface RoughSceneView {
   walls: readonly Wall[] // подложка: остатки и собственные стены «Монтажа»
   doorways: readonly WallElement[]
@@ -57,7 +76,10 @@ export interface RoughSceneView {
   selectedScreedId?: string | null
   ghost?: PlasterGhost | null
   ruler?: RulerReading | null
-  erasing?: { kind: "plaster" | "screed"; id: string } | null
+  erasing?: { kind: "plaster" | "screed" | "angle"; id: string } | null
+  rightAngles?: readonly RightAngleSign[]
+  selectedRightAngleId?: string | null
+  angleGhost?: RightAngleGhost | null
   callouts?: readonly Callout[]
   selectedCalloutId?: string | null
   erasingCalloutId?: string | null
@@ -227,6 +249,38 @@ export function drawRoughScene(
   }
 
   opts.overlay?.(ctx)
+
+  // знаки прямых углов: скобка из двух плеч от вершины, чернилами схемы на контуре цвета бумаги — читается на штукатурке и
+  // на серой подложке при любой схеме; выделение и ластик обводят её своим цветом
+  const arm = rightAngleArmPx(m)
+  const bracket = (sign: Pick<RightAngleSign, "point" | "arms">): Point[] => {
+    const v = toScreen(sign.point)
+    return [sign.arms[0], { x: 0, y: 0 }, sign.arms[1]].map((dir) => ({ x: v.x + dir.x * arm, y: v.y + dir.y * arm }))
+  }
+  const strokeBracket = (path: Point[], color: string, width: number): void => {
+    ctx.strokeStyle = color
+    ctx.lineWidth = width
+    ctx.beginPath()
+    path.forEach((p, i) => (i === 0 ? ctx.moveTo(p.x, p.y) : ctx.lineTo(p.x, p.y)))
+    ctx.stroke()
+  }
+  const paintSign = (sign: Pick<RightAngleSign, "point" | "arms">, mark: string | null): void => {
+    const path = bracket(sign)
+    if (mark !== null) strokeBracket(path, mark, m.contourPx * 5)
+    strokeBracket(path, palette.paper, m.contourPx * 3)
+    strokeBracket(path, palette.ink, m.contourPx * 1.5)
+  }
+  for (const sign of scene.rightAngles ?? []) {
+    const erasing = scene.erasing?.kind === "angle" && scene.erasing.id === sign.id
+    paintSign(sign, erasing ? palette.erase : scene.selectedRightAngleId === sign.id ? palette.selection : null)
+  }
+  if (scene.angleGhost) {
+    highlight(scene.angleGhost.strips.map((strip) => strip.map(toScreen)), palette.selection)
+    ctx.save()
+    ctx.globalAlpha = GHOST_ALPHA * 2
+    paintSign(scene.angleGhost, null)
+    ctx.restore()
+  }
 
   // подписи стяжек: подложка цвета бумаги и текст постоянного размера в опорной точке
   ctx.save()

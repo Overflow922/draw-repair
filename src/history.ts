@@ -1,8 +1,8 @@
 import { isNoteList } from "./notes/notes-store"
 import { historyKey } from "./plans"
 import type { PlanId } from "./plans"
-import { isBattery, isBatteryMark, isCallout, isCommunication, isDemolitionMark, isDimension, isDrawing, isDrywallWall, isPlasterMark, isRoomRecord, isScreed, isWall, isWallElement } from "./storage"
-import type { Battery, BatteryMark, Callout, Communication, DemolitionMark, Dimension, DimPoint, Drawing, PlasterMark, RoomRecord, Screed, Wall, WallElement } from "./types"
+import { isBattery, isBatteryMark, isCallout, isCommunication, isDemolitionMark, isDimension, isDrawing, isDrywallWall, isPlasterMark, isRightAngle, isRoomRecord, isScreed, isWall, isWallElement } from "./storage"
+import type { Battery, BatteryMark, Callout, Communication, DemolitionMark, Dimension, DimPoint, Drawing, PlasterMark, RightAngleMark, RoomRecord, Screed, Wall, WallElement } from "./types"
 
 const KEY = "draw-repair:history"
 export const HISTORY_LIMIT = 50
@@ -31,7 +31,8 @@ export type HistoryEntry =
   // шаг примечаний плана (change add-plan-notes, design D3): список примечаний плана до правки
   | { kind: "notes"; notes: string[] }
   // шаг плана «Черновые работы» (change add-rough-works-plan, design D7): списки штукатурки и стяжек до операции
-  | { kind: "rough"; plaster: PlasterMark[]; screeds: Screed[] }
+  // и прямых углов (change plaster-right-angle, design D4); у записи, сохранённой до введения углов, поля нет
+  | { kind: "rough"; plaster: PlasterMark[]; screeds: Screed[]; angles?: RightAngleMark[] }
 
 export interface DrawingHistory {
   past: HistoryEntry[]
@@ -155,9 +156,16 @@ export function redoNotes(history: DrawingHistory, current: readonly string[]): 
 export interface RoughState {
   plaster: PlasterMark[]
   screeds: Screed[]
+  angles?: RightAngleMark[]
 }
 
-const copyRough = (state: RoughState): RoughState => ({ plaster: state.plaster.map((m) => ({ ...m })), screeds: state.screeds.map((s) => ({ id: s.id, at: { ...s.at }, thicknessMm: s.thicknessMm })) })
+const copyAngle = (a: RightAngleMark): RightAngleMark => ({ id: a.id, corner: [{ ...a.corner[0] }, { ...a.corner[1] }] })
+
+const copyRough = (state: RoughState): RoughState => ({
+  plaster: state.plaster.map((m) => ({ ...m })),
+  screeds: state.screeds.map((s) => ({ id: s.id, at: { ...s.at }, thicknessMm: s.thicknessMm })),
+  ...(state.angles === undefined ? null : { angles: state.angles.map(copyAngle) }),
+})
 
 const roughEntry = (state: RoughState): HistoryEntry => ({ kind: "rough", ...copyRough(state) })
 
@@ -277,7 +285,9 @@ const isHistoryEntry = (e: unknown): e is HistoryEntry => {
       (x.batteryMarks === undefined || (Array.isArray(x.batteryMarks) && x.batteryMarks.every(isBatteryMark)))
   if (x.kind === "callouts") return Array.isArray(x.callouts) && x.callouts.every(isCallout)
   if (x.kind === "notes") return isNoteList(x.notes)
-  if (x.kind === "rough") return Array.isArray(x.plaster) && x.plaster.every(isPlasterMark) && Array.isArray(x.screeds) && x.screeds.every(isScreed)
+  if (x.kind === "rough")
+    return Array.isArray(x.plaster) && x.plaster.every(isPlasterMark) && Array.isArray(x.screeds) && x.screeds.every(isScreed) &&
+      (x.angles === undefined || (Array.isArray(x.angles) && x.angles.every(isRightAngle)))
   return x.kind === "close" && typeof x.drawingId === "string" &&
     typeof x.index === "number" && Number.isInteger(x.index) && x.index >= 0
 }

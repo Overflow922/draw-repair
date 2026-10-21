@@ -38,8 +38,9 @@ describe("каталог", () => {
 })
 
 describe("инструменты", () => {
-  it("RW-103: набор — «Штукатурка», «Стяжка», «Выноска», «Линейка», «Примечания», «Ластик»; по умолчанию «Штукатурка»", () => {
-    expect(toolsOf("rough")).toEqual(["plaster", "screed", "callout", "ruler", "notes", "eraser"])
+  // change plaster-right-angle (canvas-app «Группы инструментов»): «Прямой угол» стоит между «Штукатуркой» и «Стяжкой»
+  it("RW-103: набор — «Штукатурка», «Прямой угол», «Стяжка», «Выноска», «Линейка», «Примечания», «Ластик»; по умолчанию «Штукатурка»", () => {
+    expect(toolsOf("rough")).toEqual(["plaster", "rightAngle", "screed", "callout", "ruler", "notes", "eraser"])
     expect(defaultToolOf("rough")).toBe("plaster")
   })
 

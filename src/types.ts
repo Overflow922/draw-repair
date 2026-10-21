@@ -228,6 +228,22 @@ export interface Screed {
   thicknessMm: number
 }
 
+// Положение пометки штукатурки в углу (change plaster-right-angle, design D3): вершина лежит у края участка fromCm (from),
+// у края toCm (to) или внутри участка (through); у торца from и to — края торца поперёк стены по граням -1 и +1
+export type CornerPosition = "from" | "to" | "through"
+
+export interface CornerRef {
+  markId: string
+  at: CornerPosition
+}
+
+// Пометка прямого угла (change plaster-right-angle, design D3): угол контура штукатурки задан двумя пометками штукатурки
+// и положением в каждой; координат нет, знак стоит в текущей вершине угла
+export interface RightAngleMark {
+  id: string
+  corner: readonly [CornerRef, CornerRef]
+}
+
 // Выноска — подпись со стрелкой (change add-callout, design D1): точка стрелки и точка текста лежат в координатах чертежа ровно там,
 // где кликнул пользователь, к стенам не привязаны; текст — строки через \n, не пустой. Принадлежит одному плану
 export interface Callout {
@@ -308,6 +324,7 @@ export interface Drawing {
   // дописывается (add-rough-works-plan design D7)
   roughPlaster?: PlasterMark[]
   roughScreeds?: Screed[]
+  roughAngles?: RightAngleMark[]
   roughCallouts?: Callout[]
   roughNotes?: string[]
   // объекты плана «Реконструкция»; отсутствие — пустой план, при загрузке не дописывается (reconstruction-plan design D1)

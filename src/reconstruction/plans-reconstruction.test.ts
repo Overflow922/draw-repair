@@ -54,7 +54,8 @@ describe("инструменты", () => {
     expect(toolsOf("measure")).toEqual(["wall", "doorway", "door", "window", "battery", "riser", "duct", "dimension", "callout", "ruler", "notes", "eraser"])
     expect(toolsOf("demolition")).toEqual(["demolition", "callout", "ruler", "notes", "eraser"])
     expect(toolsOf("mounting")).toEqual(["wall", "doorway", "door", "window", "battery", "dimension", "callout", "ruler", "notes", "eraser"])
-    expect(toolsOf("rough")).toEqual(["plaster", "screed", "callout", "ruler", "notes", "eraser"])
+    // change plaster-right-angle (canvas-app «Группы инструментов»): набор «Черновых работ» дополнен «Прямым углом»
+    expect(toolsOf("rough")).toEqual(["plaster", "rightAngle", "screed", "callout", "ruler", "notes", "eraser"])
   })
 
   it("RC-106: «Выноска», «Линейка», «Примечания» и «Ластик» есть на каждом плане по одному разу", () => {
