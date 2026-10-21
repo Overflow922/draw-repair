@@ -679,10 +679,6 @@ Follow-ups from `add-callout` (2026-10-14; implemented, tasks 1–11).
 
 Follow-ups from `fix-battery-centering-and-numbers` (2026-10-14).
 
-### Bugs
-
-- [ ] `npm test` (`vitest run`) picks up a stale agent worktree copy under `.claude/worktrees/agent-afe5052a1a208916f/` and fails 10 tests there (`battery-tool.test.ts` B-TOOL-7/7b/7c, `plan-tools.test.ts` PT-02/SZ-70/SZ-71, `mounting-plans.test.ts` MP-51, …); the real `src/` is green (`npx vitest run --exclude ".claude/**"`: 211 files, 4706 tests). Remove the worktree (see memory «worktree long-path cleanup») or exclude `.claude/**` in the vitest config.
-
 ### Tests
 
 - [ ] `centerGuideTracks` in `src/main.ts` (the centring guide is passed to the renderer as `tracks` only while the battery tool is active or a battery is dragged) has no automated test: the project has no DOM test environment. Checked by hand in the browser on 2026-10-14 (ghost snap at zoom 1 and 0.18, no guide outside the 35 px radius, guide while dragging an already centred battery, numbers 12000 / 7000 / 12000 with the material boundary on the right).
@@ -712,9 +708,6 @@ Follow-ups from the demolition corner fix (2026-10-15).
 ### Tests
 - [ ] Test validation (independent) of `cap-flush-snap` not run; the mutation survivors of the new tests are unknown (`src/wall-snap-cap-flush.test.ts`, `src/wall-geometry-offset-gap.test.ts`).
 - [ ] The window of the flush position (nearest of three along the cap) and the DOM wiring were checked by hand only for one scene (A 40 cm, new 20 cm, flush on the lower face); the left/upper face, a cap at an angle in the browser and the preview while rotating the segment were not checked by hand.
-
-### Docs
-- [ ] A plain `npx vitest run` also picks up stale `.claude/worktrees/*/src/**` copies and reports 18 failures there; run it with `--exclude ".claude/**"` or clean the worktrees.
 
 ### Out of scope
 - The flat-cap rule applies only to the late wall of a collinear gap joint with the axis offset above 1 cm. A late wall whose end meets the cap of an earlier wall at a small angle (0.5-15 deg) with an axis offset still uses the bisector cut of "Почти коллинеарный стык".
@@ -749,10 +742,6 @@ Follow-ups from the demolition corner fix (2026-10-15).
 
 Follow-ups from `add-plan-notes` (2026-10-15).
 
-## Bugs
-
-- [ ] Plain `vitest run` picks up stale validator worktrees in `.claude/worktrees/agent-*` (old copies of tests, 15 failures, e.g. `plan-tools.test.ts` with the old tool lists), and `src/wall-edit-invariants.test.ts` times out under the full-suite load (passes alone). Run with `--exclude ".claude/**"`; the worktrees should be removed (see the worktree long-path cleanup note) or excluded in a vitest config.
-
 ## Tests
 
 - [ ] The `src/main.ts` wiring of the notes panel (`commitNotes`, `stepNotes`, `closeNotesPanel` in `setTool`/`setPlan`/`activate`, `pagehide`) has no automated test; checked by hand in Firefox (input, normalisation, save, undo/redo, plan switch, Esc, reload, canvas click with the tool active). Not checked: dark theme, switching drawing tabs with an open panel, history of the «Монтаж» undo keeping its notes.
@@ -768,11 +757,6 @@ Follow-ups from `add-plan-notes` (2026-10-15).
 ---
 
 Follow-ups from add-legend-objects (2026-10-15).
-
-## Tests
-
-- [ ] `vitest run` picks up stale copies of tests from `.claude/worktrees/agent-afe5052a1a208916f/` (18 failures there: tool-set order tests, wall-edit-invariants). Remove the worktree or add `.claude/worktrees` to the vitest `exclude` list in `vite.config.ts`.
-- [ ] `src/wall-edit-invariants.test.ts` (INV-1, INV-2) fails when the full suite runs in parallel (~13 s under load) and passes alone; looks like a timeout under load.
 
 ---
 
@@ -810,7 +794,6 @@ Follow-ups from `plaster-click-whole-face` (2026-10-19).
 
 ## Bugs
 
-- [ ] Full `npx vitest run` fails: the stale validator worktree `.claude/worktrees/agent-afe5052a1a208916f` is picked up by vitest and its old test copies fail (plan-tools, mounting-plans, battery-tool, communications/plans, wall-edit-invariants). Remove the worktree or exclude `.claude/**` in the vitest config. Under full-suite load `src/wall-edit-invariants.test.ts` INV-1/INV-2 also exceed the default timeout (14 s, pass alone in ~6 s).
 - [ ] (unverified, not caused by this change) On a side made of two collinear walls S1 `(0,500)-(250,500)` and S2 `(250,500)-(500,500)` (brick + gkl) a selected plaster mark `0–250` on each shows the width number `2710` (mm) instead of `2500` in the browser. Check `markDimensions` for collinear joints.
 
 ## Tests
@@ -869,15 +852,6 @@ Follow-ups from `collinear-axes-meet` (2026-10-19).
 
 Follow-ups from `remove-wall-tracking` (2026-10-19).
 
-## Tests
-
-- [ ] Baseline `npm test` is not green: vitest also collects the stale validator worktree
-  `.claude/worktrees/agent-afe5052a1a208916f/` (git-ignored; 15 failures there in `plan-tools`, `plans`, `battery-tool`,
-  `mounting-plans` — tool-set order of an old source copy). Remove the worktree (see memory «worktree long-path cleanup»)
-  or exclude `.claude/**` in the vitest config.
-- [ ] `src/wall-edit-invariants.test.ts` times out (5 s per test, 2 tests) in the full run and passes alone (6 tests,
-  ~6 s). Raise its timeout or split the property runs.
-
 ---
 
 Follow-ups from `wall-body-corners-snap` (2026-10-19).
@@ -890,9 +864,6 @@ Follow-ups from `wall-body-corners-snap` (2026-10-19).
   wording/behaviour mismatch stays to be settled at the spec level.
 
 ## Out of scope (decided, revisit if needed)
-
-- Baseline failures (stale validator worktree, `wall-edit-invariants` timeout) are already listed under
-  `remove-wall-tracking` above.
 
 - [ ] `wall-selection` «Привязка к углам тел стен…» examples are inconsistent with their own geometry: wall A
   (0,0)→(200,0) has corners at (200,±10), not (210,−10); the ortho scenario puts the cursor 50 cm from the corner while
@@ -918,13 +889,6 @@ Follow-ups from `wall-body-corners-snap` (2026-10-19).
   (`plaster-pipeline.test.ts` PL-1, PL-3 pass on the old code too). Needs the user's saved drawing; tasks 1.3/1.5 stay open.
 - [ ] `src/rough/plaster.ts` `overhang` extends a mark that touches a wall end to the open face end unless a coplanar
   wall covers the zone; an offset (non-flush) neighbour or a near-parallel wall is not covered by a test.
-
-### Tests
-
-- [ ] `src/demolition/wall-edit-invariants.test.ts` INV-1/INV-2 failed at baseline in an earlier run; they passed on the
-  last full run (`vitest run --exclude ".claude/**"`), so they are flaky — investigate.
-- [ ] Vitest picks up stale `.claude/worktrees/agent-*` copies (the full run fails 6 files); add an `exclude` to the
-  vitest config or clean the worktrees.
 
 ### Out of scope (decided, revisit if needed)
 
