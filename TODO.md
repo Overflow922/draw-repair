@@ -837,18 +837,8 @@ Follow-ups from `remove-wall-tracking` (2026-10-19).
 
 Follow-ups from `wall-body-corners-snap` (2026-10-19).
 
-## Docs
-
-- [ ] `wall-selection` «Привязка при перетаскивании конца» says the end snaps "по тем же правилам, что и вершины при
-  рисовании", but the drag code uses `snapWithSource` / `snapOnOrthoAxis` (`src/geometry.ts`) over axes, not the
-  drawing-vertex rules of `src/wall-snap.ts`. `wall-body-corners-snap` only adds body corners to the drag targets; the
-  wording/behaviour mismatch stays to be settled at the spec level.
-
 ## Out of scope (decided, revisit if needed)
 
-- [ ] `wall-selection` «Привязка к углам тел стен…» examples are inconsistent with their own geometry: wall A
-  (0,0)→(200,0) has corners at (200,±10), not (210,−10); the ortho scenario puts the cursor 50 cm from the corner while
-  the rule needs it within the snap radius. Tests use (200,±10) and an axis near the corner. Fix the spec text.
 - [ ] `wall-drawing` tie rule «у одной стены — на ребре, идущем от её начала оси» is not implemented: for equal
   distances only the wall order in the array decides (`junctionCandidates`, `src/wall-snap.ts`); no scenario covers it.
 
