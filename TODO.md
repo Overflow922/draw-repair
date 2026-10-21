@@ -760,10 +760,6 @@ Follow-ups from `add-rough-works-plan` (2026-10-18).
 
 Follow-ups from `plaster-click-whole-face` (2026-10-19).
 
-## Bugs
-
-- [ ] (unverified, not caused by this change) On a side made of two collinear walls S1 `(0,500)-(250,500)` and S2 `(250,500)-(500,500)` (brick + gkl) a selected plaster mark `0–250` on each shows the width number `2710` (mm) instead of `2500` in the browser. Check `markDimensions` for collinear joints.
-
 ## Tests
 
 - [ ] `src/main.ts` wiring of the plaster hover/click (`pointermove` → `hover`, `pointerleave` → `hover(null)`, `pointerdown`/`pointerup` → `down`/`up`) has no automated test; checked by hand in the browser (highlight, click, opening, collinear chain, drag places nothing, Escape, undo).
@@ -792,11 +788,6 @@ Follow-ups from `collinear-axes-meet` (2026-10-19).
   piece to its own axis `[0, len]`, so the gap belongs to neither wall and the plaster strip breaks there (~16 px at 1:40
   for 20 cm walls). Repro: a store with `E (0,0)-(500,0)` and `N (510,0)-(580,0)` of different materials, plaster click on
   the `+1` face. New walls drawn after the change are not affected. Workaround: redraw the joint.
-- [ ] **Plaster width number is 21 cm too long at a collinear joint of two materials.** `markDimensions`
-  (`src/demolition/mark-dimensions.ts`) gives `5210` for a plaster piece `0–500` on `E` with `N (500,0)-(580,0)` of another
-  material (and `1010` for the `0–80` piece on `N`); a single wall gives `5000`. Same with a 10 cm axis gap, so it does
-  not come from the axes; suspected cause: `markChains` (`src/demolition/mark-chains.ts`) measures to the joint's body
-  boundary. Found while checking `collinear-axes-meet` in the browser; not fixed there (no spec scenario).
 
 ## Tests
 
