@@ -31,6 +31,8 @@ function setup(initial: FurnitureItem[] = [], params: ItemParams = TABLE_DEFAULT
       state.selectedCalls++
     },
     newId: () => `t${++state.nextId}`,
+    walls: () => [],
+    pxPerCm: () => 2,
   }
   return { state, tool: createItemTool(host) }
 }

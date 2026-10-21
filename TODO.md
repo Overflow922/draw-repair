@@ -1009,3 +1009,10 @@ Follow-ups from `furniture-items-catalog` (2026-10-21).
 
 - Общая функция `footprint(item)` и не-прямоугольные формы (круглый стол, Г-образный диван): `clipByRect` в `src/furniture/overlap.ts`, `hitItem` и `itemCorners` в `src/furniture/item.ts` рассчитаны на прямоугольник. Для выпуклых форм достаточно обобщить `clipByRect`, для вогнутых нужно делить форму на выпуклые части.
 - Разные наборы полей у видов (высота и др.): у всех видов ширина, длина, угол.
+
+## Out of scope — furniture-center-snap (2026-10-21)
+
+- [ ] Furniture snapping to edges (item faces, wall faces) — only centers snap now.
+- [ ] Equal spacing between furniture items.
+- [ ] Guide lines along a rotated item's own axes (a chair at 45° only gives world X/Y lines).
+- [ ] A modifier key to turn center snapping off for one gesture.

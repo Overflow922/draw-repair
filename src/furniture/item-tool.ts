@@ -1,5 +1,10 @@
 import type { Direction } from "../communications/geometry"
-import type { FurnitureItem, Point } from "../types"
+import { CENTER_GUIDE_OVERSHOOT_PX } from "../battery/battery-guide"
+import type { TrackLine } from "../battery/battery-guide"
+import type { FurnitureItem, Point, Wall } from "../types"
+import { centerSources, FURNITURE_SNAP_RADIUS_PX, guideTrack, snapCenter } from "./center-snap"
+import type { SnapResult } from "./center-snap"
+import { roomSidesAt } from "./room-sides"
 import type { FurnitureKind } from "./furniture-kinds"
 import { newItem } from "./item"
 import { nudgeItems, removeItems, replaceItem, shiftItems, itemAt } from "./item-edit"
@@ -19,10 +24,13 @@ export interface ItemToolHost {
   redraw(): void
   selected(): void // выделены столы нажатием или постановкой: main снимает выделение остальных объектов и открывает панель
   newId(): string
+  walls(): readonly Wall[] // стены подложки: по ним находится помещение предмета, середины его сторон — линии центровки (change furniture-center-snap)
+  pxPerCm(): number // экранных px на см чертежа: радиус центровки и выступ риски не зависят от зума
 }
 
 export interface ItemTool {
   ghost(): FurnitureItem | null
+  guides(): TrackLine[] // риски центровки призрака или перетаскиваемого предмета
   hover(p: Point | null): void
   place(p: Point): void
   selectedIds(): ReadonlySet<string>
@@ -45,6 +53,8 @@ export interface ItemTool {
 
 interface Drag {
   grab: Point
+  grabbed: Point // центр захваченного предмета до жеста
+  snap: SnapResult | null // прилипание на последнем шаге жеста
   base: FurnitureItem[] // столы до жеста
 }
 
@@ -54,18 +64,32 @@ export function createItemTool(host: ItemToolHost): ItemTool {
   let drag: Drag | null = null
   let burst = false
 
-  const selectedItems = (): FurnitureItem[] => host.items().filter((t) => selected.has(t.id))
+  // центр с прилипанием к линиям сторон своего помещения и других предметов; excluded — предметы, не дающие линий (выделенные при перетаскивании)
+  const snapped = (p: Point, excluded: ReadonlySet<string>): SnapResult =>
+    snapCenter(p, centerSources(roomSidesAt(host.walls(), p), host.items(), excluded), FURNITURE_SNAP_RADIUS_PX / host.pxPerCm())
+  const snappedGhost = (): SnapResult | null => (ghostAt ? snapped(ghostAt, new Set()) : null)
+  const track = (result: SnapResult): TrackLine[] => result.hits.map((hit) => guideTrack(hit, result.center, host.pxPerCm(), CENTER_GUIDE_OVERSHOOT_PX))
+
+  const selectedItems =(): FurnitureItem[] => host.items().filter((t) => selected.has(t.id))
   const withoutSelection = (): void => {
     selected = new Set()
   }
 
   const tool: ItemTool = {
-    ghost: () => (ghostAt ? newItem("", host.kind(), ghostAt, host.params()) : null),
+    ghost() {
+      const at = snappedGhost()
+      return at ? newItem("", host.kind(), at.center, host.params()) : null
+    },
+    guides() {
+      if (drag) return drag.snap ? track(drag.snap) : []
+      const at = snappedGhost()
+      return at ? track(at) : []
+    },
     hover(p) {
       ghostAt = p
     },
     place(p) {
-      const table = newItem(host.newId(), host.kind(), p, host.params())
+      const table = newItem(host.newId(), host.kind(), snapped(p, new Set()).center, host.params())
       host.record(host.items())
       host.setItems([...host.items(), table])
       selected = new Set([table.id])
@@ -97,13 +121,15 @@ export function createItemTool(host: ItemToolHost): ItemTool {
         host.selected()
       }
       burst = false
-      drag = { grab: p, base: host.items().map((t) => ({ ...t })) }
+      drag = { grab: p, grabbed: { x: hit.x, y: hit.y }, snap: null, base: host.items().map((t) => ({ ...t })) }
       host.redraw()
       return true
     },
     dragTo(p) {
       if (!drag) return
-      host.setItems(shiftItems(drag.base, selected, p.x - drag.grab.x, p.y - drag.grab.y) ?? drag.base.map((t) => ({ ...t })))
+      const target = snapped({ x: drag.grabbed.x + p.x - drag.grab.x, y: drag.grabbed.y + p.y - drag.grab.y }, selected)
+      drag.snap = target
+      host.setItems(shiftItems(drag.base, selected, target.center.x - drag.grabbed.x, target.center.y - drag.grabbed.y) ?? drag.base.map((t) => ({ ...t })))
       host.changed()
     },
     endDrag() {

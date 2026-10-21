@@ -1265,6 +1265,8 @@ const itemHost: ItemToolHost = {
     furniturePanelOpen = true
   },
   newId: () => crypto.randomUUID(),
+  walls: () => walls,
+  pxPerCm: () => PX_PER_CM * view.zoom,
 }
 const itemTool = createItemTool(itemHost)
 
@@ -1653,6 +1655,7 @@ function drawFurniturePlan(): void {
       hoverDim: target.dim,
       marqueeHits,
       marquee,
+      tracks: centerGuideTracks(),
       ruler: tool === "ruler" && cursor && !gestureActive() ? rulerReading(cursor, walls) : null,
     },
   )
@@ -1848,10 +1851,12 @@ function drawMeasurePlan(): void {
   })
 }
 
-// риска центровки батареи по окну (change fix-battery-centering-and-numbers, design D2)
+// риски центровки: батареи по окну (change fix-battery-centering-and-numbers, design D2) и мебели (change furniture-center-snap)
 function centerGuideTracks(): TrackLine[] | null {
   const guide = tool === "battery" || batteryTool.dragging() ? batteryTool.guide() : null
-  return guide ? [guide] : null
+  const furnitureGuides = tool === "furniture" || itemTool.dragging() ? itemTool.guides() : []
+  const tracks = [...(guide ? [guide] : []), ...furnitureGuides]
+  return tracks.length > 0 ? tracks : null
 }
 
 // нажатая кнопка мыши: рамка, перетаскивание стен или размера, протяжка пометки, сдвиг вида
