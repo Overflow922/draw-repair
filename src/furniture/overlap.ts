@@ -4,15 +4,16 @@ import { segmentShape } from "../communications/shape"
 import type { Shape } from "../communications/shape"
 import { hostOf } from "../doorway/doorway-faces"
 import { cutPieces, openingLines } from "../doorway/doorway-layout"
-import type { Battery, Communication, Point, Table, Wall, WallElement } from "../types"
+import type { Battery, Communication, Point, FurnitureItem, Wall, WallElement } from "../types"
 import { clipHalfPlane, displayPolygons, polygonArea } from "../wall-geometry"
-import { tableCorners } from "./table"
+import type { FurnitureKind } from "./furniture-kinds"
+import { itemCorners } from "./item"
 
 // Пересечения стола с другими объектами (change furniture-plan-table, design D4): препятствия приводятся к многоугольникам,
 // пересечение — отсечение многоугольника препятствия сторонами прямоугольника стола. Касание граней пересечением не является:
 // наложение распознаётся при глубине больше RECOGNITION_DEPTH_CM (как в wall-collision). Чистые функции, входы не мутируются.
 
-export const OBSTACLE_ORDER = ["wall", "drywall", "plaster", "opening", "door", "window", "battery", "communication", "table"] as const
+export const OBSTACLE_ORDER = ["wall", "drywall", "plaster", "opening", "door", "window", "battery", "communication", "furniture"] as const
 
 export type ObstacleKind = (typeof OBSTACLE_ORDER)[number]
 
@@ -23,8 +24,11 @@ export interface Obstacle {
 
 export interface Overlap {
   kind: ObstacleKind
-  // стол, чьё пересечение это; у пересечения двух столов — тот, чей идентификатор меньше
-  tableId: string
+  // предмет, чьё пересечение это; у пересечения двух предметов — тот, чей идентификатор меньше
+  itemId: string
+  itemKind: FurnitureKind
+  // вид второго предмета у пересечения двух предметов (kind "furniture"), иначе не задан
+  otherKind?: FurnitureKind
   region: Point[]
 }
 
@@ -86,8 +90,8 @@ export function obstaclesOf(source: ObstacleSource): Obstacle[] {
 const wallPieces = (w: Wall, all: readonly Wall[]): Point[][] => displayPolygons(w, [...all]).map((p) => [...p])
 
 // сторона прямоугольника: отсечение оставляет точки со скалярным произведением (q − c)·n ≥ −half
-function clipByRect(poly: readonly Point[], t: Table, shrinkCm: number): Point[] {
-  const [p0, p1, , p3] = tableCorners(t)
+function clipByRect(poly: readonly Point[], t: FurnitureItem, shrinkCm: number): Point[] {
+  const [p0, p1, , p3] = itemCorners(t)
   const c = { x: t.x, y: t.y }
   const len = (a: Point, b: Point): number => Math.hypot(b.x - a.x, b.y - a.y)
   const w = len(p0, p1)
@@ -106,7 +110,7 @@ function clipByRect(poly: readonly Point[], t: Table, shrinkCm: number): Point[]
 }
 
 // область пересечения многоугольника со столом или null: распознаётся по столу, сжатому на допуск, область — по полному столу
-function overlapRegion(poly: readonly Point[], t: Table): Point[] | null {
+function overlapRegion(poly: readonly Point[], t: FurnitureItem): Point[] | null {
   if (poly.length < 3) return null
   const core = clipByRect(poly, t, RECOGNITION_DEPTH_CM)
   if (core.length < 3 || polygonArea(core) <= MIN_AREA_CM2) return null
@@ -114,28 +118,28 @@ function overlapRegion(poly: readonly Point[], t: Table): Point[] | null {
 }
 
 // пересечения одного стола с препятствиями и с другими столами (для призрака и выделенного стола)
-export function tableOverlaps(table: Table, obstacles: readonly Obstacle[], others: readonly Table[] = []): Overlap[] {
+export function itemOverlaps(table: FurnitureItem, obstacles: readonly Obstacle[], others: readonly FurnitureItem[] = []): Overlap[] {
   const out: Overlap[] = []
   for (const o of obstacles)
     for (const poly of o.polygons) {
       const region = overlapRegion(poly, table)
-      if (region) out.push({ kind: o.kind, tableId: table.id, region })
+      if (region) out.push({ kind: o.kind, itemId: table.id, itemKind: table.kind, region })
     }
   for (const other of others) {
     if (other.id === table.id) continue
-    const region = overlapRegion(tableCorners(other), table)
-    if (region) out.push({ kind: "table", tableId: table.id, region })
+    const region = overlapRegion(itemCorners(other), table)
+    if (region) out.push({ kind: "furniture", itemId: table.id, itemKind: table.kind, otherKind: other.kind, region })
   }
   return out
 }
 
 // пересечения всех столов плана; пара столов даёт одну область (у стола с меньшим идентификатором)
-export function furnitureOverlaps(tables: readonly Table[], obstacles: readonly Obstacle[]): Overlap[] {
-  return tables.flatMap((t) =>
-    tableOverlaps(
+export function furnitureOverlaps(items: readonly FurnitureItem[], obstacles: readonly Obstacle[]): Overlap[] {
+  return items.flatMap((t) =>
+    itemOverlaps(
       t,
       obstacles,
-      tables.filter((o) => o.id > t.id),
+      items.filter((o) => o.id > t.id),
     ),
   )
 }

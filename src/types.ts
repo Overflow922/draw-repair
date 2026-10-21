@@ -1,3 +1,4 @@
+import type { FurnitureKind } from "./furniture/furniture-kinds"
 import type { PlanId } from "./plans"
 
 export interface Point {
@@ -288,10 +289,12 @@ export interface ReconstructionContent {
   notes?: string[]
 }
 
-// Стол плана «Мебель» (change furniture-plan-table, design D2): прямоугольник с центром (x, y); ширина вдоль оси X и длина вдоль
-// оси Y при угле 0; угол в градусах по часовой на экране, диапазон [0, 360), вращение вокруг центра
-export interface Table {
+// Предмет мебели плана «Мебель» (change furniture-plan-table, design D2; change furniture-items-catalog, design D1): вид из
+// каталога и прямоугольник с центром (x, y); ширина вдоль оси X и длина вдоль оси Y при угле 0; угол в градусах по часовой
+// на экране, диапазон [0, 360), вращение вокруг центра
+export interface FurnitureItem {
   id: string
+  kind: FurnitureKind
   x: number
   y: number
   widthCm: number
@@ -301,7 +304,7 @@ export interface Table {
 
 // Собственные объекты плана «Мебель» (change furniture-plan-table, design D2): столы и размеры плана, выноски и примечания
 export interface FurnitureContent {
-  tables: Table[]
+  items: FurnitureItem[]
   dimensions: Dimension[]
   callouts?: Callout[]
   notes?: string[]

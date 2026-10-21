@@ -23,28 +23,23 @@
             <div id="plan-switch" aria-label="Планы"></div>
           </header>
           <aside id="toolbar" class="panel">
-            <div class="tool-anchor" data-tools="table">
+            <div class="tool-anchor" data-tools="furniture">
               <button id="tool-furniture" class="tool" title="Мебель" type="button">
                 <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round"><rect x="3" y="7" width="18" height="5" rx="1"/><path d="M6 12v7M18 12v7"/></svg>
               </button>
               <div id="furniture-panel" class="panel tool-panel">
-                <div class="group-tools" aria-label="Инструменты группы «Мебель»">
-                  <button id="tool-table" class="group-tool active" title="Стол" type="button">
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round"><rect x="3" y="7" width="18" height="5" rx="1"/><path d="M6 12v7M18 12v7"/></svg>
-                    <span>Стол</span>
-                  </button>
-                </div>
-                <label class="thickness-field" title="Ширина стола (вдоль X при угле 0)">
-                  <span id="table-width-unit">Ширина, мм</span>
-                  <input id="table-width" type="text" inputmode="decimal" />
+                <div id="furniture-kinds" class="group-tools" aria-label="Инструменты группы «Мебель»"></div>
+                <label class="thickness-field" title="Ширина (вдоль X при угле 0)">
+                  <span id="furniture-width-unit">Ширина, мм</span>
+                  <input id="furniture-width" type="text" inputmode="decimal" />
                 </label>
-                <label class="thickness-field" title="Длина стола (вдоль Y при угле 0)">
-                  <span id="table-length-unit">Длина, мм</span>
-                  <input id="table-length" type="text" inputmode="decimal" />
+                <label class="thickness-field" title="Длина (вдоль Y при угле 0)">
+                  <span id="furniture-length-unit">Длина, мм</span>
+                  <input id="furniture-length" type="text" inputmode="decimal" />
                 </label>
-                <label class="thickness-field" title="Угол поворота стола по часовой стрелке, градусы">
+                <label class="thickness-field" title="Угол поворота по часовой стрелке, градусы">
                   <span>Угол, °</span>
-                  <input id="table-angle" type="text" inputmode="decimal" />
+                  <input id="furniture-angle" type="text" inputmode="decimal" />
                 </label>
               </div>
             </div>

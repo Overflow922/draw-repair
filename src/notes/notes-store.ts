@@ -40,7 +40,7 @@ export function withNotes(drawing: Drawing, plan: PlanId, list: string[]): Drawi
   if (plan === "demolition") return { ...drawing, demolitionNotes: list }
   if (plan === "rough") return { ...drawing, roughNotes: list }
   if (plan === "reconstruction") return { ...drawing, reconstruction: { ...(drawing.reconstruction ?? { walls: [], dimensions: [] }), notes: list } }
-  if (plan === "furniture") return { ...drawing, furniture: { ...(drawing.furniture ?? { tables: [], dimensions: [] }), notes: list } }
+  if (plan === "furniture") return { ...drawing, furniture: { ...(drawing.furniture ?? { items: [], dimensions: [] }), notes: list } }
   const mounting = drawing.mounting ?? { walls: [], dimensions: [] }
   return { ...drawing, mounting: { ...mounting, notes: list } }
 }

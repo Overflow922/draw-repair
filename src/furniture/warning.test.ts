@@ -4,7 +4,10 @@ import { warningText } from "./warning"
 
 // change furniture-plan-table: текст плашки (spec furniture-plan «Пересечения стола»)
 
-const overlap = (kind: Overlap["kind"]): Overlap => ({ kind, tableId: "t", region: [] })
+// TCR (change furniture-items-catalog): вид препятствия «стол» стал общим видом «furniture»; у пересечения есть вид предмета, а у
+// пересечения двух предметов — и вид второго
+const overlap = (kind: Overlap["kind"]): Overlap =>
+  kind === "furniture" ? { kind, itemId: "t", itemKind: "table", otherKind: "table", region: [] } : { kind, itemId: "t", itemKind: "table", region: [] }
 
 describe("текст плашки", () => {
   it("FP-320: без пересечений плашки нет", () => {
@@ -16,7 +19,7 @@ describe("текст плашки", () => {
   })
 
   it("FP-322: виды без повторов в порядке «стена, гипсокартон, штукатурка, проём, дверь, окно, батарея, коммуникация, стол»", () => {
-    const all = (["table", "communication", "battery", "window", "door", "opening", "plaster", "drywall", "wall", "wall"] as const).map(overlap)
+    const all = (["furniture", "communication", "battery", "window", "door", "opening", "plaster", "drywall", "wall", "wall"] as const).map(overlap)
     expect(warningText(all)).toBe("Стол пересекается: стена, гипсокартон, штукатурка, проём, дверь, окно, батарея, коммуникация, стол")
   })
 

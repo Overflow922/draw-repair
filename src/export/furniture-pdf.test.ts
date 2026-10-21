@@ -1,10 +1,10 @@
 import { readFileSync } from "node:fs"
 import type { jsPDF } from "jspdf"
 import { describe, expect, it } from "vitest"
-import { conflictColor, tableColors } from "../furniture/furniture-render"
+import { conflictColor, itemColors } from "../furniture/furniture-render"
 import { drywallColors } from "../reconstruction/reconstruction-render"
 import { content, drawing, drywall, plaster, rectWalls, wall } from "../reconstruction/reconstruction.test-utils"
-import type { Battery, Communication, Drawing, Table } from "../types"
+import type { Battery, Communication, Drawing, FurnitureItem } from "../types"
 import { LEGEND_ROW_PITCH_MM, legendEntries } from "./legend"
 import type { PageFormat } from "./page-format"
 import { parsePaint } from "./pdf-paint.test-utils"
@@ -14,14 +14,15 @@ import type { PlanPage } from "./pdf"
 
 // change furniture-plan-table: шестая страница PDF — план «Мебель» и записи легенды
 // (spec pdf-export «Страница плана «Мебель»», «Легенда на странице PDF»)
+// TCR (change furniture-items-catalog): стол стал предметом мебели (Table → FurnitureItem, tables → items, table*.ts → item*.ts) с видом «table»; меняются только имена и вид в данных, утверждения о поведении не менялись
 
 const font = readFileSync(new URL("../assets/pt-sans-regular.ttf", import.meta.url)).toString("base64")
 const SEP = new Date(2026, 8, 5, 14, 32, 7)
 
 const build = (d: Drawing, scale = 50, format: PageFormat = "A3"): jsPDF => buildPdfPages(pagesOf(d), "cm", scale, format, font, d.name, SEP)
 
-const table = (id: string, x: number, y: number, angleDeg = 0): Table => ({ id, x, y, widthCm: 80, lengthCm: 160, angleDeg })
-const withTables = (d: Drawing, tables: Table[]): Drawing => ({ ...d, furniture: { tables, dimensions: [] } })
+const table = (id: string, x: number, y: number, angleDeg = 0): FurnitureItem => ({ id, kind: "table", x, y, widthCm: 80, lengthCm: 160, angleDeg })
+const withTables = (d: Drawing, items: FurnitureItem[]): Drawing => ({ ...d, furniture: { items, dimensions: [] } })
 const ROOM = (): ReturnType<typeof rectWalls> => rectWalls("k", 0, 0, 420, 520)
 const G = (): ReturnType<typeof drywall> => drywall("g", 20, 30, 220, 30, 10, 270)
 const PLAN = (): Drawing => drawing({ walls: ROOM(), roughPlaster: [plaster("a", "k1", 1, "a", 0, 420, 20)], reconstruction: content([G()]) })
@@ -33,7 +34,7 @@ const rgbOf = (hex: string): readonly [number, number, number] => {
 const near = (a: readonly number[], b: readonly number[]): boolean => a.every((v, i) => Math.abs(v - (b[i] ?? 0)) < 0.01)
 const fillsOf = (doc: jsPDF, page: number, color: readonly number[]): Extract<PaintOp, { kind: "fill" }>[] =>
   parsePaint(doc, page).filter((op): op is Extract<PaintOp, { kind: "fill" }> => op.kind === "fill" && near(op.color, color))
-const TABLE_COLOR = rgbOf(tableColors("light").fill)
+const TABLE_COLOR = rgbOf(itemColors("table", "light").fill)
 const GREEN = rgbOf(drywallColors("light").fill)
 const labels = (page: PlanPage): string[] => legendEntries(page).map((e) => e.label)
 const must = (page: PlanPage | undefined): PlanPage => {
@@ -100,7 +101,7 @@ describe("страница «Мебель» в PDF", () => {
 })
 
 describe("легенда страницы «Мебель»", () => {
-  const withObjects = (tables: Table[]): Drawing => withTables(PLAN(), tables)
+  const withObjects = (items: FurnitureItem[]): Drawing => withTables(PLAN(), items)
 
   it("FP-410: «Кирпич», «Штукатурка», «Гипсокартон», «Стол» в этом порядке", () => {
     expect(labels(must(pagesOf(withObjects([table("t", 200, 260)]))[5]))).toEqual(["Кирпич", "Штукатурка", "Гипсокартон", "Стол"])

@@ -1,4 +1,6 @@
 import { CHAR_WIDTH } from "../doorway/element-label"
+import { FURNITURE_KIND_ORDER, kindEntry } from "../furniture/furniture-kinds"
+import type { FurnitureKind } from "../furniture/furniture-kinds"
 import { MATERIALS, normalizeMaterial } from "../types"
 import type { Material } from "../types"
 import type { PlanPage } from "./pdf"
@@ -15,7 +17,7 @@ export type LegendEntry =
   | { kind: "plaster"; label: string }
   | { kind: "screed"; label: string }
   | { kind: "drywall"; label: string }
-  | { kind: "table"; label: string }
+  | { kind: "furniture"; item: FurnitureKind; label: string }
 
 export const LEGEND_PAD_LEFT_MM = 8
 export const LEGEND_SAMPLE_W_MM = 16
@@ -49,7 +51,9 @@ export function legendEntries(page: PlanPage): LegendEntry[] {
   const screeds = page.rough?.screeds ?? []
   if (screeds.length > 0) entries.push({ kind: "screed", label: `Стяжка до ${Math.max(...screeds.map((s) => s.screed.thicknessMm))} мм` })
   if (drywall > 0) entries.push({ kind: "drywall", label: "Гипсокартон" })
-  if ((page.furniture?.tables.length ?? 0) > 0) entries.push({ kind: "table", label: "Стол" })
+  // мебель: запись на каждый вид каталога, чьи предметы есть на странице, в порядке каталога (change furniture-items-catalog, design D6)
+  for (const item of FURNITURE_KIND_ORDER)
+    if (page.furniture?.items.some((i) => i.kind === item)) entries.push({ kind: "furniture", item, label: kindEntry(item).label })
   return entries
 }
 

@@ -2,16 +2,17 @@ import { describe, expect, it } from "vitest"
 import { calloutsOf, withCallouts } from "../callout/callout-store"
 import { notesOf, withNotes } from "../notes/notes-store"
 import { PLANS, activePlanOf, defaultToolOf, historyKey, isPlanId, toolsOf } from "../plans"
-import type { Callout, Drawing, Table } from "../types"
+import type { Callout, Drawing, FurnitureItem } from "../types"
 
 // change furniture-plan-table: план «Мебель» в каталоге, его инструменты, выноски и примечания
 // (spec drawing-plans «Каталог планов», «Инструменты плана»; furniture-plan «Инструменты плана «Мебель»»)
+// TCR (change furniture-items-catalog): стол стал предметом мебели (Table → FurnitureItem, tables → items, table*.ts → item*.ts) с видом «table»; меняются только имена и вид в данных, утверждения о поведении не менялись
 
 const drawing = (extra: Record<string, unknown> = {}): Drawing =>
   ({ id: "a", name: "Чертёж 1", walls: [], dimensions: [], view: { zoom: 1, pan: { x: 0, y: 0 } }, ...extra }) as Drawing
 
 const callout: Callout = { id: "c", target: { x: 1, y: 2 }, at: { x: 3, y: 4 }, text: "Стол у окна" }
-const table: Table = { id: "t", x: 0, y: 0, widthCm: 80, lengthCm: 160, angleDeg: 0 }
+const table: FurnitureItem = { id: "t", kind: "table", x: 0, y: 0, widthCm: 80, lengthCm: 160, angleDeg: 0 }
 
 describe("каталог", () => {
   it("FP-200: «Мебель» (furniture) — шестой, последний план каталога", () => {
@@ -38,8 +39,8 @@ describe("каталог", () => {
 
 describe("инструменты", () => {
   it("FP-203: набор — «Стол» (группа «Мебель»), «Размер», «Выноска», «Линейка», «Примечания», «Ластик»; по умолчанию «Стол»", () => {
-    expect(toolsOf("furniture")).toEqual(["table", "dimension", "callout", "ruler", "notes", "eraser"])
-    expect(defaultToolOf("furniture")).toBe("table")
+    expect(toolsOf("furniture")).toEqual(["furniture", "dimension", "callout", "ruler", "notes", "eraser"])
+    expect(defaultToolOf("furniture")).toBe("furniture")
   })
 
   it("FP-203: инструментов других планов на плане нет", () => {
@@ -48,7 +49,7 @@ describe("инструменты", () => {
   })
 
   it("FP-204: «Стол» есть только на плане «Мебель»", () => {
-    for (const plan of ["measure", "demolition", "mounting", "rough", "reconstruction"] as const) expect(toolsOf(plan)).not.toContain("table")
+    for (const plan of ["measure", "demolition", "mounting", "rough", "reconstruction"] as const) expect(toolsOf(plan)).not.toContain("furniture")
   })
 
   it("FP-205: наборы остальных планов не изменились", () => {
@@ -88,8 +89,8 @@ describe("выноски и примечания плана", () => {
   })
 
   it("FP-208: запись выносок и примечаний плана не стирает его столы и размеры", () => {
-    const base = drawing({ furniture: { tables: [table], dimensions: [] } })
-    expect(withCallouts(base, "furniture", [callout]).furniture?.tables).toEqual([table])
-    expect(withNotes(base, "furniture", ["x"]).furniture?.tables).toEqual([table])
+    const base = drawing({ furniture: { items: [table], dimensions: [] } })
+    expect(withCallouts(base, "furniture", [callout]).furniture?.items).toEqual([table])
+    expect(withNotes(base, "furniture", ["x"]).furniture?.items).toEqual([table])
   })
 })

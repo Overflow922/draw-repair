@@ -3,33 +3,29 @@ import type { ReconstructionOptions, ReconstructionView } from "../reconstructio
 import { SCREEN_METRICS, prepareCanvas, tracePolygons } from "../render"
 import { LIGHT_PALETTE } from "../theme"
 import type { Theme } from "../theme"
-import type { Point, Table, Unit, View } from "../types"
+import type { Point, FurnitureItem, Unit, View } from "../types"
 import type { Overlap } from "./overlap"
-import { tableCorners } from "./table"
+import { kindEntry } from "./furniture-kinds"
+import type { FurnitureKind, ItemColors } from "./furniture-kinds"
+import { itemCorners } from "./item"
 
 // Отрисовка плана «Мебель» (change furniture-plan-table, design D8): подложка — результат «Реконструкции» (рисует её функция
 // плана «Реконструкция»), поверх неё столы в реальном масштабе, затем подсветка пересечений, затем размеры. Одна функция для
 // холста и PDF: в PDF подсветка и призрак не передаются.
 
-export interface TableColors {
-  fill: string
-  stroke: string
-}
-
-// стол — тёплая заливка с тёмным контуром, отличная от серой подложки, зелёного гипсокартона и красной подсветки;
-// PDF — всегда светлая схема (spec furniture-plan «Отображение плана «Мебель» и цвет стола»)
-export const tableColors = (theme: Theme): TableColors =>
-  theme === "dark" ? { fill: "#b8863f", stroke: "#f3dcae" } : { fill: "#e0b46c", stroke: "#6b4510" }
+// цвет предмета задаёт каталог видов; PDF — всегда светлая схема (spec furniture-plan «Отображение плана «Мебель» и цвет стола»,
+// «Каталог видов мебели»)
+export const itemColors = (kind: FurnitureKind, theme: Theme): ItemColors => kindEntry(kind).colors[theme]
 
 // область пересечения стола с другими объектами — красная, полупрозрачная; цвет задаётся схемой
 export const conflictColor = (theme: Theme): string => (theme === "dark" ? "rgba(248, 113, 113, 0.6)" : "rgba(220, 38, 38, 0.55)")
 
 export interface FurnitureView extends ReconstructionView {
-  tables: readonly Table[]
-  selectedTableIds?: ReadonlySet<string>
-  erasingTableId?: string | null
+  items: readonly FurnitureItem[]
+  selectedItemIds?: ReadonlySet<string>
+  erasingItemId?: string | null
   // призрак под указателем у инструмента «Стол»
-  tableGhost?: Table | null
+  itemGhost?: FurnitureItem | null
   // области пересечений; только на холсте
   overlaps?: readonly Overlap[]
 }
@@ -47,14 +43,14 @@ export function drawFurnitureScene(
 ): void {
   const m = opts.metrics ?? SCREEN_METRICS
   const palette = opts.palette ?? LIGHT_PALETTE
-  const colors = tableColors(opts.theme ?? "light")
+  const theme = opts.theme ?? "light"
 
-  const outline = (t: Table, toScreen: (p: Point) => Point): Point[] => tableCorners(t).map(toScreen)
+  const outline = (t: FurnitureItem, toScreen: (p: Point) => Point): Point[] => itemCorners(t).map(toScreen)
 
   const above = (c: CanvasRenderingContext2D, toScreen: (p: Point) => Point): void => {
     // обводка выделения и ластика — под телом стола
-    for (const t of scene.tables) {
-      const color = scene.erasingTableId === t.id ? palette.erase : scene.selectedTableIds?.has(t.id) ? palette.selection : null
+    for (const t of scene.items) {
+      const color = scene.erasingItemId === t.id ? palette.erase : scene.selectedItemIds?.has(t.id) ? palette.selection : null
       if (!color) continue
       c.strokeStyle = color
       c.fillStyle = color
@@ -67,7 +63,8 @@ export function drawFurnitureScene(
       c.stroke()
       c.lineJoin = "miter"
     }
-    const paint = (t: Table): void => {
+    const paint = (t: FurnitureItem): void => {
+      const colors = itemColors(t.kind, theme)
       c.fillStyle = colors.fill
       c.strokeStyle = colors.stroke
       c.lineWidth = m.contourPx
@@ -75,13 +72,13 @@ export function drawFurnitureScene(
       c.fill()
       c.stroke()
     }
-    for (const t of scene.tables) paint(t)
-    if (scene.tableGhost) {
+    for (const t of scene.items) paint(t)
+    if (scene.itemGhost) {
       c.globalAlpha = GHOST_ALPHA
-      paint(scene.tableGhost)
+      paint(scene.itemGhost)
       c.globalAlpha = 1
     }
-    c.fillStyle = conflictColor(opts.theme ?? "light")
+    c.fillStyle = conflictColor(theme)
     for (const o of scene.overlaps ?? []) {
       tracePolygons(c, [o.region.map(toScreen)])
       c.fill()

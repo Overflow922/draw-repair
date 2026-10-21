@@ -38,7 +38,7 @@ const PLAN_TOOLS: Record<PlanId, readonly [Tool, ...Tool[]]> = {
   // «Реконструкция» (change reconstruction-plan, design D9): стены гипсокартона поверх подложки «Черновых работ»
   reconstruction: ["drywall", "dimension", "callout", "ruler", "notes", "eraser"],
   // «Мебель» (change furniture-plan-table, design D1): столы поверх подложки «Реконструкции»; «Стол» — в группе «Мебель»
-  furniture: ["table", "dimension", "callout", "ruler", "notes", "eraser"],
+  furniture: ["furniture", "dimension", "callout", "ruler", "notes", "eraser"],
 }
 
 export const toolsOf = (plan: PlanId): readonly Tool[] => PLAN_TOOLS[plan]

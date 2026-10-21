@@ -21,7 +21,7 @@ import type { ExplicatedRoom } from "../room-explication"
 import type { PlasterPiece } from "../rough/plaster"
 import { drawFurnitureScene } from "../furniture/furniture-render"
 import { furnitureScene } from "../furniture/furniture-scene"
-import { tableCorners } from "../furniture/table"
+import { itemCorners } from "../furniture/item"
 import { drawReconstructionScene } from "../reconstruction/reconstruction-render"
 import { reconstructionScene } from "../reconstruction/reconstruction-scene"
 import { drawRoughScene, roughExtent } from "../rough/rough-render"
@@ -34,7 +34,7 @@ import { calloutLayout } from "../callout/callout-layout"
 import { calloutsOf } from "../callout/callout-store"
 import { notesOf } from "../notes/notes-store"
 import { CHAR_WIDTH } from "../doorway/element-label"
-import type { Battery, Callout, Communication, Dimension, Drawing, DrywallWall, Point, Screed, Table, Unit, Wall, WallElement } from "../types"
+import type { Battery, Callout, Communication, Dimension, Drawing, DrywallWall, Point, Screed, FurnitureItem, Unit, Wall, WallElement } from "../types"
 import { FONT_B64 } from "./font"
 import { PAGE_FORMATS_MM } from "./page-format"
 import type { PageFormat } from "./page-format"
@@ -178,7 +178,7 @@ export interface PlanPage {
   // гипсокартона; walls страницы — подложка, dimensions — размеры самого плана
   reconstruction?: ReconstructionLayer
   // столы плана «Мебель» (change furniture-plan-table, design D9): у страницы этого плана рядом лежит и reconstruction (подложка)
-  furniture?: { tables: readonly Table[] }
+  furniture?: { items: readonly FurnitureItem[] }
 }
 
 export interface RoughLayer {
@@ -275,7 +275,7 @@ export function pagesOf(drawing: Drawing): PlanPage[] {
           ...callouts,
           ...notes,
           reconstruction: { pieces: scene.base.pieces, drywall: scene.base.own },
-          furniture: { tables: scene.tables },
+          furniture: { items: scene.items },
           title: plan.label,
         }
       }
@@ -311,8 +311,8 @@ export function pageBounds(page: PlanPage, scale: number): BBox {
   // штукатурка подложки плана «Реконструкция»; стены гипсокартона входят в габариты как стены
   const reconstruction = page.reconstruction ? roughExtent({ pieces: page.reconstruction.pieces, screeds: [] }, kMm, PDF_METRICS.labelPx) : []
   // углы столов плана «Мебель»
-  const tables = (page.furniture?.tables ?? []).flatMap(tableCorners)
-  const extra = [...marks, ...bodies, ...rects, ...calloutPoints, ...rough, ...reconstruction, ...tables]
+  const items = (page.furniture?.items ?? []).flatMap(itemCorners)
+  const extra = [...marks, ...bodies, ...rects, ...calloutPoints, ...rough, ...reconstruction, ...items]
   const walls = page.reconstruction ? [...page.walls, ...page.reconstruction.drywall] : page.walls
   return wallsBBox(walls, page.dimensions, 0.5 * scale, page.doorways, scale, extra, batteries)
 }
@@ -373,7 +373,7 @@ function drawPage(
     }
     const opts = { grid: false, metrics: PDF_METRICS, palette: LIGHT_PALETTE, theme: "light", dimensions: page.dimensions } as const
     // страница «Мебель»: подложка и столы без подсветки пересечений
-    if (page.furniture !== undefined) drawFurnitureScene(ctx, w, h, { ...scene, tables: page.furniture.tables }, unit, view, opts)
+    if (page.furniture !== undefined) drawFurnitureScene(ctx, w, h, { ...scene, items: page.furniture.items }, unit, view, opts)
     else drawReconstructionScene(ctx, w, h, scene, unit, view, opts)
     return
   }

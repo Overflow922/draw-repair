@@ -56,18 +56,20 @@ import { UNIT_TO_CM } from "./format-length"
 import { isDrywallWall, loadStore, saveStore } from "./storage"
 import { DRYWALL_DEFAULTS, editParams, newDrywallWall, panelValues, parseLengthField } from "./reconstruction/drywall-params"
 import type { DrywallParams } from "./reconstruction/drywall-params"
+import { FURNITURE_KIND_ORDER, kindEntry } from "./furniture/furniture-kinds"
+import type { FurnitureKind } from "./furniture/furniture-kinds"
 import { renderFurniture } from "./furniture/furniture-render"
 import { furnitureScene } from "./furniture/furniture-scene"
 import type { FurnitureScene } from "./furniture/furniture-scene"
 import { openFurniture, storedFurniture } from "./furniture/furniture-workspace"
 import type { Workspace as FurnitureWorkspace } from "./furniture/furniture-workspace"
-import { furnitureOverlaps, obstaclesOf, tableOverlaps } from "./furniture/overlap"
+import { furnitureOverlaps, obstaclesOf, itemOverlaps } from "./furniture/overlap"
 import type { Obstacle, Overlap } from "./furniture/overlap"
-import { tablesInRect } from "./furniture/table-edit"
-import { TABLE_DEFAULTS, editParams as editTableParams, panelValues as tablePanelValues, parseAngleField } from "./furniture/table-params"
-import type { TableParams } from "./furniture/table-params"
-import { createTableTool } from "./furniture/table-tool"
-import type { TableToolHost } from "./furniture/table-tool"
+import { itemsInRect } from "./furniture/item-edit"
+import { editParams as editItemParams, initialKindParams, panelValues as itemPanelValues, parseAngleField, paramsOfKind, withKindParams } from "./furniture/item-params"
+import type { ItemParams } from "./furniture/item-params"
+import { createItemTool } from "./furniture/item-tool"
+import type { ItemToolHost } from "./furniture/item-tool"
 import { warningText } from "./furniture/warning"
 import { PLASTER_OBSTACLE_PREFIX } from "./reconstruction/plaster-obstacles"
 import { renderReconstruction } from "./reconstruction/reconstruction-render"
@@ -98,7 +100,7 @@ import { afterPlace, escapeAction, resumesAfterSelectionCleared, selectionAllowe
 import { loadThemeChoice, paletteOf, resolveTheme, saveThemeChoice, themeToggleTitle, toggledTheme } from "./theme"
 import type { Theme } from "./theme"
 import { GRID_STEP_CM, MATERIALS, PX_PER_CM } from "./types"
-import type { Battery, BatteryMark, Communication, DemolitionMark, Dimension, DimPoint, Drawing, DrywallWall, Material, PlasterMark, Point, RightAngleMark, RoomRecord, Screed, Table, Unit, View, Wall, WallElement } from "./types"
+import type { Battery, BatteryMark, Communication, DemolitionMark, Dimension, DimPoint, Drawing, DrywallWall, Material, PlasterMark, Point, RightAngleMark, RoomRecord, Screed, FurnitureItem, Unit, View, Wall, WallElement } from "./types"
 
 const canvas = document.querySelector<HTMLCanvasElement>("#canvas")!
 const canvasWrap = document.querySelector<HTMLElement>("#canvas-wrap")!
@@ -137,12 +139,26 @@ const drywallThicknessUnit = document.querySelector<HTMLElement>("#drywall-thick
 const drywallHeightUnit = document.querySelector<HTMLElement>("#drywall-height-unit")!
 const toolFurnitureBtn = document.querySelector<HTMLButtonElement>("#tool-furniture")!
 const furniturePanel = document.querySelector<HTMLElement>("#furniture-panel")!
-const toolTableBtn = document.querySelector<HTMLButtonElement>("#tool-table")!
-const tableWidthInput = document.querySelector<HTMLInputElement>("#table-width")!
-const tableLengthInput = document.querySelector<HTMLInputElement>("#table-length")!
-const tableAngleInput = document.querySelector<HTMLInputElement>("#table-angle")!
-const tableWidthUnit = document.querySelector<HTMLElement>("#table-width-unit")!
-const tableLengthUnit = document.querySelector<HTMLElement>("#table-length-unit")!
+// кнопки видов в панели группы «Мебель» — по одной на вид каталога, в порядке каталога (spec furniture-plan «Каталог видов мебели»)
+const furnitureKindsRow = document.querySelector<HTMLElement>("#furniture-kinds")!
+const furnitureKindButtons = new Map<FurnitureKind, HTMLButtonElement>(
+  FURNITURE_KIND_ORDER.map((kind) => {
+    const entry = kindEntry(kind)
+    const button = document.createElement("button")
+    button.id = `tool-furniture-${kind}`
+    button.className = "group-tool"
+    button.type = "button"
+    button.title = entry.label
+    button.innerHTML = `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round">${entry.icon}</svg><span>${entry.label}</span>`
+    furnitureKindsRow.append(button)
+    return [kind, button]
+  }),
+)
+const furnitureWidthInput = document.querySelector<HTMLInputElement>("#furniture-width")!
+const furnitureLengthInput = document.querySelector<HTMLInputElement>("#furniture-length")!
+const furnitureAngleInput = document.querySelector<HTMLInputElement>("#furniture-angle")!
+const furnitureWidthUnit = document.querySelector<HTMLElement>("#furniture-width-unit")!
+const furnitureLengthUnit = document.querySelector<HTMLElement>("#furniture-length-unit")!
 const furnitureWarning = document.querySelector<HTMLElement>("#furniture-warning")!
 const roomEditor = document.querySelector<HTMLElement>("#room-editor")!
 const roomNameInput = document.querySelector<HTMLInputElement>("#room-name")!
@@ -194,13 +210,16 @@ let reconCache: ReconstructionScene | null = null
 let drywallParams: DrywallParams = { ...DRYWALL_DEFAULTS }
 let drywallPanelOpen = false
 // рабочий набор плана «Мебель» (change furniture-plan-table, design D3): walls — вся подложка только для чтения, dimensions —
-// видимые размеры плана, tables — столы; в чертёж пишутся столы и размеры (commitFurniture). Препятствия считаются при загрузке
+// видимые размеры плана, items — столы; в чертёж пишутся столы и размеры (commitFurniture). Препятствия считаются при загрузке
 let furnitureWorkspace: FurnitureWorkspace | null = null
-let tables: Table[] = []
+let items: FurnitureItem[] = []
 let furnitureObstacles: Obstacle[] = []
 let furnitureCache: FurnitureScene | null = null
 // значения для новых столов: запоминаются в сеансе, в чертёж не входят
-let tableParams: TableParams = { ...TABLE_DEFAULTS }
+// активный вид инструмента «Мебель» и значения для новых предметов по видам: в сеансе, в чертеже не сохраняются
+let furnitureKind: FurnitureKind = "table"
+let kindParams = initialKindParams()
+const itemParamsOf = (kind: FurnitureKind): ItemParams => paramsOfKind(kindParams, kind)
 let furniturePanelOpen = false
 let selectedDoorways: WallElement[] = []
 // выделенная коммуникация (change add-communications): выделяется только на обмерочном плане, ровно одна
@@ -380,9 +399,9 @@ for (const input of [roomNameInput, roomHeightInput]) {
 
 const pushRecord = (): void => {
   nudgeBurst = false
-  tableTool.endBurst()
+  itemTool.endBurst()
   // на плане «Мебель» шаг истории хранит столы и размеры плана (change furniture-plan-table, design D7)
-  if (furnitureWorkspace) recordFurniture(activeHistory(), { tables, dimensions })
+  if (furnitureWorkspace) recordFurniture(activeHistory(), { items, dimensions })
   else record(activeHistory(), historyOf(scene()))
 }
 
@@ -426,7 +445,7 @@ function loadWorking(): void {
   reconWorkspace = null
   furnitureCache = null
   furnitureWorkspace = null
-  tables = []
+  items = []
   furnitureObstacles = []
   obstacles = []
   if (activePlanOf(d) === "furniture") {
@@ -435,7 +454,7 @@ function loadWorking(): void {
     const opened = openFurniture(d, s)
     walls = opened.scene.walls
     dimensions = opened.scene.dimensions
-    tables = opened.scene.tables
+    items = opened.scene.items
     doorways = s.base.base.doorways
     batteries = s.base.base.batteries
     workspace = null
@@ -511,8 +530,8 @@ function commitReconstruction(): void {
 function commitFurniture(): void {
   const drawing = store.drawings.find((d) => d.id === store.activeId)
   if (!furnitureWorkspace || !drawing) return // вкладка уже закрыта — писать некуда
-  const next = storedFurniture(tables, dimensions, furnitureWorkspace, drawing)
-  if (next.tables.length === 0 && next.dimensions.length === 0 && drawing.furniture === undefined) return
+  const next = storedFurniture(items, dimensions, furnitureWorkspace, drawing)
+  if (next.items.length === 0 && next.dimensions.length === 0 && drawing.furniture === undefined) return
   drawing.furniture = next
 }
 
@@ -1078,7 +1097,7 @@ const calloutHost: CalloutToolHost = {
     screedTool.clearSelection()
     rightAngleTool.cancel()
     rightAngleTool.clearSelection()
-    tableTool.clearSelection()
+    itemTool.clearSelection()
     closeRoughEditor()
     closeRoughPanels()
     setWallPanel(false)
@@ -1134,7 +1153,7 @@ const closeEditors = (): void => {
 // выделение стола — тоже выделение «другого объекта»: любое выделение и снятие выделения снимает его
 const closeNumberEditor = (): void => {
   closeEditors()
-  tableTool.clearSelection()
+  itemTool.clearSelection()
 }
 
 const resetElementTools = (): void => {
@@ -1157,8 +1176,8 @@ function selectDoorway(d: WallElement): void {
 
 const pushSnapshot = (snapshot: Scene): void => {
   nudgeBurst = false
-  tableTool.endBurst()
-  if (furnitureWorkspace) recordFurniture(activeHistory(), { tables, dimensions: snapshot.dimensions })
+  itemTool.endBurst()
+  if (furnitureWorkspace) recordFurniture(activeHistory(), { items, dimensions: snapshot.dimensions })
   else recordSnapshot(activeHistory(), historyOf(snapshot))
 }
 
@@ -1214,9 +1233,9 @@ function applyDrywallField(field: keyof DrywallParams, input: HTMLInputElement):
   redraw()
 }
 
-// план «Мебель» (change furniture-plan-table, design D6, D7): жесты над столами ведёт tableTool; здесь — состояние чертежа,
+// план «Мебель» (change furniture-plan-table, design D6, D7): жесты над столами ведёт itemTool; здесь — состояние чертежа,
 // одно выделение на холсте и панель группы «Мебель»
-function clearNonTableSelection(): void {
+function clearNonItemSelection(): void {
   closeEditors()
   selectedBatteries = []
   selectedCommunication = null
@@ -1226,65 +1245,68 @@ function clearNonTableSelection(): void {
   lengthDirty = false
 }
 
-const tableHost: TableToolHost = {
-  tables: () => tables,
-  setTables: (next) => {
-    tables = next
+const itemHost: ItemToolHost = {
+  items: () => items,
+  setItems: (next) => {
+    items = next
   },
-  params: () => tableParams,
+  kind: () => furnitureKind,
+  params: () => itemParamsOf(furnitureKind),
   record: (before) => {
     nudgeBurst = false
-    recordFurniture(activeHistory(), { tables: [...before], dimensions })
+    recordFurniture(activeHistory(), { items: [...before], dimensions })
   },
   changed: () => {
     dirty = true
   },
   redraw: () => redraw(),
   selected: () => {
-    clearNonTableSelection()
+    clearNonItemSelection()
     furniturePanelOpen = true
   },
   newId: () => crypto.randomUUID(),
 }
-const tableTool = createTableTool(tableHost)
+const itemTool = createItemTool(itemHost)
 
 // панель группы «Мебель»: значения единственного выделенного стола, иначе значения для новых; единицы — текущие
 function syncFurniturePanel(): void {
   furniturePanel.classList.toggle("open", furniturePanelOpen)
-  toolFurnitureBtn.classList.toggle("active", tool === "table")
-  tableWidthUnit.textContent = `Ширина, ${UNIT_LABEL[unit]}`
-  tableLengthUnit.textContent = `Длина, ${UNIT_LABEL[unit]}`
-  const shown = tablePanelValues(tableParams, tableTool.selectedTable())
-  if (document.activeElement !== tableWidthInput) tableWidthInput.value = formatCm(shown.widthCm, unit)
-  if (document.activeElement !== tableLengthInput) tableLengthInput.value = formatCm(shown.lengthCm, unit)
-  if (document.activeElement !== tableAngleInput) tableAngleInput.value = String(Math.round(shown.angleDeg * 100) / 100)
+  toolFurnitureBtn.classList.toggle("active", tool === "furniture")
+  for (const [kind, button] of furnitureKindButtons) button.classList.toggle("active", tool === "furniture" && kind === furnitureKind)
+  furnitureWidthUnit.textContent = `Ширина, ${UNIT_LABEL[unit]}`
+  furnitureLengthUnit.textContent = `Длина, ${UNIT_LABEL[unit]}`
+  const shown = itemPanelValues(itemParamsOf(furnitureKind), itemTool.selectedItem())
+  if (document.activeElement !== furnitureWidthInput) furnitureWidthInput.value = formatCm(shown.widthCm, unit)
+  if (document.activeElement !== furnitureLengthInput) furnitureLengthInput.value = formatCm(shown.lengthCm, unit)
+  if (document.activeElement !== furnitureAngleInput) furnitureAngleInput.value = String(Math.round(shown.angleDeg * 100) / 100)
 }
 
 // правка поля панели: единственный выделенный стол меняется одним шагом, иначе меняются значения для новых; недопустимое значение не применяется
-function applyTableField(field: keyof TableParams, input: HTMLInputElement): void {
+function applyItemField(field: keyof ItemParams, input: HTMLInputElement): void {
   const value = field === "angleDeg" ? parseAngleField(input.value) : parseLengthField(input.value, unit)
   if (value !== null) {
-    const edited = editTableParams(tableParams, tableTool.selectedTable(), { [field]: value })
-    tableParams = edited.params
-    if (edited.table) tableTool.replaceSelected(edited.table)
+    const edited = editItemParams(itemParamsOf(furnitureKind), itemTool.selectedItem(), { [field]: value })
+    kindParams = withKindParams(kindParams, furnitureKind, edited.params)
+    if (edited.table) itemTool.replaceSelected(edited.table)
   }
   input.blur()
   syncFurniturePanel()
   redraw()
 }
 
-const furnitureGroupState = (): GroupState<"table"> => ({ current: "table", active: tool === "table" ? "table" : "other", panelOpen: furniturePanelOpen })
+const furnitureGroupState = (): GroupState<FurnitureKind> => ({ current: furnitureKind, active: tool === "furniture" ? furnitureKind : "other", panelOpen: furniturePanelOpen })
 
-function applyFurnitureGroup(next: GroupState<"table">): void {
-  if (next.active !== "other" && next.active !== tool) setTool(next.active)
+function applyFurnitureGroup(next: GroupState<FurnitureKind>): void {
+  furnitureKind = next.current
+  if (next.active !== "other" && tool !== "furniture") setTool("furniture")
   furniturePanelOpen = next.panelOpen
   syncFurniturePanel()
 }
 
 // установка стола снимает инструмент, поставленный стол остаётся выделенным, панель остаётся открытой (spec furniture-plan «Постановка стола»)
-function leaveTablePlacing(): void {
+function leaveItemPlacing(): void {
   tool = "none"
-  tableTool.hover(null)
+  itemTool.hover(null)
   furniturePanelOpen = true
   syncToolUI()
   redraw()
@@ -1292,12 +1314,12 @@ function leaveTablePlacing(): void {
 
 // выделенные столы и размеры удаляются одним шагом истории
 function deleteFurnitureSelection(): void {
-  if (!tableTool.hasSelection() && selectedDimensions.length === 0) return
+  if (!itemTool.hasSelection() && selectedDimensions.length === 0) return
   pushRecord()
   const picked = new Set(selectedDimensions)
   setDimensions(dimensions.filter((d) => !picked.has(d)))
-  tables = tables.filter((t) => !tableTool.selectedIds().has(t.id))
-  tableTool.clearSelection()
+  items = items.filter((t) => !itemTool.selectedIds().has(t.id))
+  itemTool.clearSelection()
   selectedDimensions = []
   dirty = true
   redraw()
@@ -1305,8 +1327,8 @@ function deleteFurnitureSelection(): void {
 
 // пересечения столов и призрака с препятствиями подложки; не хранятся, считаются по текущему состоянию
 function currentOverlaps(): Overlap[] {
-  const ghost = tool === "table" ? tableTool.ghost() : null
-  return [...furnitureOverlaps(tables, furnitureObstacles), ...(ghost ? tableOverlaps(ghost, furnitureObstacles, tables) : [])]
+  const ghost = tool === "furniture" ? itemTool.ghost() : null
+  return [...furnitureOverlaps(items, furnitureObstacles), ...(ghost ? itemOverlaps(ghost, furnitureObstacles, items) : [])]
 }
 
 function selectDimension(dim: Dimension): void {
@@ -1408,7 +1430,7 @@ function setTool(next: Tool): void {
   marqueePending = null
   resetDemolition()
   resetRough()
-  tableTool.reset()
+  itemTool.reset()
   furniturePanelOpen = false
   setWallPanel(false)
   closeOpeningsPanel()
@@ -1593,7 +1615,7 @@ function drawFurniturePlan(): void {
   const palette = paletteOf(theme)
   const erasingCallout = tool === "eraser" && hoverWorld ? calloutTool.pick(hoverWorld) : null
   const target = tool === "eraser" && cursor && !erasingCallout ? eraserTarget(cursor) : { wall: null, dim: null, doorway: null, communication: null, battery: null }
-  const erasingTable = tool === "eraser" && hoverWorld && !erasingCallout && !target.dim ? tableTool.eraseTarget(hoverWorld) : null
+  const erasingItem = tool === "eraser" && hoverWorld && !erasingCallout && !target.dim ? itemTool.eraseTarget(hoverWorld) : null
   const draft = dimDraftGeometry()
   const snapHit = tool === "dimension" && cursor && (!dimDraft.a || !dimDraft.b) ? nearestDimAnchor(cursor, walls, doorways, radiusCm(), []) : null
   const overlaps = currentOverlaps()
@@ -1612,10 +1634,10 @@ function drawFurniturePlan(): void {
       callouts: calloutTool.displayList(),
       selectedCalloutId: calloutTool.selectedId(),
       erasingCalloutId: erasingCallout?.id ?? null,
-      tables,
-      selectedTableIds: tableTool.selectedIds(),
-      erasingTableId: erasingTable?.id ?? null,
-      tableGhost: tool === "table" ? tableTool.ghost() : null,
+      items,
+      selectedItemIds: itemTool.selectedIds(),
+      erasingItemId: erasingItem?.id ?? null,
+      itemGhost: tool === "furniture" ? itemTool.ghost() : null,
       overlaps,
     },
     unit,
@@ -1834,7 +1856,7 @@ function centerGuideTracks(): TrackLine[] | null {
 
 // нажатая кнопка мыши: рамка, перетаскивание стен или размера, протяжка пометки, сдвиг вида
 function gestureActive(): boolean {
-  return !!(marquee || marqueePending || groupMove || endpointDrag || dimDrag || doorwayTool.dragging() || communicationTool.dragging() || batteryTool.dragging() || calloutTool.dragging() || demolitionTool.dragging() || plasterTool.dragging() || tableTool.dragging() || panDrag)
+  return !!(marquee || marqueePending || groupMove || endpointDrag || dimDrag || doorwayTool.dragging() || communicationTool.dragging() || batteryTool.dragging() || calloutTool.dragging() || demolitionTool.dragging() || plasterTool.dragging() || itemTool.dragging() || panDrag)
 }
 
 // ластик: размер → коммуникация → батарея → проём → стена (wall-deletion «Инструмент «Ластик»», «Ластик и удаление
@@ -2054,8 +2076,8 @@ canvas.addEventListener("pointermove", (e) => {
     redraw()
     return
   }
-  if (tableTool.dragging()) {
-    tableTool.dragTo(toWorld(e))
+  if (itemTool.dragging()) {
+    itemTool.dragTo(toWorld(e))
     redraw()
     return
   }
@@ -2184,9 +2206,9 @@ canvas.addEventListener("pointermove", (e) => {
   } else if (tool === "battery") {
     cursor = toWorld(e)
     batteryTool.hover(cursor)
-  } else if (tool === "table") {
+  } else if (tool === "furniture") {
     cursor = toWorld(e)
-    tableTool.hover(cursor)
+    itemTool.hover(cursor)
   } else cursor = toSnappedPoint(e)
   hoverWorld = toWorld(e)
   redraw()
@@ -2197,7 +2219,7 @@ canvas.addEventListener("pointerleave", () => {
   hoverWorld = null
   if (tool === "plaster") plasterTool.hover(null)
   if (tool === "rightAngle") rightAngleTool.hover(null)
-  if (tool === "table") tableTool.hover(null)
+  if (tool === "furniture") itemTool.hover(null)
   if ((tool === "ruler" || (tool === "eraser" && (onDemolition() || onRough()))) && cursor) cursor = null
   redraw()
 })
@@ -2362,7 +2384,7 @@ canvas.addEventListener("pointerdown", (e) => {
       return
     case undefined: {
       // стол плана «Мебель»: размеры и выноска главнее, подложка не выделяется; нажатие выделяет стол и начинает перетаскивание
-      if (onFurniture() && tableTool.press(p)) {
+      if (onFurniture() && itemTool.press(p)) {
         suppressClick = true
         canvas.setPointerCapture(e.pointerId)
         return
@@ -2391,9 +2413,9 @@ canvas.addEventListener("pointerup", (e) => {
     if (e.button === 0) calloutTool.endDrag()
     return
   }
-  if (tableTool.dragging()) {
+  if (itemTool.dragging()) {
     if (e.button === 0) {
-      tableTool.endDrag()
+      itemTool.endDrag()
       redraw()
     }
     return
@@ -2483,7 +2505,7 @@ canvas.addEventListener("pointerup", (e) => {
   redraw()
 })
 
-function marqueePicks(rect: { x1: number; y1: number; x2: number; y2: number }): { walls: Wall[]; dims: Dimension[]; doorways: WallElement[]; batteries: Battery[]; tables: Table[] } {
+function marqueePicks(rect: { x1: number; y1: number; x2: number; y2: number }): { walls: Wall[]; dims: Dimension[]; doorways: WallElement[]; batteries: Battery[]; items: FurnitureItem[] } {
   const k = PX_PER_CM * view.zoom
   const min = { x: Math.min(rect.x1, rect.x2) / k + view.pan.x, y: Math.min(rect.y1, rect.y2) / k + view.pan.y }
   const max = { x: Math.max(rect.x1, rect.x2) / k + view.pan.x, y: Math.max(rect.y1, rect.y2) / k + view.pan.y }
@@ -2498,7 +2520,7 @@ function marqueePicks(rect: { x1: number; y1: number; x2: number; y2: number }):
     dims: dimsPicked,
     doorways: doorwaysInRect(min, max, walls, doorways).filter(editableElement),
     batteries: batteriesInRect(min, max, walls, batteries).filter(editableBattery),
-    tables: onFurniture() ? tablesInRect(tables, min, max) : [],
+    items: onFurniture() ? itemsInRect(items, min, max) : [],
   }
 }
 
@@ -2511,12 +2533,12 @@ function finishMarquee(rect: { x1: number; y1: number; x2: number; y2: number },
   selectedDoorways = additive ? [...selectedDoorways, ...picks.doorways.filter((d) => !selectedDoorways.includes(d))] : picks.doorways
   selectedBatteries = additive ? [...selectedBatteries, ...picks.batteries.filter((b) => !selectedBatteries.includes(b))] : picks.batteries
   lengthDirty = false
-  const previousTables = tableTool.selectedIds()
+  const previousItems = itemTool.selectedIds()
   closeNumberEditor()
   if (onFurniture()) {
     // столы плана «Мебель» выделяются рамкой вместе с размерами; с Shift — добавляются к выделенным
-    tableTool.select([...(additive ? previousTables : []), ...picks.tables.map((t) => t.id)])
-    if (tableTool.hasSelection()) furniturePanelOpen = true
+    itemTool.select([...(additive ? previousItems : []), ...picks.items.map((t) => t.id)])
+    if (itemTool.hasSelection()) furniturePanelOpen = true
   }
   if (!selectedDoorways.length && !selectedBatteries.length && selectedWalls.length === 1 && !selectedDimensions.length) {
     syncThicknessBox()
@@ -2571,17 +2593,17 @@ canvas.addEventListener("click", (e) => {
     const { wall, dim, doorway, communication, battery } = eraserTarget(p)
     if (dim) deleteDimension(dim)
     // план «Мебель»: ластик стирает столы, подложка (стены, штукатурка, гипсокартон, элементы) не стирается
-    else if (onFurniture()) tableTool.erase(raw)
+    else if (onFurniture()) itemTool.erase(raw)
     else if (communication) deleteCommunication(communication)
     else if (battery) deleteBattery(battery)
     else if (doorway) deleteDoorway(doorway)
     else if (wall) deleteWall(wall)
     return
   }
-  if (tool === "table") {
+  if (tool === "furniture") {
     // стол ставится всегда, пересечения только показываются; установка снимает инструмент, стол остаётся выделенным
-    tableTool.place(raw)
-    leaveTablePlacing()
+    itemTool.place(raw)
+    leaveItemPlacing()
     return
   }
   const kind = communicationKind()
@@ -2618,7 +2640,7 @@ canvas.addEventListener("click", (e) => {
     selectedCommunication = null
     calloutTool.deselect()
     deselectRoom()
-    tableTool.clearSelection()
+    itemTool.clearSelection()
     lengthDirty = false
     clearDimSelection()
     redraw()
@@ -2912,12 +2934,12 @@ for (const input of [drywallThicknessInput, drywallHeightInput]) {
 
 // кнопка группы «Мебель» и кнопка её инструмента «Стол» (spec furniture-plan «Панель группы «Мебель» и инструмента «Стол»»)
 toolFurnitureBtn.addEventListener("click", () => applyFurnitureGroup(groupButtonClick(furnitureGroupState())))
-toolTableBtn.addEventListener("click", () => applyFurnitureGroup(groupPick(furnitureGroupState(), "table")))
+for (const [kind, button] of furnitureKindButtons) button.addEventListener("click", () => applyFurnitureGroup(groupPick(furnitureGroupState(), kind)))
 // поля панели применяются по фиксации ввода; клавиши поля не доходят до холста
-tableWidthInput.addEventListener("change", () => applyTableField("widthCm", tableWidthInput))
-tableLengthInput.addEventListener("change", () => applyTableField("lengthCm", tableLengthInput))
-tableAngleInput.addEventListener("change", () => applyTableField("angleDeg", tableAngleInput))
-for (const input of [tableWidthInput, tableLengthInput, tableAngleInput]) {
+furnitureWidthInput.addEventListener("change", () => applyItemField("widthCm", furnitureWidthInput))
+furnitureLengthInput.addEventListener("change", () => applyItemField("lengthCm", furnitureLengthInput))
+furnitureAngleInput.addEventListener("change", () => applyItemField("angleDeg", furnitureAngleInput))
+for (const input of [furnitureWidthInput, furnitureLengthInput, furnitureAngleInput]) {
   input.addEventListener("keydown", (e) => {
     e.stopPropagation()
     if (e.key === "Enter" || e.key === "Escape") input.blur()
@@ -3086,7 +3108,7 @@ function activate(id: string): void {
   syncToolUI()
   resetDemolition()
   resetRough()
-  tableTool.reset()
+  itemTool.reset()
   clearChain()
   closeNumberEditor()
   selectedWalls = []
@@ -3140,7 +3162,7 @@ function removeDrawing(id: string, index: number): void {
 function resetEditing(): void {
   resetDemolition()
   resetRough()
-  tableTool.reset()
+  itemTool.reset()
   clearChain()
   closeNumberEditor()
   calloutTool.reset()
@@ -3185,9 +3207,9 @@ function stepRough(step: typeof undoRough): void {
 
 // отмена или повтор шага плана «Мебель» (change furniture-plan-table, design D7): подставляются столы и размеры плана до операции
 function stepFurniture(step: typeof undoFurniture): void {
-  const next = step(activeHistory(), { tables, dimensions })
+  const next = step(activeHistory(), { items, dimensions })
   if (!next) return
-  tables = next.tables
+  items = next.items
   dimensions = next.dimensions
   dirty = true
   resetEditing()
@@ -3261,7 +3283,7 @@ function stepNotes(step: typeof undoNotes): void {
 }
 
 function undo(): void {
-  if (groupMove || endpointDrag || panDrag || dimDrag || doorwayTool.dragging() || communicationTool.dragging() || batteryTool.dragging() || calloutTool.dragging() || demolitionTool.dragging() || plasterTool.dragging() || tableTool.dragging()) return
+  if (groupMove || endpointDrag || panDrag || dimDrag || doorwayTool.dragging() || communicationTool.dragging() || batteryTool.dragging() || calloutTool.dragging() || demolitionTool.dragging() || plasterTool.dragging() || itemTool.dragging()) return
   // открытое поле ввода выноски и поле примечаний сохраняют текст до отмены
   calloutTool.commitEditor()
   commitNotes()
@@ -3303,7 +3325,7 @@ function undo(): void {
 }
 
 function redo(): void {
-  if (groupMove || endpointDrag || panDrag || dimDrag || doorwayTool.dragging() || communicationTool.dragging() || batteryTool.dragging() || calloutTool.dragging() || demolitionTool.dragging() || plasterTool.dragging() || tableTool.dragging()) return
+  if (groupMove || endpointDrag || panDrag || dimDrag || doorwayTool.dragging() || communicationTool.dragging() || batteryTool.dragging() || calloutTool.dragging() || demolitionTool.dragging() || plasterTool.dragging() || itemTool.dragging()) return
   calloutTool.commitEditor()
   commitNotes()
   const h = activeHistory()
@@ -3424,7 +3446,7 @@ window.addEventListener("keydown", (e) => {
       return
     }
     if (onFurniture()) {
-      if (!tableTool.dragging() && !dimDrag && !panDrag) deleteFurnitureSelection()
+      if (!itemTool.dragging() && !dimDrag && !panDrag) deleteFurnitureSelection()
       return
     }
     if (onRough()) {
@@ -3487,7 +3509,7 @@ window.addEventListener("keydown", (e) => {
       gestureActive: !!chainStart,
       dimensionDraft: !!(dimDraft.a || dimDraft.b),
       calloutDraft: calloutTool.hasDraft(),
-      hasSelection: selectedDimensions.length + selectedWalls.length + selectedDoorways.length + selectedBatteries.length > 0 || selectedCommunication !== null || calloutTool.selectedId() !== null || selectedRoom !== null || tableTool.hasSelection(),
+      hasSelection: selectedDimensions.length + selectedWalls.length + selectedDoorways.length + selectedBatteries.length > 0 || selectedCommunication !== null || calloutTool.selectedId() !== null || selectedRoom !== null || itemTool.hasSelection(),
     })
     if (action === "end-gesture") endChain()
     else if (action === "cancel-dimension-draft") {
@@ -3501,10 +3523,10 @@ window.addEventListener("keydown", (e) => {
   if (e.target instanceof HTMLInputElement) return
   // на плане «Мебель» стрелки сдвигают выделенные столы, без выделения ничего не меняют (материал стены не переключается)
   if (onFurniture()) {
-    if (!tableTool.hasSelection() || tableTool.dragging() || calloutTool.selectedId() !== null) return
+    if (!itemTool.hasSelection() || itemTool.dragging() || calloutTool.selectedId() !== null) return
     e.preventDefault()
     const direction = e.key === "ArrowUp" ? "up" : e.key === "ArrowDown" ? "down" : e.key === "ArrowLeft" ? "left" : "right"
-    if (tableTool.nudge(direction, e.shiftKey)) redraw()
+    if (itemTool.nudge(direction, e.shiftKey)) redraw()
     return
   }
   // на плане «Демонтаж» нет стен, материалов и элементов: стрелки ничего не двигают и не переключают

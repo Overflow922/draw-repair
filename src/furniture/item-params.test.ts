@@ -1,11 +1,14 @@
 import { describe, expect, it } from "vitest"
 import { parseLengthField } from "../length-field"
-import type { Table } from "../types"
-import { TABLE_DEFAULTS, editParams, panelValues, parseAngleField } from "./table-params"
+import type { FurnitureItem } from "../types"
+import { defaultParams, editParams, panelValues, parseAngleField } from "./item-params"
 
 // change furniture-plan-table: параметры панели «Стол» (spec furniture-plan «Панель группы «Мебель» и инструмента «Стол»»)
+// TCR (change furniture-items-catalog): значения по умолчанию вида берутся из каталога видов, утверждения не менялись
 
-const table: Table = { id: "t", x: 0, y: 0, widthCm: 80, lengthCm: 160, angleDeg: 0 }
+const TABLE_DEFAULTS = defaultParams("table")
+
+const table: FurnitureItem = { id: "t", kind: "table", x: 0, y: 0, widthCm: 80, lengthCm: 160, angleDeg: 0 }
 
 describe("значения по умолчанию", () => {
   it("FP-120: ширина 80 см, длина 160 см, угол 0", () => {

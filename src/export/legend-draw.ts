@@ -7,7 +7,8 @@ import { LIGHT_PALETTE } from "../theme"
 import type { Palette } from "../theme"
 import { PX_PER_CM } from "../types"
 import type { Battery, Communication, Point, View, Wall } from "../types"
-import { tableColors } from "../furniture/furniture-render"
+import { itemColors } from "../furniture/furniture-render"
+import type { FurnitureKind } from "../furniture/furniture-kinds"
 import { drywallColors } from "../reconstruction/reconstruction-render"
 import { plasterColors } from "../rough/rough-render"
 import { DEMOLITION_HATCH, SCREED_HATCH, strokeHatchSeries } from "../wall-hatch"
@@ -79,9 +80,9 @@ function drawDrywallSample(ctx: CanvasRenderingContext2D, origin: Point): void {
   ctx.stroke()
 }
 
-// образец «Стол»: цвета стола светлой схемы, как на чертеже
-function drawTableSample(ctx: CanvasRenderingContext2D, origin: Point): void {
-  const colors = tableColors("light")
+// образец предмета мебели: цвета вида светлой схемы, как на чертеже
+function drawItemSample(ctx: CanvasRenderingContext2D, origin: Point, kind: FurnitureKind): void {
+  const colors = itemColors(kind, "light")
   ctx.fillStyle = colors.fill
   tracePolygons(ctx, [sampleRect(origin)])
   ctx.fill()
@@ -162,8 +163,8 @@ function drawSample(ctx: CanvasRenderingContext2D, entry: LegendEntry, origin: P
       return drawScreedSample(ctx, origin)
     case "drywall":
       return drawDrywallSample(ctx, origin)
-    case "table":
-      return drawTableSample(ctx, origin)
+    case "furniture":
+      return drawItemSample(ctx, origin, entry.item)
   }
 }
 

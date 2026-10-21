@@ -1,6 +1,7 @@
-import type { Point, Table } from "../types"
+import type { FurnitureItem, Point } from "../types"
+import type { FurnitureKind } from "./furniture-kinds"
 
-// Стол плана «Мебель» (change furniture-plan-table, design D2, D5): прямоугольник вокруг центра. Ширина — вдоль оси X при
+// Предмет мебели плана «Мебель» (change furniture-plan-table, design D2, D5): прямоугольник вокруг центра. Ширина — вдоль оси X при
 // угле 0, длина — вдоль оси Y; угол в градусах по часовой на экране (ось Y вниз). Чистые функции, входы не мутируются.
 
 // угол → диапазон [0, 360): 360 даёт 0, −90 даёт 270, 450 даёт 90
@@ -9,8 +10,9 @@ export const normalizeAngle = (deg: number): number => {
   return a === 0 ? 0 : a
 }
 
-export const newTable = (id: string, center: Point, params: { widthCm: number; lengthCm: number; angleDeg: number }): Table => ({
+export const newItem = (id: string, kind: FurnitureKind, center: Point, params: { widthCm: number; lengthCm: number; angleDeg: number }): FurnitureItem => ({
   id,
+  kind,
   x: center.x,
   y: center.y,
   widthCm: params.widthCm,
@@ -21,13 +23,13 @@ export const newTable = (id: string, center: Point, params: { widthCm: number; l
 const toRadians = (deg: number): number => (deg * Math.PI) / 180
 
 // единичные оси стола: u — вдоль ширины, v — вдоль длины (в чертёже, ось Y вниз)
-function axes(t: Table): { u: Point; v: Point } {
+function axes(t: FurnitureItem): { u: Point; v: Point } {
   const r = toRadians(t.angleDeg)
   return { u: { x: Math.cos(r), y: Math.sin(r) }, v: { x: -Math.sin(r), y: Math.cos(r) } }
 }
 
 // углы стола по обходу: левый верхний, правый верхний, правый нижний, левый нижний (при угле 0)
-export function tableCorners(t: Table): [Point, Point, Point, Point] {
+export function itemCorners(t: FurnitureItem): [Point, Point, Point, Point] {
   const { u, v } = axes(t)
   const hw = t.widthCm / 2
   const hl = t.lengthCm / 2
@@ -36,7 +38,7 @@ export function tableCorners(t: Table): [Point, Point, Point, Point] {
 }
 
 // точка внутри тела стола (с допуском tolCm наружу): точка переводится в систему стола обратным поворотом
-export function hitTable(t: Table, p: Point, tolCm = 0): boolean {
+export function hitItem(t: FurnitureItem, p: Point, tolCm = 0): boolean {
   const { u, v } = axes(t)
   const dx = p.x - t.x
   const dy = p.y - t.y

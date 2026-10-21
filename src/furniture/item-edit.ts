@@ -1,7 +1,7 @@
 import { DIRECTION_VECTORS } from "../communications/geometry"
 import type { Direction } from "../communications/geometry"
-import type { Point, Table } from "../types"
-import { hitTable, tableCorners } from "./table"
+import type { Point, FurnitureItem } from "../types"
+import { hitItem, itemCorners } from "./item"
 
 // Правка столов (change furniture-plan-table, design D6): чистые функции над массивом столов; входы не мутируются.
 // Перемещение свободное — без привязок и без ограничений препятствиями; пересечения только показываются (overlap.ts).
@@ -11,35 +11,35 @@ export const NUDGE_STEP_CM = 10
 export const NUDGE_FINE_CM = 1
 
 // сдвиг выделенных столов на вектор; null — ничего не изменилось (шага истории нет)
-export function shiftTables(tables: readonly Table[], ids: ReadonlySet<string>, dx: number, dy: number): Table[] | null {
+export function shiftItems(items: readonly FurnitureItem[], ids: ReadonlySet<string>, dx: number, dy: number): FurnitureItem[] | null {
   if (dx === 0 && dy === 0) return null
-  if (!tables.some((t) => ids.has(t.id))) return null
-  return tables.map((t) => (ids.has(t.id) ? { ...t, x: t.x + dx, y: t.y + dy } : t))
+  if (!items.some((t) => ids.has(t.id))) return null
+  return items.map((t) => (ids.has(t.id) ? { ...t, x: t.x + dx, y: t.y + dy } : t))
 }
 
-export function nudgeTables(tables: readonly Table[], ids: ReadonlySet<string>, direction: Direction, fine: boolean): Table[] | null {
+export function nudgeItems(items: readonly FurnitureItem[], ids: ReadonlySet<string>, direction: Direction, fine: boolean): FurnitureItem[] | null {
   const step = fine ? NUDGE_FINE_CM : NUDGE_STEP_CM
   const v = DIRECTION_VECTORS[direction]
-  return shiftTables(tables, ids, v.x * step, v.y * step)
+  return shiftItems(items, ids, v.x * step, v.y * step)
 }
 
-export const removeTables = (tables: readonly Table[], ids: ReadonlySet<string>): Table[] => tables.filter((t) => !ids.has(t.id))
+export const removeItems = (items: readonly FurnitureItem[], ids: ReadonlySet<string>): FurnitureItem[] => items.filter((t) => !ids.has(t.id))
 
-export const replaceTable = (tables: readonly Table[], next: Table): Table[] => tables.map((t) => (t.id === next.id ? next : t))
+export const replaceItem = (items: readonly FurnitureItem[], next: FurnitureItem): FurnitureItem[] => items.map((t) => (t.id === next.id ? next : t))
 
 // стол под точкой: при наложении столов — поставленный позже (нарисованный сверху)
-export function tableAt(tables: readonly Table[], p: Point, tolCm: number): Table | null {
-  for (let i = tables.length - 1; i >= 0; i--) {
-    const t = tables[i]
-    if (t && hitTable(t, p, tolCm)) return t
+export function itemAt(items: readonly FurnitureItem[], p: Point, tolCm: number): FurnitureItem | null {
+  for (let i = items.length - 1; i >= 0; i--) {
+    const t = items[i]
+    if (t && hitItem(t, p, tolCm)) return t
   }
   return null
 }
 
 // стол пересекает прямоугольник рамки: разделяющие оси — оси рамки и оси стола
-export function tablesInRect(tables: readonly Table[], min: Point, max: Point): Table[] {
-  return tables.filter((t) => {
-    const corners = tableCorners(t)
+export function itemsInRect(items: readonly FurnitureItem[], min: Point, max: Point): FurnitureItem[] {
+  return items.filter((t) => {
+    const corners = itemCorners(t)
     const xs = corners.map((c) => c.x)
     const ys = corners.map((c) => c.y)
     if (Math.max(...xs) < min.x || Math.min(...xs) > max.x || Math.max(...ys) < min.y || Math.min(...ys) > max.y) return false

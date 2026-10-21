@@ -1,8 +1,8 @@
 import { isNoteList } from "./notes/notes-store"
 import { historyKey } from "./plans"
 import type { PlanId } from "./plans"
-import { isBattery, isBatteryMark, isCallout, isCommunication, isDemolitionMark, isDimension, isDrawing, isDrywallWall, isPlasterMark, isRightAngle, isRoomRecord, isScreed, isTable, isWall, isWallElement } from "./storage"
-import type { Battery, BatteryMark, Callout, Communication, DemolitionMark, Dimension, DimPoint, Drawing, PlasterMark, RightAngleMark, RoomRecord, Screed, Table, Wall, WallElement } from "./types"
+import { isBattery, isBatteryMark, isCallout, isCommunication, isDemolitionMark, isDimension, isDrawing, isDrywallWall, isPlasterMark, isRightAngle, isRoomRecord, isScreed, isFurnitureItem, isWall, isWallElement, readFurnitureItem } from "./storage"
+import type { Battery, BatteryMark, Callout, Communication, DemolitionMark, Dimension, DimPoint, Drawing, PlasterMark, RightAngleMark, RoomRecord, Screed, FurnitureItem, Wall, WallElement } from "./types"
 
 const KEY = "draw-repair:history"
 export const HISTORY_LIMIT = 50
@@ -34,7 +34,7 @@ export type HistoryEntry =
   // и прямых углов (change plaster-right-angle, design D4); у записи, сохранённой до введения углов, поля нет
   | { kind: "rough"; plaster: PlasterMark[]; screeds: Screed[]; angles?: RightAngleMark[] }
   // шаг плана «Мебель» (change furniture-plan-table, design D9): столы и размеры плана до операции
-  | { kind: "furniture"; tables: Table[]; dimensions: Dimension[] }
+  | { kind: "furniture"; items: FurnitureItem[]; dimensions: Dimension[] }
 
 export interface DrawingHistory {
   past: HistoryEntry[]
@@ -196,12 +196,12 @@ export function redoRough(history: DrawingHistory, current: RoughState): RoughSt
 // Столы и размеры плана «Мебель» (change furniture-plan-table, design D9): как у «Черновых работ» — работают только с верхней
 // записью вида «furniture», при другой записи возвращают null и стеки не меняют; прежние функции отмены её не забирают
 export interface FurnitureState {
-  tables: Table[]
+  items: FurnitureItem[]
   dimensions: Dimension[]
 }
 
 const copyFurniture = (state: FurnitureState): FurnitureState => ({
-  tables: state.tables.map((t) => ({ ...t })),
+  items: state.items.map((t) => ({ ...t })),
   dimensions: cloneScene({ walls: [], dimensions: state.dimensions }).dimensions,
 })
 
@@ -326,7 +326,7 @@ const isHistoryEntry = (e: unknown): e is HistoryEntry => {
   if (x.kind === "rough")
     return Array.isArray(x.plaster) && x.plaster.every(isPlasterMark) && Array.isArray(x.screeds) && x.screeds.every(isScreed) &&
       (x.angles === undefined || (Array.isArray(x.angles) && x.angles.every(isRightAngle)))
-  if (x.kind === "furniture") return Array.isArray(x.tables) && x.tables.every(isTable) && Array.isArray(x.dimensions) && x.dimensions.every(isDimension)
+  if (x.kind === "furniture") return Array.isArray(x.items) && x.items.every(isFurnitureItem) && Array.isArray(x.dimensions) && x.dimensions.every(isDimension)
   return x.kind === "close" && typeof x.drawingId === "string" &&
     typeof x.index === "number" && Number.isInteger(x.index) && x.index >= 0
 }
@@ -355,10 +355,35 @@ const isHistoryStore = (d: unknown): d is HistoryStore => {
     Array.isArray((d as HistoryStore).trash) && (d as HistoryStore).trash.every(isTrashEntry)
 }
 
+const asRecord = (v: unknown): Record<string, unknown> | null => (typeof v === "object" && v !== null && !Array.isArray(v) ? Object.fromEntries(Object.entries(v)) : null)
+
+// записи «Мебели», сохранённые до каталога видов (change furniture-items-catalog, design D5): предметы лежат в поле tables и
+// без вида — переносятся в items и читаются как столы; всё прочее остаётся как есть и проверяется общими правилами
+function upgradeFurnitureEntry(entry: unknown): unknown {
+  const e = asRecord(entry)
+  if (e === null || e.kind !== "furniture" || e.items !== undefined || !Array.isArray(e.tables)) return entry
+  const { tables, ...rest } = e
+  return { ...rest, items: Array.isArray(tables) ? tables.map((t) => readFurnitureItem(t) ?? t) : tables }
+}
+
+function upgradeHistory(data: unknown): unknown {
+  const store = asRecord(data)
+  const histories = asRecord(store?.histories)
+  if (store === null || histories === null) return data
+  const upgraded = Object.fromEntries(
+    Object.entries(histories).map(([key, h]) => {
+      const hist = asRecord(h)
+      if (hist === null || !Array.isArray(hist.past) || !Array.isArray(hist.future)) return [key, h]
+      return [key, { ...hist, past: hist.past.map(upgradeFurnitureEntry), future: hist.future.map(upgradeFurnitureEntry) }]
+    }),
+  )
+  return { ...store, histories: upgraded }
+}
+
 export function parseHistory(raw: string): LoadedHistory | null {
   let data: unknown
   try {
-    data = JSON.parse(raw)
+    data = upgradeHistory(JSON.parse(raw))
   } catch {
     return null
   }

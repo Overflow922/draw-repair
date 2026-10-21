@@ -992,3 +992,20 @@ Follow-ups from `furniture-plan-table` (2026-10-21).
 
 - Dimensions and the ruler have no anchors on tables: «Размер» measures only between faces of the underlay (`furniture-plan` «Инструменты плана «Мебель»»).
 - The door swing area is not an obstacle for tables: a table may stand where a door opens without a highlight or plaque.
+
+---
+
+Follow-ups from `furniture-items-catalog` (2026-10-21).
+
+## Docs
+
+- [ ] Скилл `.claude/skills/add-furniture-kind/SKILL.md` лежит в `.claude/`, которая целиком в `.gitignore`, поэтому в коммит не попал. Решить, версионировать ли скиллы проекта (например, исключить `.claude/skills/` из `.gitignore`).
+
+## Tests
+
+- [ ] `src/main.ts`: переключение вида в панели группы «Мебель» (`applyFurnitureGroup`, `furnitureKindButtons`) и значения по видам проверены только на чистых частях (`item-params-kinds.test.ts`) и разметке; живой переключатель при двух видах не проверялся, пока в каталоге один вид — проверить на втором виде (стул).
+
+## Out of scope (decided, revisit if needed)
+
+- Общая функция `footprint(item)` и не-прямоугольные формы (круглый стол, Г-образный диван): `clipByRect` в `src/furniture/overlap.ts`, `hitItem` и `itemCorners` в `src/furniture/item.ts` рассчитаны на прямоугольник. Для выпуклых форм достаточно обобщить `clipByRect`, для вогнутых нужно делить форму на выпуклые части.
+- Разные наборы полей у видов (высота и др.): у всех видов ширина, длина, угол.

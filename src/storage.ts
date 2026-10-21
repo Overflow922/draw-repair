@@ -1,11 +1,12 @@
 import { mergeAll } from "./demolition/marks"
-import { normalizeAngle } from "./furniture/table"
+import { isFurnitureKind } from "./furniture/furniture-kinds"
+import { normalizeAngle } from "./furniture/item"
 import { loadNoteList } from "./notes/notes-store"
 import { isPlanId } from "./plans"
 import { mergeAllPlaster } from "./rough/plaster-marks"
 import { PLASTER_THICKNESS, SCREED_THICKNESS, isThickness } from "./rough/rough-model"
 import { isDoor, isWindow, normalizeMaterial } from "./types"
-import type { Battery, BatteryCornerPoint, BatteryMark, Callout, Communication, CornerRef, DemolitionMark, Dimension, DimPoint, Doorway, Drawing, DrawingStore, DrywallWall, EdgePoint, EdgeRef, FurnitureContent, JambPoint, MountingContent, PlasterMark, Point, ReconstructionContent, RightAngleMark, RoomRecord, Screed, Table, View, Wall, WallDoor, WallElement, WallWindow } from "./types"
+import type { Battery, BatteryCornerPoint, BatteryMark, Callout, Communication, CornerRef, DemolitionMark, Dimension, DimPoint, Doorway, Drawing, DrawingStore, DrywallWall, EdgePoint, EdgeRef, FurnitureContent, JambPoint, MountingContent, PlasterMark, Point, ReconstructionContent, RightAngleMark, RoomRecord, Screed, FurnitureItem, View, Wall, WallDoor, WallElement, WallWindow } from "./types"
 
 const KEY = "draw-repair:drawing"
 
@@ -366,15 +367,22 @@ function loadReconstruction(raw: unknown): { reconstruction?: ReconstructionCont
   }
 }
 
-// стол плана «Мебель» (change furniture-plan-table, design D9): непустой идентификатор, числа центра и угла, ширина и длина больше нуля
-export const isTable = (t: unknown): t is Table => {
+// предмет мебели плана «Мебель» (change furniture-plan-table, design D9; change furniture-items-catalog, design D1): вид из
+// каталога, непустой идентификатор, числа центра и угла, ширина и длина больше нуля
+export const isFurnitureItem = (t: unknown): t is FurnitureItem => {
   if (typeof t !== "object" || t === null) return false
   const x = t as Record<string, unknown>
-  return typeof x.id === "string" && x.id !== "" && num(x.x) && num(x.y) && num(x.angleDeg) && num(x.widthCm) && x.widthCm > 0 && num(x.lengthCm) && x.lengthCm > 0
+  return isFurnitureKind(x.kind) && typeof x.id === "string" && x.id !== "" && num(x.x) && num(x.y) && num(x.angleDeg) && num(x.widthCm) && x.widthCm > 0 && num(x.lengthCm) && x.lengthCm > 0
 }
 
+// предмет из документа или истории: без вида (до введения каталога видов) читается как стол, неизвестный вид — битый (null);
 // угол вне диапазона [0, 360) приводится при загрузке
-const copyTable = (t: Table): Table => ({ id: t.id, x: t.x, y: t.y, widthCm: t.widthCm, lengthCm: t.lengthCm, angleDeg: normalizeAngle(t.angleDeg) })
+export function readFurnitureItem(raw: unknown): FurnitureItem | null {
+  if (typeof raw !== "object" || raw === null) return null
+  const item = "kind" in raw ? raw : { ...raw, kind: "table" }
+  if (!isFurnitureItem(item)) return null
+  return { id: item.id, kind: item.kind, x: item.x, y: item.y, widthCm: item.widthCm, lengthCm: item.lengthCm, angleDeg: normalizeAngle(item.angleDeg) }
+}
 
 // объекты плана «Мебель» при загрузке: некорректные столы и размеры отбрасываются по одному; размеры на отсутствующие стены
 // сохраняются; поле, не являющееся объектом, читается как отсутствующее; выноски и примечания — по общим правилам
@@ -385,7 +393,8 @@ function loadFurniture(raw: unknown): { furniture?: FurnitureContent } {
   const notes = loadNoteList(x.notes)
   return {
     furniture: {
-      tables: list(x.tables).filter(isTable).map(copyTable),
+      // чертёж до введения каталога видов хранил предметы в поле tables
+      items: list(x.items ?? x.tables).flatMap((i) => readFurnitureItem(i) ?? []),
       dimensions: list(x.dimensions).filter(isDimension).map(copyDimension),
       ...(x.callouts === undefined ? null : { callouts: loadCalloutList(x.callouts) }),
       ...(notes === undefined ? null : { notes }),
