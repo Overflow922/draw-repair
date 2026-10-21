@@ -17,6 +17,7 @@ import { revealDimension } from "./plaster-reveal"
 import type { PlasterPiece } from "./plaster"
 import { plasterDimensions, plasterRunDimensions } from "./plaster-dimensions"
 import { endDimension } from "./plaster-end"
+import { endDimensionBounds } from "./plaster-end-bounds"
 import type { PlasterTargetPiece } from "./plaster-face"
 import { screedLabelBox } from "./screed-label"
 import { screedThresholds } from "./screed-threshold"
@@ -259,7 +260,8 @@ export function drawRoughScene(
     // торец — один размер, длина торца (change plaster-wall-end-face, design D7); торец в плоскости входит в размер участка
     for (const piece of scene.pieces) {
       if (piece.mark.face !== "end" || inRun.has(piece)) continue
-      const d = endDimension(piece.wall, piece.mark.anchor, piece.from, piece.to, piece.mark.thicknessMm, unit, k, m.labelPx)
+      const [from, to] = endDimensionBounds(piece, scene.pieces)
+      const d = endDimension(piece.wall, piece.mark.anchor, from, to, piece.mark.thicknessMm, unit, k, m.labelPx)
       if (d) drawDimensionGeom(ctx, d.geom, d.text, colors.stroke, view, m, palette, false, scene.selectedPlasterId === piece.mark.id, true)
     }
     // откос — один размер, толщина стены (change plaster-opening-reveals, design D5)

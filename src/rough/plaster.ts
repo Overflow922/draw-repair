@@ -140,26 +140,27 @@ function wrapSideCorners(piece: PlasterPiece, pieces: readonly PlasterPiece[], r
   }
 }
 
-// Внешний угол выступа: полоса торца шире на толщину штукатурки у края, дошедшего до боковой грани, если на этой грани у
-// этого конца есть действующая полоса — угол закрывает торец (change plaster-end-outer-corner)
+// Внешний угол выступа: полоса торца шире у края, дошедшего до боковой грани, если на этой грани у этого конца есть
+// действующая полоса — угол закрывает торец; ширина расширения — толщина этой боковой полосы, чтобы внешние поверхности
+// торца и боковой полосы сошлись в одну линию (change plaster-end-outer-corner, plaster-single-contour)
 function wrapEndCorners(piece: PlasterPiece, pieces: readonly PlasterPiece[]): PlasterPiece {
   const mark = piece.mark
   if (mark.face !== "end") return piece
   const half = piece.wall.thicknessCm / 2
   const len = lengthOf(piece.wall)
-  const depth = mark.thicknessMm / 10
-  const reached = (face: Side): boolean =>
-    pieces.some(
+  const reaching = (face: Side): PlasterPiece | undefined =>
+    pieces.find(
       (x) =>
         x.mark.face === face &&
         x.wall.id === piece.wall.id &&
         (mark.anchor === "a" ? x.from <= EPS_CM : x.to >= len - EPS_CM),
     )
+  const sideDepth = (face: Side): number => (reaching(face)?.mark.thicknessMm ?? 0) / 10
   // поперечное смещение +half — грань +1, −half — грань −1
   return {
     ...piece,
-    from: piece.from <= -half + EPS_CM && reached(-1) ? piece.from - depth : piece.from,
-    to: piece.to >= half - EPS_CM && reached(1) ? piece.to + depth : piece.to,
+    from: piece.from <= -half + EPS_CM ? piece.from - sideDepth(-1) : piece.from,
+    to: piece.to >= half - EPS_CM ? piece.to + sideDepth(1) : piece.to,
   }
 }
 
