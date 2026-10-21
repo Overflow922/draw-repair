@@ -195,9 +195,6 @@ Follow-ups from planning `popups-buttons-only` (2026-10-07).
   opens its tool panel showing its values". After `popups-buttons-only` it should say: popups hold only buttons,
   numbers are edited in place (dashed underline, click to edit), new objects inherit from the last edited one.
   The file belongs to the user.
-- [ ] Purpose lines of the synced main specs are stale (a delta spec cannot change Purpose, the sync leaves it alone):
-  `openspec/specs/dimension-selection/spec.md` still mentions editing the offset "через панель свойств";
-  `openspec/specs/door/spec.md` still mentions «кнопкой поворота».
 
 ## Tests
 
