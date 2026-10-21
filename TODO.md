@@ -649,10 +649,6 @@ Follow-ups from `fix-duct-resize-against-wall` (2026-10-13).
 
 Follow-ups from `add-callout` (2026-10-14; implemented, tasks 1–11).
 
-### Docs
-
-- [ ] `openspec/specs/canvas-app/spec.md` «Кнопка «Батарея»» says a repeated click on the active tool's button deactivates it "(как у «Окна»)", but the same file (line 53) and the code say a repeated click on «Окно», «Размер», «Линейка», «Ластик» changes nothing, and `toolBatteryBtn` does nothing on a repeated click. Fix the battery requirement (the `add-callout` delta states the verified behaviour: a repeated click changes nothing).
-
 ### Bugs
 
 - [ ] (cosmetic) On screen the callout leader starts at the right/left edge of the text backing at the first line's bottom edge, so it touches the last letter of the first line; the GOST sample leaves a small gap. Spec says only "у края первой строки" (`callout` «Отображение выноски»); decide whether to add a gap in `calloutLayout` (`lineStart`) and cover it in `callout-layout.test.ts`.
