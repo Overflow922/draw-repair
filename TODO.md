@@ -847,9 +847,9 @@ Follow-ups from `wall-body-corners-snap` (2026-10-19).
 - [ ] No test for the «Проём» scenario at a junction corner (vertex violating a doorway must not be offered):
   `acceptor` applies `candidateBlock`, but only the free-end case is covered (`CW-7f`).
 
-- [ ] `wall-drawing` «Привязка к существующим стенам» (main spec, ~line 155) still says an outer corner has no snap
-  target "кроме угла свободного торца"; after `wall-body-corners-snap` the outer junction corner is a target
-  («Диагональное прилипание к углу тела стены»). Reword that sentence (and the line about the end-zone window, ~157).
+- [ ] `wall-drawing` «Привязка к существующим стенам» (main spec, ~line 157) speaks of the diagonal snap window only
+  "за углом свободного торца"; after `wall-body-corners-snap` the outer junction corner is a target too
+  («Диагональное прилипание к углу тела стены»). Check whether the window applies there and reword.
 
 
 ## plaster-face-to-corners (apply, 2026-10-20)
