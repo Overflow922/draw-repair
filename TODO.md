@@ -24,11 +24,6 @@ Follow-ups from `fix-wall-move-joints` (archived 2026-10-04, commit `83e9b78`).
 - [ ] Far-end occupancy with walls of different thickness.
 - [ ] Arrow-key nudge without ortho: automated test (currently checked only manually in the browser).
 
-## Docs
-
-- [ ] `design.md` D2 of the archived change describes `endOccupied(walls, w, end)`; the code signature is
-  `endOccupied(p, w, walls)` (`src/geometry.ts`).
-
 ## Out of scope (decided, revisit if needed)
 
 - Coordinate drift itself is not corrected; the 1 cm margin only makes joint classification tolerant to it.
