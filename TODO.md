@@ -1016,3 +1016,9 @@ Follow-ups from `furniture-items-catalog` (2026-10-21).
 - [ ] Equal spacing between furniture items.
 - [ ] Guide lines along a rotated item's own axes (a chair at 45° only gives world X/Y lines).
 - [ ] A modifier key to turn center snapping off for one gesture.
+
+## sofa-sketch-redraw (2026-10-23)
+
+### Out of scope
+
+- [ ] Подушка на эскизе дивана (нарисована от руки слева на спинке) не включена в рисунок дивана: неясно, нужна ли она как часть дивана. Если нужна — спросить форму и положение, добавить в рисунок (`sofaDrawing` в `src/furniture/item-drawing.ts`).

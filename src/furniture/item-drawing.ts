@@ -79,19 +79,45 @@ export const chairDrawing: ItemDrawingFn = ({ widthCm: w, lengthCm: l }, forcedS
   return { outline, lines: [closed(outline), back, closed(seat)] }
 }
 
-// Диван: контур со скруглением 10 см и сиденье со скруглением 6 см с отступами 16 см от боков (подлокотники), 22 см от верха (спинка)
-// и 8 см от низа; две вертикальные линии на третях ширины сиденья делят его на три подушки
+// Дуга-парабола от (x1, y) к (x0, y), вершина поднята на rise над y посередине (ось Y вниз)
+function bulge(x1: number, x0: number, y: number, rise: number): Point[] {
+  const steps = 12
+  return Array.from({ length: steps + 1 }, (_, i) => {
+    const t = i / steps
+    return { x: x1 + (x0 - x1) * t, y: y - 4 * rise * t * (1 - t) }
+  })
+}
+
+// Диван по эскизу (200 × 80): подлокотники шириной 18 см с верхом на 4 см ниже спинки, три подушки спинки между ними
+// от верха до линии сиденья (23 см от низа), переднее ребро подушки — дуга высотой 5 см, у переднего края планка 17 см
+// с отступами 14 см от боков и 6 см от низа
 export const sofaDrawing: ItemDrawingFn = ({ widthCm: w, lengthCm: l }, forcedScale) => {
-  const k = forcedScale ?? detailScale({ widthCm: w, lengthCm: l }, 90)
-  const side = 16 * k
-  const top = 22 * k
-  const bottom = 8 * k
-  const outline = roundedRect(0, 0, w, l, 10 * k)
-  const seatWidth = w - 2 * side
-  const seat = roundedRect(side, top, seatWidth, l - top - bottom, 6 * k)
-  const cushionLine = (n: number): Point[] => {
-    const x = side + (seatWidth * n) / 3
-    return [{ x, y: top }, { x, y: l - bottom }]
+  const k = forcedScale ?? detailScale({ widthCm: w, lengthCm: l }, 80)
+  const arm = 18 * k
+  const armTop = 4 * k
+  const corner = 2 * k
+  const baseCorner = 3 * k
+  const seatY = l - 23 * k
+  const outline = [
+    ...arc(corner, armTop + corner, corner, 180, 270),
+    { x: arm, y: armTop },
+    ...arc(arm + corner, corner, corner, 180, 270),
+    ...arc(w - arm - corner, corner, corner, 270, 360),
+    { x: w - arm, y: armTop },
+    ...arc(w - corner, armTop + corner, corner, 270, 360),
+    ...arc(w - baseCorner, l - baseCorner, baseCorner, 0, 90),
+    ...arc(baseCorner, l - baseCorner, baseCorner, 90, 180),
+  ]
+  const cushionWidth = (w - 2 * arm) / 3
+  const cushion = (n: number): Point[] => {
+    const x0 = arm + cushionWidth * n
+    const x1 = x0 + cushionWidth
+    return [
+      ...arc(x0 + corner, corner, corner, 180, 270),
+      ...arc(x1 - corner, corner, corner, 270, 360),
+      ...bulge(x1, x0, seatY, 5 * k),
+    ]
   }
-  return { outline, lines: [closed(outline), closed(seat), cushionLine(1), cushionLine(2)] }
+  const rail = roundedRect(14 * k, seatY, w - 28 * k, 17 * k, 1.5 * k)
+  return { outline, lines: [closed(outline), closed(cushion(0)), closed(cushion(1)), closed(cushion(2)), closed(rail)] }
 }

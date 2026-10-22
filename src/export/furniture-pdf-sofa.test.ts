@@ -71,17 +71,16 @@ describe("легенда: запись «Диван»", () => {
     const doc = build(withItems(PLAN(), [sofa("s", 200, 260)]))
     const sample = inkStrokesOfSize(doc, 6, 16, 7.2)
     expect(sample).toHaveLength(1)
-    const [outer, seat] = sample[0]?.subpaths ?? []
-    // TCR (change sofa-cushions): к силуэту и сиденью добавились две линии подушек
-    expect(sample[0]?.subpaths).toHaveLength(4)
+    const [outer, , , , rail] = sample[0]?.subpaths ?? []
+    // TCR (change sofa-sketch-redraw): силуэт, три подушки спинки и планка
+    expect(sample[0]?.subpaths).toHaveLength(5)
     const o = boxOf(outer ?? [])
-    const s = boxOf(seat ?? [])
-    // отступы сиденья 16 / 22 / 8 см при масштабе легенды 0,2 мм/см: 3,2 / 4,4 / 1,6 мм
-    expect(s.x - o.x).toBeCloseTo(3.2, 2)
-    expect(s.y - o.y).toBeCloseTo(4.4, 2)
-    expect(o.y + o.h - (s.y + s.h)).toBeCloseTo(1.6, 2)
-    // скругление контура 10 см — 2 мм: верхняя сторона начинается на 2 мм правее левого края
-    expect(Math.min(...(outer ?? []).filter((p) => Math.abs(p.y - o.y) < 1e-6).map((p) => p.x)) - o.x).toBeCloseTo(2, 2)
+    const s = boxOf(rail ?? [])
+    // планка: отступ 14 см от боков и 6 см от низа при масштабе легенды 0,2 мм/см: 2,8 / 1,2 мм
+    expect(s.x - o.x).toBeCloseTo(2.8, 2)
+    expect(o.y + o.h - (s.y + s.h)).toBeCloseTo(1.2, 2)
+    // верхняя сторона спинки начинается на 20 см (подлокотник 18 + скругление 2) — 4 мм правее левого края
+    expect(Math.min(...(outer ?? []).filter((p) => Math.abs(p.y - o.y) < 1e-6).map((p) => p.x)) - o.x).toBeCloseTo(4, 2)
     const filled = parsePaint(doc, 6).filter(
       (op) => op.kind === "fill" && op.box !== null && op.box.x >= o.x - 0.05 && op.box.y >= o.y - 0.05 && op.box.x + op.box.w <= o.x + o.w + 0.05 && op.box.y + op.box.h <= o.y + o.h + 0.05,
     )
