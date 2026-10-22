@@ -33,7 +33,8 @@ describe("рисунок дивана", () => {
 
   it("SD-02: сиденье — отступы 16 см от боков, 22 см от верха, 8 см от низа, скругление 6 см", () => {
     const d = sofaDrawing(size(200, 90))
-    expect(d.lines).toHaveLength(2)
+    // TCR (change sofa-cushions): к силуэту и сиденью добавились две линии подушек
+    expect(d.lines).toHaveLength(4)
     const seat = d.lines[1] ?? []
     expect(boxOf(seat)).toEqual([16, 184, 22, 82])
     expect(Math.min(...atY(seat, 22).map((p) => p.x))).toBeCloseTo(22, 6)
@@ -72,6 +73,27 @@ describe("рисунок дивана", () => {
       expect(p.y).toBeGreaterThanOrEqual(-EPS)
       expect(p.y).toBeLessThanOrEqual(60 + EPS)
     }
+  })
+
+  it("SD-08: диван 200×90 — две вертикальные линии на x = 72 и 128 от верха до низа сиденья", () => {
+    const [, , a = [], b = []] = sofaDrawing(size(200, 90)).lines
+    expect(a.map((p) => [rounded(p.x), rounded(p.y)])).toEqual([[72, 22], [72, 82]])
+    expect(b.map((p) => [rounded(p.x), rounded(p.y)])).toEqual([[128, 22], [128, 82]])
+  })
+
+  it("SD-09: диван 240×100 — подушки равны, линии на третях ширины сиденья", () => {
+    const [, , a = [], b = []] = sofaDrawing(size(240, 100)).lines
+    expect(a[0]?.x).toBeCloseTo(16 + (240 - 32) / 3, 6)
+    expect(b[0]?.x).toBeCloseTo(16 + (2 * (240 - 32)) / 3, 6)
+  })
+
+  it("SD-10: узкий диван 200×60 — линии подушек внутри предмета и между подлокотниками", () => {
+    const k = 60 / 90
+    const [, , a = [], b = []] = sofaDrawing(size(200, 60)).lines
+    expect(a[0]?.x).toBeGreaterThan(16 * k)
+    expect(b[0]?.x).toBeLessThan(200 - 16 * k)
+    expect(rounded(a[0]?.y ?? NaN)).toBe(rounded(22 * k))
+    expect(rounded(a[1]?.y ?? NaN)).toBe(rounded(60 - 8 * k))
   })
 
   it("SD-07: заданный коэффициент деталей заменяет вычисляемый", () => {

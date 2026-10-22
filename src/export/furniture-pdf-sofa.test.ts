@@ -72,7 +72,8 @@ describe("легенда: запись «Диван»", () => {
     const sample = inkStrokesOfSize(doc, 6, 16, 7.2)
     expect(sample).toHaveLength(1)
     const [outer, seat] = sample[0]?.subpaths ?? []
-    expect(sample[0]?.subpaths).toHaveLength(2)
+    // TCR (change sofa-cushions): к силуэту и сиденью добавились две линии подушек
+    expect(sample[0]?.subpaths).toHaveLength(4)
     const o = boxOf(outer ?? [])
     const s = boxOf(seat ?? [])
     // отступы сиденья 16 / 22 / 8 см при масштабе легенды 0,2 мм/см: 3,2 / 4,4 / 1,6 мм
