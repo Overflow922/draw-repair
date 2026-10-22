@@ -2,7 +2,7 @@
 // длина, угол) различаются только видом, а вид — только записью каталога. Новый вид — новая запись; больше ничего в логике
 // не меняется (скилл add-furniture-kind).
 
-import { chairDrawing, tableDrawing } from "./item-drawing"
+import { chairDrawing, sofaDrawing, tableDrawing } from "./item-drawing"
 import type { ItemDrawingFn } from "./item-drawing"
 
 export interface ItemDefaults {
@@ -37,6 +37,13 @@ export const FURNITURE_KINDS = {
     defaults: { widthCm: 45, lengthCm: 45, angleDeg: 0 },
     drawing: chairDrawing,
     icon: '<path d="M7 3v9M7 12h10M17 12v9M7 12v9M7 3h6"/>',
+  },
+  sofa: {
+    label: "Диван",
+    plaqueWord: "диван",
+    defaults: { widthCm: 200, lengthCm: 90, angleDeg: 0 },
+    drawing: sofaDrawing,
+    icon: '<path d="M5 11V8a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v3"/><path d="M3 13a2 2 0 0 1 4 0v2h10v-2a2 2 0 0 1 4 0v5H3z"/><path d="M5 18v2M19 18v2"/>',
   },
 } as const satisfies Record<string, FurnitureKindEntry>
 

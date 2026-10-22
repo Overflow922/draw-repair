@@ -78,3 +78,15 @@ export const chairDrawing: ItemDrawingFn = ({ widthCm: w, lengthCm: l }, forcedS
   const seat = roundedRect(11 * k, 13 * k, w - 22 * k, l - 17 * k, 6 * k)
   return { outline, lines: [closed(outline), back, closed(seat)] }
 }
+
+// Диван: контур со скруглением 10 см и сиденье со скруглением 6 см с отступами 16 см от боков (подлокотники), 22 см от верха (спинка)
+// и 8 см от низа
+export const sofaDrawing: ItemDrawingFn = ({ widthCm: w, lengthCm: l }, forcedScale) => {
+  const k = forcedScale ?? detailScale({ widthCm: w, lengthCm: l }, 90)
+  const side = 16 * k
+  const top = 22 * k
+  const bottom = 8 * k
+  const outline = roundedRect(0, 0, w, l, 10 * k)
+  const seat = roundedRect(side, top, w - 2 * side, l - top - bottom, 6 * k)
+  return { outline, lines: [closed(outline), closed(seat)] }
+}

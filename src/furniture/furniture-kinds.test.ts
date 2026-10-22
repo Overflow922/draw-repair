@@ -6,12 +6,15 @@ import { FURNITURE_KINDS, FURNITURE_KIND_ORDER, isFurnitureKind, kindEntry } fro
 
 describe("каталог видов мебели", () => {
   // TCR (change add-furniture-chair): в каталоге новый вид
-  it("FIK-01: в каталоге «Стол» (80 × 160) и «Стул» (45 × 45), угол 0", () => {
-    expect(FURNITURE_KIND_ORDER).toEqual(["table", "chair"])
+  it("FIK-01: в каталоге «Стол» (80 × 160), «Стул» (45 × 45) и «Диван» (200 × 90), угол 0", () => {
+    // TCR (change add-furniture-sofa): в каталоге новый вид
+    expect(FURNITURE_KIND_ORDER).toEqual(["table", "chair", "sofa"])
     expect(kindEntry("table").label).toBe("Стол")
     expect(kindEntry("table").defaults).toEqual({ widthCm: 80, lengthCm: 160, angleDeg: 0 })
     expect(kindEntry("chair").label).toBe("Стул")
     expect(kindEntry("chair").defaults).toEqual({ widthCm: 45, lengthCm: 45, angleDeg: 0 })
+    expect(kindEntry("sofa").label).toBe("Диван")
+    expect(kindEntry("sofa").defaults).toEqual({ widthCm: 200, lengthCm: 90, angleDeg: 0 })
   })
 
   it("FIK-02: порядок видов совпадает с порядком записей каталога", () => {
@@ -21,7 +24,8 @@ describe("каталог видов мебели", () => {
   it("FIK-03: isFurnitureKind принимает только виды каталога", () => {
     expect(isFurnitureKind("table")).toBe(true)
     // TCR (change add-furniture-chair): «chair» теперь вид каталога, в примере не-вида — «sofa»
-    for (const x of ["", "sofa", "toString", undefined, 1, null]) expect(isFurnitureKind(x), String(x)).toBe(false)
+    // TCR (change add-furniture-sofa): «sofa» теперь вид каталога, в примере не-вида — «wardrobe»
+    for (const x of ["", "wardrobe", "toString", undefined, 1, null]) expect(isFurnitureKind(x), String(x)).toBe(false)
   })
 
   describe.each(FURNITURE_KIND_ORDER)("вид %s", (kind) => {
