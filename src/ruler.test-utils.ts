@@ -1,4 +1,5 @@
 import { expect } from "vitest"
+import type { RulerObject } from "./ruler"
 import type { Point, Wall } from "./types"
 import { W, rect, sceneR, shiftWalls } from "./room-area.test-utils"
 
@@ -156,6 +157,22 @@ export const SHARP_AXES: Point[] = [
   { x: 0, y: 600 * Math.tan(20 * DEG) },
 ]
 export const sceneSharp = (): Wall[] => closed(SHARP_AXES)
+
+// ---------- объекты линейки (change ruler-objects-span) ----------
+
+// комната R300: внутренние грани x ∈ [10, 310], y ∈ [10, 290] — 300 × 280 см
+export const sceneRoom300 = (): Wall[] => rect(0, 0, 320, 300)
+
+// прямоугольный объект с центром (cx, cy); угол — поворот оси ширины по часовой на экране
+export const rectObject = (cx: number, cy: number, widthCm: number, depthCm: number, angleDeg = 0): RulerObject => ({
+  kind: "rect",
+  center: { x: cx, y: cy },
+  u: rot({ x: 1, y: 0 }, angleDeg),
+  widthCm,
+  depthCm,
+})
+
+export const circleObject = (cx: number, cy: number, diameterCm: number): RulerObject => ({ kind: "circle", center: { x: cx, y: cy }, diameterCm })
 
 // ---------- записывающий контекст ----------
 

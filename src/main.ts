@@ -45,6 +45,8 @@ import { findRooms } from "./room-area"
 import { roomBlockAt, roomBlockLayout, roomBlocksOf } from "./room-block"
 import { formatRoomHeight, parseRoomHeight, reconcileRooms } from "./room-explication"
 import { rulerReading } from "./ruler"
+import type { RulerReading } from "./ruler"
+import { rulerObjectsOf } from "./ruler-objects"
 import { exportPages, pagesOf } from "./export/pdf"
 import { fitScale, scaleLabel } from "./export/fit-scale"
 import type { PageFormat } from "./export/pdf"
@@ -1601,6 +1603,12 @@ function redraw(): void {
   }
 }
 
+// замер линейки под курсором: стены плана и его объекты — батареи, коммуникации и (на плане «Мебель») мебель (change ruler-objects-span, design D6)
+function rulerOf(planWalls: Wall[], planBatteries: readonly Battery[], planItems: readonly FurnitureItem[] = []): RulerReading | null {
+  if (tool !== "ruler" || !cursor || gestureActive()) return null
+  return rulerReading(cursor, planWalls, rulerObjectsOf({ walls: planWalls, batteries: planBatteries, communications: communicationsOf(), items: planItems }))
+}
+
 function drawPlan(): void {
   if (!onFurniture()) furnitureWarning.hidden = true
   if (onFurniture()) drawFurniturePlan()
@@ -1656,7 +1664,7 @@ function drawFurniturePlan(): void {
       marqueeHits,
       marquee,
       tracks: centerGuideTracks(),
-      ruler: tool === "ruler" && cursor && !gestureActive() ? rulerReading(cursor, walls) : null,
+      ruler: rulerOf(walls, batteries, items),
     },
   )
 }
@@ -1719,7 +1727,7 @@ function drawReconstructionPlan(): void {
         chainStart && segment?.dir && segment.refRay && segment.angleDeg !== null
           ? { at: segment.start, from: segment.refRay, to: segment.dir, deg: segment.angleDeg }
           : null,
-      ruler: tool === "ruler" && cursor && !gestureActive() ? rulerReading(cursor, walls) : null,
+      ruler: rulerOf(walls, batteries),
     },
   )
 }
@@ -1747,7 +1755,7 @@ function drawRoughPlan(): void {
       selectedPlasterId: plasterTool.selectedId(),
       selectedScreedId: screedTool.selectedId(),
       ghost: plasterTool.ghost(),
-      ruler: tool === "ruler" && cursor && !gestureActive() ? rulerReading(cursor, s.base.walls) : null,
+      ruler: rulerOf(s.base.walls, s.base.batteries),
       rightAngles: s.rightAngles.map((a) => ({ id: a.mark.id, point: a.corner.point, arms: a.corner.arms })),
       selectedRightAngleId: rightAngleTool.selectedId(),
       angleGhost: angleGhost && tool === "rightAngle" ? { point: angleGhost.point, arms: angleGhost.arms, strips: cornerStrips(angleGhost, s.pieces) } : null,
@@ -1784,7 +1792,7 @@ function drawDemolitionPlan(): void {
       marks,
       selectedId: demolitionTool.selectedId(),
       ghost: demolitionTool.ghost(),
-      ruler: tool === "ruler" && cursor && !gestureActive() ? rulerReading(cursor, walls) : null,
+      ruler: rulerOf(walls, batteries),
       erasing: tool === "eraser" && cursor && !erasingCallout ? demolitionTool.eraseTarget(cursor) : null,
       callouts: calloutTool.displayList(),
       selectedCalloutId: calloutTool.selectedId(),
@@ -1846,7 +1854,7 @@ function drawMeasurePlan(): void {
         ? { at: segment.start, from: segment.refRay, to: segment.dir, deg: segment.angleDeg }
         : null,
     tracks: centerGuideTracks(),
-    ruler: tool === "ruler" && cursor && !gestureActive() ? rulerReading(cursor, walls) : null,
+    ruler: rulerOf(walls, batteries),
     palette: paletteOf(theme),
   })
 }

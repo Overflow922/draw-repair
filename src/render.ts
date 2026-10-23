@@ -774,7 +774,7 @@ function drawAngleArc(
   ctx.restore()
 }
 
-// замеры линейки: длина оси стены или пролёты грань-грань — как размерная линия цветом
+// замеры линейки: длина оси стены, размеры объекта или пролёты грань-грань — как размерная линия цветом
 // подсказок построения (цвет угла); углы помещения — дугами
 function drawRuler(
   ctx: CanvasRenderingContext2D,
@@ -785,7 +785,7 @@ function drawRuler(
   m: RenderMetrics,
   palette: Palette,
 ): void {
-  const measures = ruler.kind === "wall" ? [ruler] : [ruler.horizontal, ruler.vertical].filter((s) => s !== null)
+  const measures = ruler.kind === "wall" ? [ruler] : ruler.kind === "object" ? ruler.measures : [ruler.horizontal, ruler.vertical].filter((s) => s !== null)
   ctx.save()
   ctx.font = `${m.labelPx}px ${m.font}`
   ctx.textAlign = "center"

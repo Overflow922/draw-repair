@@ -20,8 +20,17 @@ export interface RoomAngle {
   deg: number // внутренний угол, округлён до сотых
 }
 
+// объект плана для линейки (change ruler-objects-span, design D1): повёрнутый прямоугольник или круг
+export type RulerObject =
+  | { kind: "rect"; center: Point; u: Point; widthCm: number; depthCm: number } // u — единичная ось ширины, ось глубины v = (−u.y, u.x)
+  | { kind: "circle"; center: Point; diameterCm: number }
+
+type RulerRect = Extract<RulerObject, { kind: "rect" }>
+type RulerCircle = Extract<RulerObject, { kind: "circle" }>
+
 export type RulerReading =
   | { kind: "wall"; wall: Wall; from: Point; to: Point; lengthCm: number }
+  | { kind: "object"; measures: Span[] } // размеры объекта под курсором: ширина и глубина прямоугольника или диаметр круга
   | { kind: "space"; horizontal: Span | null; vertical: Span | null; angles: RoomAngle[] }
 
 interface WallForm {
@@ -39,12 +48,71 @@ const RAD_TO_DEG = 180 / Math.PI
 
 const roundHundredths = (deg: number): number => Math.round(deg * 100) / 100
 
-export function rulerReading(p: Point, walls: Wall[]): RulerReading {
+// стена под курсором главнее объекта; затем объект; иначе пролёт между стенами и торцами объектов (change ruler-objects-span, design D3)
+export function rulerReading(p: Point, walls: Wall[], objects: readonly RulerObject[] = []): RulerReading {
   const forms = walls.map((wall) => ({ wall, polys: displayPolygons(wall, walls) }))
   const wall = wallUnder(p, forms)
   if (wall) return wallReading(wall, walls)
-  const polys = forms.flatMap((f) => f.polys)
-  return { kind: "space", horizontal: span(p, polys, "x"), vertical: span(p, polys, "y"), angles: roomAngles(p, walls, freeCapCorners(forms)) }
+  const object = objectUnder(p, objects)
+  if (object) return objectReading(p, object)
+  const polys = [...forms.flatMap((f) => f.polys), ...objects.flatMap((o) => (o.kind === "rect" ? [rectCorners(o)] : []))]
+  const circles = objects.filter((o): o is RulerCircle => o.kind === "circle")
+  return {
+    kind: "space",
+    horizontal: span(p, polys, circles, "x"),
+    vertical: span(p, polys, circles, "y"),
+    angles: roomAngles(p, walls, freeCapCorners(forms)),
+  }
+}
+
+const rectAxisV = (o: RulerRect): Point => ({ x: -o.u.y, y: o.u.x })
+
+function rectCorners(o: RulerRect): Point[] {
+  const v = rectAxisV(o)
+  const hw = o.widthCm / 2
+  const hd = o.depthCm / 2
+  const at = (sw: number, sd: number): Point => ({ x: o.center.x + sw * hw * o.u.x + sd * hd * v.x, y: o.center.y + sw * hw * o.u.y + sd * hd * v.y })
+  return [at(-1, -1), at(1, -1), at(1, 1), at(-1, 1)]
+}
+
+function insideObject(p: Point, o: RulerObject): boolean {
+  if (o.kind === "circle") return dist(p, o.center) <= o.diameterCm / 2
+  const v = rectAxisV(o)
+  const d = sub(p, o.center)
+  return Math.abs(dot(d, o.u)) <= o.widthCm / 2 && Math.abs(dot(d, v)) <= o.depthCm / 2
+}
+
+// объект, в теле которого курсор; среди нескольких — с ближайшим центром, при равенстве — стоящий раньше
+function objectUnder(p: Point, objects: readonly RulerObject[]): RulerObject | null {
+  let best: RulerObject | null = null
+  let bestD = Infinity
+  for (const o of objects) {
+    if (!insideObject(p, o)) continue
+    const d = dist(p, o.center)
+    if (d < bestD) {
+      best = o
+      bestD = d
+    }
+  }
+  return best
+}
+
+// прямоугольник: линии ширины и глубины проходят через курсор (следуют за ним, подписи не совпадают);
+// круг: диаметр по горизонтали через центр
+function objectReading(p: Point, o: RulerObject): RulerReading {
+  const line = (from: Point, to: Point): Span => ({ from, to, lengthCm: dist(from, to) })
+  if (o.kind === "circle") {
+    const r = o.diameterCm / 2
+    return { kind: "object", measures: [line({ x: o.center.x - r, y: o.center.y }, { x: o.center.x + r, y: o.center.y })] }
+  }
+  const v = rectAxisV(o)
+  const d = sub(p, o.center)
+  const a = dot(d, o.u)
+  const b = dot(d, v)
+  const hw = o.widthCm / 2
+  const hd = o.depthCm / 2
+  const at = (sa: number, sb: number): Point => ({ x: o.center.x + sa * o.u.x + sb * v.x, y: o.center.y + sa * o.u.y + sb * v.y })
+  return { kind: "object", measures: [line(at(-hw, b), at(hw, b)), line(at(a, -hd), at(a, hd))] }
 }
 
 // замер стены: по оси; у конца с выступом тела (коллинеарное продолжение с зазором) линия идёт от плоскости
@@ -100,11 +168,23 @@ function wallUnder(p: Point, forms: WallForm[]): Wall | null {
   return best
 }
 
-// пролёт вдоль оси axis через курсор: ближайшие пересечения лучей с рёбрами форм по обе стороны
-function span(p: Point, polys: Point[][], axis: "x" | "y"): Span | null {
+// пролёт вдоль оси axis через курсор: ближайшие пересечения лучей с рёбрами форм и окружностями по обе стороны
+function span(p: Point, polys: Point[][], circles: RulerCircle[], axis: "x" | "y"): Span | null {
   const across = axis === "x" ? "y" : "x"
   let lo = -Infinity
   let hi = Infinity
+  const take = (at: number): void => {
+    if (at < p[axis] && at > lo) lo = at
+    if (at > p[axis] && at < hi) hi = at
+  }
+  for (const c of circles) {
+    const r = c.diameterCm / 2
+    const offset = p[across] - c.center[across]
+    if (Math.abs(offset) >= r) continue // луч мимо круга или касательный
+    const half = Math.sqrt(r * r - offset * offset)
+    take(c.center[axis] - half)
+    take(c.center[axis] + half)
+  }
   for (const poly of polys) {
     for (let i = 0; i < poly.length; i++) {
       const a = poly[i]
@@ -112,9 +192,7 @@ function span(p: Point, polys: Point[][], axis: "x" | "y"): Span | null {
       // ребро вдоль луча: на линии луча — коллинеарно, вход даст соседнее ребро; иначе не пересекает
       if (a[across] === b[across]) continue
       if (p[across] < Math.min(a[across], b[across]) || p[across] > Math.max(a[across], b[across])) continue
-      const at = a[axis] + ((p[across] - a[across]) * (b[axis] - a[axis])) / (b[across] - a[across])
-      if (at < p[axis] && at > lo) lo = at
-      if (at > p[axis] && at < hi) hi = at
+      take(a[axis] + ((p[across] - a[across]) * (b[axis] - a[axis])) / (b[across] - a[across]))
     }
   }
   if (!Number.isFinite(lo) || !Number.isFinite(hi)) return null
