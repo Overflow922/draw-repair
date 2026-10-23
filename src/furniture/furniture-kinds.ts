@@ -14,6 +14,7 @@ import {
   wallCabinetDrawing,
 } from "./item-drawing"
 import type { ItemDrawingFn } from "./item-drawing"
+import { doubleWardrobeDrawing, slidingWardrobeDrawing } from "./wardrobe-drawing"
 
 export interface ItemDefaults {
   widthCm: number
@@ -96,6 +97,20 @@ export const FURNITURE_KINDS = {
     defaults: { widthCm: 30, lengthCm: 60, angleDeg: 0 },
     drawing: nightstandDrawing,
     icon: '<rect x="6" y="3" width="12" height="18"/><path d="M8 6h8" stroke-dasharray="1.5 1"/><path d="M8 6v13h8V6"/>',
+  },
+  slidingWardrobe: {
+    label: "Шкаф-купе",
+    plaqueWord: "шкаф-купе",
+    defaults: { widthCm: 300, lengthCm: 60, angleDeg: 0 },
+    drawing: slidingWardrobeDrawing,
+    icon: '<rect x="2" y="5" width="20" height="14"/><path d="M2 8h20M2 10.5h20M9 5v3M15 5v3M12 8v2.5"/><path d="M6 13v4M9 13v4M15 13v4M18 13v4"/>',
+  },
+  doubleWardrobe: {
+    label: "Шкаф двустворчатый",
+    plaqueWord: "шкаф двустворчатый",
+    defaults: { widthCm: 100, lengthCm: 60, angleDeg: 0 },
+    drawing: doubleWardrobeDrawing,
+    icon: '<rect x="5" y="3" width="14" height="18"/><path d="M5 6h14M12 3v3M8 14h8"/><path d="M8 8.5v4.5M10.5 8.5v4.5M13.5 15v4M16 15v4"/>',
   },
 } as const satisfies Record<string, FurnitureKindEntry>
 

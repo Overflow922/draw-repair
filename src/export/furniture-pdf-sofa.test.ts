@@ -96,6 +96,7 @@ describe("легенда: запись «Диван»", () => {
     const base = drawing({ walls, roughPlaster: [plaster("a", "k1", 1, "a", 0, 420, 20)], reconstruction: content([G()]) })
     // TCR (change add-furniture-tv-wall-cabinet): в каталоге семь видов — 17 записей, 15 в первом столбце легенды и 2 во втором (spec pdf-export «Легенда на странице PDF»)
     // TCR (change add-furniture-bed-nightstand): в каталоге девять видов — 19 записей, 15 в первом столбце легенды и 4 во втором
+    // TCR (change add-furniture-wardrobes): в каталоге одиннадцать видов — 21 запись, 15 в первом столбце легенды и 6 во втором
     const items = [
       table("t", 200, 160),
       item("p", "desk", 200, 300, 100, 50),
@@ -106,11 +107,13 @@ describe("легенда: запись «Диван»", () => {
       item("w", "wallCabinet", 300, 400, 180, 42),
       item("b", "bed", 500, 400, 160, 200),
       item("n", "nightstand", 700, 400, 30, 60),
+      item("k", "slidingWardrobe", 800, 400, 300, 60),
+      item("d", "doubleWardrobe", 900, 400, 100, 60),
     ]
     const d = { ...withItems(base, items), batteries: [battery], communications: [riser, duct] }
     const entries = legendEntries(must(pagesOf(d)[5]))
-    expect(entries.map((e) => e.label).slice(-9)).toEqual(["Стол", "Стул", "Диван", "Письменный стол", "Компьютерное кресло", "Телевизор", "Подвесная тумба", "Кровать", "Прикроватный столик"])
-    expect(entries).toHaveLength(19)
+    expect(entries.map((e) => e.label).slice(-11)).toEqual(["Стол", "Стул", "Диван", "Письменный стол", "Компьютерное кресло", "Телевизор", "Подвесная тумба", "Кровать", "Прикроватный столик", "Шкаф-купе", "Шкаф двустворчатый"])
+    expect(entries).toHaveLength(21)
     expect(Math.min(entries.length, LEGEND_COLUMN_CAPACITY) * LEGEND_ROW_PITCH_MM).toBeLessThanOrEqual(222)
   })
 })

@@ -36,7 +36,8 @@ describe("разметка группы «Мебель»", () => {
     // TCR (change add-furniture-desk-office-chair): в каталоге новые виды
     // TCR (change add-furniture-tv-wall-cabinet): в каталоге новые виды
     // TCR (change add-furniture-bed-nightstand): в каталоге новые виды
-    expect(FURNITURE_KIND_ORDER).toEqual(["table", "chair", "sofa", "desk", "officeChair", "tv", "wallCabinet", "bed", "nightstand"])
+    // TCR (change add-furniture-wardrobes): в каталоге новые виды
+    expect(FURNITURE_KIND_ORDER).toEqual(["table", "chair", "sofa", "desk", "officeChair", "tv", "wallCabinet", "bed", "nightstand", "slidingWardrobe", "doubleWardrobe"])
     expect(main).toContain("FURNITURE_KIND_ORDER.map((kind)")
     expect(main).toContain("button.id = `tool-furniture-${kind}`")
     expect(main).toContain('button.className = "group-tool"')
