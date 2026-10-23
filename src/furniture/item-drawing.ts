@@ -22,10 +22,10 @@ export type ItemDrawingFn = (size: ItemSize, detailScale?: number) => ItemDrawin
 
 const ARC_STEP_DEG = 5
 
-const closed = (poly: Point[]): Point[] => (poly[0] ? [...poly, poly[0]] : poly)
+export const closed = (poly: Point[]): Point[] => (poly[0] ? [...poly, poly[0]] : poly)
 
 // дуга окружности с центром (cx, cy), углы в градусах (ось Y вниз, 0° — вправо, 90° — вниз), шаг не больше ARC_STEP_DEG
-function arc(cx: number, cy: number, r: number, fromDeg: number, toDeg: number): Point[] {
+export function arc(cx: number, cy: number, r: number, fromDeg: number, toDeg: number): Point[] {
   const steps = Math.max(1, Math.ceil(Math.abs(toDeg - fromDeg) / ARC_STEP_DEG))
   return Array.from({ length: steps + 1 }, (_, i) => {
     const a = ((fromDeg + ((toDeg - fromDeg) * i) / steps) * Math.PI) / 180

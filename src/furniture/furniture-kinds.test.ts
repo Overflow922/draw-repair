@@ -13,7 +13,10 @@ describe("каталог видов мебели", () => {
     // TCR (change add-furniture-bed-nightstand): в каталоге новые виды
     // TCR (change add-furniture-wardrobes): в каталоге новые виды
     // TCR (change add-furniture-curtains): в каталоге новый вид
-    expect(FURNITURE_KIND_ORDER).toEqual(["table", "chair", "sofa", "desk", "officeChair", "tv", "wallCabinet", "bed", "nightstand", "slidingWardrobe", "doubleWardrobe", "curtains"])
+    // TCR (change add-furniture-kitchen-cabinet-fridge): в каталоге новые виды
+    expect(FURNITURE_KIND_ORDER).toEqual(["table", "chair", "sofa", "desk", "officeChair", "tv", "wallCabinet", "bed", "nightstand", "slidingWardrobe", "doubleWardrobe", "curtains", "kitchenCabinet", "fridge"])
+    expect(kindEntry("kitchenCabinet").defaults).toEqual({ widthCm: 60, lengthCm: 62, angleDeg: 0 })
+    expect(kindEntry("fridge").defaults).toEqual({ widthCm: 100, lengthCm: 90, angleDeg: 0 })
     expect(kindEntry("curtains").label).toBe("Шторы")
     expect(kindEntry("curtains").defaults).toEqual({ widthCm: 300, lengthCm: 13, angleDeg: 0 })
     expect(kindEntry("slidingWardrobe").label).toBe("Шкаф-купе")

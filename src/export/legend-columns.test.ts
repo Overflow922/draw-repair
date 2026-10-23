@@ -25,6 +25,9 @@ const ITEMS: Record<FurnitureItem["kind"], FurnitureItem> = {
   doubleWardrobe: item("d", "doubleWardrobe", 800, 400, 100, 60),
   // TCR (change add-furniture-curtains): в каталоге новый вид (запись нужна типу Record; наборы FIFTEEN и ALL не меняются)
   curtains: item("u", "curtains", 900, 400, 300, 13),
+  // TCR (change add-furniture-kitchen-cabinet-fridge): в каталоге новые виды (запись нужна типу Record; наборы FIFTEEN и ALL не меняются)
+  kitchenCabinet: item("q", "kitchenCabinet", 1000, 400, 60, 62),
+  fridge: item("f", "fridge", 1100, 400, 100, 90),
 }
 
 // страница «Мебель» со всеми материалами, батареей, стояком, воздуховодом, штукатуркой, гипсокартоном и предметами заданных видов

@@ -3,6 +3,7 @@
 // не меняется (скилл add-furniture-kind).
 
 import { curtainsDrawing } from "./curtains-drawing"
+import { fridgeDrawing } from "./fridge-drawing"
 import {
   bedDrawing,
   chairDrawing,
@@ -15,6 +16,7 @@ import {
   wallCabinetDrawing,
 } from "./item-drawing"
 import type { ItemDrawingFn } from "./item-drawing"
+import { kitchenCabinetDrawing } from "./kitchen-cabinet-drawing"
 import { doubleWardrobeDrawing, slidingWardrobeDrawing } from "./wardrobe-drawing"
 
 export interface ItemDefaults {
@@ -119,6 +121,20 @@ export const FURNITURE_KINDS = {
     defaults: { widthCm: 300, lengthCm: 13, angleDeg: 0 },
     drawing: curtainsDrawing,
     icon: '<path d="M2 11c2-6 4-6 5.5 0s3.500 6 4.500 0 3.500-6 5.500 0 3 6 4.500 0"/><path d="M3 15c2-4 3.500-4 5 0s3 4 4 0 3-4 4.500 0 2 4 4 0"/><path d="M2 19h20M2 21h20"/>',
+  },
+  kitchenCabinet: {
+    label: "Кухонный шкаф",
+    plaqueWord: "кухонный шкаф",
+    defaults: { widthCm: 60, lengthCm: 62, angleDeg: 0 },
+    drawing: kitchenCabinetDrawing,
+    icon: '<rect x="4" y="7" width="16" height="14"/><path d="M4 10h16M9 3.500h6M10 3.500v3.500M14 3.500v3.500"/>',
+  },
+  fridge: {
+    label: "Холодильник двустворчатый",
+    plaqueWord: "холодильник двустворчатый",
+    defaults: { widthCm: 100, lengthCm: 90, angleDeg: 0 },
+    drawing: fridgeDrawing,
+    icon: '<rect x="3" y="3" width="18" height="11"/><circle cx="12" cy="8.500" r="3"/><path d="M3 14l5 7M21 14l-8 7"/>',
   },
 } as const satisfies Record<string, FurnitureKindEntry>
 
