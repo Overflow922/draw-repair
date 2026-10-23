@@ -212,3 +212,27 @@ export const officeChairDrawing: ItemDrawingFn = ({ widthCm: w, lengthCm: l }, f
   }
   return { outline, lines: [bodyTop, bodyBottom, ...arms, seat, ...spokes, ...squares, ...wheels] }
 }
+
+// Телевизор по эскизу (91 × 11, экран вверху): экран 3 см толщиной во всю ширину, задняя стенка — трапеция под экраном (края 5 см от боков по
+// линии экрана и 9,5 см по низу, высота 3 см), шейка — четыре отрезка на ±16 и ±19,5 см от середины ширины (y 6–8,5), подставка шириной 42 см
+// (y 8,5–11) по центру. Подставка шире длины предмета, поэтому детали уменьшаются по обеим сторонам: min(1, ширина / 91, длина / 11);
+// силуэт для обводки — прямоугольник предмета
+export const tvDrawing: ItemDrawingFn = ({ widthCm: w, lengthCm: l }, forcedScale) => {
+  const k = forcedScale ?? Math.min(1, w / 91, l / 11)
+  const cx = w / 2
+  const outline = [{ x: 0, y: 0 }, { x: w, y: 0 }, { x: w, y: l }, { x: 0, y: l }]
+  const screen = closed([{ x: 0, y: 0 }, { x: w, y: 0 }, { x: w, y: 3 * k }, { x: 0, y: 3 * k }])
+  const back = [{ x: 5 * k, y: 3 * k }, { x: 9.5 * k, y: 6 * k }, { x: w - 9.5 * k, y: 6 * k }, { x: w - 5 * k, y: 3 * k }]
+  const post = (dx: number): Point[] => [{ x: cx + dx * k, y: 6 * k }, { x: cx + dx * k, y: 8.5 * k }]
+  const base = closed([{ x: cx - 21 * k, y: 8.5 * k }, { x: cx + 21 * k, y: 8.5 * k }, { x: cx + 21 * k, y: 11 * k }, { x: cx - 21 * k, y: 11 * k }])
+  return { outline, lines: [screen, back, post(-19.5), post(-16), post(16), post(19.5), base] }
+}
+
+// Подвесная тумба по эскизу (180 × 42): прямоугольник с острыми углами и два крепления 6 × 7 см у нижнего (к стене) края с отступом 13 см от боков;
+// у креплений нижней стороны нет — её заменяет нижний край
+export const wallCabinetDrawing: ItemDrawingFn = ({ widthCm: w, lengthCm: l }, forcedScale) => {
+  const k = forcedScale ?? detailScale({ widthCm: w, lengthCm: l }, 42)
+  const outline = [{ x: 0, y: 0 }, { x: w, y: 0 }, { x: w, y: l }, { x: 0, y: l }]
+  const bracket = (x: number): Point[] => [{ x, y: l }, { x, y: l - 7 * k }, { x: x + 6 * k, y: l - 7 * k }, { x: x + 6 * k, y: l }]
+  return { outline, lines: [closed(outline), bracket(13 * k), bracket(w - 19 * k)] }
+}

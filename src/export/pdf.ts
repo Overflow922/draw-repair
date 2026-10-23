@@ -43,7 +43,7 @@ import { drawExplication } from "./explication-draw"
 import { pageNotes } from "./notes"
 import { drawNotes } from "./notes-draw"
 import { drawLegend } from "./legend-draw"
-import { legendWidthMm } from "./legend"
+import { legendColumnCount, legendWidthMm } from "./legend"
 import { drawSheet } from "./sheet-draw"
 import { drawingArea, legendArea, sheetSizeMm } from "./sheet-layout"
 
@@ -344,6 +344,7 @@ function drawPage(
   scale: number,
   format: PageFormat,
   legendMm: number,
+  legendColumns: number,
   bandMm: number,
   name: string,
   date: Date,
@@ -356,7 +357,7 @@ function drawPage(
     pan: { x: -placement.offsetX / placement.mmPerCm, y: -placement.offsetY / placement.mmPerCm },
   }
   drawSheet(doc, format, page.title === undefined ? { name, scale, date } : { name, scale, date, pageName: page.title })
-  drawLegend(doc, ctx, page, legendArea(format, legendMm, bandMm))
+  drawLegend(doc, ctx, page, legendArea(format, legendMm, bandMm), legendColumns)
   const explication = pageExplication(page)
   if (explication) drawExplication(doc, format, explication)
   const notes = pageNotes(page)
@@ -433,10 +434,11 @@ export function buildPdfPages(
   doc.addFileToVFS("PTSans.ttf", fontB64)
   doc.addFont("PTSans.ttf", "PTSans", "normal")
   const legendMm = legendWidthMm(pages)
+  const legendColumns = legendColumnCount(pages)
   const bandMm = bottomBandMm(pages, format)
   pages.forEach((page, i) => {
     if (i > 0) doc.addPage([pw, ph], "landscape")
-    drawPage(doc, page, unit, scale, format, legendMm, bandMm, name, date)
+    drawPage(doc, page, unit, scale, format, legendMm, legendColumns, bandMm, name, date)
   })
   return doc
 }

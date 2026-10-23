@@ -22,6 +22,8 @@ export type LegendEntry =
 export const LEGEND_PAD_LEFT_MM = 8
 export const LEGEND_SAMPLE_W_MM = 16
 export const LEGEND_ROW_PITCH_MM = 14
+// записей в столбце: ⌊222 / 14⌋ — предел высоты области чертежа среди A3–A0; остальные записи — во втором столбце
+export const LEGEND_COLUMN_CAPACITY = 15
 export const LEGEND_GAP_MM = 5
 export const LEGEND_FONT_MM = 3.5
 export const LEGEND_LINE_PITCH_MM = 4.5
@@ -79,9 +81,24 @@ export function wrapLabel(label: string): string[] {
   return lines
 }
 
-// ширина столбца легенды документа: самая широкая строка подписей среди всех страниц после переноса
-export function legendWidthMm(pages: readonly PlanPage[]): number {
+// ширина одного столбца легенды документа: самая широкая строка подписей среди всех страниц после переноса
+export function legendColumnWidthMm(pages: readonly PlanPage[]): number {
   const widest = Math.max(0, ...pages.flatMap((p) => legendEntries(p)).flatMap((e) => wrapLabel(e.label)).map(estimateMm))
   if (widest === 0) return 0
   return LEGEND_PAD_LEFT_MM + LEGEND_SAMPLE_W_MM + LEGEND_GAP_MM + widest + LEGEND_PAD_RIGHT_MM
+}
+
+// столбец и строка записи с номером i: записи идут сверху вниз по первому столбцу, затем по второму (change add-furniture-tv-wall-cabinet)
+export function legendCell(i: number): { column: number; row: number } {
+  return { column: Math.floor(i / LEGEND_COLUMN_CAPACITY), row: i % LEGEND_COLUMN_CAPACITY }
+}
+
+// число столбцов легенды документа: наибольшее среди страниц, не меньше одного
+export function legendColumnCount(pages: readonly PlanPage[]): number {
+  return Math.max(1, ...pages.map((p) => Math.ceil(legendEntries(p).length / LEGEND_COLUMN_CAPACITY)))
+}
+
+// ширина легенды документа: число столбцов, умноженное на ширину столбца; 0, если легенды нигде нет
+export function legendWidthMm(pages: readonly PlanPage[]): number {
+  return legendColumnCount(pages) * legendColumnWidthMm(pages)
 }

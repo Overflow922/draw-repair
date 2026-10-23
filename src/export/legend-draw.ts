@@ -24,6 +24,7 @@ import {
   LEGEND_PAD_LEFT_MM,
   LEGEND_RISER_DIAMETER_MM,
   LEGEND_ROW_PITCH_MM,
+  legendCell,
   legendEntries,
   wrapLabel,
 } from "./legend"
@@ -186,12 +187,15 @@ function drawSample(ctx: CanvasRenderingContext2D, entry: LegendEntry, origin: P
 
 // столбец легенды страницы: записи сверху вниз с верхнего края столбца; на странице «Демонтаж» образцы материалов серые,
 // как подложка. Образец стоит по центру блока строк подписи.
-export function drawLegend(doc: jsPDF, ctx: CanvasRenderingContext2D, page: PlanPage, column: Rect): void {
+// Записи сверх пятнадцатой стоят во втором столбце той же ширины; columns — число столбцов легенды документа (change add-furniture-tv-wall-cabinet)
+export function drawLegend(doc: jsPDF, ctx: CanvasRenderingContext2D, page: PlanPage, column: Rect, columns: number): void {
   const underlay = page.demolition !== undefined || page.rough !== undefined || page.reconstruction !== undefined
   const palette: Palette = underlay ? { ...LIGHT_PALETTE, ink: LIGHT_PALETTE.muted } : LIGHT_PALETTE
+  const columnWidth = column.w / columns
   legendEntries(page).forEach((entry, i) => {
-    const centerY = column.y + LEGEND_ROW_PITCH_MM * (i + 0.5)
-    const origin: Point = { x: column.x + LEGEND_PAD_LEFT_MM, y: centerY }
+    const cell = legendCell(i)
+    const centerY = column.y + LEGEND_ROW_PITCH_MM * (cell.row + 0.5)
+    const origin: Point = { x: column.x + columnWidth * cell.column + LEGEND_PAD_LEFT_MM, y: centerY }
     drawSample(ctx, entry, origin, palette, page.reconstruction !== undefined)
     // рендер образца меняет состояние шрифта документа, поэтому шрифт задаётся после образца
     doc.setFont(PDF_METRICS.font, "normal")

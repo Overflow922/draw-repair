@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest"
 import { content, drawing, drywall, plaster, rectWalls, wall } from "../reconstruction/reconstruction.test-utils"
 import { LIGHT_PALETTE } from "../theme"
 import type { Battery, Communication, Drawing, FurnitureItem } from "../types"
-import { LEGEND_ROW_PITCH_MM, legendEntries } from "./legend"
+import { LEGEND_COLUMN_CAPACITY, LEGEND_ROW_PITCH_MM, legendEntries } from "./legend"
 import { parsePaint } from "./pdf-paint.test-utils"
 import type { PaintOp } from "./pdf-paint.test-utils"
 import { buildPdfPages, pagesOf } from "./pdf"
@@ -87,19 +87,27 @@ describe("легенда: запись «Диван»", () => {
     expect(filled).toEqual([])
   })
 
-  it("SP-04: все виды каталога вместе с пятью материалами, батареей, стояком, воздуховодом, штукатуркой и гипсокартоном помещаются по высоте на A3", () => {
+  it("SP-04: все виды каталога вместе с пятью материалами, батареей, стояком, воздуховодом, штукатуркой и гипсокартоном: столбец легенды помещается по высоте на A3", () => {
     const battery: Battery = { id: "b1", wallId: "k1", face: 1, anchor: "a", offsetCm: 100, lengthCm: 70, thicknessCm: 10, gapCm: 3 }
     const materials = ["blocks", "brick", "concrete", "gkl", "wood-long"] as const
     const walls = [...rectWalls("k", 0, 0, 420, 320), ...materials.map((m, i) => wall(`m${i}`, 600, i * 60, 800, i * 60, 10, m))]
     const riser: Communication = { kind: "riser", id: "r1", x: 200, y: 160, diameterCm: 11 }
     const duct: Communication = { kind: "duct", id: "d1", x: 300, y: 200, widthCm: 30, depthCm: 20 }
     const base = drawing({ walls, roughPlaster: [plaster("a", "k1", 1, "a", 0, 420, 20)], reconstruction: content([G()]) })
-    // TCR (change add-furniture-desk-office-chair): в каталоге новые виды — пять видов, 15 записей
-    const items = [table("t", 200, 160), item("p", "desk", 200, 300, 100, 50), chair("c", 100, 100), sofa("s", 300, 100), item("o", "officeChair", 100, 300, 60, 60)]
+    // TCR (change add-furniture-tv-wall-cabinet): в каталоге семь видов — 17 записей, 15 в первом столбце легенды и 2 во втором (spec pdf-export «Легенда на странице PDF»)
+    const items = [
+      table("t", 200, 160),
+      item("p", "desk", 200, 300, 100, 50),
+      chair("c", 100, 100),
+      sofa("s", 300, 100),
+      item("o", "officeChair", 100, 300, 60, 60),
+      item("v", "tv", 300, 300, 91, 11),
+      item("w", "wallCabinet", 300, 400, 180, 42),
+    ]
     const d = { ...withItems(base, items), batteries: [battery], communications: [riser, duct] }
     const entries = legendEntries(must(pagesOf(d)[5]))
-    expect(entries.map((e) => e.label).slice(-5)).toEqual(["Стол", "Стул", "Диван", "Письменный стол", "Компьютерное кресло"])
-    expect(entries).toHaveLength(15)
-    expect(entries.length * LEGEND_ROW_PITCH_MM).toBeLessThanOrEqual(222)
+    expect(entries.map((e) => e.label).slice(-7)).toEqual(["Стол", "Стул", "Диван", "Письменный стол", "Компьютерное кресло", "Телевизор", "Подвесная тумба"])
+    expect(entries).toHaveLength(17)
+    expect(Math.min(entries.length, LEGEND_COLUMN_CAPACITY) * LEGEND_ROW_PITCH_MM).toBeLessThanOrEqual(222)
   })
 })
