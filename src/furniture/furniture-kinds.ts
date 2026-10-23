@@ -2,7 +2,7 @@
 // длина, угол) различаются только видом, а вид — только записью каталога. Новый вид — новая запись; больше ничего в логике
 // не меняется (скилл add-furniture-kind).
 
-import { chairDrawing, sofaDrawing, tableDrawing } from "./item-drawing"
+import { chairDrawing, deskDrawing, officeChairDrawing, sofaDrawing, tableDrawing } from "./item-drawing"
 import type { ItemDrawingFn } from "./item-drawing"
 
 export interface ItemDefaults {
@@ -44,6 +44,20 @@ export const FURNITURE_KINDS = {
     defaults: { widthCm: 200, lengthCm: 90, angleDeg: 0 },
     drawing: sofaDrawing,
     icon: '<path d="M5 11V8a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v3"/><path d="M3 13a2 2 0 0 1 4 0v2h10v-2a2 2 0 0 1 4 0v5H3z"/><path d="M5 18v2M19 18v2"/>',
+  },
+  desk: {
+    label: "Письменный стол",
+    plaqueWord: "письменный стол",
+    defaults: { widthCm: 100, lengthCm: 50, angleDeg: 0 },
+    drawing: deskDrawing,
+    icon: '<rect x="3" y="7" width="18" height="10" rx="1"/><path d="M5 9v6M19 9v6" stroke-dasharray="1.5 1"/><path d="M8 15h8"/>',
+  },
+  officeChair: {
+    label: "Компьютерное кресло",
+    plaqueWord: "компьютерное кресло",
+    defaults: { widthCm: 60, lengthCm: 60, angleDeg: 0 },
+    drawing: officeChairDrawing,
+    icon: '<path d="M7 11V8a5 5 0 0 1 10 0v3"/><rect x="8" y="11" width="8" height="5" rx="1.5"/><path d="M5 10v5M19 10v5M12 16v2M7 21l5-3 5 3"/>',
   },
 } as const satisfies Record<string, FurnitureKindEntry>
 

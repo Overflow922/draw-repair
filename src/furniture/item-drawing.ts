@@ -121,3 +121,94 @@ export const sofaDrawing: ItemDrawingFn = ({ widthCm: w, lengthCm: l }, forcedSc
   const rail = roundedRect(14 * k, seatY, w - 28 * k, 17 * k, 1.5 * k)
   return { outline, lines: [closed(outline), closed(cushion(0)), closed(cushion(1)), closed(cushion(2)), closed(rail)] }
 }
+
+// Штрихи пунктира вдоль замкнутой ломаной: штрих dash, промежуток gap, начиная с её первой точки; штрих не прерывается на углах.
+// Каждый штрих — отдельная ломаная, поэтому пунктир рисуется теми же линиями рисунка, что и сплошные
+function dashed(ring: readonly Point[], dash: number, gap: number): Point[][] {
+  const strokes: Point[][] = []
+  let stroke: Point[] | null = null
+  let drawing = true
+  let left = dash
+  for (let i = 1; i < ring.length; i++) {
+    const a = ring[i - 1]
+    const b = ring[i]
+    if (!a || !b) continue
+    const length = Math.hypot(b.x - a.x, b.y - a.y)
+    const at = (t: number): Point => ({ x: a.x + ((b.x - a.x) * t) / length, y: a.y + ((b.y - a.y) * t) / length })
+    let t = 0
+    while (length - t > 1e-9) {
+      const step = Math.min(left, length - t)
+      if (drawing) {
+        stroke ??= [at(t)]
+        stroke.push(at(t + step))
+      }
+      t += step
+      left -= step
+      if (left <= 1e-9) {
+        if (drawing && stroke) strokes.push(stroke)
+        stroke = null
+        drawing = !drawing
+        left = drawing ? dash : gap
+      }
+    }
+  }
+  if (stroke) strokes.push(stroke)
+  return strokes
+}
+
+// Письменный стол по эскизу (100 × 50): контур со скруглением 2 см, две пунктирные ножки 3 см шириной с отступом 3,5 см от боков и
+// 4 см от верха и низа (штрих 1,5 см, промежуток 1 см) и сплошная линия между ножками на 4 см выше нижнего края (от 10 см от боков)
+export const deskDrawing: ItemDrawingFn = ({ widthCm: w, lengthCm: l }, forcedScale) => {
+  const k = forcedScale ?? detailScale({ widthCm: w, lengthCm: l }, 50)
+  const outline = roundedRect(0, 0, w, l, 2 * k)
+  const leg = (x: number): Point[][] =>
+    dashed(closed([{ x, y: 4 * k }, { x: x + 3 * k, y: 4 * k }, { x: x + 3 * k, y: l - 4 * k }, { x, y: l - 4 * k }]), 1.5 * k, 1 * k)
+  const front = [{ x: 10 * k, y: l - 4 * k }, { x: w - 10 * k, y: l - 4 * k }]
+  return { outline, lines: [closed(outline), ...leg(3.5 * k), ...leg(w - 6.5 * k), front] }
+}
+
+// Колёсико кресла: центр и точка на подлокотнике или теле, откуда идёт спица (у верхнего колёсика спицы нет — её закрывает тело)
+interface OfficeChairCaster {
+  centre: Point
+  spokeFrom: Point | null
+}
+
+const OFFICE_CHAIR_CASTERS: readonly OfficeChairCaster[] = [
+  { centre: { x: 30, y: 3 }, spokeFrom: null },
+  { centre: { x: 4, y: 23 }, spokeFrom: { x: 9, y: 24.3 } },
+  { centre: { x: 56, y: 23 }, spokeFrom: { x: 51, y: 24.3 } },
+  { centre: { x: 14, y: 55.5 }, spokeFrom: { x: 17, y: 50 } },
+  { centre: { x: 46, y: 55.5 }, spokeFrom: { x: 43, y: 50 } },
+]
+const CASTER_HALF_CM = 2.2
+const CASTER_WHEEL_RADIUS_CM = 1.4
+
+// Компьютерное кресло по эскизу (60 × 60, числа в сантиметрах в системе предмета 60 × 60): тело x 11,5–48,5, y 5,5–50 (верхние углы
+// радиуса 10, нижние 5) с линией, прерванной подлокотниками (x 9–14 и 46–51, y 19,5–43,5, концы радиуса 2,5), дуга сиденья от (14; 22)
+// до (46; 22) с вершиной на y = 16,5, пять колёсиков (квадрат 4,4 и окружность радиуса 1,4), четыре спицы. Фигура одного размера
+// у предмета любой величины и стоит в его центре; у предмета меньше 60 × 60 все детали уменьшаются
+export const officeChairDrawing: ItemDrawingFn = ({ widthCm: w, lengthCm: l }, forcedScale) => {
+  const k = forcedScale ?? detailScale({ widthCm: w, lengthCm: l }, 60)
+  const place = (p: Point): Point => ({ x: w / 2 + (p.x - 30) * k, y: l / 2 + (p.y - 30) * k })
+  const placed = (pts: readonly Point[]): Point[] => pts.map(place)
+  const topCorners = [...arc(21.5, 15.5, 10, 180, 270), ...arc(38.5, 15.5, 10, 270, 360)]
+  const outline = placed([...topCorners, ...arc(43.5, 45, 5, 0, 90), ...arc(16.5, 45, 5, 90, 180)])
+  const bodyTop = placed([{ x: 11.5, y: 19.5 }, ...topCorners, { x: 48.5, y: 19.5 }])
+  const bodyBottom = placed([{ x: 11.5, y: 43.5 }, ...arc(16.5, 45, 5, 180, 90), ...arc(43.5, 45, 5, 90, 0), { x: 48.5, y: 43.5 }])
+  const arms = [roundedRect(9, 19.5, 5, 24, 2.5), roundedRect(46, 19.5, 5, 24, 2.5)].map((arm) => closed(placed(arm)))
+  const seat = placed(bulge(46, 14, 22, 5.5))
+  const spokes: Point[][] = []
+  const squares: Point[][] = []
+  const wheels: Point[][] = []
+  for (const { centre: c, spokeFrom } of OFFICE_CHAIR_CASTERS) {
+    const length = spokeFrom ? Math.hypot(c.x - spokeFrom.x, c.y - spokeFrom.y) : 1
+    // u — вдоль спицы к колёсику (у верхнего — вверх), v — поперёк
+    const u = spokeFrom ? { x: (c.x - spokeFrom.x) / length, y: (c.y - spokeFrom.y) / length } : { x: 0, y: -1 }
+    const v = { x: -u.y, y: u.x }
+    const corner = (a: number, b: number): Point => ({ x: c.x + CASTER_HALF_CM * (a * u.x + b * v.x), y: c.y + CASTER_HALF_CM * (a * u.y + b * v.y) })
+    if (spokeFrom) spokes.push(placed([spokeFrom, corner(-1, 0)]))
+    squares.push(closed(placed([corner(1, 1), corner(1, -1), corner(-1, -1), corner(-1, 1)])))
+    wheels.push(placed(arc(c.x, c.y, CASTER_WHEEL_RADIUS_CM, 0, 360)))
+  }
+  return { outline, lines: [bodyTop, bodyBottom, ...arms, seat, ...spokes, ...squares, ...wheels] }
+}

@@ -8,7 +8,12 @@ describe("каталог видов мебели", () => {
   // TCR (change add-furniture-chair): в каталоге новый вид
   it("FIK-01: в каталоге «Стол» (80 × 160), «Стул» (45 × 45) и «Диван» (200 × 90), угол 0", () => {
     // TCR (change add-furniture-sofa): в каталоге новый вид
-    expect(FURNITURE_KIND_ORDER).toEqual(["table", "chair", "sofa"])
+    // TCR (change add-furniture-desk-office-chair): в каталоге новые виды
+    expect(FURNITURE_KIND_ORDER).toEqual(["table", "chair", "sofa", "desk", "officeChair"])
+    expect(kindEntry("desk").label).toBe("Письменный стол")
+    expect(kindEntry("desk").defaults).toEqual({ widthCm: 100, lengthCm: 50, angleDeg: 0 })
+    expect(kindEntry("officeChair").label).toBe("Компьютерное кресло")
+    expect(kindEntry("officeChair").defaults).toEqual({ widthCm: 60, lengthCm: 60, angleDeg: 0 })
     expect(kindEntry("table").label).toBe("Стол")
     expect(kindEntry("table").defaults).toEqual({ widthCm: 80, lengthCm: 160, angleDeg: 0 })
     expect(kindEntry("chair").label).toBe("Стул")

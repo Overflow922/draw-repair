@@ -94,10 +94,12 @@ describe("легенда: запись «Диван»", () => {
     const riser: Communication = { kind: "riser", id: "r1", x: 200, y: 160, diameterCm: 11 }
     const duct: Communication = { kind: "duct", id: "d1", x: 300, y: 200, widthCm: 30, depthCm: 20 }
     const base = drawing({ walls, roughPlaster: [plaster("a", "k1", 1, "a", 0, 420, 20)], reconstruction: content([G()]) })
-    const d = { ...withItems(base, [table("t", 200, 160), chair("c", 100, 100), sofa("s", 300, 100)]), batteries: [battery], communications: [riser, duct] }
+    // TCR (change add-furniture-desk-office-chair): в каталоге новые виды — пять видов, 15 записей
+    const items = [table("t", 200, 160), item("p", "desk", 200, 300, 100, 50), chair("c", 100, 100), sofa("s", 300, 100), item("o", "officeChair", 100, 300, 60, 60)]
+    const d = { ...withItems(base, items), batteries: [battery], communications: [riser, duct] }
     const entries = legendEntries(must(pagesOf(d)[5]))
-    expect(entries.map((e) => e.label).slice(-3)).toEqual(["Стол", "Стул", "Диван"])
-    expect(entries).toHaveLength(13)
+    expect(entries.map((e) => e.label).slice(-5)).toEqual(["Стол", "Стул", "Диван", "Письменный стол", "Компьютерное кресло"])
+    expect(entries).toHaveLength(15)
     expect(entries.length * LEGEND_ROW_PITCH_MM).toBeLessThanOrEqual(222)
   })
 })
