@@ -17,6 +17,7 @@ import {
 } from "./item-drawing"
 import type { ItemDrawingFn } from "./item-drawing"
 import { kitchenCabinetDrawing } from "./kitchen-cabinet-drawing"
+import type { ObstacleKind } from "./overlap"
 import { doubleWardrobeDrawing, slidingWardrobeDrawing } from "./wardrobe-drawing"
 
 export interface ItemDefaults {
@@ -35,6 +36,15 @@ export interface FurnitureKindEntry {
   drawing: ItemDrawingFn
   // содержимое SVG иконки кнопки вида (viewBox 24 x 24, stroke currentColor)
   icon: string
+  // с чем этот вид может стоять без предупреждения о пересечении (change furniture-overlap-exemptions): виды препятствий
+  // и виды мебели; пара видов исключена, если любой из двух перечисляет другой
+  overlapExemptions?: OverlapExemptions
+}
+
+export interface OverlapExemptions {
+  obstacles?: readonly ObstacleKind[]
+  // ключи каталога; тип FurnitureKind выводится из самого каталога, поэтому здесь строки — их проверяет тест FOE-10
+  furniture?: readonly string[]
 }
 
 export const FURNITURE_KINDS = {
@@ -79,6 +89,7 @@ export const FURNITURE_KINDS = {
     defaults: { widthCm: 91, lengthCm: 11, angleDeg: 0 },
     drawing: tvDrawing,
     icon: '<rect x="2" y="6" width="20" height="3"/><path d="M5 9l2 3h10l2-3"/><path d="M9 12v3M15 12v3M8 18h8v-3H8z"/>',
+    overlapExemptions: { furniture: ["wallCabinet", "nightstand", "kitchenCabinet"] },
   },
   wallCabinet: {
     label: "Подвесная тумба",
@@ -121,6 +132,7 @@ export const FURNITURE_KINDS = {
     defaults: { widthCm: 300, lengthCm: 13, angleDeg: 0 },
     drawing: curtainsDrawing,
     icon: '<path d="M2 11c2-6 4-6 5.5 0s3.500 6 4.500 0 3.500-6 5.500 0 3 6 4.500 0"/><path d="M3 15c2-4 3.500-4 5 0s3 4 4 0 3-4 4.500 0 2 4 4 0"/><path d="M2 19h20M2 21h20"/>',
+    overlapExemptions: { obstacles: ["battery"] },
   },
   kitchenCabinet: {
     label: "Кухонный шкаф",

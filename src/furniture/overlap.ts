@@ -6,6 +6,7 @@ import { hostOf } from "../doorway/doorway-faces"
 import { cutPieces, openingLines } from "../doorway/doorway-layout"
 import type { Battery, Communication, Point, FurnitureItem, Wall, WallElement } from "../types"
 import { clipHalfPlane, displayPolygons, polygonArea } from "../wall-geometry"
+import { kindEntry } from "./furniture-kinds"
 import type { FurnitureKind } from "./furniture-kinds"
 import { itemCorners } from "./item"
 
@@ -117,16 +118,24 @@ function overlapRegion(poly: readonly Point[], t: FurnitureItem): Point[] | null
   return clipByRect(poly, t, 0)
 }
 
+// наложение, которое не считается пересечением (change furniture-overlap-exemptions): вид предмета перечисляет вид препятствия
+// или вид другого предмета в своих исключениях — у любого из двух предметов пары
+const exemptFromObstacle = (item: FurnitureKind, obstacle: ObstacleKind): boolean => kindEntry(item).overlapExemptions?.obstacles?.includes(obstacle) ?? false
+const exemptPair = (a: FurnitureKind, b: FurnitureKind): boolean =>
+  (kindEntry(a).overlapExemptions?.furniture?.includes(b) ?? false) || (kindEntry(b).overlapExemptions?.furniture?.includes(a) ?? false)
+
 // пересечения одного стола с препятствиями и с другими столами (для призрака и выделенного стола)
 export function itemOverlaps(table: FurnitureItem, obstacles: readonly Obstacle[], others: readonly FurnitureItem[] = []): Overlap[] {
   const out: Overlap[] = []
-  for (const o of obstacles)
+  for (const o of obstacles) {
+    if (exemptFromObstacle(table.kind, o.kind)) continue
     for (const poly of o.polygons) {
       const region = overlapRegion(poly, table)
       if (region) out.push({ kind: o.kind, itemId: table.id, itemKind: table.kind, region })
     }
+  }
   for (const other of others) {
-    if (other.id === table.id) continue
+    if (other.id === table.id || exemptPair(table.kind, other.kind)) continue
     const region = overlapRegion(itemCorners(other), table)
     if (region) out.push({ kind: "furniture", itemId: table.id, itemKind: table.kind, otherKind: other.kind, region })
   }
