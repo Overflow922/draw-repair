@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest"
 import type { Point } from "../types"
+import { itemDrawingInPlan } from "./furniture-render"
+import { newItem } from "./item"
 import { nightstandDrawing } from "./item-drawing"
 import type { ItemSize } from "./item-drawing"
 
@@ -57,5 +59,16 @@ describe("рисунок прикроватного столика", () => {
   it("NS-06: масштаб деталей 1 из аргумента задаёт детали в полном размере при любых габаритах", () => {
     const d = nightstandDrawing(size(20, 40), 1)
     expect(pts(d.lines[1])).toEqual([[2.5, 2.5], [2.5, 37.5], [17.5, 37.5], [17.5, 2.5]])
+  })
+
+  it("NS-07: столик с углом 90° — пунктирная сторона справа от центра на экране", () => {
+    const item = newItem("n", "nightstand", { x: 0, y: 0 }, { widthCm: 30, lengthCm: 60, angleDeg: 90 })
+    const dashes = itemDrawingInPlan(item).lines.slice(2)
+    // пунктир лежит на y = 2,5 при центре (15; 30), то есть на 27,5 выше центра; после поворота на 90° — на 27,5 правее
+    expect(dashes).toHaveLength(10)
+    expect(dashes.every((l) => l.every((p) => Math.abs(p.x - 27.5) < 1e-6))).toBe(true)
+    // рамка (2,5; 2,5), (2,5; 57,5), (27,5; 57,5), (27,5; 2,5) относительно центра — (−12,5; −27,5), (−12,5; 27,5), (12,5; 27,5), (12,5; −27,5);
+    // после поворота на 90° (x, y) → (−y, x)
+    expect(pts(itemDrawingInPlan(item).lines[1])).toEqual([[27.5, -12.5], [-27.5, -12.5], [-27.5, 12.5], [27.5, 12.5]])
   })
 })

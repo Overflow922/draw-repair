@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest"
 import type { Point } from "../types"
+import { itemDrawingInPlan } from "./furniture-render"
+import { newItem } from "./item"
 import { bedDrawing } from "./item-drawing"
 import type { ItemSize } from "./item-drawing"
 
@@ -120,5 +122,19 @@ describe("рисунок кровати", () => {
     const d = bedDrawing(size(120, 100), 1)
     expect(box(d.lines[1])).toEqual([3.5, 3.5, 116.5, 96.5])
     expect(box(d.lines[2])).toEqual([10, 57, 10 + 45, 94])
+  })
+
+  it("BED-10: кровать с углом 90° — подушки слева от центра на экране", () => {
+    const item = newItem("b", "bed", { x: 0, y: 0 }, { widthCm: 160, lengthCm: 200, angleDeg: 90 })
+    const lines = itemDrawingInPlan(item).lines
+    const centre = (l: readonly Point[]): Point => {
+      const [x0, y0, x1, y1] = box(l)
+      return { x: ((x0 ?? 0) + (x1 ?? 0)) / 2, y: ((y0 ?? 0) + (y1 ?? 0)) / 2 }
+    }
+    // подушки (центры (42,5; 175,5) и (117,5; 175,5)) относительно центра (80; 100): (−37,5; 75,5) и (37,5; 75,5);
+    // после поворота на 90° — влево на 75,5, выше и ниже центра на 37,5
+    const near = (p: Point, x: number, y: number): boolean => Math.hypot(p.x - x, p.y - y) < 1e-3
+    expect(lines.some((l) => near(centre(l), -75.5, -37.5))).toBe(true)
+    expect(lines.some((l) => near(centre(l), -75.5, 37.5))).toBe(true)
   })
 })
