@@ -236,3 +236,44 @@ export const wallCabinetDrawing: ItemDrawingFn = ({ widthCm: w, lengthCm: l }, f
   const bracket = (x: number): Point[] => [{ x, y: l }, { x, y: l - 7 * k }, { x: x + 6 * k, y: l - 7 * k }, { x: x + 6 * k, y: l }]
   return { outline, lines: [closed(outline), bracket(13 * k), bracket(w - 19 * k)] }
 }
+
+// Кровать по эскизу (160 × 200, изголовье внизу): контур со скруглением 2 см, матрас с отступом 3,5 см (скругление 1,5 см), две подушки высотой 37 см
+// (y от l − 43 до l − 6, скругление 3 см, шириной (w − 30)/2 с отступом 10 см от боков и промежутком 10 см), одеяло — две незамкнутые кромки
+// с концами на боковых сторонах матраса (верхняя — дуга с провисом 2,5 см на y = l − 84, нижняя — ломаная с дугами радиуса 5 см на y = l − 45)
+// и три складки-отрезка: слева, по середине ширины и справа. Детали привязаны к нижнему краю и не растягиваются
+export const bedDrawing: ItemDrawingFn = ({ widthCm: w, lengthCm: l }, forcedScale) => {
+  const k = forcedScale ?? detailScale({ widthCm: w, lengthCm: l }, 160)
+  const outline = roundedRect(0, 0, w, l, 2 * k)
+  const mattress = roundedRect(3.5 * k, 3.5 * k, w - 7 * k, l - 7 * k, 1.5 * k)
+  const pillowWidth = (w - 30 * k) / 2
+  const pillow = (x: number): Point[] => roundedRect(x, l - 43 * k, pillowWidth, 37 * k, 3 * k)
+  const blanketTop = bulge(3.5 * k, w - 3.5 * k, l - 84 * k, -2.5 * k)
+  const blanketBottom = [...arc(8.5 * k, l - 50 * k, 5 * k, 180, 90), ...arc(w - 8.5 * k, l - 50 * k, 5 * k, 90, 0)]
+  const fold = (x0: number, y0: number, x1: number, y1: number): Point[] => [{ x: x0, y: l - y0 * k }, { x: x1, y: l - y1 * k }]
+  const mid = w / 2
+  return {
+    outline,
+    lines: [
+      closed(outline),
+      closed(mattress),
+      closed(pillow(10 * k)),
+      closed(pillow(20 * k + pillowWidth)),
+      blanketTop,
+      blanketBottom,
+      fold(5 * k, 58, 24 * k, 47),
+      fold(mid - 11 * k, 75, mid + 33 * k, 49),
+      fold(w - 56 * k, 72, w - 10 * k, 48),
+    ],
+  }
+}
+
+// Прикроватный столик по эскизу (30 × 60): прямоугольник с острыми углами и рамка с отступом 2,5 см — левая, нижняя и правая стороны сплошные,
+// верхняя пунктиром (штрих 1,5 см, промежуток 1 см, от левого угла)
+export const nightstandDrawing: ItemDrawingFn = ({ widthCm: w, lengthCm: l }, forcedScale) => {
+  const k = forcedScale ?? detailScale({ widthCm: w, lengthCm: l }, 30)
+  const inset = 2.5 * k
+  const outline = [{ x: 0, y: 0 }, { x: w, y: 0 }, { x: w, y: l }, { x: 0, y: l }]
+  const frame = [{ x: inset, y: inset }, { x: inset, y: l - inset }, { x: w - inset, y: l - inset }, { x: w - inset, y: inset }]
+  const top = dashed([{ x: inset, y: inset }, { x: w - inset, y: inset }], 1.5 * k, 1 * k)
+  return { outline, lines: [closed(outline), frame, ...top] }
+}

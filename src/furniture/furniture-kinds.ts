@@ -2,7 +2,17 @@
 // длина, угол) различаются только видом, а вид — только записью каталога. Новый вид — новая запись; больше ничего в логике
 // не меняется (скилл add-furniture-kind).
 
-import { chairDrawing, deskDrawing, officeChairDrawing, sofaDrawing, tableDrawing, tvDrawing, wallCabinetDrawing } from "./item-drawing"
+import {
+  bedDrawing,
+  chairDrawing,
+  deskDrawing,
+  nightstandDrawing,
+  officeChairDrawing,
+  sofaDrawing,
+  tableDrawing,
+  tvDrawing,
+  wallCabinetDrawing,
+} from "./item-drawing"
 import type { ItemDrawingFn } from "./item-drawing"
 
 export interface ItemDefaults {
@@ -72,6 +82,20 @@ export const FURNITURE_KINDS = {
     defaults: { widthCm: 180, lengthCm: 42, angleDeg: 0 },
     drawing: wallCabinetDrawing,
     icon: '<rect x="3" y="6" width="18" height="12"/><path d="M6 18v-3h3v3M15 18v-3h3v3"/>',
+  },
+  bed: {
+    label: "Кровать",
+    plaqueWord: "кровать",
+    defaults: { widthCm: 160, lengthCm: 200, angleDeg: 0 },
+    drawing: bedDrawing,
+    icon: '<rect x="4" y="3" width="16" height="18" rx="1"/><rect x="6" y="15.5" width="5" height="3.5" rx="1"/><rect x="13" y="15.5" width="5" height="3.5" rx="1"/><path d="M4 11h16"/>',
+  },
+  nightstand: {
+    label: "Прикроватный столик",
+    plaqueWord: "прикроватный столик",
+    defaults: { widthCm: 30, lengthCm: 60, angleDeg: 0 },
+    drawing: nightstandDrawing,
+    icon: '<rect x="6" y="3" width="12" height="18"/><path d="M8 6h8" stroke-dasharray="1.5 1"/><path d="M8 6v13h8V6"/>',
   },
 } as const satisfies Record<string, FurnitureKindEntry>
 

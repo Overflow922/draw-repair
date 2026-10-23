@@ -17,6 +17,9 @@ const ITEMS: Record<FurnitureItem["kind"], FurnitureItem> = {
   officeChair: item("o", "officeChair", 100, 300, 60, 60),
   tv: item("v", "tv", 300, 300, 91, 11),
   wallCabinet: item("w", "wallCabinet", 300, 400, 180, 42),
+  // TCR (change add-furniture-bed-nightstand): в каталоге новые виды (запись нужна типу Record; наборы FIFTEEN и ALL не меняются)
+  bed: item("b", "bed", 500, 400, 160, 200),
+  nightstand: item("n", "nightstand", 600, 400, 30, 60),
 }
 
 // страница «Мебель» со всеми материалами, батареей, стояком, воздуховодом, штукатуркой, гипсокартоном и предметами заданных видов
