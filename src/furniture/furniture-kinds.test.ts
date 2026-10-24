@@ -14,7 +14,12 @@ describe("каталог видов мебели", () => {
     // TCR (change add-furniture-wardrobes): в каталоге новые виды
     // TCR (change add-furniture-curtains): в каталоге новый вид
     // TCR (change add-furniture-kitchen-cabinet-fridge): в каталоге новые виды
-    expect(FURNITURE_KIND_ORDER).toEqual(["table", "chair", "sofa", "desk", "officeChair", "tv", "wallCabinet", "bed", "nightstand", "slidingWardrobe", "doubleWardrobe", "curtains", "kitchenCabinet", "fridge"])
+    // TCR (change add-furniture-kitchen-objects): в каталоге новые виды
+    expect(FURNITURE_KIND_ORDER).toEqual(["table", "chair", "sofa", "desk", "officeChair", "tv", "wallCabinet", "bed", "nightstand", "slidingWardrobe", "doubleWardrobe", "curtains", "kitchenCabinet", "fridge", "wineCabinet", "hob", "dishwasher", "sink"])
+    expect(kindEntry("wineCabinet").defaults).toEqual({ widthCm: 30, lengthCm: 62, angleDeg: 0 })
+    expect(kindEntry("hob").defaults).toEqual({ widthCm: 52, lengthCm: 30, angleDeg: 0 })
+    expect(kindEntry("dishwasher").defaults).toEqual({ widthCm: 60, lengthCm: 62, angleDeg: 0 })
+    expect(kindEntry("sink").defaults).toEqual({ widthCm: 45, lengthCm: 40, angleDeg: 0 })
     expect(kindEntry("kitchenCabinet").defaults).toEqual({ widthCm: 60, lengthCm: 62, angleDeg: 0 })
     expect(kindEntry("fridge").defaults).toEqual({ widthCm: 100, lengthCm: 90, angleDeg: 0 })
     expect(kindEntry("curtains").label).toBe("Шторы")

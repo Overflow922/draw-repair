@@ -34,7 +34,7 @@ export function arc(cx: number, cy: number, r: number, fromDeg: number, toDeg: n
 }
 
 // прямоугольник со скруглёнными углами по часовой, начиная с левого верхнего скругления; радиус ограничен половиной стороны
-function roundedRect(x: number, y: number, w: number, h: number, radius: number): Point[] {
+export function roundedRect(x: number, y: number, w: number, h: number, radius: number): Point[] {
   const r = Math.max(0, Math.min(radius, w / 2, h / 2))
   if (r === 0) return [{ x, y }, { x: x + w, y }, { x: x + w, y: y + h }, { x, y: y + h }]
   return [
@@ -80,7 +80,7 @@ export const chairDrawing: ItemDrawingFn = ({ widthCm: w, lengthCm: l }, forcedS
 }
 
 // Дуга-парабола от (x1, y) к (x0, y), вершина поднята на rise над y посередине (ось Y вниз)
-function bulge(x1: number, x0: number, y: number, rise: number): Point[] {
+export function bulge(x1: number, x0: number, y: number, rise: number): Point[] {
   const steps = 12
   return Array.from({ length: steps + 1 }, (_, i) => {
     const t = i / steps

@@ -17,6 +17,8 @@ import {
 } from "./item-drawing"
 import type { ItemDrawingFn } from "./item-drawing"
 import { kitchenCabinetDrawing } from "./kitchen-cabinet-drawing"
+import { hobDrawing, sinkDrawing } from "./kitchen-inset-drawing"
+import { dishwasherDrawing, wineCabinetDrawing } from "./kitchen-module-drawing"
 import type { ObstacleKind } from "./overlap"
 import { doubleWardrobeDrawing, slidingWardrobeDrawing } from "./wardrobe-drawing"
 
@@ -147,6 +149,39 @@ export const FURNITURE_KINDS = {
     defaults: { widthCm: 100, lengthCm: 90, angleDeg: 0 },
     drawing: fridgeDrawing,
     icon: '<rect x="3" y="3" width="18" height="11"/><circle cx="12" cy="8.500" r="3"/><path d="M3 14l5 7M21 14l-8 7"/>',
+  },
+  // объекты кухни (change add-furniture-kitchen-objects): встроенные стоят в кухонном шкафу, врезные — на нём и над встроенными
+  wineCabinet: {
+    label: "Винный шкаф",
+    plaqueWord: "винный шкаф",
+    defaults: { widthCm: 30, lengthCm: 62, angleDeg: 0 },
+    drawing: wineCabinetDrawing,
+    icon: '<rect x="7" y="6" width="10" height="15"/><path d="M7 8.500h10M10 3.500h4M10.500 3.500v2.500M13.500 3.500v2.500"/><path d="M11.300 10.500v2l-1.300 1.500v5h4v-5l-1.300-1.500v-2z"/>',
+    overlapExemptions: { furniture: ["kitchenCabinet"] },
+  },
+  hob: {
+    label: "Варочная панель",
+    plaqueWord: "варочная панель",
+    defaults: { widthCm: 52, lengthCm: 30, angleDeg: 0 },
+    drawing: hobDrawing,
+    icon: '<rect x="2" y="6" width="20" height="12" rx="1"/><circle cx="8" cy="12" r="3.500"/><circle cx="15" cy="12" r="2.500"/><circle cx="19.500" cy="10.500" r="0.700"/><circle cx="19.500" cy="13.500" r="0.700"/>',
+    overlapExemptions: { furniture: ["kitchenCabinet", "wineCabinet", "dishwasher"] },
+  },
+  dishwasher: {
+    label: "Посудомойка",
+    plaqueWord: "посудомойка",
+    defaults: { widthCm: 60, lengthCm: 62, angleDeg: 0 },
+    drawing: dishwasherDrawing,
+    icon: '<rect x="3" y="7" width="18" height="14"/><path d="M3 10h18M8 3.500h8M9.500 3.500v3.500M14.500 3.500v3.500"/><path d="M6.500 12h5a2.500 3 0 0 1-5 0zM9 15v3M7 18.500h4M15 12v2.500a1 1 0 0 0 2 0V12M16 15.500v3"/>',
+    overlapExemptions: { furniture: ["kitchenCabinet"] },
+  },
+  sink: {
+    label: "Раковина",
+    plaqueWord: "раковина",
+    defaults: { widthCm: 45, lengthCm: 40, angleDeg: 0 },
+    drawing: sinkDrawing,
+    icon: '<rect x="2" y="4" width="20" height="16" rx="2"/><rect x="4" y="6" width="16" height="8" rx="1.500"/><circle cx="12" cy="17" r="1.500"/><path d="M5 16.500h3M5 18h3M16 16.500h3M16 18h3"/>',
+    overlapExemptions: { furniture: ["kitchenCabinet", "wineCabinet", "dishwasher"] },
   },
 } as const satisfies Record<string, FurnitureKindEntry>
 

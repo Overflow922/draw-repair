@@ -99,6 +99,7 @@ describe("легенда: запись «Диван»", () => {
     // TCR (change add-furniture-wardrobes): в каталоге одиннадцать видов — 21 запись, 15 в первом столбце легенды и 6 во втором
     // TCR (change add-furniture-curtains): в каталоге двенадцать видов — 22 записи, 15 в первом столбце легенды и 7 во втором
     // TCR (change add-furniture-kitchen-cabinet-fridge): в каталоге четырнадцать видов — 24 записи, 15 в первом столбце легенды и 9 во втором
+    // TCR (change add-furniture-kitchen-objects): в каталоге восемнадцать видов — 28 записей, 15 в первом столбце легенды и 13 во втором
     const items = [
       table("t", 200, 160),
       item("p", "desk", 200, 300, 100, 50),
@@ -114,11 +115,15 @@ describe("легенда: запись «Диван»", () => {
       item("u", "curtains", 1000, 400, 300, 13),
       item("q", "kitchenCabinet", 1100, 400, 60, 62),
       item("f", "fridge", 1200, 400, 100, 90),
+      item("e", "wineCabinet", 1300, 400, 30, 62),
+      item("h", "hob", 1400, 400, 52, 30),
+      item("j", "dishwasher", 1500, 400, 60, 62),
+      item("r", "sink", 1600, 400, 45, 40),
     ]
     const d = { ...withItems(base, items), batteries: [battery], communications: [riser, duct] }
     const entries = legendEntries(must(pagesOf(d)[5]))
-    expect(entries.map((e) => e.label).slice(-14)).toEqual(["Стол", "Стул", "Диван", "Письменный стол", "Компьютерное кресло", "Телевизор", "Подвесная тумба", "Кровать", "Прикроватный столик", "Шкаф-купе", "Шкаф двустворчатый", "Шторы", "Кухонный шкаф", "Холодильник двустворчатый"])
-    expect(entries).toHaveLength(24)
+    expect(entries.map((e) => e.label).slice(-18)).toEqual(["Стол", "Стул", "Диван", "Письменный стол", "Компьютерное кресло", "Телевизор", "Подвесная тумба", "Кровать", "Прикроватный столик", "Шкаф-купе", "Шкаф двустворчатый", "Шторы", "Кухонный шкаф", "Холодильник двустворчатый", "Винный шкаф", "Варочная панель", "Посудомойка", "Раковина"])
+    expect(entries).toHaveLength(28)
     expect(Math.min(entries.length, LEGEND_COLUMN_CAPACITY) * LEGEND_ROW_PITCH_MM).toBeLessThanOrEqual(222)
   })
 })
