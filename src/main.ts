@@ -67,7 +67,12 @@ import { openFurniture, storedFurniture } from "./furniture/furniture-workspace"
 import type { Workspace as FurnitureWorkspace } from "./furniture/furniture-workspace"
 import { furnitureOverlaps, obstaclesOf, itemOverlaps } from "./furniture/overlap"
 import type { Obstacle, Overlap } from "./furniture/overlap"
-import { itemsInRect } from "./furniture/item-edit"
+import { applyItemNumber, itemsInRect } from "./furniture/item-edit"
+import type { ItemNumber } from "./furniture/item-number"
+import { itemSizeLayout } from "./furniture/item-size-layout"
+import { furnitureReachBodies, itemDistanceLayout } from "./furniture/item-wall-reach"
+import type { Shape } from "./communications/shape"
+import { numberAt } from "./doorway/editable-numbers"
 import { editParams as editItemParams, initialKindParams, panelValues as itemPanelValues, parseAngleField, paramsOfKind, withKindParams } from "./furniture/item-params"
 import type { ItemParams } from "./furniture/item-params"
 import { createItemTool } from "./furniture/item-tool"
@@ -216,6 +221,10 @@ let drywallPanelOpen = false
 let furnitureWorkspace: FurnitureWorkspace | null = null
 let items: FurnitureItem[] = []
 let furnitureObstacles: Obstacle[] = []
+// тела граней для расстояний выделенного предмета до стен (change furniture-dimensions, design D2)
+let furnitureBodies: Shape[] = []
+// поле ввода правимого числа выделенного предмета
+let itemNumberEditor: NumberEditor | null = null
 let furnitureCache: FurnitureScene | null = null
 // значения для новых столов: запоминаются в сеансе, в чертёж не входят
 // активный вид инструмента «Мебель» и значения для новых предметов по видам: в сеансе, в чертеже не сохраняются
@@ -449,6 +458,7 @@ function loadWorking(): void {
   furnitureWorkspace = null
   items = []
   furnitureObstacles = []
+  furnitureBodies = []
   obstacles = []
   if (activePlanOf(d) === "furniture") {
     // подложка — результат «Реконструкции», целиком только для чтения; правятся столы и собственные размеры плана
@@ -463,6 +473,7 @@ function loadWorking(): void {
     furnitureWorkspace = opened.workspace
     remnantHome = new Map(walls.map((w) => [w.id, { a: { ...w.a }, b: { ...w.b } }]))
     furnitureObstacles = obstaclesOf({ walls: s.base.underlay, drywall: s.base.own, plaster: opened.obstacles, elements: doorways, batteries, communications: communicationsOf() })
+    furnitureBodies = furnitureReachBodies(s.base)
     return
   }
   if (activePlanOf(d) === "reconstruction") {
@@ -1145,6 +1156,8 @@ function closeOpeningsPanel(): void {
 // поле ввода числа выделенного объекта: элемента стены или коммуникации
 // (каждое выделение другого объекта и снятие выделения начинаются с этого вызова, поэтому он же снимает выделение выноски)
 const closeEditors = (): void => {
+  itemNumberEditor?.close()
+  itemNumberEditor = null
   selectionEditing.closeEditor()
   communicationTool.closeEditor()
   batteryTool.closeEditor()
@@ -1333,6 +1346,41 @@ function deleteFurnitureSelection(): void {
 function currentOverlaps(): Overlap[] {
   const ghost = tool === "furniture" ? itemTool.ghost() : null
   return [...furnitureOverlaps(items, furnitureObstacles), ...(ghost ? itemOverlaps(ghost, furnitureObstacles, items) : [])]
+}
+
+// числа ровно одного выделенного предмета на экране — габариты и расстояния до стен; при активном инструменте их нет
+// (change furniture-dimensions, design D4, D5)
+function selectedItemNumbers(): { itemId: string; numbers: ItemNumber[] } | null {
+  const t = tool === "furniture" ? null : itemTool.selectedItem()
+  if (!t) return null
+  const k = PX_PER_CM * view.zoom
+  return { itemId: t.id, numbers: [...itemSizeLayout(t, unit, k, SCREEN_METRICS), ...itemDistanceLayout(t, furnitureBodies, unit, k, SCREEN_METRICS)] }
+}
+
+// нажатие на правимое число выделенного предмета: поле на месте числа; Enter — правка одним шагом истории, как поле панели
+function pressFurnitureNumber(p: Point): boolean {
+  const t = onFurniture() ? itemTool.selectedItem() : null
+  const editable = t ? selectedItemNumbers() : null
+  const k = PX_PER_CM * view.zoom
+  const n = editable ? numberAt(p, editable.numbers, NUMBER_HIT_PX / k) : null
+  if (!t || !n) return false
+  closeEditors()
+  const at = { x: (n.center.x - view.pan.x) * k, y: (n.center.y - view.pan.y) * k }
+  itemNumberEditor = openNumberEditor(
+    canvasWrap,
+    at,
+    formatCm(n.valueCm, unit),
+    (text) => {
+      const next = applyItemNumber(t, n.field, parseFloat(text.replace(",", ".")) * UNIT_TO_CM[unit], furnitureBodies)
+      if (next) itemTool.replaceSelected(next)
+      syncFurniturePanel()
+      redraw()
+    },
+    () => {
+      itemNumberEditor = null
+    },
+  )
+  return true
 }
 
 function selectDimension(dim: Dimension): void {
@@ -1649,6 +1697,7 @@ function drawFurniturePlan(): void {
       erasingItemId: erasingItem?.id ?? null,
       itemGhost: tool === "furniture" ? itemTool.ghost() : null,
       overlaps,
+      editable: selectedItemNumbers(),
     },
     unit,
     view,
@@ -2322,7 +2371,7 @@ canvas.addEventListener("pointerdown", (e) => {
   // правка выделенного элемента на месте (change popups-buttons-only, design D6): правимое число, затем зона
   // направления выделенной двери — главнее любой цели нажатия
   const p = toWorld(e)
-  if (selectionEditing.pressNumber(p) || selectionEditing.pressZone(p) || (communicationsEditable() && communicationTool.pressNumber(p)) || batteryTool.pressNumber(p)) {
+  if (selectionEditing.pressNumber(p) || selectionEditing.pressZone(p) || (communicationsEditable() && communicationTool.pressNumber(p)) || batteryTool.pressNumber(p) || pressFurnitureNumber(p)) {
     suppressClick = true
     return
   }

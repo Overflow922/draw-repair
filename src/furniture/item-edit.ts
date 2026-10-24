@@ -1,7 +1,11 @@
 import { DIRECTION_VECTORS } from "../communications/geometry"
 import type { Direction } from "../communications/geometry"
+import type { Shape } from "../communications/shape"
 import type { Point, FurnitureItem } from "../types"
 import { hitItem, itemCorners } from "./item"
+import type { ItemNumberField } from "./item-number"
+import { editParams } from "./item-params"
+import { itemWallReach } from "./item-wall-reach"
 
 // Правка столов (change furniture-plan-table, design D6): чистые функции над массивом столов; входы не мутируются.
 // Перемещение свободное — без привязок и без ограничений препятствиями; пересечения только показываются (overlap.ts).
@@ -26,6 +30,21 @@ export function nudgeItems(items: readonly FurnitureItem[], ids: ReadonlySet<str
 export const removeItems = (items: readonly FurnitureItem[], ids: ReadonlySet<string>): FurnitureItem[] => items.filter((t) => !ids.has(t.id))
 
 export const replaceItem = (items: readonly FurnitureItem[], next: FurnitureItem): FurnitureItem[] => items.map((t) => (t.id === next.id ? next : t))
+
+// ввод в число выделенного предмета (change furniture-dimensions, design D3): габарит — как поле панели (центр и угол на месте),
+// расстояние — сдвиг вдоль нормали стороны, чтобы расстояние до той же грани стало введённым, без центровки и без
+// ограничения препятствиями; null — значение недопустимо, грани нет или предмет не изменился
+const SAME_CM = 1e-9
+
+export function applyItemNumber(t: FurnitureItem, field: ItemNumberField, valueCm: number, bodies: readonly Shape[]): FurnitureItem | null {
+  if (field.kind === "size") return editParams(t, t, field.size === "width" ? { widthCm: valueCm } : { lengthCm: valueCm }).table
+  if (!Number.isFinite(valueCm) || valueCm < 0) return null
+  const reach = itemWallReach(t, field.side, bodies)
+  if (!reach) return null
+  const shift = reach.t - valueCm
+  if (Math.abs(shift) <= SAME_CM) return null
+  return { ...t, x: t.x + reach.normal.x * shift, y: t.y + reach.normal.y * shift }
+}
 
 // стол под точкой: при наложении столов — поставленный позже (нарисованный сверху)
 export function itemAt(items: readonly FurnitureItem[], p: Point, tolCm: number): FurnitureItem | null {

@@ -3,7 +3,7 @@ import { drywallColors } from "../reconstruction/reconstruction-render"
 import { reconstructionScene } from "../reconstruction/reconstruction-scene"
 import { content, drawing, drywall, plaster } from "../reconstruction/reconstruction.test-utils"
 import { recordingContext } from "../room-area.test-utils"
-import type { FillOp, StrokeOp } from "../room-area.test-utils"
+import type { DrawOp, FillOp, StrokeOp } from "../room-area.test-utils"
 import { DARK_PALETTE, LIGHT_PALETTE } from "../theme"
 import type { Theme } from "../theme"
 import { PX_PER_CM } from "../types"
@@ -33,15 +33,20 @@ const draw = (view: FurnitureView, theme: Theme = "light") => {
   return rec.ops
 }
 
+// TCR (change furniture-dimensions): на холсте появились габариты предметов — размерные линии цвета размеров плана (ink): штрихи
+// из отрезков в две точки и залитые треугольники стрелок (spec furniture-plan «Габариты предмета мебели»). Подсчёт линий и
+// заливок предмета (FP-300, FP-302, FP-303, FP-305) их исключает; утверждения о самом предмете не менялись
+const isDimensionOp = (o: DrawOp): boolean =>
+  o.kind === "stroke" ? o.subpaths.every((sp) => sp.length <= 2) : o.kind === "fill" ? o.subpaths.every((sp) => sp.length <= 3) : false
 const fills = (ops: ReturnType<typeof draw>, style: string): FillOp[] => ops.filter((o): o is FillOp => o.kind === "fill" && o.fillStyle === style)
-const strokes = (ops: ReturnType<typeof draw>, style: string): StrokeOp[] => ops.filter((o): o is StrokeOp => o.kind === "stroke" && o.strokeStyle === style)
+const strokes = (ops: ReturnType<typeof draw>, style: string): StrokeOp[] => ops.filter((o): o is StrokeOp => o.kind === "stroke" && o.strokeStyle === style && !isDimensionOp(o))
 const box = (pts: readonly Point[]) => ({ minX: Math.min(...pts.map((p) => p.x)), maxX: Math.max(...pts.map((p) => p.x)), minY: Math.min(...pts.map((p) => p.y)), maxY: Math.max(...pts.map((p) => p.y)) })
 const INK = LIGHT_PALETTE.ink
 
 describe("цвета", () => {
   it("FP-300: предмет рисуется без заливки — на плане со столом и стулом нет ни одной заливки", () => {
     for (const theme of ["light", "dark"] as const) {
-      expect(draw(viewOf(drawing(), { items: [table("t", 200, 100), chair("c", 400, 100)] }), theme).filter((o) => o.kind === "fill")).toEqual([])
+      expect(draw(viewOf(drawing(), { items: [table("t", 200, 100), chair("c", 400, 100)] }), theme).filter((o) => o.kind === "fill" && !isDimensionOp(o))).toEqual([])
     }
   })
 
@@ -118,9 +123,11 @@ describe("предметы на холсте", () => {
     function spiedStroke(): void
     function spiedStroke(path: Path2D): void
     function spiedStroke(path?: Path2D): void {
-      if (rec.ctx.strokeStyle === INK) alphas.push(rec.ctx.globalAlpha)
+      const before = rec.ops.length
       if (path === undefined) original()
       else original(path)
+      const op = rec.ops[before]
+      if (rec.ctx.strokeStyle === INK && op && !isDimensionOp(op)) alphas.push(rec.ctx.globalAlpha)
     }
     rec.ctx.stroke = spiedStroke
     drawFurnitureScene(rec.ctx, 800, 600, viewOf(drawing(), { items: [table("t", 600, 100)], itemGhost: table("", 200, 100) }), "cm", VIEW, { grid: false, palette: LIGHT_PALETTE, theme: "light" })

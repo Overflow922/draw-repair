@@ -31,7 +31,7 @@ const OUTLINE_PX = 4
 const HANDLE_PX = 5
 // правимые числа выделенного элемента (change popups-buttons-only, design D2) и альтернативные направления двери
 const UNDERLINE_DASH = [3, 2]
-const UNDERLINE_GAP_PX = 2 // зазор между нижним краем текста и штрихом
+export const UNDERLINE_GAP_PX = 2 // зазор между нижним краем текста и штрихом
 const ALTERNATIVE_DASH = [4, 3]
 const MM = 96 / 25.4
 
@@ -607,7 +607,7 @@ function drawDiameterLeader(ctx: CanvasRenderingContext2D, riser: Riser, text: s
 }
 
 // штриховое подчёркивание правимого числа: отрезок шириной widthPx, центр — center, вдоль dir (экранные px)
-function drawUnderline(ctx: CanvasRenderingContext2D, center: Point, dir: Point, widthPx: number, color: string, m: RenderMetrics): void {
+export function drawUnderline(ctx: CanvasRenderingContext2D, center: Point, dir: Point, widthPx: number, color: string, m: RenderMetrics): void {
   ctx.save()
   ctx.setLineDash(UNDERLINE_DASH)
   ctx.strokeStyle = color

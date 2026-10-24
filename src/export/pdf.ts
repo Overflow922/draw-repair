@@ -22,6 +22,7 @@ import type { PlasterPiece } from "../rough/plaster"
 import { drawFurnitureScene } from "../furniture/furniture-render"
 import { furnitureScene } from "../furniture/furniture-scene"
 import { itemCorners } from "../furniture/item"
+import { itemSizeOutsidePoints } from "../furniture/item-size-layout"
 import { drawReconstructionScene } from "../reconstruction/reconstruction-render"
 import { reconstructionScene } from "../reconstruction/reconstruction-scene"
 import { drawRoughScene, roughExtent } from "../rough/rough-render"
@@ -310,8 +311,8 @@ export function pageBounds(page: PlanPage, scale: number): BBox {
   const rough = page.rough ? roughExtent(page.rough, kMm, PDF_METRICS.labelPx) : []
   // штукатурка подложки плана «Реконструкция»; стены гипсокартона входят в габариты как стены
   const reconstruction = page.reconstruction ? roughExtent({ pieces: page.reconstruction.pieces, screeds: [] }, kMm, PDF_METRICS.labelPx) : []
-  // углы столов плана «Мебель»
-  const items = (page.furniture?.items ?? []).flatMap(itemCorners)
+  // углы столов плана «Мебель» и их габариты, вынесенные наружу (change furniture-dimensions, design D5)
+  const items = (page.furniture?.items ?? []).flatMap((t) => [...itemCorners(t), ...itemSizeOutsidePoints(t, kMm, PDF_METRICS)])
   const extra = [...marks, ...bodies, ...rects, ...calloutPoints, ...rough, ...reconstruction, ...items]
   const walls = page.reconstruction ? [...page.walls, ...page.reconstruction.drywall] : page.walls
   return wallsBBox(walls, page.dimensions, 0.5 * scale, page.doorways, scale, extra, batteries)
