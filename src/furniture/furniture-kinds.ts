@@ -2,6 +2,7 @@
 // длина, угол) различаются только видом, а вид — только записью каталога. Новый вид — новая запись; больше ничего в логике
 // не меняется (скилл add-furniture-kind).
 
+import { kitchenColumnDrawing, microwaveDrawing, ovenDrawing } from "./built-in-appliance-drawing"
 import { curtainsDrawing } from "./curtains-drawing"
 import { fridgeDrawing } from "./fridge-drawing"
 import {
@@ -19,6 +20,7 @@ import type { ItemDrawingFn } from "./item-drawing"
 import { kitchenCabinetDrawing } from "./kitchen-cabinet-drawing"
 import { hobDrawing, sinkDrawing } from "./kitchen-inset-drawing"
 import { dishwasherDrawing, wineCabinetDrawing } from "./kitchen-module-drawing"
+import { dryerDrawing, washerDrawing } from "./laundry-drawing"
 import type { ObstacleKind } from "./overlap"
 import { doubleWardrobeDrawing, slidingWardrobeDrawing } from "./wardrobe-drawing"
 
@@ -165,7 +167,7 @@ export const FURNITURE_KINDS = {
     defaults: { widthCm: 52, lengthCm: 30, angleDeg: 0 },
     drawing: hobDrawing,
     icon: '<rect x="2" y="6" width="20" height="12" rx="1"/><circle cx="8" cy="12" r="3.500"/><circle cx="15" cy="12" r="2.500"/><circle cx="19.500" cy="10.500" r="0.700"/><circle cx="19.500" cy="13.500" r="0.700"/>',
-    overlapExemptions: { furniture: ["kitchenCabinet", "wineCabinet", "dishwasher"] },
+    overlapExemptions: { furniture: ["kitchenCabinet", "wineCabinet", "dishwasher", "oven", "washer"] },
   },
   dishwasher: {
     label: "Посудомойка",
@@ -181,7 +183,48 @@ export const FURNITURE_KINDS = {
     defaults: { widthCm: 45, lengthCm: 40, angleDeg: 0 },
     drawing: sinkDrawing,
     icon: '<rect x="2" y="4" width="20" height="16" rx="2"/><rect x="4" y="6" width="16" height="8" rx="1.500"/><circle cx="12" cy="17" r="1.500"/><path d="M5 16.500h3M5 18h3M16 16.500h3M16 18h3"/>',
-    overlapExemptions: { furniture: ["kitchenCabinet", "wineCabinet", "dishwasher"] },
+    overlapExemptions: { furniture: ["kitchenCabinet", "wineCabinet", "dishwasher", "oven", "washer"] },
+  },
+  // встраиваемая техника (change add-furniture-appliances): духовой шкаф и микроволновка стоят в колонне, духовой шкаф и стиральная
+  // машина — встроенные объекты кухни, сушильная машина стоит на стиральной; отдельно стоящей техники нет
+  kitchenColumn: {
+    label: "Кухонная колонна",
+    plaqueWord: "кухонная колонна",
+    defaults: { widthCm: 60, lengthCm: 62, angleDeg: 0 },
+    drawing: kitchenColumnDrawing,
+    icon: '<rect x="5" y="6" width="14" height="15"/><path d="M5 8.5h14M9.5 3h5M10.5 3v3M13.5 3v3M5 8.5l14 12.5M19 8.5L5 21"/>',
+  },
+  oven: {
+    label: "Духовой шкаф",
+    plaqueWord: "духовой шкаф",
+    defaults: { widthCm: 60, lengthCm: 62, angleDeg: 0 },
+    drawing: ovenDrawing,
+    icon: '<rect x="3" y="6" width="18" height="15"/><path d="M3 9h18M9 3h6M10 3v3M14 3v3"/><circle cx="12" cy="15" r="4.5"/><path d="M10.5 13c-.7.5-.7 1.5 0 2s.7 1.5 0 2M12 13c-.7.5-.7 1.5 0 2s.7 1.5 0 2M13.5 13c-.7.5-.7 1.5 0 2s.7 1.5 0 2"/>',
+    overlapExemptions: { furniture: ["kitchenCabinet", "kitchenColumn"] },
+  },
+  microwave: {
+    label: "Микроволновка",
+    plaqueWord: "микроволновка",
+    defaults: { widthCm: 60, lengthCm: 62, angleDeg: 0 },
+    drawing: microwaveDrawing,
+    icon: '<rect x="3" y="6" width="18" height="15"/><path d="M3 9h18M9 3h6M10 3v3M14 3v3"/><circle cx="12" cy="15" r="4.5"/><path d="M9 14c1-1 2 1 3 0s2 1 3 0M9 16.5c1-1 2 1 3 0s2 1 3 0"/>',
+    overlapExemptions: { furniture: ["kitchenColumn", "oven"] },
+  },
+  washer: {
+    label: "Стиральная машина",
+    plaqueWord: "стиральная машина",
+    defaults: { widthCm: 60, lengthCm: 60, angleDeg: 0 },
+    drawing: washerDrawing,
+    icon: '<rect x="3" y="5" width="18" height="16"/><path d="M4 5V3h3v2M8 5V3h3v2M13 5V3h7v2"/><circle cx="12" cy="13.5" r="5"/><path d="M7 13.5c.6.8 1.9.8 2.5 0s1.9.8 2.5 0 1.9.8 2.5 0 1.9.8 2.5 0"/>',
+    overlapExemptions: { furniture: ["kitchenCabinet"] },
+  },
+  dryer: {
+    label: "Сушильная машина",
+    plaqueWord: "сушильная машина",
+    defaults: { widthCm: 60, lengthCm: 60, angleDeg: 0 },
+    drawing: dryerDrawing,
+    icon: '<rect x="3" y="5" width="18" height="16"/><path d="M4 5V3h3v2M8 5V3h3v2M13 5V3h7v2"/><circle cx="12" cy="13.5" r="5"/><path d="M11 13.5a1 1 0 0 1 2 0a2 2 0 0 1-4 0a3 3 0 0 1 6 0a4 4 0 0 1-8 0"/>',
+    overlapExemptions: { furniture: ["washer"] },
   },
 } as const satisfies Record<string, FurnitureKindEntry>
 

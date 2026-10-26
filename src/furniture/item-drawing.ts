@@ -33,6 +33,9 @@ export function arc(cx: number, cy: number, r: number, fromDeg: number, toDeg: n
   })
 }
 
+// кривая по параметру t от 0 до 1 в steps + 1 точках; концы — точно в t = 0 и t = 1
+export const curve = (steps: number, at: (t: number) => Point): Point[] => Array.from({ length: steps + 1 }, (_, i) => at(i / steps))
+
 // прямоугольник со скруглёнными углами по часовой, начиная с левого верхнего скругления; радиус ограничен половиной стороны
 export function roundedRect(x: number, y: number, w: number, h: number, radius: number): Point[] {
   const r = Math.max(0, Math.min(radius, w / 2, h / 2))

@@ -119,11 +119,17 @@ describe("легенда: запись «Диван»", () => {
       item("h", "hob", 1400, 400, 52, 30),
       item("j", "dishwasher", 1500, 400, 60, 62),
       item("r", "sink", 1600, 400, 45, 40),
+      // TCR (change add-furniture-appliances): в каталоге двадцать три вида — 33 записи, 15 + 15 + 3 по столбцам легенды
+      item("x", "kitchenColumn", 1700, 400, 60, 62),
+      item("y", "oven", 1800, 400, 60, 62),
+      item("z", "microwave", 1900, 400, 60, 62),
+      item("a", "washer", 2000, 400, 60, 60),
+      item("g", "dryer", 2100, 400, 60, 60),
     ]
     const d = { ...withItems(base, items), batteries: [battery], communications: [riser, duct] }
     const entries = legendEntries(must(pagesOf(d)[5]))
-    expect(entries.map((e) => e.label).slice(-18)).toEqual(["Стол", "Стул", "Диван", "Письменный стол", "Компьютерное кресло", "Телевизор", "Подвесная тумба", "Кровать", "Прикроватный столик", "Шкаф-купе", "Шкаф двустворчатый", "Шторы", "Кухонный шкаф", "Холодильник двустворчатый", "Винный шкаф", "Варочная панель", "Посудомойка", "Раковина"])
-    expect(entries).toHaveLength(28)
+    expect(entries.map((e) => e.label).slice(-23)).toEqual(["Стол", "Стул", "Диван", "Письменный стол", "Компьютерное кресло", "Телевизор", "Подвесная тумба", "Кровать", "Прикроватный столик", "Шкаф-купе", "Шкаф двустворчатый", "Шторы", "Кухонный шкаф", "Холодильник двустворчатый", "Винный шкаф", "Варочная панель", "Посудомойка", "Раковина", "Кухонная колонна", "Духовой шкаф", "Микроволновка", "Стиральная машина", "Сушильная машина"]) // TCR (change add-furniture-appliances)
+    expect(entries).toHaveLength(33) // TCR (change add-furniture-appliances)
     expect(Math.min(entries.length, LEGEND_COLUMN_CAPACITY) * LEGEND_ROW_PITCH_MM).toBeLessThanOrEqual(222)
   })
 })

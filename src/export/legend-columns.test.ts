@@ -33,6 +33,12 @@ const ITEMS: Record<FurnitureItem["kind"], FurnitureItem> = {
   hob: item("h", "hob", 1300, 400, 52, 30),
   dishwasher: item("j", "dishwasher", 1400, 400, 60, 62),
   sink: item("r", "sink", 1500, 400, 45, 40),
+  // TCR (change add-furniture-appliances): в каталоге новые виды (запись нужна типу Record; наборы FIFTEEN и ALL не меняются)
+  kitchenColumn: item("x", "kitchenColumn", 1600, 400, 60, 62),
+  oven: item("y", "oven", 1700, 400, 60, 62),
+  microwave: item("z", "microwave", 1800, 400, 60, 62),
+  washer: item("a", "washer", 1900, 400, 60, 60),
+  dryer: item("g", "dryer", 2000, 400, 60, 60),
 }
 
 // страница «Мебель» со всеми материалами, батареей, стояком, воздуховодом, штукатуркой, гипсокартоном и предметами заданных видов
