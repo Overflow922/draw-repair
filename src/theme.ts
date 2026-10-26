@@ -18,6 +18,7 @@ export interface Palette {
   snap: string // точка привязки размера
   sill: string // «H под.» в подписи окна
   concreteFill: string // заливка стены из бетона под штрихами: темнее бумаги, штрихи ink на ней читаются
+  ceiling: string // заливка натяжного потолка; рисуется полупрозрачной (CEILING_ALPHA) поверх подложки и мебели (change add-ceiling-plan, design D7)
 }
 
 export const LIGHT_PALETTE: Palette = {
@@ -38,6 +39,7 @@ export const LIGHT_PALETTE: Palette = {
   snap: "#dc2626",
   sill: "#2b7fd4",
   concreteFill: "#cfcfcf",
+  ceiling: "#ffd600",
 }
 
 export const DARK_PALETTE: Palette = {
@@ -58,6 +60,7 @@ export const DARK_PALETTE: Palette = {
   snap: "#f87171",
   sill: "#60a5fa",
   concreteFill: "#4a4b50",
+  ceiling: "#e0b400",
 }
 
 export const paletteOf = (theme: Theme): Palette => (theme === "dark" ? DARK_PALETTE : LIGHT_PALETTE)

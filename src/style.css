@@ -18,6 +18,7 @@
   --popup-text: #7f1d1d;
   --popup-bg: #fef2f2;
   --popup-border: #fca5a5;
+  --ceiling: rgba(255, 214, 0, 0.35); /* заливка натяжного потолка: ceiling в LIGHT_PALETTE с прозрачностью CEILING_ALPHA (src/ceiling/ceiling-render.ts) */
 }
 
 :root[data-theme="dark"] {
@@ -41,6 +42,7 @@
   --popup-text: #fecaca;
   --popup-bg: #3f1d1d;
   --popup-border: #7f1d1d;
+  --ceiling: rgba(224, 180, 0, 0.35); /* заливка натяжного потолка: ceiling в DARK_PALETTE с прозрачностью CEILING_ALPHA (src/ceiling/ceiling-render.ts) */
 }
 
 html,

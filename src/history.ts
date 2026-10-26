@@ -1,8 +1,8 @@
 import { isNoteList } from "./notes/notes-store"
 import { historyKey } from "./plans"
 import type { PlanId } from "./plans"
-import { isBattery, isBatteryMark, isCallout, isCommunication, isDemolitionMark, isDimension, isDrawing, isDrywallWall, isPlasterMark, isRightAngle, isRoomRecord, isScreed, isFurnitureItem, isPlumbingDimension, isWall, isWallElement, readFurnitureItem } from "./storage"
-import type { Battery, BatteryMark, Callout, Communication, DemolitionMark, Dimension, DimPoint, Drawing, PlasterMark, RightAngleMark, RoomRecord, Screed, FurnitureItem, Wall, WallElement } from "./types"
+import { copyStretchCeiling, isBattery, isBatteryMark, isCallout, isCommunication, isDemolitionMark, isDimension, isDrawing, isDrywallWall, isPlasterMark, isRightAngle, isRoomRecord, isScreed, isFurnitureItem, isPlumbingDimension, isStretchCeiling, isWall, isWallElement, readFurnitureItem } from "./storage"
+import type { Battery, BatteryMark, Callout, Communication, DemolitionMark, Dimension, DimPoint, Drawing, PlasterMark, RightAngleMark, RoomRecord, Screed, FurnitureItem, StretchCeiling, Wall, WallElement } from "./types"
 
 const KEY = "draw-repair:history"
 export const HISTORY_LIMIT = 50
@@ -37,6 +37,8 @@ export type HistoryEntry =
   | { kind: "furniture"; items: FurnitureItem[]; dimensions: Dimension[] }
   // шаг плана «Сантехника» (change add-plumbing-plan, design D6): размеры плана до операции; приборы — объекты «Мебели»
   | { kind: "plumbing"; dimensions: Dimension[] }
+  // шаг плана «Потолки и освещение» (change add-ceiling-plan, design D6): натяжные потолки плана до операции
+  | { kind: "ceiling"; ceilings: StretchCeiling[] }
 
 export interface DrawingHistory {
   past: HistoryEntry[]
@@ -263,6 +265,32 @@ export function redoPlumbing(history: DrawingHistory, current: readonly Dimensio
   return copyDimensions(e.dimensions)
 }
 
+// Натяжные потолки плана «Потолки и освещение» (change add-ceiling-plan, design D6): как у «Сантехники» — работают только с
+// верхней записью вида «ceiling», при другой записи возвращают null и стеки не меняют
+const ceilingEntry = (ceilings: readonly StretchCeiling[]): HistoryEntry => ({ kind: "ceiling", ceilings: ceilings.map(copyStretchCeiling) })
+
+export function recordCeiling(history: DrawingHistory, ceilings: readonly StretchCeiling[]): void {
+  history.past.push(ceilingEntry(ceilings))
+  if (history.past.length > HISTORY_LIMIT) history.past.shift()
+  history.future = []
+}
+
+export function undoCeiling(history: DrawingHistory, current: readonly StretchCeiling[]): StretchCeiling[] | null {
+  const e = history.past[history.past.length - 1]
+  if (!e || e.kind !== "ceiling") return null
+  history.past.pop()
+  history.future.push(ceilingEntry(current))
+  return e.ceilings.map(copyStretchCeiling)
+}
+
+export function redoCeiling(history: DrawingHistory, current: readonly StretchCeiling[]): StretchCeiling[] | null {
+  const e = history.future[history.future.length - 1]
+  if (!e || e.kind !== "ceiling") return null
+  history.future.pop()
+  history.past.push(ceilingEntry(current))
+  return e.ceilings.map(copyStretchCeiling)
+}
+
 // отмена: снимок из past возвращается, текущие пометки кладутся в future (в истории плана «Демонтаж» только такие записи)
 export function undoMarks(history: DrawingHistory, current: readonly DemolitionMark[]): DemolitionMark[] | null {
   const e = history.past[history.past.length - 1]
@@ -320,7 +348,7 @@ export function redoDemolition(history: DrawingHistory, current: DemolitionState
 
 export function undoEntry(history: DrawingHistory, scene: Scene): HistoryEntry | null {
   const e = history.past[history.past.length - 1]
-  if (!e || e.kind === "callouts" || e.kind === "notes" || e.kind === "rough" || e.kind === "furniture" || e.kind === "plumbing") return null
+  if (!e || e.kind === "callouts" || e.kind === "notes" || e.kind === "rough" || e.kind === "furniture" || e.kind === "plumbing" || e.kind === "ceiling") return null
   history.past.pop()
   history.future.push(e.kind === "walls" ? { kind: "walls", ...cloneScene(scene) } : e)
   return e
@@ -328,7 +356,7 @@ export function undoEntry(history: DrawingHistory, scene: Scene): HistoryEntry |
 
 export function redoEntry(history: DrawingHistory, scene: Scene): HistoryEntry | null {
   const e = history.future[history.future.length - 1]
-  if (!e || e.kind === "callouts" || e.kind === "notes" || e.kind === "rough" || e.kind === "furniture" || e.kind === "plumbing") return null
+  if (!e || e.kind === "callouts" || e.kind === "notes" || e.kind === "rough" || e.kind === "furniture" || e.kind === "plumbing" || e.kind === "ceiling") return null
   history.future.pop()
   history.past.push(e.kind === "walls" ? { kind: "walls", ...cloneScene(scene) } : e)
   return e
@@ -362,6 +390,7 @@ const isHistoryEntry = (e: unknown): e is HistoryEntry => {
       (x.angles === undefined || (Array.isArray(x.angles) && x.angles.every(isRightAngle)))
   if (x.kind === "furniture") return Array.isArray(x.items) && x.items.every(isFurnitureItem) && Array.isArray(x.dimensions) && x.dimensions.every(isDimension)
   if (x.kind === "plumbing") return Array.isArray(x.dimensions) && x.dimensions.every(isPlumbingDimension)
+  if (x.kind === "ceiling") return Array.isArray(x.ceilings) && x.ceilings.every(isStretchCeiling)
   return x.kind === "close" && typeof x.drawingId === "string" &&
     typeof x.index === "number" && Number.isInteger(x.index) && x.index >= 0
 }

@@ -17,6 +17,7 @@ export type LegendEntry =
   | { kind: "plaster"; label: string }
   | { kind: "screed"; label: string }
   | { kind: "drywall"; label: string }
+  | { kind: "ceiling"; label: string }
   | { kind: "furniture"; item: FurnitureKind; label: string }
 
 export const LEGEND_PAD_LEFT_MM = 8
@@ -55,6 +56,9 @@ export function legendEntries(page: PlanPage): LegendEntry[] {
   const screeds = page.rough?.screeds ?? []
   if (screeds.length > 0) entries.push({ kind: "screed", label: `Стяжка до ${Math.max(...screeds.map((s) => s.screed.thicknessMm))} мм` })
   if (drywall > 0) entries.push({ kind: "drywall", label: "Гипсокартон" })
+  // натяжной потолок — на странице «Потолки и освещение» при действующих потолках; её предметы — подложка, записей видов не дают
+  // (change add-ceiling-plan, design D8)
+  if ((page.ceiling?.ceilings.length ?? 0) > 0) entries.push({ kind: "ceiling", label: "Натяжной потолок" })
   // мебель: запись на каждый вид каталога, чьи предметы есть на странице, в порядке каталога (change furniture-items-catalog, design D6)
   for (const item of FURNITURE_KIND_ORDER)
     if (page.furniture?.items.some((i) => i.kind === item)) entries.push({ kind: "furniture", item, label: kindEntry(item).label })

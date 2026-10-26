@@ -10,6 +10,8 @@ import type { Battery, Communication, Point, View, Wall } from "../types"
 import { traceLines } from "../furniture/furniture-render"
 import { kindEntry } from "../furniture/furniture-kinds"
 import type { FurnitureKind } from "../furniture/furniture-kinds"
+import { CEILING_ALPHA, canvasTranslucent } from "../ceiling/ceiling-render"
+import type { Translucent } from "../ceiling/ceiling-render"
 import { drywallColors } from "../reconstruction/reconstruction-render"
 import { plasterColors } from "../rough/rough-render"
 import { DEMOLITION_HATCH, SCREED_HATCH, strokeHatchSeries } from "../wall-hatch"
@@ -79,6 +81,21 @@ function drawDrywallSample(ctx: CanvasRenderingContext2D, origin: Point): void {
   tracePolygons(ctx, [poly])
   ctx.fill()
   ctx.strokeStyle = colors.stroke
+  ctx.lineWidth = PDF_METRICS.contourPx
+  ctx.stroke()
+}
+
+// образец «Натяжной потолок»: жёлтая заливка цвета светлой схемы с той же прозрачностью, что на чертеже, и тёмный контур
+// (change add-ceiling-plan, design D8)
+function drawCeilingSample(ctx: CanvasRenderingContext2D, origin: Point, translucent: Translucent): void {
+  const poly = sampleRect(origin)
+  translucent(CEILING_ALPHA, () => {
+    ctx.fillStyle = LIGHT_PALETTE.ceiling
+    tracePolygons(ctx, [poly])
+    ctx.fill()
+  })
+  ctx.strokeStyle = LIGHT_PALETTE.ink
+  tracePolygons(ctx, [poly])
   ctx.lineWidth = PDF_METRICS.contourPx
   ctx.stroke()
 }
@@ -163,7 +180,7 @@ function drawCommunicationSample(ctx: CanvasRenderingContext2D, entry: LegendEnt
   strokeCommunications(ctx, [sample], mmView(origin), LIGHT_PALETTE.ink, PDF_METRICS.contourPx, LIGHT_PALETTE.concreteFill)
 }
 
-function drawSample(ctx: CanvasRenderingContext2D, entry: LegendEntry, origin: Point, palette: Palette, greyPlaster: boolean): void {
+function drawSample(ctx: CanvasRenderingContext2D, entry: LegendEntry, origin: Point, palette: Palette, greyPlaster: boolean, translucent: Translucent): void {
   switch (entry.kind) {
     case "material":
       return drawLegendSample(ctx, entry.material, origin, PDF_METRICS, palette)
@@ -180,6 +197,8 @@ function drawSample(ctx: CanvasRenderingContext2D, entry: LegendEntry, origin: P
       return drawScreedSample(ctx, origin)
     case "drywall":
       return drawDrywallSample(ctx, origin)
+    case "ceiling":
+      return drawCeilingSample(ctx, origin, translucent)
     case "furniture":
       return drawItemSample(ctx, origin, entry.item)
   }
@@ -188,7 +207,7 @@ function drawSample(ctx: CanvasRenderingContext2D, entry: LegendEntry, origin: P
 // столбец легенды страницы: записи сверху вниз с верхнего края столбца; на странице «Демонтаж» образцы материалов серые,
 // как подложка. Образец стоит по центру блока строк подписи.
 // Записи сверх пятнадцатой стоят во втором столбце той же ширины; columns — число столбцов легенды документа (change add-furniture-tv-wall-cabinet)
-export function drawLegend(doc: jsPDF, ctx: CanvasRenderingContext2D, page: PlanPage, column: Rect, columns: number): void {
+export function drawLegend(doc: jsPDF, ctx: CanvasRenderingContext2D, page: PlanPage, column: Rect, columns: number, translucent: Translucent = canvasTranslucent(ctx)): void {
   const underlay = page.demolition !== undefined || page.rough !== undefined || page.reconstruction !== undefined
   const palette: Palette = underlay ? { ...LIGHT_PALETTE, ink: LIGHT_PALETTE.muted } : LIGHT_PALETTE
   const columnWidth = column.w / columns
@@ -196,7 +215,7 @@ export function drawLegend(doc: jsPDF, ctx: CanvasRenderingContext2D, page: Plan
     const cell = legendCell(i)
     const centerY = column.y + LEGEND_ROW_PITCH_MM * (cell.row + 0.5)
     const origin: Point = { x: column.x + columnWidth * cell.column + LEGEND_PAD_LEFT_MM, y: centerY }
-    drawSample(ctx, entry, origin, palette, page.reconstruction !== undefined)
+    drawSample(ctx, entry, origin, palette, page.reconstruction !== undefined, translucent)
     // рендер образца меняет состояние шрифта документа, поэтому шрифт задаётся после образца
     doc.setFont(PDF_METRICS.font, "normal")
     doc.setTextColor(0, 0, 0)

@@ -1,3 +1,4 @@
+import { isDropMm } from "./ceiling/ceiling"
 import { mergeAll } from "./demolition/marks"
 import { isFurnitureKind } from "./furniture/furniture-kinds"
 import { normalizeAngle } from "./furniture/item"
@@ -6,7 +7,7 @@ import { isPlanId } from "./plans"
 import { mergeAllPlaster } from "./rough/plaster-marks"
 import { PLASTER_THICKNESS, SCREED_THICKNESS, isThickness } from "./rough/rough-model"
 import { isDoor, isWindow, normalizeMaterial } from "./types"
-import type { Battery, BatteryCornerPoint, BatteryMark, Callout, Communication, CornerRef, DemolitionMark, Dimension, DimPoint, Doorway, Drawing, DrawingStore, DrywallWall, EdgePoint, EdgeRef, FurnitureContent, ItemPoint, JambPoint, MountingContent, PlasterMark, PlumbingContent, Point, ReconstructionContent, RightAngleMark, RoomRecord, Screed, FurnitureItem, View, Wall, WallDoor, WallElement, WallWindow } from "./types"
+import type { Battery, BatteryCornerPoint, BatteryMark, Callout, CeilingContent, Communication, CornerRef, DemolitionMark, Dimension, DimPoint, Doorway, Drawing, DrawingStore, DrywallWall, EdgePoint, EdgeRef, FurnitureContent, ItemPoint, JambPoint, MountingContent, PlasterMark, PlumbingContent, Point, ReconstructionContent, RightAngleMark, RoomRecord, Screed, FurnitureItem, StretchCeiling, View, Wall, WallDoor, WallElement, WallWindow } from "./types"
 
 const KEY = "draw-repair:drawing"
 
@@ -436,6 +437,31 @@ function loadPlumbing(raw: unknown): { plumbing?: PlumbingContent } {
   }
 }
 
+// натяжной потолок (change add-ceiling-plan, design D2): непустой идентификатор, опорная точка, опускание — целое больше нуля
+export const isStretchCeiling = (c: unknown): c is StretchCeiling => {
+  if (typeof c !== "object" || c === null) return false
+  const x = c as Record<string, unknown>
+  return typeof x.id === "string" && x.id !== "" && isPoint(x.at) && isDropMm(x.dropMm)
+}
+
+export const copyStretchCeiling = (c: StretchCeiling): StretchCeiling => ({ id: c.id, at: { x: c.at.x, y: c.at.y }, dropMm: c.dropMm })
+
+// объекты плана «Потолки и освещение» при загрузке: некорректные потолки отбрасываются по одному, порядок списка сохраняется;
+// потолки вне помещений сохраняются; поле, не являющееся объектом, читается как отсутствующее; выноски и примечания — по общим
+// правилам; мебель в поле не хранится
+function loadCeiling(raw: unknown): { ceiling?: CeilingContent } {
+  if (typeof raw !== "object" || raw === null || Array.isArray(raw)) return {}
+  const x = raw as Record<string, unknown>
+  const notes = loadNoteList(x.notes)
+  return {
+    ceiling: {
+      ceilings: (Array.isArray(x.ceilings) ? x.ceilings : []).filter(isStretchCeiling).map(copyStretchCeiling),
+      ...(x.callouts === undefined ? null : { callouts: loadCalloutList(x.callouts) }),
+      ...(notes === undefined ? null : { notes }),
+    },
+  }
+}
+
 const emptyDrawing = (name: string): Drawing => ({
   id: crypto.randomUUID(),
   name,
@@ -504,6 +530,7 @@ export function parseStore(raw: string): LoadedStore | null {
           ...loadReconstruction(dr.reconstruction),
           ...loadFurniture(dr.furniture),
           ...loadPlumbing(dr.plumbing),
+          ...loadCeiling(dr.ceiling),
           dimensions: (Array.isArray(dr.dimensions) ? dr.dimensions : []).filter(isDimension).map(copyDimension),
         }
       })

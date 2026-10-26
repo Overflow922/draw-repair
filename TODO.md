@@ -1139,3 +1139,27 @@ Follow-ups from `furniture-items-catalog` (2026-10-21).
 ### Docs
 
 - [ ] Сценарий `pdf-export` «Габариты и размеры на странице» исправлен в ходе реализации: число размера в см округляется до целого (`src/format-length.ts`), поэтому «107,5» в см выводится как «108»; сценарий переписан на мм («450», «400», «1075»).
+
+---
+
+Follow-ups from `add-ceiling-plan` (2026-10-26).
+
+## Out of scope (decided, revisit if needed)
+
+- [ ] **Drywall bulkhead ("выпуск гипсокартона") on the ceiling plan.** The user explicitly left it out of this change
+  (see the user's reference pictures). Needs its own tool on «Потолки и освещение».
+- [ ] **Light fixtures.** The plan is named «Потолки и освещение», but it only has the stretch ceiling so far; no light
+  objects, legend entries or PDF output for them.
+- [ ] **Rooms that take drywall into account.** Ceiling rooms come from «Монтаж» walls (like screed and the room
+  explication), so a store-room enclosed by drywall gets no ceiling of its own and the fill runs under the drywall
+  (`src/ceiling/ceiling-scene.ts`, design D4 / Risks). Changing that belongs to the room explication, not to the ceiling.
+
+## Tests
+
+- [ ] (add-ceiling-plan, 2026-10-26) `src/main.ts` ceiling wiring has no DOM-level test: clicking a ceiling label opens the
+  panel with its value and the in-place field, clearing the selection closes the panel, the eraser hover highlight follows
+  the cursor. Checked by hand in the browser; `src/ceiling/ceiling-wiring.test.ts` covers only the plan-switch commit order
+  and the Delete branch.
+- [ ] (add-ceiling-plan) Render test for a rotated item on the ceiling plan (`src/ceiling/ceiling-render.test.ts`): scenario
+  «Повёрнутый предмет» is covered only at scene level (CP-61, same centre, size and angle) and by the shared
+  `itemDrawingInPlan`.

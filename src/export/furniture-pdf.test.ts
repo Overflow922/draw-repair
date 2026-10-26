@@ -67,10 +67,10 @@ describe("страница «Мебель» в PDF", () => {
   it("FP-400: страниц шесть; шестая — «Мебель» со столом линиями без заливки и зелёным гипсокартоном; на остальных стола нет", () => {
     const d = withTables(PLAN(), [table("t", 200, 260)])
     const pages = pagesOf(d)
-    expect(pages).toHaveLength(7) // TCR (change add-plumbing-plan): семь — седьмой план «Сантехника»
+    expect(pages).toHaveLength(8) // TCR (change add-plumbing-plan): семь — седьмой план «Сантехника» // TCR (change add-ceiling-plan): восемь — восьмой план «Потолки и освещение»
     expect(must(pages[5]).title).toBe("Мебель")
     const doc = build(d)
-    expect(doc.getNumberOfPages()).toBe(7) // TCR (change add-plumbing-plan): семь
+    expect(doc.getNumberOfPages()).toBe(8) // TCR (change add-plumbing-plan): семь // TCR (change add-ceiling-plan): восемь — восьмой план «Потолки и освещение»
     expect(inkStrokesOfSize(doc, 6, 16, 32).length).toBeGreaterThan(0)
     expect(fillsOfSize(doc, 6, 16, 32)).toBe(0)
     expect(fillsOf(doc, 6, GREEN).length).toBeGreaterThan(0)
@@ -122,8 +122,8 @@ describe("страница «Мебель» в PDF", () => {
 
   it("FP-406: страница без объектов и столов пуста, но остаётся в документе", () => {
     const d = drawing({})
-    expect(pagesOf(d)).toHaveLength(7) // TCR (change add-plumbing-plan): семь
-    expect(build(d).getNumberOfPages()).toBe(7) // TCR (change add-plumbing-plan): семь
+    expect(pagesOf(d)).toHaveLength(8) // TCR (change add-plumbing-plan): семь // TCR (change add-ceiling-plan): восемь — восьмой план «Потолки и освещение»
+    expect(build(d).getNumberOfPages()).toBe(8) // TCR (change add-plumbing-plan): семь // TCR (change add-ceiling-plan): восемь — восьмой план «Потолки и освещение»
   })
 })
 

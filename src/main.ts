@@ -1,5 +1,5 @@
 import "./style.css"
-import { cloneScene, loadHistory, planHistory, record, recordCallouts, recordDemolition, recordFurniture, recordNotes, recordPlumbing, recordRough, recordSnapshot, redoCallouts, redoDemolition, redoEntry, redoFurniture, redoNotes, redoPlumbing, redoRough, saveHistory, undoCallouts, undoDemolition, undoEntry, undoFurniture, undoNotes, undoPlumbing, undoRough } from "./history"
+import { cloneScene, loadHistory, planHistory, record, recordCallouts, recordCeiling, recordDemolition, recordFurniture, recordNotes, recordPlumbing, recordRough, recordSnapshot, redoCallouts, redoCeiling, redoDemolition, redoEntry, redoFurniture, redoNotes, redoPlumbing, redoRough, saveHistory, undoCallouts, undoCeiling, undoDemolition, undoEntry, undoFurniture, undoNotes, undoPlumbing, undoRough } from "./history"
 import type { Scene } from "./history"
 import { dimLevelSnap, dimensionGeometry, dimensionOffsetAt, hitWall, nearestDimAnchor, dimPointPoint, pointsEqual, segmentIntersectsRect, snap, snapOthers, snapWithSource, zoomAt } from "./geometry"
 import type { DimGeometry, SnapResult } from "./geometry"
@@ -78,6 +78,13 @@ import type { ItemParams } from "./furniture/item-params"
 import { createItemTool } from "./furniture/item-tool"
 import type { ItemToolHost } from "./furniture/item-tool"
 import { warningText } from "./furniture/warning"
+import { CEILING_DROP_DEFAULT, parseDropMm } from "./ceiling/ceiling"
+import { renderCeiling } from "./ceiling/ceiling-render"
+import { ceilingScene } from "./ceiling/ceiling-scene"
+import type { CeilingScene } from "./ceiling/ceiling-scene"
+import { createCeilingTool } from "./ceiling/ceiling-tool"
+import type { CeilingToolHost } from "./ceiling/ceiling-tool"
+import { openCeiling, storedCeiling } from "./ceiling/ceiling-workspace"
 import { plumbingScene } from "./plumbing/plumbing-scene"
 import type { PlumbingScene } from "./plumbing/plumbing-scene"
 import { renderPlumbing } from "./plumbing/plumbing-render"
@@ -112,7 +119,7 @@ import { afterPlace, escapeAction, resumesAfterSelectionCleared, selectionAllowe
 import { loadThemeChoice, paletteOf, resolveTheme, saveThemeChoice, themeToggleTitle, toggledTheme } from "./theme"
 import type { Theme } from "./theme"
 import { GRID_STEP_CM, MATERIALS, PX_PER_CM } from "./types"
-import type { Battery, BatteryMark, Communication, DemolitionMark, Dimension, DimPoint, Drawing, DrywallWall, Material, PlasterMark, Point, RightAngleMark, RoomRecord, Screed, FurnitureItem, Unit, View, Wall, WallElement } from "./types"
+import type { Battery, BatteryMark, Communication, DemolitionMark, Dimension, DimPoint, Drawing, DrywallWall, Material, PlasterMark, Point, RightAngleMark, RoomRecord, Screed, StretchCeiling, FurnitureItem, Unit, View, Wall, WallElement } from "./types"
 
 const canvas = document.querySelector<HTMLCanvasElement>("#canvas")!
 const canvasWrap = document.querySelector<HTMLElement>("#canvas-wrap")!
@@ -141,6 +148,9 @@ const toolRightAngleBtn = document.querySelector<HTMLButtonElement>("#tool-right
 const toolScreedBtn = document.querySelector<HTMLButtonElement>("#tool-screed")!
 const screedPanel = document.querySelector<HTMLElement>("#screed-panel")!
 const screedThicknessInput = document.querySelector<HTMLInputElement>("#screed-thickness")!
+const toolStretchCeilingBtn = document.querySelector<HTMLButtonElement>("#tool-stretch-ceiling")!
+const ceilingPanel = document.querySelector<HTMLElement>("#ceiling-panel")!
+const ceilingDropInput = document.querySelector<HTMLInputElement>("#ceiling-drop")!
 const toolbar = document.querySelector<HTMLElement>("#toolbar")!
 const wallPanel = document.querySelector<HTMLElement>("#wall-panel")!
 const toolDrywallBtn = document.querySelector<HTMLButtonElement>("#tool-drywall")!
@@ -475,7 +485,22 @@ function loadWorking(): void {
   plumbingCache = null
   plumbingWorkspace = null
   fixtures = []
+  ceilingCache = null
+  ceilingItems = []
   obstacles = []
+  if (activePlanOf(d) === "ceiling") {
+    // подложка и мебель «Мебели» только для чтения: инструменты плана правят только потолки (design D4)
+    const s = ceilingNow()
+    const opened = openCeiling(d, s)
+    walls = opened.scene.walls
+    ceilingItems = opened.scene.items
+    dimensions = []
+    doorways = s.base.base.doorways
+    batteries = s.base.base.batteries
+    workspace = null
+    remnantHome = new Map()
+    return
+  }
   if (activePlanOf(d) === "plumbing") {
     // подложка — та же, что у «Мебели», приборы — из «Мебели»; всё только для чтения, правятся размеры плана (design D3)
     const s = plumbingNow()
@@ -1082,6 +1107,102 @@ function pressRough(p: Point): void {
   clearRoughSelection()
 }
 
+// план «Потолки и освещение» (change add-ceiling-plan, design D4, D5): потолки лежат в чертеже, подложка и мебель «Мебели» — только
+// для чтения; сцена держится в кэше до изменения данных или смены плана
+const onCeiling = (): boolean => activePlanOf(current()) === "ceiling"
+let ceilingCache: CeilingScene | null = null
+const ceilingNow = (): CeilingScene => (ceilingCache ??= ceilingScene(current()))
+const NO_CEILINGS: StretchCeiling[] = []
+const ceilingsOf = (): StretchCeiling[] => current().ceiling?.ceilings ?? NO_CEILINGS
+// мебель «Мебели» для «Линейки»: замер до предметов, как на «Мебели»
+let ceilingItems: readonly FurnitureItem[] = []
+// опускание для новых потолков: запоминается в сеансе, в чертёж не входит
+let ceilingDropMm = CEILING_DROP_DEFAULT
+let ceilingPanelOpen = false
+let ceilingEditor: { editor: NumberEditor; id: string } | null = null
+
+const ceilingHost: CeilingToolHost = {
+  scene: ceilingNow,
+  ceilings: ceilingsOf,
+  setCeilings: (next) => {
+    current().ceiling = storedCeiling(next, current())
+    ceilingCache = null
+  },
+  record: () => {
+    nudgeBurst = false
+    recordCeiling(activeHistory(), ceilingsOf())
+  },
+  changed: () => {
+    dirty = true
+  },
+  redraw: () => redraw(),
+  newId: () => crypto.randomUUID(),
+  newDropMm: () => ceilingDropMm,
+  view: () => view,
+  labelPx: SCREEN_METRICS.labelPx,
+}
+const ceilingTool = createCeilingTool(ceilingHost)
+
+// панель «Натяжной потолок»: опускание выделенного потолка, иначе значение для новых
+function syncCeilingPanel(): void {
+  ceilingPanel.classList.toggle("open", ceilingPanelOpen)
+  toolStretchCeilingBtn.classList.toggle("active", tool === "stretchCeiling")
+  if (document.activeElement !== ceilingDropInput) ceilingDropInput.value = String(ceilingTool.selected()?.dropMm ?? ceilingDropMm)
+}
+
+const closeCeilingEditor = (): void => {
+  ceilingEditor?.editor.close()
+  ceilingEditor = null
+}
+
+// поле на месте применяет набранное значение при смене плана и вкладки (spec drawing-plans «Правка подписи потолка при
+// переключении»); недопустимое значение не применяется
+function commitCeilingEditor(): void {
+  if (!ceilingEditor) return
+  const { editor, id } = ceilingEditor
+  const mm = parseDropMm(editor.text())
+  closeCeilingEditor()
+  if (mm !== null) ceilingTool.setDropOf(id, mm)
+}
+
+// сброс поля ввода, выделения и панели (смена плана, чертежа и инструмента, отмена и повтор)
+const resetCeiling = (): void => {
+  closeCeilingEditor()
+  ceilingTool.clearSelection()
+  ceilingPanelOpen = false
+  syncCeilingPanel()
+}
+
+// без инструмента: нажатие на подпись потолка выделяет его, открывает панель и поле на месте; иначе выделение снимается
+// (мебель не выделяется)
+function pressCeiling(p: Point): void {
+  closeCeilingEditor()
+  const ceiling = ceilingTool.labelAt(p)
+  if (!ceiling) {
+    resetCeiling()
+    return
+  }
+  ceilingTool.select(p)
+  ceilingPanelOpen = true
+  const k = PX_PER_CM * view.zoom
+  const at = { x: (ceiling.at.x - view.pan.x) * k, y: (ceiling.at.y - view.pan.y) * k + SCREEN_METRICS.labelPx }
+  const editor = openNumberEditor(
+    canvasWrap,
+    at,
+    String(ceiling.dropMm),
+    (text) => {
+      const mm = parseDropMm(text)
+      if (mm !== null) ceilingTool.setDropOf(ceiling.id, mm)
+      redraw()
+    },
+    () => {
+      if (ceilingEditor?.editor === editor) ceilingEditor = null
+    },
+  )
+  ceilingEditor = { editor, id: ceiling.id }
+  redraw()
+}
+
 // примечания активного плана (change add-plan-notes, design D4): панель с полем; правка применяется при потере фокуса,
 // закрытии панели, смене инструмента, плана и вкладки, Esc — одним шагом истории плана, если список изменился
 let notesPanelOpen = false
@@ -1155,6 +1276,7 @@ const calloutHost: CalloutToolHost = {
     itemTool.clearSelection()
     closeRoughEditor()
     closeRoughPanels()
+    resetCeiling()
     setWallPanel(false)
   },
   changed: () => {
@@ -1525,6 +1647,7 @@ function setTool(next: Tool): void {
   marqueePending = null
   resetDemolition()
   resetRough()
+  resetCeiling()
   itemTool.reset()
   furniturePanelOpen = false
   setWallPanel(false)
@@ -1683,6 +1806,7 @@ function redraw(): void {
   }
   frame.request()
   syncRoughPanels()
+  syncCeilingPanel()
   syncDrywallPanel()
   syncFurniturePanel()
   updateLengthBox()
@@ -1707,6 +1831,7 @@ function drawPlan(): void {
   if (!onFurniture()) furnitureWarning.hidden = true
   if (onFurniture()) drawFurniturePlan()
   else if (onPlumbing()) drawPlumbingPlan()
+  else if (onCeiling()) drawCeilingPlan()
   else if (onReconstruction()) drawReconstructionPlan()
   else if (onRough()) drawRoughPlan()
   else if (onDemolition()) drawDemolitionPlan()
@@ -1802,6 +1927,36 @@ function drawPlumbingPlan(): void {
       marquee,
       ruler: rulerOf(walls, batteries, fixtures),
     },
+  )
+}
+
+// план «Потолки и освещение» (change add-ceiling-plan, design D7): заливка потолков, подложка «Мебели», мебель серыми линиями,
+// подписи потолков, выноски; «Линейка» меряет до мебели
+function drawCeilingPlan(): void {
+  const s = ceilingNow()
+  // выноска главнее потолка под курсором ластика
+  const erasingCallout = tool === "eraser" && cursor ? calloutTool.pick(cursor) : null
+  const erasingCeiling = tool === "eraser" && cursor && !erasingCallout ? ceilingTool.eraseTarget(cursor) : null
+  renderCeiling(
+    canvas,
+    {
+      walls: s.base.underlay,
+      doorways,
+      communications: communicationsOf(),
+      batteries,
+      pieces: s.base.pieces,
+      drywall: s.base.own,
+      items: ceilingItems,
+      ceilings: s.ceilings.map((a) => ({ ceiling: a.object, room: a.item.room })),
+      selectedCeilingId: ceilingTool.selectedId(),
+      erasingCeilingId: erasingCeiling,
+      callouts: calloutTool.displayList(),
+      selectedCalloutId: calloutTool.selectedId(),
+      erasingCalloutId: erasingCallout?.id ?? null,
+    },
+    unit,
+    view,
+    { palette: paletteOf(theme), theme, ruler: rulerOf(walls, batteries, ceilingItems) },
   )
 }
 
@@ -2319,6 +2474,15 @@ canvas.addEventListener("pointermove", (e) => {
     }
     return
   }
+  if (onCeiling()) {
+    // «Линейка», «Ластик» и «Выноска» следят за курсором
+    if (tool === "ruler" || tool === "eraser" || tool === "callout") {
+      cursor = toWorld(e)
+      if (tool === "callout") calloutTool.hover(cursor)
+      redraw()
+    }
+    return
+  }
   if (onDemolition()) {
     // протяжка пометки перерисовывает сама; «Линейка» и «Ластик» следят за курсором
     if (tool === "demolition") demolitionTool.move(toWorld(e), screenPoint(e))
@@ -2369,7 +2533,7 @@ canvas.addEventListener("pointerleave", () => {
   if (tool === "plaster") plasterTool.hover(null)
   if (tool === "rightAngle") rightAngleTool.hover(null)
   if (tool === "furniture") itemTool.hover(null)
-  if ((tool === "ruler" || (tool === "eraser" && (onDemolition() || onRough()))) && cursor) cursor = null
+  if ((tool === "ruler" || (tool === "eraser" && (onDemolition() || onRough() || onCeiling()))) && cursor) cursor = null
   redraw()
 })
 
@@ -2424,6 +2588,20 @@ canvas.addEventListener("pointerdown", (e) => {
         resumePlasterTool()
       }
     }
+    return
+  }
+  if (onCeiling()) {
+    // без инструмента: выноска, иначе подпись потолка; мебель и подложка не выделяются
+    if (!selectionAllowed(tool)) return
+    const p = toWorld(e)
+    if (calloutTool.press(p)) {
+      suppressClick = true
+      canvas.setPointerCapture(e.pointerId)
+      resetCeiling()
+      return
+    }
+    if (calloutTool.selectedId() !== null) calloutTool.deselect()
+    pressCeiling(p)
     return
   }
   if (onDemolition()) {
@@ -2575,6 +2753,7 @@ canvas.addEventListener("pointerup", (e) => {
     if (tool === "plaster" && plasterTool.up(toWorld(e), screenPoint(e)) !== null && plasterTool.selectedId() !== null) leavePlasterTool()
     return
   }
+  if (onCeiling() && e.button === 0) return
   if (onDemolition() && e.button === 0) {
     // поставленная пометка остаётся выделенной, инструмент снимается — как у проёма (change demolition-select-after-mark)
     if (tool === "demolition" && batteryPress) {
@@ -2720,6 +2899,14 @@ canvas.addEventListener("click", (e) => {
     else if (tool === "screed") screedTool.place(at)
     else if (tool === "rightAngle") rightAngleTool.place(at)
     else if (tool === "eraser" && !calloutTool.eraseAt(at) && !rightAngleTool.erase(at) && !plasterTool.erase(at)) screedTool.erase(at)
+    return
+  }
+  // на плане «Потолки и освещение»: «Натяжной потолок» ставится кликом, «Ластик» стирает выноску, иначе потолок под курсором
+  if (onCeiling()) {
+    const at = toWorld(e)
+    if (tool === "callout") calloutTool.click(at)
+    else if (tool === "stretchCeiling") ceilingTool.place(at)
+    else if (tool === "eraser" && !calloutTool.eraseAt(at)) ceilingTool.erase(at)
     return
   }
   // на плане «Демонтаж» жесты разбирает адаптер по нажатию и отпусканию (change demolition-plan, design D10);
@@ -3179,6 +3366,29 @@ for (const input of [plasterThicknessInput, screedThicknessInput]) {
   })
 }
 
+// «Натяжной потолок»: кнопка включает инструмент и открывает панель, повторный клик по активному — переключает панель
+toolStretchCeilingBtn.addEventListener("click", () => {
+  if (tool !== "stretchCeiling") {
+    setTool("stretchCeiling")
+    ceilingPanelOpen = true
+  } else ceilingPanelOpen = !ceilingPanelOpen
+  syncCeilingPanel()
+})
+// поле опускания: меняет выделенный потолок одним шагом истории, иначе — значение для новых; недопустимое не применяется
+ceilingDropInput.addEventListener("change", () => {
+  const mm = parseDropMm(ceilingDropInput.value)
+  if (mm !== null) {
+    if (ceilingTool.selectedId() !== null) ceilingTool.setSelectedDrop(mm)
+    else ceilingDropMm = mm
+  }
+  ceilingDropInput.blur()
+  redraw()
+})
+ceilingDropInput.addEventListener("keydown", (e) => {
+  e.stopPropagation()
+  if (e.key === "Enter" || e.key === "Escape") ceilingDropInput.blur()
+})
+
 wallTypesRow.addEventListener("click", (e) => {
   const btn = (e.target as HTMLElement).closest<HTMLButtonElement>(".wall-type")
   if (btn) setWallMaterial(btn.dataset.material as Material)
@@ -3222,6 +3432,7 @@ function setPlan(id: PlanId): void {
   // набранный текст выноски и примечаний сохраняется на прежнем плане
   calloutTool.commitEditor()
   closeNotesPanel() // панель закрывается до смены плана: поле показывает список прежнего плана
+  commitCeilingEditor() // шаг истории — на прежнем плане
   commitWorking()
   current().activePlan = id
   activate(store.activeId)
@@ -3246,6 +3457,7 @@ function newDrawing(): void {
 
 function activate(id: string): void {
   calloutTool.commitEditor()
+  commitCeilingEditor()
   closeNotesPanel()
   commitWorking()
   store.activeId = id
@@ -3257,6 +3469,7 @@ function activate(id: string): void {
   syncToolUI()
   resetDemolition()
   resetRough()
+  resetCeiling()
   itemTool.reset()
   clearChain()
   closeNumberEditor()
@@ -3311,6 +3524,7 @@ function removeDrawing(id: string, index: number): void {
 function resetEditing(): void {
   resetDemolition()
   resetRough()
+  resetCeiling()
   itemTool.reset()
   clearChain()
   closeNumberEditor()
@@ -3360,6 +3574,17 @@ function stepFurniture(step: typeof undoFurniture): void {
   if (!next) return
   items = next.items
   dimensions = next.dimensions
+  dirty = true
+  resetEditing()
+  redraw()
+}
+
+// отмена или повтор шага плана «Потолки и освещение» (change add-ceiling-plan, design D6): подставляется список потолков до операции
+function stepCeiling(step: typeof undoCeiling): void {
+  const next = step(activeHistory(), ceilingsOf())
+  if (!next) return
+  current().ceiling = storedCeiling(next, current())
+  ceilingCache = null
   dirty = true
   resetEditing()
   redraw()
@@ -3455,6 +3680,10 @@ function undo(): void {
     stepPlumbing(undoPlumbing)
     return
   }
+  if (h.past[h.past.length - 1]?.kind === "ceiling") {
+    stepCeiling(undoCeiling)
+    return
+  }
   if (h.past[h.past.length - 1]?.kind === "callouts") {
     stepCallouts(undoCallouts)
     return
@@ -3498,6 +3727,10 @@ function redo(): void {
   }
   if (h.future[h.future.length - 1]?.kind === "plumbing") {
     stepPlumbing(redoPlumbing)
+    return
+  }
+  if (h.future[h.future.length - 1]?.kind === "ceiling") {
+    stepCeiling(redoCeiling)
     return
   }
   if (h.future[h.future.length - 1]?.kind === "callouts") {
@@ -3624,6 +3857,13 @@ window.addEventListener("keydown", (e) => {
       resumePlasterTool()
       return
     }
+    // мебель и подложка не удаляются: Delete удаляет только выделенный потолок
+    if (onCeiling()) {
+      closeCeilingEditor()
+      ceilingTool.deleteSelected()
+      resetCeiling()
+      return
+    }
     if (onDemolition()) {
       if (!demolitionTool.dragging()) {
         demolitionTool.deleteSelected()
@@ -3649,6 +3889,21 @@ window.addEventListener("keydown", (e) => {
       calloutTool.deselect()
       clearRoughSelection()
       resumePlasterTool()
+    } else if (action === "deactivate-tool") setTool("none")
+    return
+  }
+  if (e.key === "Escape" && onCeiling()) {
+    const action = escapeAction({
+      tool,
+      gestureActive: false,
+      dimensionDraft: false,
+      calloutDraft: calloutTool.hasDraft(),
+      hasSelection: ceilingTool.selectedId() !== null || calloutTool.selectedId() !== null,
+    })
+    if (action === "cancel-callout-draft") calloutTool.cancelDraft()
+    else if (action === "clear-selection") {
+      calloutTool.deselect()
+      resetCeiling()
     } else if (action === "deactivate-tool") setTool("none")
     return
   }
@@ -3697,7 +3952,7 @@ window.addEventListener("keydown", (e) => {
     return
   }
   // на плане «Демонтаж» нет стен, материалов и элементов: стрелки ничего не двигают и не переключают
-  if (onDemolition() || onRough()) return
+  if (onDemolition() || onRough() || onCeiling()) return
   if (groupMove || endpointDrag || panDrag || dimDrag || doorwayTool.dragging() || communicationTool.dragging() || batteryTool.dragging()) return
   // выделенная коммуникация и выноска стрелками не двигаются и материал не переключается (spec communications)
   if (selectedCommunication || calloutTool.selectedId() !== null || selectedRoom !== null) return

@@ -51,7 +51,9 @@ describe("разметка панелей", () => {
     // TCR (change add-rough-works-plan, canvas-app «Вспомогательная панель инструмента»): добавлены панели «Штукатурка» и «Стяжка»
     // TCR (change reconstruction-plan, canvas-app «Вспомогательная панель инструмента»): добавлена панель «Гипсокартон»
     // TCR (change furniture-plan-table, canvas-app «Вспомогательная панель инструмента»): добавлена панель группы «Мебель»
-    expect(count(toolbar, /class="[^"]*\btool-panel\b/g)).toBe(8)
+    // TCR (change add-ceiling-plan, canvas-app «Вспомогательная панель инструмента»): добавлена панель «Натяжной потолок»
+    expect(count(toolbar, /class="[^"]*\btool-panel\b/g)).toBe(9)
+    expect(panel("ceiling-panel").length).toBeGreaterThan(0)
     expect(panel("furniture-panel").length).toBeGreaterThan(0)
     expect(panel("drywall-panel").length).toBeGreaterThan(0)
     expect(panel("wall-panel").length).toBeGreaterThan(0)

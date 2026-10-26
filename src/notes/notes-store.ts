@@ -32,6 +32,7 @@ export const notesOf = (drawing: Drawing, plan: PlanId): string[] => {
   if (plan === "reconstruction") return drawing.reconstruction?.notes ?? []
   if (plan === "furniture") return drawing.furniture?.notes ?? []
   if (plan === "plumbing") return drawing.plumbing?.notes ?? []
+  if (plan === "ceiling") return drawing.ceiling?.notes ?? []
   return drawing.mounting?.notes ?? []
 }
 
@@ -43,6 +44,7 @@ export function withNotes(drawing: Drawing, plan: PlanId, list: string[]): Drawi
   if (plan === "reconstruction") return { ...drawing, reconstruction: { ...(drawing.reconstruction ?? { walls: [], dimensions: [] }), notes: list } }
   if (plan === "furniture") return { ...drawing, furniture: { ...(drawing.furniture ?? { items: [], dimensions: [] }), notes: list } }
   if (plan === "plumbing") return { ...drawing, plumbing: { ...(drawing.plumbing ?? { dimensions: [] }), notes: list } }
+  if (plan === "ceiling") return { ...drawing, ceiling: { ...(drawing.ceiling ?? { ceilings: [] }), notes: list } }
   const mounting = drawing.mounting ?? { walls: [], dimensions: [] }
   return { ...drawing, mounting: { ...mounting, notes: list } }
 }

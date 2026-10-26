@@ -328,6 +328,22 @@ export interface PlumbingContent {
   notes?: string[]
 }
 
+// Натяжной потолок помещения (change add-ceiling-plan, design D2): опорная точка — точка клика и место подписи «-50мм»;
+// действует, пока опорная точка лежит в помещении экспликации; dropMm — опускание полотна от плиты, целое больше нуля
+export interface StretchCeiling {
+  id: string
+  at: Point
+  dropMm: number
+}
+
+// Собственные объекты плана «Потолки и освещение» (change add-ceiling-plan, design D2): натяжные потолки в порядке постановки,
+// выноски и примечания; мебель берётся из плана «Мебель» и здесь не хранится
+export interface CeilingContent {
+  ceilings: StretchCeiling[]
+  callouts?: Callout[]
+  notes?: string[]
+}
+
 export interface Drawing {
   id: string
   name: string
@@ -373,6 +389,8 @@ export interface Drawing {
   furniture?: FurnitureContent
   // объекты плана «Сантехника»; отсутствие — пустой план, при загрузке не дописывается (add-plumbing-plan design D5)
   plumbing?: PlumbingContent
+  // объекты плана «Потолки и освещение»; отсутствие — пустой план, при загрузке не дописывается (add-ceiling-plan design D2)
+  ceiling?: CeilingContent
   view: View
 }
 

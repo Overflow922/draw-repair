@@ -22,6 +22,8 @@ import type { PlasterPiece } from "../rough/plaster"
 import { drawFurnitureScene } from "../furniture/furniture-render"
 import { furnitureScene } from "../furniture/furniture-scene"
 import { plumbingScene } from "../plumbing/plumbing-scene"
+import { drawCeilingScene } from "../ceiling/ceiling-render"
+import { ceilingScene } from "../ceiling/ceiling-scene"
 import { itemCorners } from "../furniture/item"
 import { itemSizeOutsidePoints } from "../furniture/item-size-layout"
 import { drawReconstructionScene } from "../reconstruction/reconstruction-render"
@@ -36,7 +38,7 @@ import { calloutLayout } from "../callout/callout-layout"
 import { calloutsOf } from "../callout/callout-store"
 import { notesOf } from "../notes/notes-store"
 import { CHAR_WIDTH } from "../doorway/element-label"
-import type { Battery, Callout, Communication, Dimension, Drawing, DrywallWall, Point, Screed, FurnitureItem, Unit, Wall, WallElement } from "../types"
+import type { Battery, Callout, Communication, Dimension, Drawing, DrywallWall, Point, Screed, StretchCeiling, FurnitureItem, Unit, Wall, WallElement } from "../types"
 import { FONT_B64 } from "./font"
 import { PAGE_FORMATS_MM } from "./page-format"
 import type { PageFormat } from "./page-format"
@@ -45,6 +47,7 @@ import { drawExplication } from "./explication-draw"
 import { pageNotes } from "./notes"
 import { drawNotes } from "./notes-draw"
 import { drawLegend } from "./legend-draw"
+import { pdfTranslucent } from "./pdf-translucent"
 import { legendColumnCount, legendWidthMm } from "./legend"
 import { drawSheet } from "./sheet-draw"
 import { drawingArea, legendArea, sheetSizeMm } from "./sheet-layout"
@@ -183,6 +186,14 @@ export interface PlanPage {
   reconstruction?: ReconstructionLayer
   // столы плана «Мебель» (change furniture-plan-table, design D9): у страницы этого плана рядом лежит и reconstruction (подложка)
   furniture?: { items: readonly FurnitureItem[] }
+  // слой плана «Потолки и освещение» (change add-ceiling-plan, design D8): предметы «Мебели» серой подложкой (записей видов мебели
+  // в легенде не дают) и действующие натяжные потолки с помещениями; рядом лежит reconstruction (подложка)
+  ceiling?: CeilingLayer
+}
+
+export interface CeilingLayer {
+  items: readonly FurnitureItem[]
+  ceilings: readonly { ceiling: StretchCeiling; room: Room }[]
 }
 
 export interface RoughLayer {
@@ -299,6 +310,23 @@ export function pagesOf(drawing: Drawing): PlanPage[] {
           title: plan.label,
         }
       }
+      // страница «Потолки и освещение» (change add-ceiling-plan, design D8): подложка «Мебели» без размеров, предметы «Мебели»
+      // и действующие натяжные потолки
+      case "ceiling": {
+        const scene = ceilingScene(drawing, reconstructionScene(drawing, mounting))
+        return {
+          walls: scene.base.underlay,
+          dimensions: [],
+          doorways: mounting.doorways,
+          ...shared,
+          ...(mounting.batteries.length ? { batteries: mounting.batteries } : null),
+          ...callouts,
+          ...notes,
+          reconstruction: { pieces: scene.base.pieces, drywall: scene.base.own },
+          ceiling: { items: scene.items, ceilings: scene.ceilings.map((a) => ({ ceiling: a.object, room: a.item.room })) },
+          title: plan.label,
+        }
+      }
     }
   })
 }
@@ -332,7 +360,9 @@ export function pageBounds(page: PlanPage, scale: number): BBox {
   const reconstruction = page.reconstruction ? roughExtent({ pieces: page.reconstruction.pieces, screeds: [] }, kMm, PDF_METRICS.labelPx) : []
   // углы столов плана «Мебель» и их габариты, вынесенные наружу (change furniture-dimensions, design D5)
   const items = (page.furniture?.items ?? []).flatMap((t) => [...itemCorners(t), ...itemSizeOutsidePoints(t, kMm, PDF_METRICS)])
-  const extra = [...marks, ...bodies, ...rects, ...calloutPoints, ...rough, ...reconstruction, ...items]
+  // предметы страницы «Потолки и освещение» — без габаритов; подписи потолков лежат внутри помещений и габариты не расширяют
+  const ceilingItems = (page.ceiling?.items ?? []).flatMap(itemCorners)
+  const extra = [...marks, ...bodies, ...rects, ...calloutPoints, ...rough, ...reconstruction, ...items, ...ceilingItems]
   const walls = page.reconstruction ? [...page.walls, ...page.reconstruction.drywall] : page.walls
   return wallsBBox(walls, page.dimensions, 0.5 * scale, page.doorways, scale, extra, batteries, page.furniture?.items)
 }
@@ -377,7 +407,7 @@ function drawPage(
     pan: { x: -placement.offsetX / placement.mmPerCm, y: -placement.offsetY / placement.mmPerCm },
   }
   drawSheet(doc, format, page.title === undefined ? { name, scale, date } : { name, scale, date, pageName: page.title })
-  drawLegend(doc, ctx, page, legendArea(format, legendMm, bandMm), legendColumns)
+  drawLegend(doc, ctx, page, legendArea(format, legendMm, bandMm), legendColumns, pdfTranslucent(doc))
   const explication = pageExplication(page)
   if (explication) drawExplication(doc, format, explication)
   const notes = pageNotes(page)
@@ -396,6 +426,9 @@ function drawPage(
     const opts = { grid: false, metrics: PDF_METRICS, palette: LIGHT_PALETTE, theme: "light", dimensions: page.dimensions, dimItems: page.furniture?.items } as const
     // страницы «Мебель» и «Сантехника»: подложка и предметы без подсветки пересечений
     if (page.furniture !== undefined) drawFurnitureScene(ctx, w, h, { ...scene, items: page.furniture.items }, unit, view, opts)
+    // страница «Потолки и освещение»: подложка, предметы серым, полупрозрачная заливка потолков, подписи (change add-ceiling-plan, design D8)
+    else if (page.ceiling !== undefined)
+      drawCeilingScene(ctx, w, h, { ...scene, items: page.ceiling.items, ceilings: page.ceiling.ceilings }, unit, view, { ...opts, translucent: pdfTranslucent(doc) })
     else drawReconstructionScene(ctx, w, h, scene, unit, view, opts)
     return
   }

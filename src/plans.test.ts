@@ -22,6 +22,7 @@ describe("каталог планов", () => {
       { id: "reconstruction", label: "Реконструкция" },
       { id: "furniture", label: "Мебель" }, // TCR (change furniture-plan-table)
       { id: "plumbing", label: "Сантехника" }, // TCR (change add-plumbing-plan)
+      { id: "ceiling", label: "Потолки и освещение" }, // TCR (change add-ceiling-plan)
     ])
   })
 

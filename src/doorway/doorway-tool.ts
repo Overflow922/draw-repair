@@ -20,6 +20,7 @@ import type { ElementKind, NewElementParams } from "./element-kind"
 
 export interface NumberEditor {
   close(): void
+  text(): string // набранный текст: поле, которое применяется при смене плана (change add-ceiling-plan, design D5)
 }
 
 // Enter применяет введённый текст, Esc и потеря фокуса закрывают поле без изменений
@@ -60,7 +61,7 @@ export function openNumberEditor(
     input.focus()
     input.select()
   })
-  return { close }
+  return { close, text: () => input.value }
 }
 
 export interface ElementToolHost {

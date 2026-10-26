@@ -11,7 +11,7 @@ const drawing = (extra: Record<string, unknown> = {}): Drawing =>
 describe("каталог планов с планом «Монтаж»", () => {
   // TCR (change add-rough-works-plan): «Монтаж» остаётся третьим, но уже не последним — каталог пополнен планом «Черновые работы»
   it("MP-50: «Монтаж» (mounting) — третий план каталога", () => {
-    expect(PLANS).toHaveLength(7) // TCR (change reconstruction-plan); TCR (change furniture-plan-table): шесть // TCR (change add-plumbing-plan): семь — седьмой план «Сантехника»
+    expect(PLANS).toHaveLength(8) // TCR (change reconstruction-plan); TCR (change furniture-plan-table): шесть // TCR (change add-plumbing-plan): семь — седьмой план «Сантехника» // TCR (change add-ceiling-plan): восемь — восьмой план «Потолки и освещение»
     expect(PLANS[2]).toEqual({ id: "mounting", label: "Монтаж" })
   })
 
@@ -19,7 +19,7 @@ describe("каталог планов с планом «Монтаж»", () => {
   it("MP-50: порядок каталога — обмер, демонтаж, монтаж, черновые работы, реконструкция", () => {
     // TCR (change furniture-plan-table): шестой добавлена «Мебель»
     // TCR (change add-plumbing-plan): седьмым добавлена «Сантехника»
-    expect(PLANS.map((p) => p.id)).toEqual(["measure", "demolition", "mounting", "rough", "reconstruction", "furniture", "plumbing"])
+    expect(PLANS.map((p) => p.id)).toEqual(["measure", "demolition", "mounting", "rough", "reconstruction", "furniture", "plumbing", "ceiling"]) // TCR (change add-ceiling-plan): восемь — восьмой план «Потолки и освещение»
   })
 
   it("MP-50: план по умолчанию остаётся measure", () => {
@@ -72,7 +72,7 @@ describe("ключ истории плана «Монтаж»", () => {
   // TCR (change add-rough-works-plan): планов четыре; TCR (change reconstruction-plan): пять
   it("MP-53: ключи планов одного чертежа различны, а у разных чертежей — тоже", () => {
     const keys = PLANS.map((p) => historyKey("a", p.id))
-    expect(new Set(keys).size).toBe(7) // TCR (change furniture-plan-table): шесть // TCR (change add-plumbing-plan): семь — седьмой план «Сантехника»
+    expect(new Set(keys).size).toBe(8) // TCR (change furniture-plan-table): шесть // TCR (change add-plumbing-plan): семь — седьмой план «Сантехника» // TCR (change add-ceiling-plan): восемь — восьмой план «Потолки и освещение»
     expect(historyKey("a", "mounting")).not.toBe(historyKey("b", "mounting"))
   })
 })
