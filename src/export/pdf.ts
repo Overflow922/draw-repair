@@ -21,6 +21,7 @@ import type { ExplicatedRoom } from "../room-explication"
 import type { PlasterPiece } from "../rough/plaster"
 import { drawFurnitureScene } from "../furniture/furniture-render"
 import { furnitureScene } from "../furniture/furniture-scene"
+import { plumbingScene } from "../plumbing/plumbing-scene"
 import { itemCorners } from "../furniture/item"
 import { itemSizeOutsidePoints } from "../furniture/item-size-layout"
 import { drawReconstructionScene } from "../reconstruction/reconstruction-render"
@@ -78,6 +79,8 @@ export function wallsBBox(
   scale: number = BBOX_DEFAULT_SCALE,
   extra: readonly Point[] = [],
   batteries: readonly Battery[] = [],
+  // приборы, к которым привязаны размеры плана «Сантехника» (change add-plumbing-plan, design D8)
+  items: readonly FurnitureItem[] = [],
 ): BBox {
   let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity
   const add = (x: number, y: number): void => {
@@ -93,7 +96,7 @@ export function wallsBBox(
     add(w.b.x + w.thicknessCm / 2, w.b.y + w.thicknessCm / 2)
   }
   for (const dim of dimensions) {
-    const g = dimensionGeometry(dim, walls, doorways, batteries)
+    const g = dimensionGeometry(dim, walls, doorways, batteries, items)
     if (!g) continue
     add(g.p1.x, g.p1.y)
     add(g.p2.x, g.p2.y)
@@ -280,6 +283,22 @@ export function pagesOf(drawing: Drawing): PlanPage[] {
           title: plan.label,
         }
       }
+      // страница «Сантехника» (change add-plumbing-plan, design D8): та же подложка, приборы «Мебели» и размеры своего плана
+      case "plumbing": {
+        const scene = plumbingScene(drawing, reconstructionScene(drawing, mounting))
+        return {
+          walls: scene.base.underlay,
+          dimensions: scene.dimensions,
+          doorways: mounting.doorways,
+          ...shared,
+          ...(mounting.batteries.length ? { batteries: mounting.batteries } : null),
+          ...callouts,
+          ...notes,
+          reconstruction: { pieces: scene.base.pieces, drywall: scene.base.own },
+          furniture: { items: scene.items },
+          title: plan.label,
+        }
+      }
     }
   })
 }
@@ -315,7 +334,7 @@ export function pageBounds(page: PlanPage, scale: number): BBox {
   const items = (page.furniture?.items ?? []).flatMap((t) => [...itemCorners(t), ...itemSizeOutsidePoints(t, kMm, PDF_METRICS)])
   const extra = [...marks, ...bodies, ...rects, ...calloutPoints, ...rough, ...reconstruction, ...items]
   const walls = page.reconstruction ? [...page.walls, ...page.reconstruction.drywall] : page.walls
-  return wallsBBox(walls, page.dimensions, 0.5 * scale, page.doorways, scale, extra, batteries)
+  return wallsBBox(walls, page.dimensions, 0.5 * scale, page.doorways, scale, extra, batteries, page.furniture?.items)
 }
 
 export function placeOnPage(b: BBox, scale: number, format: PageFormat, legendMm = 0, bandMm?: number): Placement {
@@ -373,8 +392,9 @@ function drawPage(
       drywall: page.reconstruction.drywall,
       callouts: page.callouts,
     }
-    const opts = { grid: false, metrics: PDF_METRICS, palette: LIGHT_PALETTE, theme: "light", dimensions: page.dimensions } as const
-    // страница «Мебель»: подложка и столы без подсветки пересечений
+    // предметы страницы разрешают точки размеров к приборам плана «Сантехника» (change add-plumbing-plan, design D4)
+    const opts = { grid: false, metrics: PDF_METRICS, palette: LIGHT_PALETTE, theme: "light", dimensions: page.dimensions, dimItems: page.furniture?.items } as const
+    // страницы «Мебель» и «Сантехника»: подложка и предметы без подсветки пересечений
     if (page.furniture !== undefined) drawFurnitureScene(ctx, w, h, { ...scene, items: page.furniture.items }, unit, view, opts)
     else drawReconstructionScene(ctx, w, h, scene, unit, view, opts)
     return

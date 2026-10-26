@@ -149,7 +149,7 @@ describe("pagesOf", () => {
     // TCR-3 (change mounting-plan): страниц три — добавлена страница плана «Монтаж» (pdf-export «Страница плана «Монтаж»»)
     // TCR (change add-rough-works-plan): страниц четыре — добавлена страница плана «Черновые работы»;
     // TCR (change reconstruction-plan): пять — добавлена страница плана «Реконструкция»
-    expect(pagesOf(d)).toHaveLength(6) // TCR (change furniture-plan-table): шесть
+    expect(pagesOf(d)).toHaveLength(7) // TCR (change furniture-plan-table): шесть // TCR (change add-plumbing-plan): семь — седьмой план «Сантехника»
     // TCR-1 (change pdf-plan-page-names): страница плана несёт название плана для графы 5
     expect(pagesOf(d)[0]).toEqual({ walls: [WA], dimensions: [dim], doorways: [DOOR_A], title: "Обмерочный план" })
   })

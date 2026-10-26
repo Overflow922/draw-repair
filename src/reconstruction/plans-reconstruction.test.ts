@@ -15,7 +15,8 @@ const callout: Callout = { id: "c", target: { x: 1, y: 2 }, at: { x: 3, y: 4 }, 
 describe("каталог", () => {
   it("RC-100: «Реконструкция» (reconstruction) — пятый, последний план каталога", () => {
     // TCR (change furniture-plan-table): после «Реконструкции» добавлена «Мебель», она теперь последняя
-    expect(PLANS.map((p) => p.id)).toEqual(["measure", "demolition", "mounting", "rough", "reconstruction", "furniture"])
+    // TCR (change add-plumbing-plan): седьмой добавлена «Сантехника»
+    expect(PLANS.map((p) => p.id)).toEqual(["measure", "demolition", "mounting", "rough", "reconstruction", "furniture", "plumbing"])
     expect(PLANS[4]).toEqual({ id: "reconstruction", label: "Реконструкция" })
   })
 

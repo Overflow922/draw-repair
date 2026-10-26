@@ -6,7 +6,7 @@ import { isPlanId } from "./plans"
 import { mergeAllPlaster } from "./rough/plaster-marks"
 import { PLASTER_THICKNESS, SCREED_THICKNESS, isThickness } from "./rough/rough-model"
 import { isDoor, isWindow, normalizeMaterial } from "./types"
-import type { Battery, BatteryCornerPoint, BatteryMark, Callout, Communication, CornerRef, DemolitionMark, Dimension, DimPoint, Doorway, Drawing, DrawingStore, DrywallWall, EdgePoint, EdgeRef, FurnitureContent, JambPoint, MountingContent, PlasterMark, Point, ReconstructionContent, RightAngleMark, RoomRecord, Screed, FurnitureItem, View, Wall, WallDoor, WallElement, WallWindow } from "./types"
+import type { Battery, BatteryCornerPoint, BatteryMark, Callout, Communication, CornerRef, DemolitionMark, Dimension, DimPoint, Doorway, Drawing, DrawingStore, DrywallWall, EdgePoint, EdgeRef, FurnitureContent, ItemPoint, JambPoint, MountingContent, PlasterMark, PlumbingContent, Point, ReconstructionContent, RightAngleMark, RoomRecord, Screed, FurnitureItem, View, Wall, WallDoor, WallElement, WallWindow } from "./types"
 
 const KEY = "draw-repair:drawing"
 
@@ -54,10 +54,27 @@ const isDimPoint = (p: unknown): p is DimPoint =>
   typeof p === "object" && p !== null &&
   ((p as DimPoint).kind === undefined ? isEdgeRef((p as EdgePoint).a) && isEdgeRef((p as EdgePoint).b) : isJambPoint(p) || isCornerPoint(p))
 
-export const isDimension = (dim: unknown): dim is Dimension =>
-  typeof dim === "object" && dim !== null && isDimPoint((dim as Dimension).from) && isDimPoint((dim as Dimension).to) &&
+// точка прибора: kind "item", непустой идентификатор предмета «Мебели», центр или угол со знаками u, v (change add-plumbing-plan,
+// design D5)
+const isItemPoint = (p: unknown): p is ItemPoint => {
+  if (typeof p !== "object" || p === null) return false
+  const x = p as Record<string, unknown>
+  if (x.kind !== "item" || typeof x.itemId !== "string" || x.itemId === "") return false
+  if (typeof x.at !== "object" || x.at === null) return false
+  const at = x.at as Record<string, unknown>
+  return at.kind === "center" || (at.kind === "corner" && (at.u === 1 || at.u === -1) && (at.v === 1 || at.v === -1))
+}
+
+const isDimensionWith = (point: (p: unknown) => p is DimPoint) => (dim: unknown): dim is Dimension =>
+  typeof dim === "object" && dim !== null && point((dim as Dimension).from) && point((dim as Dimension).to) &&
   typeof (dim as Dimension).offset === "number" && Number.isFinite((dim as Dimension).offset) &&
   ((dim as Dimension).auto === undefined || typeof (dim as Dimension).auto === "string")
+
+// размер плана без приборов: точка прибора в нём некорректна (design D5)
+export const isDimension = isDimensionWith(isDimPoint)
+
+// размер плана «Сантехника»: дополнительно допускает точки приборов
+export const isPlumbingDimension = isDimensionWith((p: unknown): p is DimPoint => isDimPoint(p) || isItemPoint(p))
 
 const num = (v: unknown): v is number => typeof v === "number" && Number.isFinite(v)
 
@@ -304,6 +321,7 @@ const assignIds = (walls: Wall[]): Wall[] =>
 const copyDimPoint = (p: DimPoint): DimPoint => {
   if (p.kind === "jamb") return { kind: "jamb", elementId: p.elementId, jamb: p.jamb, face: p.face }
   if (p.kind === "corner") return { kind: "corner", batteryId: p.batteryId, end: p.end, side: p.side }
+  if (p.kind === "item") return { kind: "item", itemId: p.itemId, at: p.at.kind === "center" ? { kind: "center" } : { kind: "corner", u: p.at.u, v: p.at.v } }
   return { a: { ...p.a }, b: { ...p.b } }
 }
 
@@ -402,6 +420,22 @@ function loadFurniture(raw: unknown): { furniture?: FurnitureContent } {
   }
 }
 
+// объекты плана «Сантехника» при загрузке (change add-plumbing-plan, design D5): некорректные размеры отбрасываются по одному,
+// размеры на отсутствующие стены и приборы сохраняются; поле, не являющееся объектом, читается как отсутствующее; выноски и
+// примечания — по общим правилам; приборы в поле не хранятся
+function loadPlumbing(raw: unknown): { plumbing?: PlumbingContent } {
+  if (typeof raw !== "object" || raw === null || Array.isArray(raw)) return {}
+  const x = raw as Record<string, unknown>
+  const notes = loadNoteList(x.notes)
+  return {
+    plumbing: {
+      dimensions: (Array.isArray(x.dimensions) ? x.dimensions : []).filter(isPlumbingDimension).map(copyDimension),
+      ...(x.callouts === undefined ? null : { callouts: loadCalloutList(x.callouts) }),
+      ...(notes === undefined ? null : { notes }),
+    },
+  }
+}
+
 const emptyDrawing = (name: string): Drawing => ({
   id: crypto.randomUUID(),
   name,
@@ -469,6 +503,7 @@ export function parseStore(raw: string): LoadedStore | null {
           ...loadRooms(dr.rooms),
           ...loadReconstruction(dr.reconstruction),
           ...loadFurniture(dr.furniture),
+          ...loadPlumbing(dr.plumbing),
           dimensions: (Array.isArray(dr.dimensions) ? dr.dimensions : []).filter(isDimension).map(copyDimension),
         }
       })

@@ -1,4 +1,4 @@
-import type { FurnitureItem, Point } from "../types"
+import type { FurnitureItem, ItemPointAt, Point } from "../types"
 import type { FurnitureKind } from "./furniture-kinds"
 
 // Предмет мебели плана «Мебель» (change furniture-plan-table, design D2, D5): прямоугольник вокруг центра. Ширина — вдоль оси X при
@@ -36,6 +36,18 @@ export function itemCorners(t: FurnitureItem): [Point, Point, Point, Point] {
   const at = (sw: number, sl: number): Point => ({ x: t.x + sw * hw * u.x + sl * hl * v.x, y: t.y + sw * hw * u.y + sl * hl * v.y })
   return [at(-1, -1), at(1, -1), at(1, 1), at(-1, 1)]
 }
+
+// центр или угол предмета в чертеже — точка замера прибора (change add-plumbing-plan, design D4)
+export function itemPointAt(t: FurnitureItem, at: ItemPointAt): Point {
+  if (at.kind === "center") return { x: t.x, y: t.y }
+  const { u, v } = axes(t)
+  const sw = (at.u * t.widthCm) / 2
+  const sl = (at.v * t.lengthCm) / 2
+  return { x: t.x + sw * u.x + sl * v.x, y: t.y + sw * u.y + sl * v.y }
+}
+
+// единичная ось ширины предмета: направление измерения размеров к прибору (правило батареи, design D4)
+export const itemWidthAxis = (t: FurnitureItem): Point => axes(t).u
 
 // точка из системы предмета (начало — левый верхний угол при угле 0, ось X — ширина, Y — длина, в см) в чертёж
 export function itemLocalToWorld(t: FurnitureItem, p: Point): Point {

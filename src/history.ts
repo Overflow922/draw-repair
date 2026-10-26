@@ -1,7 +1,7 @@
 import { isNoteList } from "./notes/notes-store"
 import { historyKey } from "./plans"
 import type { PlanId } from "./plans"
-import { isBattery, isBatteryMark, isCallout, isCommunication, isDemolitionMark, isDimension, isDrawing, isDrywallWall, isPlasterMark, isRightAngle, isRoomRecord, isScreed, isFurnitureItem, isWall, isWallElement, readFurnitureItem } from "./storage"
+import { isBattery, isBatteryMark, isCallout, isCommunication, isDemolitionMark, isDimension, isDrawing, isDrywallWall, isPlasterMark, isRightAngle, isRoomRecord, isScreed, isFurnitureItem, isPlumbingDimension, isWall, isWallElement, readFurnitureItem } from "./storage"
 import type { Battery, BatteryMark, Callout, Communication, DemolitionMark, Dimension, DimPoint, Drawing, PlasterMark, RightAngleMark, RoomRecord, Screed, FurnitureItem, Wall, WallElement } from "./types"
 
 const KEY = "draw-repair:history"
@@ -35,6 +35,8 @@ export type HistoryEntry =
   | { kind: "rough"; plaster: PlasterMark[]; screeds: Screed[]; angles?: RightAngleMark[] }
   // шаг плана «Мебель» (change furniture-plan-table, design D9): столы и размеры плана до операции
   | { kind: "furniture"; items: FurnitureItem[]; dimensions: Dimension[] }
+  // шаг плана «Сантехника» (change add-plumbing-plan, design D6): размеры плана до операции; приборы — объекты «Мебели»
+  | { kind: "plumbing"; dimensions: Dimension[] }
 
 export interface DrawingHistory {
   past: HistoryEntry[]
@@ -66,7 +68,11 @@ export function planHistory(history: HistoryStore, drawingId: string, plan: Plan
   return drawingHistory(history, historyKey(drawingId, plan))
 }
 
-const cloneDimPoint = (p: DimPoint): DimPoint => (p.kind === undefined ? { a: { ...p.a }, b: { ...p.b } } : { ...p })
+const cloneDimPoint = (p: DimPoint): DimPoint => {
+  if (p.kind === undefined) return { a: { ...p.a }, b: { ...p.b } }
+  if (p.kind === "item") return { ...p, at: { ...p.at } }
+  return { ...p }
+}
 
 export function cloneScene(scene: Scene): Scene {
   return {
@@ -229,6 +235,34 @@ export function redoFurniture(history: DrawingHistory, current: FurnitureState):
   return copyFurniture(e)
 }
 
+// Размеры плана «Сантехника» (change add-plumbing-plan, design D6): как у «Мебели» — работают только с верхней записью вида
+// «plumbing», при другой записи возвращают null и стеки не меняют; прежние функции отмены её не забирают
+const copyDimensions = (dimensions: readonly Dimension[]): Dimension[] => cloneScene({ walls: [], dimensions: [...dimensions] }).dimensions
+
+const plumbingEntry = (dimensions: readonly Dimension[]): HistoryEntry => ({ kind: "plumbing", dimensions: copyDimensions(dimensions) })
+
+export function recordPlumbing(history: DrawingHistory, dimensions: readonly Dimension[]): void {
+  history.past.push(plumbingEntry(dimensions))
+  if (history.past.length > HISTORY_LIMIT) history.past.shift()
+  history.future = []
+}
+
+export function undoPlumbing(history: DrawingHistory, current: readonly Dimension[]): Dimension[] | null {
+  const e = history.past[history.past.length - 1]
+  if (!e || e.kind !== "plumbing") return null
+  history.past.pop()
+  history.future.push(plumbingEntry(current))
+  return copyDimensions(e.dimensions)
+}
+
+export function redoPlumbing(history: DrawingHistory, current: readonly Dimension[]): Dimension[] | null {
+  const e = history.future[history.future.length - 1]
+  if (!e || e.kind !== "plumbing") return null
+  history.future.pop()
+  history.past.push(plumbingEntry(current))
+  return copyDimensions(e.dimensions)
+}
+
 // отмена: снимок из past возвращается, текущие пометки кладутся в future (в истории плана «Демонтаж» только такие записи)
 export function undoMarks(history: DrawingHistory, current: readonly DemolitionMark[]): DemolitionMark[] | null {
   const e = history.past[history.past.length - 1]
@@ -286,7 +320,7 @@ export function redoDemolition(history: DrawingHistory, current: DemolitionState
 
 export function undoEntry(history: DrawingHistory, scene: Scene): HistoryEntry | null {
   const e = history.past[history.past.length - 1]
-  if (!e || e.kind === "callouts" || e.kind === "notes" || e.kind === "rough" || e.kind === "furniture") return null
+  if (!e || e.kind === "callouts" || e.kind === "notes" || e.kind === "rough" || e.kind === "furniture" || e.kind === "plumbing") return null
   history.past.pop()
   history.future.push(e.kind === "walls" ? { kind: "walls", ...cloneScene(scene) } : e)
   return e
@@ -294,7 +328,7 @@ export function undoEntry(history: DrawingHistory, scene: Scene): HistoryEntry |
 
 export function redoEntry(history: DrawingHistory, scene: Scene): HistoryEntry | null {
   const e = history.future[history.future.length - 1]
-  if (!e || e.kind === "callouts" || e.kind === "notes" || e.kind === "rough" || e.kind === "furniture") return null
+  if (!e || e.kind === "callouts" || e.kind === "notes" || e.kind === "rough" || e.kind === "furniture" || e.kind === "plumbing") return null
   history.future.pop()
   history.past.push(e.kind === "walls" ? { kind: "walls", ...cloneScene(scene) } : e)
   return e
@@ -327,6 +361,7 @@ const isHistoryEntry = (e: unknown): e is HistoryEntry => {
     return Array.isArray(x.plaster) && x.plaster.every(isPlasterMark) && Array.isArray(x.screeds) && x.screeds.every(isScreed) &&
       (x.angles === undefined || (Array.isArray(x.angles) && x.angles.every(isRightAngle)))
   if (x.kind === "furniture") return Array.isArray(x.items) && x.items.every(isFurnitureItem) && Array.isArray(x.dimensions) && x.dimensions.every(isDimension)
+  if (x.kind === "plumbing") return Array.isArray(x.dimensions) && x.dimensions.every(isPlumbingDimension)
   return x.kind === "close" && typeof x.drawingId === "string" &&
     typeof x.index === "number" && Number.isInteger(x.index) && x.index >= 0
 }

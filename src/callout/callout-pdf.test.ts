@@ -142,7 +142,7 @@ describe("отрисовка страниц", () => {
   it("C-PDF-3b: PDF содержит шесть страниц и собирается с выносками на всех планах", () => {
     calls.length = 0
     const doc = buildPdfPages(pagesOf(all()), "cm", SCALE, "A4", font, "t", new Date(2026, 0, 1))
-    expect(doc.getNumberOfPages()).toBe(6) // TCR (change furniture-plan-table): шесть
+    expect(doc.getNumberOfPages()).toBe(7) // TCR (change furniture-plan-table): шесть // TCR (change add-plumbing-plan): семь — седьмой план «Сантехника»
   })
 })
 
@@ -233,6 +233,6 @@ describe("границы содержимого страницы", () => {
     expect(b.minX).toBeLessThanOrEqual(100)
     const doc = buildPdfPages(pagesOf(only), "cm", SCALE, "A4", font, "t", new Date(2026, 0, 1))
     // TCR (change add-rough-works-plan): страниц четыре; TCR (change reconstruction-plan): пять
-    expect(doc.getNumberOfPages()).toBe(6) // TCR (change furniture-plan-table): шесть
+    expect(doc.getNumberOfPages()).toBe(7) // TCR (change furniture-plan-table): шесть // TCR (change add-plumbing-plan): семь — седьмой план «Сантехника»
   })
 })

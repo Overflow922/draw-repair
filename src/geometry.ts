@@ -2,7 +2,8 @@ import type { Axis } from "./ortho-axis"
 import { ZOOM_MAX, ZOOM_MIN } from "./types"
 import { batteryCorner } from "./battery/battery-geometry"
 import { hostOf, hostPoint, jambsT } from "./doorway/doorway-faces"
-import type { Battery, BatteryCornerPoint, Dimension, DimPoint, EdgeRef, JambPoint, Point, View, Wall, WallElement } from "./types"
+import { itemPointAt, itemWidthAxis } from "./furniture/item"
+import type { Battery, BatteryCornerPoint, Dimension, DimPoint, EdgeRef, FurnitureItem, ItemPoint, ItemPointAt, JambPoint, Point, View, Wall, WallElement } from "./types"
 import { convexCorners, sceneContour } from "./scene-contour"
 import { faceCornerTol, pointInPolygon } from "./wall-geometry"
 
@@ -492,10 +493,24 @@ function cornerPosition(point: BatteryCornerPoint, walls: Wall[], batteries: rea
   return batteryCorner(battery, host, point.end, point.side)
 }
 
-// elements нужен только точкам-откосам, batteries — только углам батарей; для граневых точек списки не используются
-export function dimPointPoint(point: DimPoint, walls: Wall[], elements: readonly WallElement[] = [], batteries: readonly Battery[] = []): Point | null {
+// позиция центра или угла прибора; null — прибора нет (change add-plumbing-plan, design D4)
+function itemPosition(point: ItemPoint, items: readonly FurnitureItem[]): Point | null {
+  const item = items.find((t) => t.id === point.itemId)
+  return item ? itemPointAt(item, point.at) : null
+}
+
+// elements нужен только точкам-откосам, batteries — только углам батарей, items — только точкам приборов; для граневых точек
+// списки не используются
+export function dimPointPoint(
+  point: DimPoint,
+  walls: Wall[],
+  elements: readonly WallElement[] = [],
+  batteries: readonly Battery[] = [],
+  items: readonly FurnitureItem[] = [],
+): Point | null {
   if (point.kind === "jamb") return jambPosition(point, walls, elements)
   if (point.kind === "corner") return cornerPosition(point, walls, batteries)
+  if (point.kind === "item") return itemPosition(point, items)
   const wa = walls.find((w) => w.id === point.a.wallId)
   const wb = walls.find((w) => w.id === point.b.wallId)
   if (!wa || !wb) return null
@@ -535,6 +550,15 @@ export interface DimAnchorHit {
 // допуск равенства расстояний: при равенстве вершина контура выигрывает у откоса (design D5)
 const TIE_CM = 1e-9
 
+// точки замера прибора в порядке приоритета снапа: центр, затем четыре угла
+const ITEM_POINTS: readonly ItemPointAt[] = [
+  { kind: "center" },
+  { kind: "corner", u: -1, v: -1 },
+  { kind: "corner", u: 1, v: -1 },
+  { kind: "corner", u: 1, v: 1 },
+  { kind: "corner", u: -1, v: 1 },
+]
+
 // ближайшая точка замера: вершина контура или откосный угол элемента стены (четыре на элемент)
 export function nearestDimAnchor(
   p: Point,
@@ -542,6 +566,7 @@ export function nearestDimAnchor(
   elements: readonly WallElement[],
   radius: number,
   batteries: readonly Battery[] = [],
+  items: readonly FurnitureItem[] = [],
 ): DimAnchorHit | null {
   const vertex = nearestEdgeIntersection(p, walls, radius)
   let best: DimAnchorHit | null = vertex ? { point: vertex.point, anchor: { a: vertex.a, b: vertex.b } } : null
@@ -569,6 +594,15 @@ export function nearestDimAnchor(
         best = { point, anchor }
         bestDist = d
       }
+  // точки приборов плана «Сантехника» — после углов батарей; у прибора центр раньше углов (change add-plumbing-plan, design D4)
+  for (const item of items)
+    for (const at of ITEM_POINTS) {
+      const point = itemPointAt(item, at)
+      const d = distance(p, point)
+      if (d > radius || d >= bestDist - TIE_CM) continue
+      best = { point, anchor: { kind: "item", itemId: item.id, at } }
+      bestDist = d
+    }
   return best
 }
 
@@ -609,10 +643,16 @@ export interface DimMeasure {
   direction: Point // единичное направление измерения; (b − a) · direction ≥ 0
 }
 
-// ось измерения — ось опорной стены батареи первой точки, а если первая точка не угол — второй: число и линия размера с
-// углом батареи идут вдоль оси или поперёк (по большей проекции отрезка, при равенстве — вдоль оси)
-function measureAxis(dim: Dimension, walls: Wall[], batteries: readonly Battery[]): Point | null {
-  const point = dim.from.kind === "corner" ? dim.from : dim.to.kind === "corner" ? dim.to : null
+// ось измерения — ось опорной стены батареи или ось ширины прибора первой точки, а если первая точка не угол батареи и не точка
+// прибора — второй: число и линия размера идут вдоль оси или поперёк (по большей проекции отрезка, при равенстве — вдоль оси)
+const axialPoint = (p: DimPoint): p is BatteryCornerPoint | ItemPoint => p.kind === "corner" || p.kind === "item"
+
+function measureAxis(dim: Dimension, walls: Wall[], batteries: readonly Battery[], items: readonly FurnitureItem[]): Point | null {
+  const point = axialPoint(dim.from) ? dim.from : axialPoint(dim.to) ? dim.to : null
+  if (point?.kind === "item") {
+    const item = items.find((t) => t.id === point.itemId)
+    return item ? itemWidthAxis(item) : null
+  }
   const battery = point ? batteries.find((b) => b.id === point.batteryId) : undefined
   const host = battery ? walls.find((w) => w.id === battery.wallId) : undefined
   return host && !pointsEqual(host.a, host.b) ? dirOf(host.a, host.b) : null
@@ -623,14 +663,15 @@ export function measureDimension(
   walls: Wall[],
   elements: readonly WallElement[] = [],
   batteries: readonly Battery[] = [],
+  items: readonly FurnitureItem[] = [],
 ): DimMeasure | null {
-  const a = dimPointPoint(dim.from, walls, elements, batteries)
-  const b = dimPointPoint(dim.to, walls, elements, batteries)
+  const a = dimPointPoint(dim.from, walls, elements, batteries, items)
+  const b = dimPointPoint(dim.to, walls, elements, batteries, items)
   if (!a || !b) return null
   const dx = b.x - a.x
   const dy = b.y - a.y
   const len = Math.hypot(dx, dy)
-  const axis = dim.from.kind === "corner" || dim.to.kind === "corner" ? measureAxis(dim, walls, batteries) : null
+  const axis = axialPoint(dim.from) || axialPoint(dim.to) ? measureAxis(dim, walls, batteries, items) : null
   if (!axis) return { valueCm: len, direction: len < EPS ? { x: 1, y: 0 } : { x: dx / len, y: dy / len } }
   const along = dx * axis.x + dy * axis.y
   const across = dx * -axis.y + dy * axis.x
@@ -646,10 +687,11 @@ export function dimensionGeometry(
   walls: Wall[],
   elements: readonly WallElement[] = [],
   batteries: readonly Battery[] = [],
+  items: readonly FurnitureItem[] = [],
 ): (DimGeometry & { valueCm: number }) | null {
-  const a = dimPointPoint(dim.from, walls, elements, batteries)
-  const b = dimPointPoint(dim.to, walls, elements, batteries)
-  const m = measureDimension(dim, walls, elements, batteries)
+  const a = dimPointPoint(dim.from, walls, elements, batteries, items)
+  const b = dimPointPoint(dim.to, walls, elements, batteries, items)
+  const m = measureDimension(dim, walls, elements, batteries, items)
   if (!a || !b || !m) return null
   const geom = dimGeometry(a, b, dim.offset, m.direction)
   return geom && { ...geom, valueCm: m.valueCm }
@@ -689,8 +731,9 @@ export function dimHitDistance(
   textFactor: number,
   elements: readonly WallElement[] = [],
   batteries: readonly Battery[] = [],
+  items: readonly FurnitureItem[] = [],
 ): number | null {
-  const g = dimensionGeometry(dim, walls, elements, batteries)
+  const g = dimensionGeometry(dim, walls, elements, batteries, items)
   if (!g) return null
   const dx = g.p2.x - g.p1.x
   const dy = g.p2.y - g.p1.y

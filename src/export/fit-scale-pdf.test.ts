@@ -125,7 +125,7 @@ describe("единый подобранный масштаб документа"
   it("T-11/T-29: на странице «Монтаж» с длинной собственной стеной масштаб мельче, чем у обмерочной страницы", () => {
     if (!measure || !mounting) throw new Error("нет страниц")
     // TCR (change add-rough-works-plan): страниц четыре — четвёртая «Черновые работы»; TCR (change reconstruction-plan): пять
-    expect(pages).toHaveLength(6) // TCR (change furniture-plan-table): шесть
+    expect(pages).toHaveLength(7) // TCR (change furniture-plan-table): шесть // TCR (change add-plumbing-plan): семь — седьмой план «Сантехника»
     expect(must(fitScale([measure], "A4"))).toBeLessThan(must(fitScale([mounting], "A4")))
   })
 
@@ -149,7 +149,7 @@ describe("единый подобранный масштаб документа"
     const scale = must(fitScale(pages, "A4"))
     build(pages, scale)
     const shown = scaleTexts()
-    expect(shown.map((t) => t.page)).toEqual([1, 2, 3, 4, 5, 6]) // TCR (change furniture-plan-table): шесть страниц
+    expect(shown.map((t) => t.page)).toEqual([1, 2, 3, 4, 5, 6, 7]) // TCR (change furniture-plan-table): шесть страниц // TCR (change add-plumbing-plan): семь
     for (const t of shown) expect(t.text).toBe(formatScale(scale))
   })
 
@@ -213,7 +213,7 @@ describe("графа 25 основной надписи", () => {
     build(pages, 2.5, "A0")
     const shown = scaleTexts()
     // TCR (change add-rough-works-plan): страниц четыре; TCR (change reconstruction-plan): пять
-    expect(shown.map((t) => t.text)).toEqual(["1:2,5", "1:2,5", "1:2,5", "1:2,5", "1:2,5", "1:2,5"]) // TCR (change furniture-plan-table): шесть страниц
+    expect(shown.map((t) => t.text)).toEqual(["1:2,5", "1:2,5", "1:2,5", "1:2,5", "1:2,5", "1:2,5", "1:2,5"]) // TCR (change furniture-plan-table): шесть страниц // TCR (change add-plumbing-plan): семь
   })
 
   it("T-26: текст графы 25 берётся из подобранного масштаба: целый — «1:100», нецелый — «1:2,5»", () => {

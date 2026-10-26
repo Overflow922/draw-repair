@@ -1,5 +1,5 @@
 import "./style.css"
-import { cloneScene, loadHistory, planHistory, record, recordCallouts, recordDemolition, recordFurniture, recordNotes, recordRough, recordSnapshot, redoCallouts, redoDemolition, redoEntry, redoFurniture, redoNotes, redoRough, saveHistory, undoCallouts, undoDemolition, undoEntry, undoFurniture, undoNotes, undoRough } from "./history"
+import { cloneScene, loadHistory, planHistory, record, recordCallouts, recordDemolition, recordFurniture, recordNotes, recordPlumbing, recordRough, recordSnapshot, redoCallouts, redoDemolition, redoEntry, redoFurniture, redoNotes, redoPlumbing, redoRough, saveHistory, undoCallouts, undoDemolition, undoEntry, undoFurniture, undoNotes, undoPlumbing, undoRough } from "./history"
 import type { Scene } from "./history"
 import { dimLevelSnap, dimensionGeometry, dimensionOffsetAt, hitWall, nearestDimAnchor, dimPointPoint, pointsEqual, segmentIntersectsRect, snap, snapOthers, snapWithSource, zoomAt } from "./geometry"
 import type { DimGeometry, SnapResult } from "./geometry"
@@ -78,6 +78,11 @@ import type { ItemParams } from "./furniture/item-params"
 import { createItemTool } from "./furniture/item-tool"
 import type { ItemToolHost } from "./furniture/item-tool"
 import { warningText } from "./furniture/warning"
+import { plumbingScene } from "./plumbing/plumbing-scene"
+import type { PlumbingScene } from "./plumbing/plumbing-scene"
+import { renderPlumbing } from "./plumbing/plumbing-render"
+import { openPlumbing, storedPlumbing } from "./plumbing/plumbing-workspace"
+import type { PlumbingWorkspace } from "./plumbing/plumbing-workspace"
 import { PLASTER_OBSTACLE_PREFIX } from "./reconstruction/plaster-obstacles"
 import { renderReconstruction } from "./reconstruction/reconstruction-render"
 import { reconstructionScene } from "./reconstruction/reconstruction-scene"
@@ -232,6 +237,11 @@ let furnitureKind: FurnitureKind = "table"
 let kindParams = initialKindParams()
 const itemParamsOf = (kind: FurnitureKind): ItemParams => paramsOfKind(kindParams, kind)
 let furniturePanelOpen = false
+// рабочий набор плана «Сантехника» (change add-plumbing-plan, design D3): walls — подложка «Мебели» только для чтения, fixtures —
+// приборы «Мебели» только для чтения (по ним разрешаются точки размеров); в чертёж пишутся только размеры плана (commitPlumbing)
+let plumbingWorkspace: PlumbingWorkspace | null = null
+let plumbingCache: PlumbingScene | null = null
+let fixtures: readonly FurnitureItem[] = []
 let selectedDoorways: WallElement[] = []
 // выделенная коммуникация (change add-communications): выделяется только на обмерочном плане, ровно одна
 let selectedCommunication: Communication | null = null
@@ -293,7 +303,7 @@ let theme: Theme = resolveTheme(themeChoice, systemDark.matches)
 
 const emptyDraft = (): { a: DimPoint | null; b: DimPoint | null } => ({ a: null, b: null })
 
-const endPoint = (end: DimPoint): Point | null => dimPointPoint(end, walls, doorways, batteries)
+const endPoint = (end: DimPoint): Point | null => dimPointPoint(end, walls, doorways, batteries, fixtures)
 
 const radiusCm = (): number => snapRadiusCm(view.zoom)
 
@@ -413,13 +423,15 @@ const pushRecord = (): void => {
   itemTool.endBurst()
   // на плане «Мебель» шаг истории хранит столы и размеры плана (change furniture-plan-table, design D7)
   if (furnitureWorkspace) recordFurniture(activeHistory(), { items, dimensions })
+  // на плане «Сантехника» — размеры плана (change add-plumbing-plan, design D6)
+  else if (plumbingWorkspace) recordPlumbing(activeHistory(), dimensions)
   else record(activeHistory(), historyOf(scene()))
 }
 
 // список проёмов заменяется целиком: правки проёма возвращают новый объект
 function setDoorways(next: WallElement[]): void {
   doorways = next
-  if (!workspace && !reconWorkspace && !furnitureWorkspace) current().doorways = next
+  if (!workspace && !reconWorkspace && !furnitureWorkspace && !plumbingWorkspace) current().doorways = next
   selectedDoorways = selectedDoorways.filter((d) => next.includes(d))
 }
 
@@ -427,14 +439,15 @@ function setDoorways(next: WallElement[]): void {
 // батареи нет (отмена удаления возвращает и пометку)
 function setBatteries(next: Battery[]): void {
   batteries = next
-  if (!workspace && !reconWorkspace && !furnitureWorkspace) current().batteries = next
+  if (!workspace && !reconWorkspace && !furnitureWorkspace && !plumbingWorkspace) current().batteries = next
   selectedBatteries = selectedBatteries.filter((b) => next.includes(b))
 }
 
 // список размеров заменяется целиком; размеры плана «Монтаж» пишутся в чертёж при фиксации (commitMounting)
 function setDimensions(next: Dimension[]): void {
-  // размеры планов «Реконструкция» и «Мебель» пишутся в чертёж при фиксации (commitReconstruction, commitFurniture)
-  if (reconWorkspace || furnitureWorkspace) {
+  // размеры планов «Реконструкция», «Мебель» и «Сантехника» пишутся в чертёж при фиксации (commitReconstruction, commitFurniture,
+  // commitPlumbing)
+  if (reconWorkspace || furnitureWorkspace || plumbingWorkspace) {
     dimensions = next
     return
   }
@@ -459,7 +472,24 @@ function loadWorking(): void {
   items = []
   furnitureObstacles = []
   furnitureBodies = []
+  plumbingCache = null
+  plumbingWorkspace = null
+  fixtures = []
   obstacles = []
+  if (activePlanOf(d) === "plumbing") {
+    // подложка — та же, что у «Мебели», приборы — из «Мебели»; всё только для чтения, правятся размеры плана (design D3)
+    const s = plumbingNow()
+    const opened = openPlumbing(d, s)
+    walls = opened.scene.walls
+    dimensions = opened.scene.dimensions
+    fixtures = opened.scene.items
+    doorways = s.base.base.doorways
+    batteries = s.base.base.batteries
+    workspace = null
+    plumbingWorkspace = opened.workspace
+    remnantHome = new Map(walls.map((w) => [w.id, { a: { ...w.a }, b: { ...w.b } }]))
+    return
+  }
   if (activePlanOf(d) === "furniture") {
     // подложка — результат «Реконструкции», целиком только для чтения; правятся столы и собственные размеры плана
     const s = furnitureNow()
@@ -548,10 +578,20 @@ function commitFurniture(): void {
   drawing.furniture = next
 }
 
+// запись размеров плана «Сантехника» в чертёж; пока их нет и поля не было, оно не создаётся (change add-plumbing-plan, design D5)
+function commitPlumbing(): void {
+  const drawing = store.drawings.find((d) => d.id === store.activeId)
+  if (!plumbingWorkspace || !drawing) return // вкладка уже закрыта — писать некуда
+  const next = storedPlumbing(dimensions, plumbingWorkspace, drawing)
+  if (next.dimensions.length === 0 && drawing.plumbing === undefined) return
+  drawing.plumbing = next
+}
+
 const commitWorking = (): void => {
   commitMounting()
   commitReconstruction()
   commitFurniture()
+  commitPlumbing()
 }
 
 // остатки и старые элементы только для чтения: правка соседа не должна сдвигать остаток
@@ -565,10 +605,10 @@ function restoreRemnants(): void {
   }
 }
 
-const editableWall = (w: Wall): boolean => !workspace?.remnantIds.has(w.id) && !reconWorkspace?.readOnlyIds.has(w.id) && !furnitureWorkspace?.readOnlyIds.has(w.id)
-// на планах «Реконструкция» и «Мебель» элементы и батареи — подложка, их правят на своих планах
-const editableElement = (e: WallElement): boolean => reconWorkspace === null && furnitureWorkspace === null && !workspace?.oldElementIds.has(e.id)
-const editableBattery = (b: Battery): boolean => reconWorkspace === null && furnitureWorkspace === null && !workspace?.oldBatteryIds.has(b.id)
+const editableWall = (w: Wall): boolean => !workspace?.remnantIds.has(w.id) && !reconWorkspace?.readOnlyIds.has(w.id) && !furnitureWorkspace?.readOnlyIds.has(w.id) && !plumbingWorkspace?.readOnlyIds.has(w.id)
+// на планах «Реконструкция», «Мебель» и «Сантехника» элементы и батареи — подложка, их правят на своих планах
+const editableElement = (e: WallElement): boolean => reconWorkspace === null && furnitureWorkspace === null && plumbingWorkspace === null && !workspace?.oldElementIds.has(e.id)
+const editableBattery = (b: Battery): boolean => reconWorkspace === null && furnitureWorkspace === null && plumbingWorkspace === null && !workspace?.oldBatteryIds.has(b.id)
 
 // стены, которые видят привязка и ограничения правки: стены плана и полосы штукатурки подложки (design D3)
 const solid = (): Wall[] => (obstacles.length ? [...walls, ...obstacles] : walls)
@@ -844,6 +884,8 @@ const onReconstruction = (): boolean => activePlanOf(current()) === "reconstruct
 const reconNow = (): ReconstructionScene => (reconCache ??= reconstructionScene(current()))
 const onFurniture = (): boolean => activePlanOf(current()) === "furniture"
 const furnitureNow = (): FurnitureScene => (furnitureCache ??= furnitureScene(current()))
+const onPlumbing = (): boolean => activePlanOf(current()) === "plumbing"
+const plumbingNow = (): PlumbingScene => (plumbingCache ??= plumbingScene(current()))
 const NO_PLASTER: PlasterMark[] = []
 const NO_SCREEDS: Screed[] = []
 const NO_ANGLES: RightAngleMark[] = []
@@ -1193,6 +1235,7 @@ const pushSnapshot = (snapshot: Scene): void => {
   nudgeBurst = false
   itemTool.endBurst()
   if (furnitureWorkspace) recordFurniture(activeHistory(), { items, dimensions: snapshot.dimensions })
+  else if (plumbingWorkspace) recordPlumbing(activeHistory(), snapshot.dimensions)
   else recordSnapshot(activeHistory(), historyOf(snapshot))
 }
 
@@ -1634,6 +1677,9 @@ function redraw(): void {
   } else if (furnitureWorkspace) {
     restoreRemnants()
     if (dirty) commitFurniture()
+  } else if (plumbingWorkspace) {
+    restoreRemnants()
+    if (dirty) commitPlumbing()
   }
   frame.request()
   syncRoughPanels()
@@ -1660,6 +1706,7 @@ function rulerOf(planWalls: Wall[], planBatteries: readonly Battery[], planItems
 function drawPlan(): void {
   if (!onFurniture()) furnitureWarning.hidden = true
   if (onFurniture()) drawFurniturePlan()
+  else if (onPlumbing()) drawPlumbingPlan()
   else if (onReconstruction()) drawReconstructionPlan()
   else if (onRough()) drawRoughPlan()
   else if (onDemolition()) drawDemolitionPlan()
@@ -1714,6 +1761,46 @@ function drawFurniturePlan(): void {
       marquee,
       tracks: centerGuideTracks(),
       ruler: rulerOf(walls, batteries, items),
+    },
+  )
+}
+
+// план «Сантехника» (change add-plumbing-plan, design D7): подложка «Мебели», приборы с габаритами только для чтения — без
+// подсветки выделения, пересечений и плашки, без правимых чисел; поверх — размеры плана, выноски и жесты «Размера» и «Линейки»
+function drawPlumbingPlan(): void {
+  const s = plumbingNow()
+  const erasingCallout = tool === "eraser" && hoverWorld ? calloutTool.pick(hoverWorld) : null
+  const target = tool === "eraser" && cursor && !erasingCallout ? eraserTarget(cursor) : { wall: null, dim: null, doorway: null, communication: null, battery: null }
+  const draft = dimDraftGeometry()
+  const snapHit = tool === "dimension" && cursor && (!dimDraft.a || !dimDraft.b) ? nearestDimAnchor(cursor, walls, doorways, radiusCm(), [], fixtures) : null
+  renderPlumbing(
+    canvas,
+    {
+      walls: s.base.underlay,
+      doorways,
+      communications: communicationsOf(),
+      batteries,
+      pieces: s.base.pieces,
+      drywall: s.base.own,
+      callouts: calloutTool.displayList(),
+      selectedCalloutId: calloutTool.selectedId(),
+      erasingCalloutId: erasingCallout?.id ?? null,
+      items: fixtures,
+    },
+    unit,
+    view,
+    {
+      palette: paletteOf(theme),
+      theme,
+      dimensions,
+      dimDraft: draft,
+      dimRubber: !dimDraft.a || dimDraft.b || !cursor ? null : draftRubber(snapHit?.point ?? cursor),
+      dimSnap: snapHit?.point ?? null,
+      selectedDims: selectedDimensions,
+      hoverDim: target.dim,
+      marqueeHits,
+      marquee,
+      ruler: rulerOf(walls, batteries, fixtures),
     },
   )
 }
@@ -1930,7 +2017,7 @@ function eraserTarget(p: Point): {
   communication: Communication | null
   battery: Battery | null
 } {
-  const found = erasePick(p, { walls, dimensions, doorways, batteries }, radiusCm(), 2)
+  const found = erasePick(p, { walls, dimensions, doorways, batteries, items: fixtures }, radiusCm(), 2)
   const communication = found?.kind === "dimension" || !communicationsEditable() ? null : hitCommunication(p, communicationsOf(), radiusCm())
   // остатки, старые элементы и старые батареи ластиком не стираются
   const readOnly = found && (found.kind === "doorway" ? !editableElement(found.doorway) : found.kind === "battery" ? !editableBattery(found.battery) : found.kind === "wall" && !editableWall(found.wall))
@@ -1957,7 +2044,7 @@ function dimDraftGeometry(): (DimGeometry & { valueCm: number }) | null {
 // геометрия размера между точками черновика с заданным смещением (число размера с углом батареи — по оси стены батареи)
 function draftGeometry(offset: number): (DimGeometry & { valueCm: number }) | null {
   if (!dimDraft.a || !dimDraft.b) return null
-  return dimensionGeometry({ from: dimDraft.a, to: dimDraft.b, offset }, walls, doorways, batteries)
+  return dimensionGeometry({ from: dimDraft.a, to: dimDraft.b, offset }, walls, doorways, batteries, fixtures)
 }
 
 function draftRubber(end: Point): [Point, Point] | null {
@@ -2178,7 +2265,7 @@ canvas.addEventListener("pointermove", (e) => {
   }
   if (dimDrag) {
     const p = toWorld(e)
-    const axis = dimensionGeometry({ ...dimDrag.dim, offset: 0 }, walls, doorways, batteries)
+    const axis = dimensionGeometry({ ...dimDrag.dim, offset: 0 }, walls, doorways, batteries, fixtures)
     if (axis) {
       const dragged = dimDrag.dim
       const level = dimLevelSnap(p, axis, dimensions.filter((d) => d !== dragged), walls, radiusCm(), doorways)
@@ -2383,7 +2470,7 @@ canvas.addEventListener("pointerdown", (e) => {
   }
   // цель нажатия (change fix-midpoint-marker-priority, design D2): маркеры выделенной стены главнее
   // размера, проёма и тела стены
-  const found = pressPick(p, { walls, dimensions, doorways, batteries }, radiusCm(), 2, {
+  const found = pressPick(p, { walls, dimensions, doorways, batteries, items: fixtures }, radiusCm(), 2, {
     selectedWall: selectedWalls.length === 1 ? selectedWalls[0] : null,
     middleMarker: true,
     dimensions: true,
@@ -2574,7 +2661,7 @@ function marqueePicks(rect: { x1: number; y1: number; x2: number; y2: number }):
   // ось стены на участке её проёма стену не выделяет (multi-selection «Рамка выделения»)
   const wallsPicked = wallsInRect(min, max, walls, doorways).filter(editableWall)
   const dimsPicked = dimensions.filter((d) => {
-    const geom = dimensionGeometry(d, walls, doorways, batteries)
+    const geom = dimensionGeometry(d, walls, doorways, batteries, fixtures)
     return !!geom && segmentIntersectsRect(geom.p1, geom.p2, min, max)
   })
   return {
@@ -2718,7 +2805,7 @@ canvas.addEventListener("click", (e) => {
 
 function placeDimension(p: Point): void {
   if (!dimDraft.a || !dimDraft.b) {
-    const hit = nearestDimAnchor(p, walls, doorways, radiusCm(), batteries.filter(editableBattery))
+    const hit = nearestDimAnchor(p, walls, doorways, radiusCm(), batteries.filter(editableBattery), fixtures)
     if (!hit) return
     const point = hit.anchor
     if (!dimDraft.a) dimDraft.a = point
@@ -3278,6 +3365,16 @@ function stepFurniture(step: typeof undoFurniture): void {
   redraw()
 }
 
+// отмена или повтор шага плана «Сантехника» (change add-plumbing-plan, design D6): подставляются размеры плана до операции
+function stepPlumbing(step: typeof undoPlumbing): void {
+  const next = step(activeHistory(), dimensions)
+  if (!next) return
+  dimensions = next
+  dirty = true
+  resetEditing()
+  redraw()
+}
+
 // сцена из записи истории: на плане «Монтаж» запись хранит содержимое «Монтажа» — рабочая сцена строится заново
 // (остатки берутся по текущему обмеру и демонтажу), на остальных планах запись подставляется как есть
 function restoreScene(e: Scene): void {
@@ -3354,6 +3451,10 @@ function undo(): void {
     stepFurniture(undoFurniture)
     return
   }
+  if (h.past[h.past.length - 1]?.kind === "plumbing") {
+    stepPlumbing(undoPlumbing)
+    return
+  }
   if (h.past[h.past.length - 1]?.kind === "callouts") {
     stepCallouts(undoCallouts)
     return
@@ -3393,6 +3494,10 @@ function redo(): void {
   const h = activeHistory()
   if (h.future[h.future.length - 1]?.kind === "furniture") {
     stepFurniture(redoFurniture)
+    return
+  }
+  if (h.future[h.future.length - 1]?.kind === "plumbing") {
+    stepPlumbing(redoPlumbing)
     return
   }
   if (h.future[h.future.length - 1]?.kind === "callouts") {
@@ -3625,8 +3730,8 @@ window.addEventListener("keydown", (e) => {
     return
   }
   if (e.key !== "ArrowUp" && e.key !== "ArrowDown") return
-  // у стен гипсокартона материала нет: без выделения стрелки на плане «Реконструкция» ничего не меняют
-  if (onReconstruction()) return
+  // у стен гипсокартона материала нет: без выделения стрелки на плане «Реконструкция» ничего не меняют; на «Сантехнике» стен нет
+  if (onReconstruction() || onPlumbing()) return
   const delta = e.key === "ArrowUp" ? -1 : 1
   const idx = MATERIALS.findIndex((m) => m.id === wallMaterial)
   setWallMaterial(MATERIALS[(idx + delta + MATERIALS.length) % MATERIALS.length].id)

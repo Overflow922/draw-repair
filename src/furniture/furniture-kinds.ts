@@ -43,6 +43,8 @@ export interface FurnitureKindEntry {
   // с чем этот вид может стоять без предупреждения о пересечении (change furniture-overlap-exemptions): виды препятствий
   // и виды мебели; пара видов исключена, если любой из двух перечисляет другой
   overlapExemptions?: OverlapExemptions
+  // прибор, подключаемый к воде: показывается на плане «Сантехника» (change add-plumbing-plan, design D2)
+  water?: true
 }
 
 export interface OverlapExemptions {
@@ -176,6 +178,7 @@ export const FURNITURE_KINDS = {
     drawing: dishwasherDrawing,
     icon: '<rect x="3" y="7" width="18" height="14"/><path d="M3 10h18M8 3.500h8M9.500 3.500v3.500M14.500 3.500v3.500"/><path d="M6.500 12h5a2.500 3 0 0 1-5 0zM9 15v3M7 18.500h4M15 12v2.500a1 1 0 0 0 2 0V12M16 15.500v3"/>',
     overlapExemptions: { furniture: ["kitchenCabinet"] },
+    water: true,
   },
   sink: {
     label: "Раковина",
@@ -184,6 +187,7 @@ export const FURNITURE_KINDS = {
     drawing: sinkDrawing,
     icon: '<rect x="2" y="4" width="20" height="16" rx="2"/><rect x="4" y="6" width="16" height="8" rx="1.500"/><circle cx="12" cy="17" r="1.500"/><path d="M5 16.500h3M5 18h3M16 16.500h3M16 18h3"/>',
     overlapExemptions: { furniture: ["kitchenCabinet", "wineCabinet", "dishwasher", "oven", "washer"] },
+    water: true,
   },
   // встраиваемая техника (change add-furniture-appliances): духовой шкаф и микроволновка стоят в колонне, духовой шкаф и стиральная
   // машина — встроенные объекты кухни, сушильная машина стоит на стиральной; отдельно стоящей техники нет
@@ -217,6 +221,7 @@ export const FURNITURE_KINDS = {
     drawing: washerDrawing,
     icon: '<rect x="3" y="5" width="18" height="16"/><path d="M4 5V3h3v2M8 5V3h3v2M13 5V3h7v2"/><circle cx="12" cy="13.5" r="5"/><path d="M7 13.5c.6.8 1.9.8 2.5 0s1.9.8 2.5 0 1.9.8 2.5 0 1.9.8 2.5 0"/>',
     overlapExemptions: { furniture: ["kitchenCabinet"] },
+    water: true,
   },
   dryer: {
     label: "Сушильная машина",

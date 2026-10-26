@@ -23,7 +23,7 @@ import { contourSegments, cross, displayPolygons, dot, outlineSegments, sub } fr
 import type { Seg } from "./wall-geometry"
 import { GRID_STEP_CM, PX_PER_CM, isDoor, isWindow, normalizeMaterial } from "./types"
 import { drawCallouts } from "./callout/callout-render"
-import type { Battery, Callout, Communication, Dimension, Material, Point, Riser, RoomRecord, Unit, View, Wall, WallDoor, WallElement } from "./types"
+import type { Battery, Callout, Communication, Dimension, FurnitureItem, Material, Point, Riser, RoomRecord, Unit, View, Wall, WallDoor, WallElement } from "./types"
 import type { TrackLine } from "./battery/battery-guide"
 import { HATCHES, strokeHatchSeries, strokeHatchTile } from "./wall-hatch"
 
@@ -74,6 +74,8 @@ export interface RenderOptions {
   hover?: Wall | null
   hoverDim?: Dimension | null
   dimensions?: Dimension[]
+  // приборы плана «Сантехника»: по ним разрешаются точки замера размеров плана (change add-plumbing-plan, design D4)
+  dimItems?: readonly FurnitureItem[]
   dimDraft?: (DimGeometry & { valueCm?: number }) | null // valueCm — число размера, если оно не равно длине отрезка (угол батареи)
   dimRubber?: [Point, Point] | null
   dimSnap?: Point | null
@@ -320,12 +322,13 @@ export function drawDimensionsLayer(
   const p = opts.palette ?? LIGHT_PALETTE
   const doorways = opts.doorways ?? []
   const batteries = opts.batteries ?? []
+  const items = opts.dimItems ?? []
   const selectedDims = opts.selectedDims ?? []
-  for (const dim of opts.dimensions ?? []) drawDimension(ctx, dim, walls, unit, p.ink, view, m, p, doorways, batteries)
+  for (const dim of opts.dimensions ?? []) drawDimension(ctx, dim, walls, unit, p.ink, view, m, p, doorways, batteries, items)
   for (const dim of opts.marqueeHits?.dims ?? [])
-    if (!selectedDims.includes(dim)) drawDimension(ctx, dim, walls, unit, p.marqueeDim, view, m, p, doorways, batteries)
-  for (const dim of selectedDims) drawDimension(ctx, dim, walls, unit, p.selectedDim, view, m, p, doorways, batteries, singleDim)
-  if (opts.hoverDim) drawDimension(ctx, opts.hoverDim, walls, unit, p.erase, view, m, p, doorways, batteries)
+    if (!selectedDims.includes(dim)) drawDimension(ctx, dim, walls, unit, p.marqueeDim, view, m, p, doorways, batteries, items)
+  for (const dim of selectedDims) drawDimension(ctx, dim, walls, unit, p.selectedDim, view, m, p, doorways, batteries, items, singleDim)
+  if (opts.hoverDim) drawDimension(ctx, opts.hoverDim, walls, unit, p.erase, view, m, p, doorways, batteries, items)
 }
 
 // подпись в системе текста: начало — центр подписи, ось x — направление текста вдоль стены (design D6)
@@ -930,9 +933,10 @@ function drawDimension(
   palette: Palette,
   elements: readonly WallElement[],
   batteries: readonly Battery[],
+  items: readonly FurnitureItem[],
   handles = false,
 ): void {
-  const geom = dimensionGeometry(dim, walls, elements, batteries)
+  const geom = dimensionGeometry(dim, walls, elements, batteries, items)
   if (!geom) return
   drawDimensionGeom(ctx, geom, formatLength(geom.valueCm, unit), color, view, m, palette, handles)
 }

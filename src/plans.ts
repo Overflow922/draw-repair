@@ -10,6 +10,7 @@ export const PLANS = [
   { id: "rough", label: "Черновые работы" },
   { id: "reconstruction", label: "Реконструкция" },
   { id: "furniture", label: "Мебель" },
+  { id: "plumbing", label: "Сантехника" },
 ] as const
 
 export type PlanId = (typeof PLANS)[number]["id"]
@@ -39,6 +40,8 @@ const PLAN_TOOLS: Record<PlanId, readonly [Tool, ...Tool[]]> = {
   reconstruction: ["drywall", "dimension", "callout", "ruler", "notes", "eraser"],
   // «Мебель» (change furniture-plan-table, design D1): столы поверх подложки «Реконструкции»; «Стол» — в группе «Мебель»
   furniture: ["furniture", "dimension", "callout", "ruler", "notes", "eraser"],
+  // «Сантехника» (change add-plumbing-plan, design D1): приборы «Мебели» — подложка, своих предметов нет; по умолчанию «Размер»
+  plumbing: ["dimension", "callout", "ruler", "notes", "eraser"],
 }
 
 export const toolsOf = (plan: PlanId): readonly Tool[] => PLAN_TOOLS[plan]

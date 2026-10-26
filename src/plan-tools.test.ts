@@ -78,6 +78,7 @@ describe("план «Демонтаж» в каталоге", () => {
       ["rough", "Черновые работы"],
       ["reconstruction", "Реконструкция"],
       ["furniture", "Мебель"], // TCR (change furniture-plan-table)
+      ["plumbing", "Сантехника"], // TCR (change add-plumbing-plan)
     ])
   })
 

@@ -2,7 +2,7 @@ import { dimHitDistance, distanceToWall, endpointAt, hitWall, midpointAt, segmen
 import { hitBattery } from "../battery/battery-pick"
 import { hitCommunication } from "../communications/pick"
 import type { Scene } from "../history"
-import type { Battery, Communication, Dimension, Point, Wall, WallElement } from "../types"
+import type { Battery, Communication, Dimension, FurnitureItem, Point, Wall, WallElement } from "../types"
 import { cross, degenerate, dot, sub, unit } from "../wall-geometry"
 import { hostOf, hostPoint, jambsT } from "./doorway-faces"
 
@@ -21,6 +21,8 @@ export interface Selection {
   dimensions: Dimension[]
   doorways: WallElement[]
   batteries?: Battery[]
+  // приборы плана «Сантехника»: по ним разрешаются точки размеров (change add-plumbing-plan, design D4)
+  items?: readonly FurnitureItem[]
 }
 
 // участок проёма — прямоугольник откосов через всю толщину; tolCm — радиус привязки
@@ -105,7 +107,7 @@ export function erasePick(p: Point, scene: Selection, tolCm: number, textFactor:
   let dimension: Dimension | null = null
   let best = Infinity
   for (const d of scene.dimensions) {
-    const dd = dimHitDistance(p, d, scene.walls, textFactor, scene.doorways, scene.batteries)
+    const dd = dimHitDistance(p, d, scene.walls, textFactor, scene.doorways, scene.batteries, scene.items)
     if (dd !== null && dd <= tolCm && dd < best) {
       dimension = d
       best = dd
@@ -164,7 +166,7 @@ export function pressPick(
     if (options.middleMarker && midpointAt(p, sel, tolCm)) return { kind: "middle", wall: sel }
   }
   if (options.dimensions) {
-    const dimension = scene.dimensions.find((d) => (dimHitDistance(p, d, scene.walls, textFactor, scene.doorways, scene.batteries) ?? Infinity) <= tolCm)
+    const dimension = scene.dimensions.find((d) => (dimHitDistance(p, d, scene.walls, textFactor, scene.doorways, scene.batteries, scene.items) ?? Infinity) <= tolCm)
     if (dimension) return { kind: "dimension", dimension }
   }
   const communication = communications && hitCommunication(p, communications.items, communications.tolCm)

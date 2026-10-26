@@ -61,7 +61,17 @@ export interface BatteryCornerPoint {
   side: "back" | "front"
 }
 
-export type DimPoint = EdgePoint | JambPoint | BatteryCornerPoint
+// точка прибора плана «Сантехника» — центр или угол предмета «Мебели» в системе предмета: u — сторона по оси ширины, v — по
+// оси длины; после поворота и правки размеров это тот же угол (change add-plumbing-plan, design D4)
+export type ItemPointAt = { kind: "center" } | { kind: "corner"; u: 1 | -1; v: 1 | -1 }
+
+export interface ItemPoint {
+  kind: "item"
+  itemId: string
+  at: ItemPointAt
+}
+
+export type DimPoint = EdgePoint | JambPoint | BatteryCornerPoint | ItemPoint
 
 export interface Dimension {
   from: DimPoint
@@ -310,6 +320,14 @@ export interface FurnitureContent {
   notes?: string[]
 }
 
+// Собственные объекты плана «Сантехника» (change add-plumbing-plan, design D5): только размеры, выноски и примечания; приборы
+// берутся из плана «Мебель» и здесь не хранятся
+export interface PlumbingContent {
+  dimensions: Dimension[]
+  callouts?: Callout[]
+  notes?: string[]
+}
+
 export interface Drawing {
   id: string
   name: string
@@ -353,6 +371,8 @@ export interface Drawing {
   reconstruction?: ReconstructionContent
   // объекты плана «Мебель»; отсутствие — пустой план, при загрузке не дописывается (furniture-plan-table design D2)
   furniture?: FurnitureContent
+  // объекты плана «Сантехника»; отсутствие — пустой план, при загрузке не дописывается (add-plumbing-plan design D5)
+  plumbing?: PlumbingContent
   view: View
 }
 
