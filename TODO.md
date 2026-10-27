@@ -1262,3 +1262,22 @@ Follow-ups from implementing `add-light-switch` (2026-10-27).
 ## Out of scope
 
 - [ ] Checks «line without a key» and «key without a line», highlight of a line's group when a key is selected, mounting height of a switch, the «Количество» column of the legend (see the `add-switching-plan` section above): not part of this change.
+
+---
+
+Follow-ups from `add-exhaust-fan` (2026-10-27).
+
+## Docs
+
+- [ ] The fan symbol follows the user's verbal description (design D4), there is no picture in `references/`; replace the drawing in `src/switching/exhaust-symbol.ts` if a picture is added.
+- [ ] Task 3.2 of `add-exhaust-fan` said the existing label-storage tests pass without edits, but `src/switching/storage-lines.test.ts` LL-21 listed `LV1` as an invalid name, which the spec now makes valid (`LV<n>`); the entry was changed to `LV0` with a TCR comment. Align the task text.
+- [ ] The `drawing-storage` delta of `add-exhaust-fan` declared «Метки линий освещения в документе» as ADDED although it exists; moved to MODIFIED so that archive does not refuse it.
+
+## Tests
+
+- [ ] `src/main.ts` wiring of the exhaust tool (`pressExhausts`, drag, Delete, Escape, undo branches, line tool on a fan) has no automated test; the model, tool, symbol, storage, history, render and PDF are unit-tested, the DOM flow was checked by hand in the browser.
+- [ ] No mutation testing tool is installed in the project; nothing in this change was mutation-tested.
+
+## Out of scope
+
+- [ ] Schema integrity checks, highlight of a group by key, height and power of a fan, a fan on «Потолки и освещение» with distances to walls (design D1: needs a separate change moving it to `ceiling.lights`), the «Количество» column of the legend.

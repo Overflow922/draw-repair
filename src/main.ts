@@ -1,5 +1,5 @@
 import "./style.css"
-import { cloneScene, loadHistory, planHistory, record, recordCallouts, recordCeilingPlan, recordDemolition, recordFurniture, recordNotes, recordPlumbing, recordRough, recordSnapshot, redoCallouts, redoCeilingPlan, redoDemolition, redoEntry, redoFurniture, redoNotes, redoPlumbing, redoRough, saveHistory, undoCallouts, undoCeilingPlan, undoDemolition, undoEntry, undoFurniture, undoNotes, undoPlumbing, undoRough, recordSwitchingLines, redoSwitchingLines, undoSwitchingLines, recordSwitches, redoSwitches, undoSwitches } from "./history"
+import { cloneScene, loadHistory, planHistory, record, recordCallouts, recordCeilingPlan, recordDemolition, recordFurniture, recordNotes, recordPlumbing, recordRough, recordSnapshot, redoCallouts, redoCeilingPlan, redoDemolition, redoEntry, redoFurniture, redoNotes, redoPlumbing, redoRough, saveHistory, undoCallouts, undoCeilingPlan, undoDemolition, undoEntry, undoFurniture, undoNotes, undoPlumbing, undoRough, recordSwitchingLines, redoSwitchingLines, undoSwitchingLines, recordSwitches, redoSwitches, undoSwitches, recordExhausts, redoExhausts, undoExhausts } from "./history"
 import type { Scene } from "./history"
 import { dimLevelSnap, dimensionGeometry, dimensionOffsetAt, hitWall, nearestDimAnchor, dimPointPoint, pointsEqual, segmentIntersectsRect, snap, snapOthers, snapWithSource, zoomAt } from "./geometry"
 import type { DimGeometry, SnapResult } from "./geometry"
@@ -103,7 +103,10 @@ import { openSwitching } from "./switching/switching-workspace"
 import { createLightLineTool } from "./switching/light-line-tool"
 import type { LightLineToolHost } from "./switching/light-line-tool"
 import { lineLabelBox } from "./switching/light-line-label"
-import { lineNumber, lineLabel, parseLineName, storedLines, visibleLines } from "./switching/light-lines"
+import { createExhaustTool } from "./switching/exhaust-tool"
+import type { ExhaustToolHost } from "./switching/exhaust-tool"
+import { storedExhausts } from "./switching/exhaust"
+import { lineNumber, lineLabel, parseLineName, prefixOfName, storedLines, visibleLines } from "./switching/light-lines"
 import { keyLabel, parseKeyCount, parseKeyLines, storedSwitches } from "./switching/light-switch"
 import { openingBodies } from "./switching/switch-reach"
 import { keyGeometry } from "./switching/switch-symbol"
@@ -138,7 +141,7 @@ import { afterPlace, escapeAction, resumesAfterSelectionCleared, selectionAllowe
 import { loadThemeChoice, paletteOf, resolveTheme, saveThemeChoice, themeToggleTitle, toggledTheme } from "./theme"
 import type { Theme } from "./theme"
 import { GRID_STEP_CM, MATERIALS, PX_PER_CM } from "./types"
-import type { Battery, BatteryMark, Communication, DemolitionMark, Dimension, DimPoint, Drawing, DrywallWall, Material, PlasterMark, Point, RightAngleMark, RoomRecord, Screed, StretchCeiling, FurnitureItem, LightFixture, LightKind, LightLine, LightSwitch, Unit, View, Wall, WallElement } from "./types"
+import type { Battery, BatteryMark, Communication, DemolitionMark, Dimension, DimPoint, Drawing, DrywallWall, ExhaustFan, Material, PlasterMark, Point, RightAngleMark, RoomRecord, Screed, StretchCeiling, FurnitureItem, LightFixture, LightKind, LightLine, LightSwitch, Unit, View, Wall, WallElement } from "./types"
 
 const canvas = document.querySelector<HTMLCanvasElement>("#canvas")!
 const canvasWrap = document.querySelector<HTMLElement>("#canvas-wrap")!
@@ -174,7 +177,8 @@ const toolLightLineBtn = document.querySelector<HTMLButtonElement>("#tool-light-
 const lightLinePanel = document.querySelector<HTMLElement>("#light-line-panel")!
 const lightLineInput = document.querySelector<HTMLInputElement>("#light-line-number")!
 const toolLightSwitchBtn = document.querySelector<HTMLButtonElement>("#tool-light-switch")!
-const lightSwitchPanel = document.querySelector<HTMLElement>("#light-switch-panel")!
+const toolExhaustBtn = document.querySelector<HTMLButtonElement>("#tool-exhaust")!
+const lightSwitchPanel =document.querySelector<HTMLElement>("#light-switch-panel")!
 const lightSwitchInput = document.querySelector<HTMLInputElement>("#light-switch-keys")!
 const toolLightBtn = document.querySelector<HTMLButtonElement>("#tool-light")!
 const lightPanel = document.querySelector<HTMLElement>("#light-panel")!
@@ -1248,6 +1252,7 @@ const lineHost: LightLineToolHost = {
     else delete current().switching
   },
   lights: lightsOf,
+  exhausts: () => exhaustsOf(),
   record: () => {
     nudgeBurst = false
     recordSwitchingLines(activeHistory(), linesOf())
@@ -1280,10 +1285,12 @@ const closeLineEditor = (): void => {
 function commitLineEditor(): void {
   if (!lineEditor) return
   const { editor, id } = lineEditor
-  const name = parseLineName(editor.text())
+  const name = parseLineName(editor.text(), prefixOfName(lineOf(id)?.name ?? ""))
   closeLineEditor()
   if (name !== null) lineTool.setNameOf(id, name)
 }
+
+const lineOf = (id: string): LightLine | undefined => linesOf().find((l) => l.id === id)
 
 // сброс поля на месте, выделения и панели (смена плана, чертежа и инструмента, отмена и повтор)
 const resetLines = (): void => {
@@ -1296,7 +1303,7 @@ const resetLines = (): void => {
 // поле правки имени на месте текста метки (экранные координаты — по рамке текста)
 function openLineEditor(line: LightLine): void {
   closeLineEditor()
-  const light = visibleLines([line], lightsOf())[0]?.light
+  const light = visibleLines([line], lightsOf(), exhaustsOf())[0]?.light
   if (!light) return
   const k = PX_PER_CM * view.zoom
   const box = lineLabelBox({ x: (light.x - view.pan.x) * k, y: (light.y - view.pan.y) * k }, line.name, SCREEN_METRICS.symbolMmPx)
@@ -1305,7 +1312,7 @@ function openLineEditor(line: LightLine): void {
     { x: box.x + box.w / 2, y: box.y + box.h / 2 },
     line.name,
     (text) => {
-      const name = parseLineName(text)
+      const name = parseLineName(text, prefixOfName(line.name))
       if (name !== null) lineTool.setNameOf(line.id, name)
       redraw()
     },
@@ -1441,6 +1448,51 @@ function releaseSwitch(): void {
   const sw = edit && !moved ? switchesOf().find((s) => s.id === edit.id) : undefined
   if (edit && sw) openSwitchEditor(sw, edit.index)
   syncSwitchPanel()
+}
+
+// вытяжки плана «Группы включения» (change add-exhaust-fan, design D3): шаг истории — снимок вытяжек и меток линий до операции
+// (удаление вытяжки забирает её метку одним шагом)
+const NO_EXHAUSTS: ExhaustFan[] = []
+const exhaustsOf = (): ExhaustFan[] => current().switching?.exhausts ?? NO_EXHAUSTS
+
+const exhaustHost: ExhaustToolHost = {
+  bodies: () => switchGeometry().bodies,
+  state: () => ({ exhausts: exhaustsOf(), lines: linesOf() }),
+  setState: (next) => {
+    const stored = storedExhausts(current().switching, next.exhausts, next.lines)
+    if (stored) current().switching = stored
+    else delete current().switching
+  },
+  record: () => {
+    nudgeBurst = false
+    recordExhausts(activeHistory(), { exhausts: exhaustsOf(), lines: linesOf() })
+  },
+  changed: () => {
+    dirty = true
+  },
+  redraw: () => redraw(),
+  newId: () => crypto.randomUUID(),
+  view: () => view,
+}
+const exhaustTool = createExhaustTool(exhaustHost)
+
+const resetExhausts = (): void => {
+  exhaustTool.clearSelection()
+}
+
+// без инструмента: нажатие на знак вытяжки выделяет её и начинает перетаскивание (панели у вытяжки нет); выноска, метка линии
+// и выключатель главнее вытяжки (их нажатия разбираются раньше)
+function pressExhausts(p: Point, e: PointerEvent): boolean {
+  const hit = lineTool.labelAt(p) ? null : exhaustTool.press(p)
+  if (!hit) {
+    resetExhausts()
+    return false
+  }
+  resetLines()
+  resetSwitches()
+  if (exhaustTool.beginDrag(p)) canvas.setPointerCapture(e.pointerId)
+  redraw()
+  return true
 }
 
 const lightGroupState = (): LightGroupState => ({ current: lightCurrent, active: tool === "light" ? lightCurrent : "other", panelOpen: lightPanelOpen })
@@ -1959,6 +2011,7 @@ function syncToolUI(): void {
   toolWallBtn.classList.toggle("active", tool === "wall")
   toolDimensionBtn.classList.toggle("active", tool === "dimension")
   toolEraserBtn.classList.toggle("active", tool === "eraser")
+  toolExhaustBtn.classList.toggle("active", tool === "exhaust")
   toolRulerBtn.classList.toggle("active", tool === "ruler")
   toolWindowBtn.classList.toggle("active", tool === "window")
   toolBatteryBtn.classList.toggle("active", tool === "battery")
@@ -2001,6 +2054,7 @@ function setTool(next: Tool): void {
   resetCeiling()
   resetLines()
   resetSwitches()
+  resetExhausts()
   itemTool.reset()
   furniturePanelOpen = false
   setWallPanel(false)
@@ -2331,6 +2385,8 @@ function drawSwitchingPlan(): void {
   const erasingLine = tool === "eraser" && cursor && !erasingCallout ? lineTool.eraseTarget(cursor) : null
   const hoveredLight = tool === "lightLine" && cursor ? lineTool.hoverTarget(cursor) : null
   const erasingSwitch = tool === "eraser" && cursor && !erasingCallout && !erasingLine ? switchTool.eraseTarget(cursor) : null
+  const erasingExhaust = tool === "eraser" && cursor && !erasingCallout && !erasingLine && !erasingSwitch ? exhaustTool.eraseTarget(cursor) : null
+  const fans = exhaustTool.displayed()
   renderSwitching(
     canvas,
     {
@@ -2343,7 +2399,11 @@ function drawSwitchingPlan(): void {
       items: s.items,
       lights: s.lights,
       selectedLightId: hoveredLight,
-      lineLabels: visibleLines(linesOf(), s.lights).map(({ line, light }) => ({ id: line.id, name: line.name, at: { x: light.x, y: light.y } })),
+      exhausts: fans,
+      exhaustGhost: tool === "exhaust" && cursor ? exhaustTool.ghost(cursor) : null,
+      selectedExhaustId: hoveredLight ?? exhaustTool.selectedId(),
+      erasingExhaustId: erasingExhaust,
+      lineLabels: visibleLines(linesOf(), s.lights, fans).map(({ line, light }) => ({ id: line.id, name: line.name, at: { x: light.x, y: light.y } })),
       selectedLineId: lineTool.selectedId(),
       erasingLineId: erasingLine,
       switches: switchTool.displayed(),
@@ -2894,7 +2954,11 @@ canvas.addEventListener("pointermove", (e) => {
       switchTool.dragTo(toWorld(e))
       return
     }
-    if (tool === "lightLine" || tool === "lightSwitch" || tool === "ruler" || tool === "eraser" || tool === "callout") {
+    if (exhaustTool.dragging()) {
+      exhaustTool.dragTo(toWorld(e))
+      return
+    }
+    if (tool === "lightLine" || tool === "lightSwitch" || tool === "exhaust" || tool === "ruler" || tool === "eraser" || tool === "callout") {
       cursor = toWorld(e)
       if (tool === "callout") calloutTool.hover(cursor)
       redraw()
@@ -2951,7 +3015,7 @@ canvas.addEventListener("pointerleave", () => {
   if (tool === "plaster") plasterTool.hover(null)
   if (tool === "rightAngle") rightAngleTool.hover(null)
   if (tool === "furniture") itemTool.hover(null)
-  if ((tool === "ruler" || (tool === "eraser" && (onDemolition() || onRough() || onCeiling() || onSwitching())) || (tool === "light" && onCeiling()) || ((tool === "lightLine" || tool === "lightSwitch") && onSwitching())) && cursor) cursor = null
+  if ((tool === "ruler" || (tool === "eraser" && (onDemolition() || onRough() || onCeiling() || onSwitching())) || (tool === "light" && onCeiling()) || ((tool === "lightLine" || tool === "lightSwitch" || tool === "exhaust") && onSwitching())) && cursor) cursor = null
   redraw()
 })
 
@@ -3044,10 +3108,17 @@ canvas.addEventListener("pointerdown", (e) => {
       canvas.setPointerCapture(e.pointerId)
       resetLines()
       resetSwitches()
+      resetExhausts()
       return
     }
     if (calloutTool.selectedId() !== null) calloutTool.deselect()
-    if (!pressSwitches(p, e)) pressLines(p)
+    if (pressSwitches(p, e)) {
+      resetExhausts()
+      return
+    }
+    if (!lineTool.labelAt(p) && pressExhausts(p, e)) return
+    resetExhausts()
+    pressLines(p)
     return
   }
   if (onDemolition()) {
@@ -3204,7 +3275,10 @@ canvas.addEventListener("pointerup", (e) => {
     return
   }
   if (onSwitching()) {
-    if (e.button === 0) releaseSwitch()
+    if (e.button === 0) {
+      releaseSwitch()
+      if (exhaustTool.dragging()) exhaustTool.endDrag()
+    }
     return
   }
   if (onDemolition() && e.button === 0) {
@@ -3369,7 +3443,8 @@ canvas.addEventListener("click", (e) => {
     if (tool === "callout") calloutTool.click(at)
     else if (tool === "lightLine") lineTool.place(at)
     else if (tool === "lightSwitch") switchTool.place(at)
-    else if (tool === "eraser" && !calloutTool.eraseAt(at) && !lineTool.erase(at)) switchTool.erase(at)
+    else if (tool === "exhaust") exhaustTool.place(at)
+    else if (tool === "eraser" && !calloutTool.eraseAt(at) && !lineTool.erase(at) && !switchTool.erase(at)) exhaustTool.erase(at)
     return
   }
   // на плане «Демонтаж» жесты разбирает адаптер по нажатию и отпусканию (change demolition-plan, design D10);
@@ -3847,7 +3922,8 @@ toolLightLineBtn.addEventListener("click", () => {
 })
 // поле «Линия»: меняет имя выделенной метки одним шагом истории, иначе — значение для новых; недопустимое не применяется
 lightLineInput.addEventListener("change", () => {
-  const name = parseLineName(lightLineInput.value)
+  // выделенная метка вытяжки принимает «LV<n>», остальное — «L<n>»; число для новых меток общее
+  const name = parseLineName(lightLineInput.value, prefixOfName(lineTool.selected()?.name ?? ""))
   if (name !== null) {
     if (lineTool.selectedId() !== null) lineTool.setSelectedName(name)
     else lineNumberCurrent = lineNumber(name)
@@ -3883,6 +3959,8 @@ lightSwitchInput.addEventListener("keydown", (e) => {
   e.stopPropagation()
   if (e.key === "Enter" || e.key === "Escape") lightSwitchInput.blur()
 })
+// «Вытяжка»: инструмент без панели; повторное нажатие на активную кнопку снимает инструмент
+toolExhaustBtn.addEventListener("click", () => setTool(tool === "exhaust" ? "none" : "exhaust"))
 // группа «Освещение»: переходы кнопки группы и панели — как у групп «Проёмы» и «Коммуникации»
 toolLightBtn.addEventListener("click", () => applyLightGroup(lightGroupClick(lightGroupState())))
 for (const [kind, button] of lightKindButtons) button.addEventListener("click", () => applyLightGroup(lightGroupPick(lightGroupState(), kind)))
@@ -3988,6 +4066,7 @@ function activate(id: string): void {
   resetCeiling()
   resetLines()
   resetSwitches()
+  resetExhausts()
   itemTool.reset()
   clearChain()
   closeNumberEditor()
@@ -4046,6 +4125,7 @@ function resetEditing(): void {
   resetCeiling()
   resetLines()
   resetSwitches()
+  resetExhausts()
   itemTool.reset()
   clearChain()
   closeNumberEditor()
@@ -4186,6 +4266,16 @@ function stepSwitches(step: typeof undoSwitches): void {
   redraw()
 }
 
+// отмена или повтор шага вытяжек плана «Группы включения» (change add-exhaust-fan, design D6): вытяжки и метки — вместе
+function stepExhausts(step: typeof undoExhausts): void {
+  const next = step(activeHistory(), exhaustHost.state())
+  if (!next) return
+  exhaustHost.setState(next)
+  dirty = true
+  resetEditing()
+  redraw()
+}
+
 function stepCallouts(step: typeof undoCallouts): void {
   const next = step(activeHistory(), calloutsOf(current(), activePlanOf(current())))
   if (!next) return
@@ -4231,6 +4321,10 @@ function undo(): void {
   }
   if (h.past[h.past.length - 1]?.kind === "switches") {
     stepSwitches(undoSwitches)
+    return
+  }
+  if (h.past[h.past.length - 1]?.kind === "exhausts") {
+    stepExhausts(undoExhausts)
     return
   }
   if (h.past[h.past.length - 1]?.kind === "callouts") {
@@ -4288,6 +4382,10 @@ function redo(): void {
   }
   if (h.future[h.future.length - 1]?.kind === "switches") {
     stepSwitches(redoSwitches)
+    return
+  }
+  if (h.future[h.future.length - 1]?.kind === "exhausts") {
+    stepExhausts(redoExhausts)
     return
   }
   if (h.future[h.future.length - 1]?.kind === "callouts") {
@@ -4404,12 +4502,13 @@ window.addEventListener("keydown", (e) => {
     }
     // подложка, мебель и освещение на плане «Группы включения» не удаляются; удаляется только выделенная метка линии или выключатель
     if (onSwitching()) {
-      if (switchTool.dragging()) return
+      if (switchTool.dragging() || exhaustTool.dragging()) return
       closeLineEditor()
       closeSwitchEditor()
-      if (!lineTool.deleteSelected()) switchTool.deleteSelected()
+      if (!lineTool.deleteSelected() && !switchTool.deleteSelected()) exhaustTool.deleteSelected()
       resetLines()
       resetSwitches()
+      resetExhausts()
       return
     }
     if (onFurniture()) {
@@ -4480,19 +4579,21 @@ window.addEventListener("keydown", (e) => {
   if (e.key === "Escape" && onSwitching()) {
     const action = escapeAction({
       tool,
-      gestureActive: switchTool.dragging(),
+      gestureActive: switchTool.dragging() || exhaustTool.dragging(),
       dimensionDraft: false,
       calloutDraft: calloutTool.hasDraft(),
-      hasSelection: calloutTool.selectedId() !== null || lineTool.selectedId() !== null || switchTool.selectedId() !== null,
+      hasSelection: calloutTool.selectedId() !== null || lineTool.selectedId() !== null || switchTool.selectedId() !== null || exhaustTool.selectedId() !== null,
     })
     if (action === "end-gesture") {
       resetSwitches()
+      resetExhausts()
       redraw()
     } else if (action === "cancel-callout-draft") calloutTool.cancelDraft()
     else if (action === "clear-selection") {
       calloutTool.deselect()
       resetLines()
       resetSwitches()
+      resetExhausts()
       redraw()
     } else if (action === "deactivate-tool") setTool("none")
     return

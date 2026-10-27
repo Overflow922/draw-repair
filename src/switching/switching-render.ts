@@ -2,7 +2,8 @@ import { canvasTranslucent, drawCeilingScene } from "../ceiling/ceiling-render"
 import type { CeilingOptions, CeilingView } from "../ceiling/ceiling-render"
 import { LIGHT_PALETTE } from "../theme"
 import { prepareCanvas, SCREEN_METRICS } from "../render"
-import type { LightSwitch, Point, Unit, View } from "../types"
+import type { ExhaustFan, LightSwitch, Point, Unit, View } from "../types"
+import { drawExhaust } from "./exhaust-symbol"
 import { drawLineLabel } from "./light-line-label"
 import { drawSwitch } from "./switch-symbol"
 
@@ -27,6 +28,11 @@ export type SwitchingView = Pick<CeilingView, "walls" | "doorways" | "communicat
   switchGhost?: LightSwitch | null
   selectedSwitchId?: string | null
   erasingSwitchId?: string | null
+  // вытяжки (change add-exhaust-fan, design D4): слой выше знаков освещения и ниже меток линий; призрак — полупрозрачный
+  exhausts?: readonly ExhaustFan[]
+  exhaustGhost?: ExhaustFan | null
+  selectedExhaustId?: string | null
+  erasingExhaustId?: string | null
 }
 
 const GHOST_ALPHA = 0.4
@@ -37,6 +43,12 @@ export function drawSwitchingScene(ctx: CanvasRenderingContext2D, w: number, h: 
   const translucent = opts.translucent ?? canvasTranslucent(ctx)
   const labels = scene.lineLabels ?? []
   const aboveLights: CeilingView["aboveLights"] = (c, toScreen) => {
+    for (const f of scene.exhausts ?? []) {
+      const color = f.id === scene.erasingExhaustId ? palette.erase : f.id === scene.selectedExhaustId ? palette.selection : undefined
+      drawExhaust(c, toScreen({ x: f.x, y: f.y }), m.symbolMmPx, palette, color)
+    }
+    const fanGhost = scene.exhaustGhost
+    if (fanGhost) translucent(GHOST_ALPHA, () => drawExhaust(c, toScreen({ x: fanGhost.x, y: fanGhost.y }), m.symbolMmPx, palette))
     for (const label of labels) {
       const highlight =
         label.id === scene.erasingLineId

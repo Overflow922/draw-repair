@@ -20,6 +20,7 @@ export type LegendEntry =
   | { kind: "drywall"; label: string }
   | { kind: "ceiling"; label: string }
   | { kind: "light"; light: LightKind; label: string }
+  | { kind: "exhaust-fan"; label: string }
   | { kind: "light-line"; label: string }
   | { kind: "light-switch"; label: string }
   | { kind: "furniture"; item: FurnitureKind; label: string }
@@ -68,6 +69,8 @@ export function legendEntries(page: PlanPage): LegendEntry[] {
   // add-switching-plan, design D7)
   const lights = page.ceiling?.lights ?? page.switching?.lights ?? []
   for (const { kind, title } of LIGHT_KINDS) if (lights.some((l) => l.kind === kind)) entries.push({ kind: "light", light: kind, label: title })
+  // «Вытяжка» — после видов освещения и до «Линии освещения», если на странице есть хотя бы одна вытяжка (change add-exhaust-fan, design D6)
+  if ((page.switching?.exhausts.length ?? 0) > 0) entries.push({ kind: "exhaust-fan", label: "Вытяжка" })
   // «Линия освещения» — после видов освещения, если на странице показана хотя бы одна метка (change add-light-lines, design D7)
   if ((page.switching?.lineLabels.length ?? 0) > 0) entries.push({ kind: "light-line", label: "Линия освещения" })
   // «Выключатель» — после «Линии освещения», если на странице есть хотя бы один выключатель (change add-light-switch, design D7)

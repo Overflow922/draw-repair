@@ -35,7 +35,7 @@ describe("каталог", () => {
 
 describe("инструменты", () => {
   it("SW-04: набор — «Линия освещения», «Выноска», «Линейка», «Примечания», «Ластик»; по умолчанию «Линия освещения»", () => {
-    expect(toolsOf("switching")).toEqual(["lightLine", "lightSwitch", "callout", "ruler", "notes", "eraser"]) // TCR (change add-light-switch): добавлен инструмент «Выключатель»
+    expect(toolsOf("switching")).toEqual(["lightLine", "lightSwitch", "exhaust", "callout", "ruler", "notes", "eraser"]) // TCR (change add-light-switch): добавлен инструмент «Выключатель»; TCR (change add-exhaust-fan): добавлен инструмент «Вытяжка»
     expect(defaultToolOf("switching")).toBe("lightLine") // TCR (change add-light-lines): по умолчанию «Линия освещения»
   })
 

@@ -1,8 +1,10 @@
 import { lightHitRadiusPx } from "../ceiling/light-symbol"
-import type { LightFixture, LightLine, Point, View } from "../types"
+import type { ExhaustFan, LightFixture, LightLine, Point, View } from "../types"
 import { PX_PER_CM } from "../types"
+import { exhaustHitRadiusPx } from "./exhaust-symbol"
 import { lineLabelAt } from "./light-line-label"
-import { canCarryLine, removeLine, renameLine, setLine, visibleLines } from "./light-lines"
+import { canCarryLine, lineLabel, lineNumber, removeLine, renameLine, setLine, visibleLines } from "./light-lines"
+import type { LineCarrier } from "./light-lines"
 
 // Инструмент «Линия освещения», выделение метки по тексту и правка (change add-light-lines, design D4): состояние выделения без
 // DOM. Данные плана, история и перерисовка — через явный хост (по образцу инструмента «Натяжной потолок»).
@@ -11,6 +13,7 @@ export interface LightLineToolHost {
   lines(): LightLine[]
   setLines(next: LightLine[]): void
   lights(): readonly LightFixture[] // все объекты освещения плана «Потолки и освещение»
+  exhausts?(): readonly ExhaustFan[] // вытяжки плана (change add-exhaust-fan): носители меток вида «LV<n>»; нет — вытяжек нет
   record(): void // одна запись истории (снимок меток до операции) — перед setLines и только при изменении
   changed(): void
   redraw(): void
@@ -49,8 +52,15 @@ export function createLightLineTool(host: LightLineToolHost): LightLineTool {
     return true
   }
 
-  // светильник под точкой: из совпавших зон побеждает позже поставленный
-  const lightAt = (p: Point): LightFixture | null => {
+  const exhausts = (): readonly ExhaustFan[] => host.exhausts?.() ?? []
+
+  // носитель под точкой: вытяжка (слой выше), иначе светильник; из совпавших зон побеждает позже поставленный
+  const carrierAt = (p: Point): LineCarrier | null => {
+    const fans = exhausts()
+    for (let i = fans.length - 1; i >= 0; i--) {
+      const f = fans[i]
+      if (f && Math.hypot(p.x - f.x, p.y - f.y) <= exhaustHitRadiusPx() / k()) return f
+    }
     const lights = host.lights()
     for (let i = lights.length - 1; i >= 0; i--) {
       const l = lights[i]
@@ -59,21 +69,28 @@ export function createLightLineTool(host: LightLineToolHost): LightLineTool {
     return null
   }
 
-  // видимые метки с точкой привязки (центр светильника) и именем — для попадания по тексту
+  const isFan = (c: LineCarrier): c is ExhaustFan => !("kind" in c)
+
+  // имя новой метки: число из поля «Линия», префикс по виду носителя
+  const nameFor = (c: LineCarrier): string => (isFan(c) ? lineLabel(lineNumber(host.newName()), "LV") : host.newName())
+
+  const carries = (c: LineCarrier): boolean => isFan(c) || canCarryLine(c)
+
+  // видимые метки с точкой привязки (центр носителя) и именем — для попадания по тексту
   const anchors = (): { at: Point; name: string; line: LightLine }[] =>
-    visibleLines(host.lines(), host.lights()).map(({ line, light }) => ({ at: { x: light.x, y: light.y }, name: line.name, line }))
+    visibleLines(host.lines(), host.lights(), exhausts()).map(({ line, light }) => ({ at: { x: light.x, y: light.y }, name: line.name, line }))
 
   const labelAt = (p: Point): LightLine | null => lineLabelAt(p, anchors(), host.view(), host.unitsPerMm)?.line ?? null
 
   return {
     place(p) {
-      const light = lightAt(p)
-      if (!light || !canCarryLine(light)) return false
-      return commit(setLine(host.lines(), light.id, host.newName(), host.newId))
+      const carrier = carrierAt(p)
+      if (!carrier || !carries(carrier)) return false
+      return commit(setLine(host.lines(), carrier.id, nameFor(carrier), host.newId))
     },
     hoverTarget(p) {
-      const light = lightAt(p)
-      return light && canCarryLine(light) ? light.id : null
+      const carrier = carrierAt(p)
+      return carrier && carries(carrier) ? carrier.id : null
     },
     select(p) {
       const hit = labelAt(p)

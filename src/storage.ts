@@ -10,7 +10,7 @@ import { isPlanId } from "./plans"
 import { mergeAllPlaster } from "./rough/plaster-marks"
 import { PLASTER_THICKNESS, SCREED_THICKNESS, isThickness } from "./rough/rough-model"
 import { isDoor, isWindow, normalizeMaterial } from "./types"
-import type { Battery, BatteryCornerPoint, BatteryMark, Callout, CeilingContent, Communication, CornerRef, DemolitionMark, Dimension, DimPoint, Doorway, Drawing, DrawingStore, DrywallWall, EdgePoint, EdgeRef, FurnitureContent, ItemPoint, JambPoint, LightFixture, LightLine, LightSwitch, MountingContent, PlasterMark, PlumbingContent, Point, ReconstructionContent, RightAngleMark, RoomRecord, Screed, FurnitureItem, StretchCeiling, SwitchingContent, SwitchKey, View, Wall, WallDoor, WallElement, WallWindow } from "./types"
+import type { Battery, BatteryCornerPoint, BatteryMark, Callout, CeilingContent, Communication, CornerRef, DemolitionMark, Dimension, DimPoint, Doorway, Drawing, DrawingStore, DrywallWall, EdgePoint, EdgeRef, ExhaustFan, FurnitureContent, ItemPoint, JambPoint, LightFixture, LightLine, LightSwitch, MountingContent, PlasterMark, PlumbingContent, Point, ReconstructionContent, RightAngleMark, RoomRecord, Screed, FurnitureItem, StretchCeiling, SwitchingContent, SwitchKey, View, Wall, WallDoor, WallElement, WallWindow } from "./types"
 
 const KEY = "draw-repair:drawing"
 
@@ -472,19 +472,30 @@ export const copyLightSwitch = (s: LightSwitch): LightSwitch => ({
   keys: s.keys.map((k) => ({ lines: [...k.lines] })),
 })
 
-// объекты плана «Группы включения» при загрузке (change add-switching-plan, design D2): метки линий освещения и выключатели
-// (некорректные отбрасываются по одной; пустой список не пишется), выноски и примечания по общим правилам; поле, не являющееся
-// объектом, читается как отсутствующее; освещение и мебель в поле не хранятся
+// вытяжка (change add-exhaust-fan, design D1): непустой идентификатор, центр — два конечных целых числа
+export const isExhaustFan = (f: unknown): f is ExhaustFan => {
+  if (typeof f !== "object" || f === null) return false
+  const x = f as Record<string, unknown>
+  return typeof x.id === "string" && x.id !== "" && Number.isInteger(x.x) && Number.isInteger(x.y)
+}
+
+export const copyExhaustFan = (f: ExhaustFan): ExhaustFan => ({ id: f.id, x: f.x, y: f.y })
+
+// объекты плана «Группы включения» при загрузке (change add-switching-plan, design D2): метки линий освещения, выключатели и
+// вытяжки (некорректные отбрасываются по одной; пустой список не пишется), выноски и примечания по общим правилам; поле, не
+// являющееся объектом, читается как отсутствующее; освещение и мебель в поле не хранятся
 function loadSwitching(raw: unknown): { switching?: SwitchingContent } {
   if (typeof raw !== "object" || raw === null || Array.isArray(raw)) return {}
   const x = raw as Record<string, unknown>
   const notes = loadNoteList(x.notes)
   const lines = Array.isArray(x.lines) ? x.lines.filter(isLightLine).map(copyLightLine) : []
   const switches = Array.isArray(x.switches) ? x.switches.filter(isLightSwitch).map(copyLightSwitch) : []
+  const exhausts = Array.isArray(x.exhausts) ? x.exhausts.filter(isExhaustFan).map(copyExhaustFan) : []
   return {
     switching: {
       ...(lines.length === 0 ? null : { lines }),
       ...(switches.length === 0 ? null : { switches }),
+      ...(exhausts.length === 0 ? null : { exhausts }),
       ...(x.callouts === undefined ? null : { callouts: loadCalloutList(x.callouts) }),
       ...(notes === undefined ? null : { notes }),
     },

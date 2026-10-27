@@ -36,7 +36,7 @@ describe("метки линий освещения в документе", () =>
           line("1", "x", "L0"),
           line("2", "x", "3"),
           line("3", "x", "L2.5"),
-          line("4", "x", "LV1"),
+          line("4", "x", "LV0"), // TCR (change add-exhaust-fan): «LV1» теперь допустимое имя (drawing-storage «Метки линий освещения в документе»)
           line("5", "x", ""),
           { id: "6", name: "L3" },
           { targetId: "x", name: "L3" },

@@ -7,6 +7,7 @@ import { LIGHT_PALETTE } from "../theme"
 import type { Palette } from "../theme"
 import { PX_PER_CM } from "../types"
 import type { Battery, Communication, LightFixture, LightKind, LightSwitch, Point, View, Wall } from "../types"
+import { drawExhaust } from "../switching/exhaust-symbol"
 import { drawSwitch } from "../switching/switch-symbol"
 import { traceLines } from "../furniture/furniture-render"
 import { kindEntry } from "../furniture/furniture-kinds"
@@ -233,6 +234,8 @@ function drawSample(ctx: CanvasRenderingContext2D, entry: LegendEntry, origin: P
       return drawCeilingSample(ctx, origin, translucent)
     case "light":
       return drawLightSample(ctx, origin, entry.light)
+    case "exhaust-fan":
+      return drawExhaust(ctx, { x: origin.x + SAMPLE_LENGTH_MM / 2, y: origin.y }, PDF_METRICS.symbolMmPx, LIGHT_PALETTE)
     case "light-line":
       return drawLightLineSample(ctx, origin)
     case "light-switch":

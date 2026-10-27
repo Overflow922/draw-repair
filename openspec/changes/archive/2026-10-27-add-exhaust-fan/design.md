@@ -48,3 +48,9 @@ SwitchingContent.exhausts?: ExhaustFan[]
 - [Вытяжка не видна на плане «Потолки и освещение»] → осознанно: она объект схемы включения. Если нужно видеть её на потолках, потребуется отдельное изменение (D1).
 - [Метка с именем не по виду носителя скрыта] → такое состояние возможно только при ручной правке документа; хранение сохраняет данные, чтобы не терять их молча.
 - [Перекрытие метки и знака соседних объектов] → без раскладки, как у светильников.
+
+
+## Implementation notes
+
+- D5 resolved: there is no picture in `references/`; the user confirmed the description in D4 (2026-10-27).
+- History: a separate entry kind `exhausts` holds the fans and the line labels together, so deleting a fan with its label is one undo step (instead of extending the `switching` entry).

@@ -1,25 +1,31 @@
-import type { LightFixture, LightLine, SwitchingContent } from "../types"
+import type { ExhaustFan, LightFixture, LightLine, SwitchingContent } from "../types"
 
 // Метки линий освещения плана «Группы включения» (change add-light-lines, design D1–D3): имя вида «L3» и правки списка меток.
 // Чистые функции, входы не мутируются; при отсутствии изменений возвращается тот же массив.
 
-const NAME = /^L[1-9]\d*$/
-const INPUT = /^[Ll]?([1-9]\d*)$/
+const NAME = /^(?:L|LV)[1-9]\d*$/
 
-// каноническое имя из числа: 3 → «L3»
-export const lineLabel = (n: number): string => "L" + String(n)
+// префикс имени: у светильника «L», у вытяжки (change add-exhaust-fan, design D2) «LV»
+export type LinePrefix = "L" | "LV"
 
-// имя в хранимом виде «L<n>», n — целое больше нуля (при загрузке допускается только оно)
+// каноническое имя из числа: 3 → «L3», с префиксом «LV» → «LV3»
+export const lineLabel = (n: number, prefix: LinePrefix = "L"): string => prefix + String(n)
+
+// имя в хранимом виде «L<n>» или «LV<n>», n — целое больше нуля (при загрузке допускается только оно)
 export const isLineName = (v: unknown): v is string => typeof v === "string" && NAME.test(v)
 
-// ввод пользователя «3», «L3», «l3» (пробелы по краям игнорируются) → «L3»; иначе null
-export function parseLineName(text: string): string | null {
-  const digits = INPUT.exec(text.trim())?.[1]
-  return digits === undefined ? null : "L" + digits
+// ввод пользователя «3», «L3», «l3» (для «LV» — «3», «LV3», «lv3»; пробелы по краям игнорируются) → «L3»; иначе null
+export function parseLineName(text: string, prefix: LinePrefix = "L"): string | null {
+  const t = text.trim().toUpperCase()
+  const digits = t.startsWith(prefix) ? t.slice(prefix.length) : t
+  return /^[1-9]\d*$/.test(digits) ? prefix + digits : null
 }
 
-// число линии из имени «L3» → 3 (для поля панели)
-export const lineNumber = (name: string): number => Number(name.slice(1))
+// число линии из имени «L3» или «LV3» → 3 (для поля панели)
+export const lineNumber = (name: string): number => Number(name.replace(/^[A-Z]+/, ""))
+
+// префикс имени метки
+export const prefixOfName = (name: string): LinePrefix => (name.startsWith("LV") ? "LV" : "L")
 
 // датчик пожарной сигнализации не коммутируется выключателем — метку не несёт (design D3)
 export const canCarryLine = (light: LightFixture): boolean => light.kind !== "smoke-detector"
@@ -51,15 +57,20 @@ export function storedLines(prev: SwitchingContent | undefined, lines: LightLine
   return { lines, ...rest }
 }
 
+// носитель метки: светильник или вытяжка (идентификаторы уникальны во всех списках чертежа)
+export type LineCarrier = LightFixture | ExhaustFan
+
 export interface VisibleLine {
   line: LightLine
-  light: LightFixture
+  light: LineCarrier
 }
 
-// метки существующих светильников; метка светильника, которого нет, хранится, но не показывается
-export function visibleLines(lines: readonly LightLine[], lights: readonly LightFixture[]): VisibleLine[] {
+// метки существующих носителей; метка носителя, которого нет, и метка с именем не по виду носителя хранятся, но не показываются
+export function visibleLines(lines: readonly LightLine[], lights: readonly LightFixture[], exhausts: readonly ExhaustFan[] = []): VisibleLine[] {
   return lines.flatMap((line) => {
     const light = lights.find((l) => l.id === line.targetId)
-    return light ? [{ line, light }] : []
+    if (light) return prefixOfName(line.name) === "L" ? [{ line, light }] : []
+    const fan = exhausts.find((f) => f.id === line.targetId)
+    return fan && prefixOfName(line.name) === "LV" ? [{ line, light: fan }] : []
   })
 }

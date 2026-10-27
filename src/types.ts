@@ -376,9 +376,24 @@ export interface LightSwitch {
   keys: SwitchKey[]
 }
 
-// Собственные объекты плана «Группы включения» (change add-switching-plan, design D2): метки линий освещения, выключатели, выноски и
-// примечания; освещение берётся из плана «Потолки и освещение» и здесь не хранится
+// Вытяжка плана «Группы включения» (change add-exhaust-fan, design D1): точка на потолке, центр — целые сантиметры
+export interface ExhaustFan {
+  id: string
+  x: number
+  y: number
+}
+
+// Вытяжки и метки линий, которые правятся вместе одним шагом истории (change add-exhaust-fan, design D6)
+export interface ExhaustState {
+  exhausts: ExhaustFan[]
+  lines: LightLine[]
+}
+
+// Собственные объекты плана «Группы включения» (change add-switching-plan, design D2): метки линий освещения, выключатели, вытяжки,
+// выноски и примечания; освещение берётся из плана «Потолки и освещение» и здесь не хранится
 export interface SwitchingContent {
+  // вытяжки в порядке постановки (change add-exhaust-fan, design D1); пустой список не пишется
+  exhausts?: ExhaustFan[]
   // метки в порядке постановки (change add-light-lines, design D1); пустой список не пишется
   lines?: LightLine[]
   // выключатели в порядке постановки (change add-light-switch, design D1); пустой список не пишется
