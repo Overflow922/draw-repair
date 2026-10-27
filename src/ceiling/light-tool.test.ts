@@ -20,6 +20,7 @@ function setup(initial: LightFixture[] = [], kind: LightKind = "spot", walls: Wa
   let lights = initial
   let current = kind
   const log = { records: 0, changed: 0 }
+  const placed: LightFixture[] = []
   const host: LightToolHost = {
     bodies: () => reachBodies(walls),
     lights: () => lights,
@@ -33,6 +34,9 @@ function setup(initial: LightFixture[] = [], kind: LightKind = "spot", walls: Wa
       log.changed++
     },
     redraw: () => {},
+    placed: (light) => {
+      placed.push(light)
+    },
     newId: idGen(),
     kind: () => current,
     view: () => VIEW,
@@ -42,6 +46,7 @@ function setup(initial: LightFixture[] = [], kind: LightKind = "spot", walls: Wa
   return {
     tool: createLightTool(host),
     log,
+    placed,
     lights: () => lights,
     setKind: (k: LightKind) => {
       current = k
@@ -71,6 +76,15 @@ describe("постановка", () => {
     expect(s.tool.ghost({ x: -5, y: 150 })).toBeNull()
     expect(s.tool.place({ x: -5, y: 150 })).toBe(false)
     expect(s.log.records).toBe(0)
+    expect(s.placed).toEqual([])
+  })
+
+  // change line-dropdown (spec light-lines «Линия при постановке»): метку ставит вызывающий, инструмент сообщает о постановке
+  it("CL-T3a: после постановки хост получает поставленный светильник; шаг истории при этом один", () => {
+    const s = setup()
+    s.tool.place({ x: 100, y: 80 })
+    expect(s.placed).toEqual([spot("n1", 100, 80)])
+    expect(s.log.records).toBe(1)
   })
 
   it("CL-T4: призрак — объект текущего вида в округлённой точке курсора", () => {

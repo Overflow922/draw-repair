@@ -22,6 +22,7 @@ export interface LightToolHost {
   record(): void // одна запись истории (снимок плана до операции) — перед setLights и только при изменении
   changed(): void
   redraw(): void
+  placed?(light: LightFixture): void // после постановки: вызывающий ставит светильнику линию (change line-dropdown, design D2)
   newId(): string
   kind(): LightKind // текущий вид группы «Освещение» — для новых объектов
   view(): View
@@ -110,7 +111,11 @@ export function createLightTool(host: LightToolHost): LightTool {
     place(p) {
       const kind = host.kind()
       const place = placementAt(kind, p)
-      return place ? commit(addLight(host.lights(), newLight(kind, place, host.newId()))) : false
+      if (!place) return false
+      const light = newLight(kind, place, host.newId())
+      const done = commit(addLight(host.lights(), light))
+      if (done) host.placed?.(light)
+      return done
     },
     symbolAt,
     numberAt: numberUnder,

@@ -29,7 +29,7 @@ const keyPoint = (s: LightSwitch, index: number, part: "circle" | "label" | "das
   return cmOf(part === "circle" ? g.circle.c : part === "label" ? g.label : g.dash[1])
 }
 
-function setup(initial: LightSwitch[] = [], keyCount = 1, openings: Shape[] = []) {
+function setup(initial: LightSwitch[] = [], keyLine = "L1", openings: Shape[] = []) {
   let switches = initial
   let n = 0
   const log = { records: 0, changes: 0 }
@@ -48,7 +48,7 @@ function setup(initial: LightSwitch[] = [], keyCount = 1, openings: Shape[] = []
     },
     redraw: () => {},
     newId: () => "id" + String(++n),
-    keyCount: () => keyCount,
+    keyLine: () => keyLine,
     view: () => VIEW,
     unitsPerMm: LIGHT_SYMBOL_PX_PER_MM,
   }
@@ -56,18 +56,25 @@ function setup(initial: LightSwitch[] = [], keyCount = 1, openings: Shape[] = []
 }
 
 describe("постановка", () => {
-  it("SW-T1: три клавиши у внешней грани над x = 120 — выключатель на грани, один шаг истории, не выделен", () => {
-    const s = setup([], 3)
+  it("SW-T1: у внешней грани над x = 120 — выключатель из одной клавиши с линией L1 на грани, один шаг истории, не выделен", () => {
+    const s = setup()
     expect(s.tool.place({ x: 120, y: -20 - NEAR_CM })).toBe(true)
-    expect(s.switches()).toEqual([newSwitch("id1", { at: { x: 120, y: -20 }, angle: -90 }, 3)])
+    expect(s.switches()).toEqual([newSwitch("id1", { at: { x: 120, y: -20 }, angle: -90 }, "L1")])
+    expect(s.switches()[0]?.keys).toEqual([{ lines: ["L1"] }])
     expect(s.log.records).toBe(1)
     expect(s.log.changes).toBe(1)
     expect(s.tool.selectedId()).toBeNull()
   })
 
-  it("SW-T2: призрак — тот же выключатель с числом клавиш из панели", () => {
-    const ghost = setup([], 2).tool.ghost({ x: 120, y: -20 - NEAR_CM })
-    expect(ghost?.keys).toHaveLength(2)
+  it("SW-T1b: линия из меню «Линия» панели попадает в единственную клавишу", () => {
+    const s = setup([], "L3")
+    s.tool.place({ x: 120, y: -20 - NEAR_CM })
+    expect(s.switches()[0]?.keys).toEqual([{ lines: ["L3"] }])
+  })
+
+  it("SW-T2: призрак — выключатель из одной клавиши с линией из панели", () => {
+    const ghost = setup([], "L2").tool.ghost({ x: 120, y: -20 - NEAR_CM })
+    expect(ghost?.keys).toEqual([{ lines: ["L2"] }])
     expect(ghost?.at).toEqual({ x: 120, y: -20 })
   })
 
@@ -89,7 +96,7 @@ describe("постановка", () => {
   })
 
   it("SW-T5: проём — призрака в нём нет", () => {
-    const s = setup([], 1, openingBodies(ROOM, [openingOn("o", "w1", 100, 90)]))
+    const s = setup([], "L1", openingBodies(ROOM, [openingOn("o", "w1", 100, 90)]))
     expect(s.tool.ghost({ x: 120, y: -20 - NEAR_CM })).toBeNull()
     expect(s.tool.place({ x: 200, y: -20 - NEAR_CM })).toBe(true)
   })
@@ -141,21 +148,44 @@ describe("правка", () => {
     expect(s.log.records).toBe(0)
   })
 
-  it("SW-T22: число клавиш выделенного — один шаг; недопустимое не применяется", () => {
-    const one = swAt("a", 120, -20, -90, [["L1"], ["L2"]])
+  it("SW-T22: линия выделенного выключателя из одной клавиши — один шаг истории, остаётся выделенным", () => {
+    const one = swAt("a", 120, -20, -90, [["L3"]])
     const s = setup([one])
     s.tool.press(keyPoint(one, 0, "circle"))
-    expect(s.tool.setSelectedKeyCount(3)).toBe(true)
-    expect(s.switches()[0]?.keys).toHaveLength(3)
+    expect(s.tool.setSelectedLine("L5")).toBe(true)
+    expect(s.switches()[0]?.keys).toEqual([{ lines: ["L5"] }])
     expect(s.log.records).toBe(1)
-    expect(s.tool.setSelectedKeyCount(7)).toBe(false)
-    expect(s.tool.setSelectedKeyCount(0)).toBe(false)
-    expect(s.log.records).toBe(1)
+    expect(s.tool.selectedId()).toBe("a")
   })
 
-  it("SW-T23: число клавиш без выделения — ничего", () => {
-    const s = setup([swAt("a", 120, -20, -90)])
-    expect(s.tool.setSelectedKeyCount(2)).toBe(false)
+  it("SW-T23: та же линия — шага истории нет; выключателю без линии линия ставится одним шагом", () => {
+    const one = swAt("a", 120, -20, -90, [["L3"]])
+    const s = setup([one])
+    s.tool.press(keyPoint(one, 0, "circle"))
+    expect(s.tool.setSelectedLine("L3")).toBe(false)
+    expect(s.log.records).toBe(0)
+
+    const bare = swAt("b", 300, -20, -90, [[]])
+    const t = setup([bare])
+    t.tool.press(keyPoint(bare, 0, "circle"))
+    expect(t.tool.setSelectedLine("LV1")).toBe(true)
+    expect(t.switches()[0]?.keys).toEqual([{ lines: ["LV1"] }])
+    expect(t.log.records).toBe(1)
+  })
+
+  it("SW-T24: без выделения, при нескольких клавишах или нескольких линиях в клавише меню ничего не меняет", () => {
+    const many = swAt("a", 120, -20, -90, [["L1"], ["L2"]])
+    const s = setup([many])
+    expect(s.tool.setSelectedLine("L9")).toBe(false)
+    s.tool.press(keyPoint(many, 0, "circle"))
+    expect(s.tool.setSelectedLine("L9")).toBe(false)
+    expect(s.switches()[0]?.keys).toEqual([{ lines: ["L1"] }, { lines: ["L2"] }])
+
+    const multi = swAt("b", 300, -20, -90, [["L3", "LV1"]])
+    const t = setup([multi])
+    t.tool.press(keyPoint(multi, 0, "circle"))
+    expect(t.tool.setSelectedLine("L9")).toBe(false)
+    expect(t.log.records + s.log.records).toBe(0)
   })
 })
 

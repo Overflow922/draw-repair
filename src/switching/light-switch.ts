@@ -13,12 +13,6 @@ export const isKeyLineName = (v: unknown): v is string => typeof v === "string" 
 // допустимое число клавиш: целое от 1 до 6
 export const isKeyCount = (n: number): boolean => Number.isInteger(n) && n >= 1 && n <= MAX_KEYS
 
-// ввод поля «Клавиш»: целое от 1 до 6 (пробелы по краям игнорируются); иначе null — прежнее значение остаётся
-export function parseKeyCount(text: string): number | null {
-  const t = text.trim()
-  return /^\d+$/.test(t) && isKeyCount(Number(t)) ? Number(t) : null
-}
-
 // ввод «L2,LV1», «l2, lv1», «L2;LV1» → имена в верхнем регистре без повторов в порядке ввода; пустая строка — пустой список;
 // любой недопустимый токен — null (ввод не применяется целиком)
 export function parseKeyLines(text: string): string[] | null {
@@ -41,12 +35,27 @@ export interface SwitchPlacement {
   angle: number
 }
 
-export const newSwitch = (id: string, place: SwitchPlacement, keyCount: number): LightSwitch => ({
+// новый выключатель — одна клавиша с линией из меню «Линия» панели (change line-dropdown)
+export const newSwitch = (id: string, place: SwitchPlacement, line: string): LightSwitch => ({
   id,
   at: place.at,
   angle: place.angle,
-  keys: Array.from({ length: keyCount }, () => ({ lines: [] })),
+  keys: [{ lines: [line] }],
 })
+
+// меню «Линия» панели: у выделенного выключателя из одной клавиши — её единственная линия (null — «—» без линии), без выделения —
+// текущая линия сеанса; выключатель из нескольких клавиш или с несколькими линиями в клавише (старые чертежи) правится на месте
+export interface SwitchLineField {
+  line: string | null
+  editable: boolean
+}
+
+export function switchLineField(selected: LightSwitch | null, sessionLine: string): SwitchLineField {
+  if (!selected) return { line: sessionLine, editable: true }
+  const only = selected.keys.length === 1 ? selected.keys[0] : undefined
+  if (!only || only.lines.length > 1) return { line: null, editable: false }
+  return { line: only.lines[0] ?? null, editable: true }
+}
 
 export const addSwitch = (switches: LightSwitch[], s: LightSwitch): LightSwitch[] => [...switches, s]
 
@@ -57,14 +66,6 @@ export function setKeyLines(switches: LightSwitch[], id: string, keyIndex: numbe
   const key = target?.keys[keyIndex]
   if (!target || !key || sameLines(key.lines, lines)) return switches
   return switches.map((s) => (s.id === id ? { ...s, keys: s.keys.map((k, i) => (i === keyIndex ? { lines } : k)) } : s))
-}
-
-// уменьшение отбрасывает последние клавиши вместе с их линиями, увеличение добавляет пустые в конец
-export function setKeyCount(switches: LightSwitch[], id: string, count: number): LightSwitch[] {
-  const target = switches.find((s) => s.id === id)
-  if (!target || !isKeyCount(count) || target.keys.length === count) return switches
-  const keys = Array.from({ length: count }, (_, i) => target.keys[i] ?? { lines: [] })
-  return switches.map((s) => (s.id === id ? { ...s, keys } : s))
 }
 
 export function moveSwitch(switches: LightSwitch[], id: string, place: SwitchPlacement): LightSwitch[] {

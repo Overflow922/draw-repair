@@ -56,10 +56,10 @@ describe("setLineOf", () => {
     expect(s.records()).toBe(0)
   })
 
-  it("вытяжке ставит LV<n>", () => {
+  it("вытяжке ставит L<n>, как светильнику", () => {
     const s = setup()
     expect(s.tool.setLineOf("f", 2)).toBe(true)
-    expect(s.lines().map((l) => [l.targetId, l.name])).toEqual([["f", "LV2"]])
+    expect(s.lines().map((l) => [l.targetId, l.name])).toEqual([["f", "L2"]])
   })
 
   it("датчик метку не несёт", () => {

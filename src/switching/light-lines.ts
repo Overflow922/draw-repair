@@ -5,27 +5,25 @@ import type { ExhaustFan, LightFixture, LightLine, SwitchingContent } from "../t
 
 const NAME = /^(?:L|LV)[1-9]\d*$/
 
-// префикс имени: у светильника «L», у вытяжки (change add-exhaust-fan, design D2) «LV»
-export type LinePrefix = "L" | "LV"
+// каноническое имя из числа: 3 → «L3»; светильники и вытяжки не разделяются (change line-dropdown, design D6)
+export const lineLabel = (n: number): string => "L" + String(n)
 
-// каноническое имя из числа: 3 → «L3», с префиксом «LV» → «LV3»
-export const lineLabel = (n: number, prefix: LinePrefix = "L"): string => prefix + String(n)
-
-// имя в хранимом виде «L<n>» или «LV<n>», n — целое больше нуля (при загрузке допускается только оно)
+// имя в хранимом виде «L<n>» или «LV<n>» (метка вытяжки из чертежа, созданного до объединения линий), n — целое больше нуля
+// (при загрузке допускается только оно)
 export const isLineName = (v: unknown): v is string => typeof v === "string" && NAME.test(v)
 
-// ввод пользователя «3», «L3», «l3» (для «LV» — «3», «LV3», «lv3»; пробелы по краям игнорируются) → «L3»; иначе null
-export function parseLineName(text: string, prefix: LinePrefix = "L"): string | null {
+// ввод пользователя «3», «L3», «l3» (пробелы по краям игнорируются) → «L3»; иначе null
+export function parseLineName(text: string): string | null {
   const t = text.trim().toUpperCase()
-  const digits = t.startsWith(prefix) ? t.slice(prefix.length) : t
-  return /^[1-9]\d*$/.test(digits) ? prefix + digits : null
+  const digits = t.startsWith("L") ? t.slice(1) : t
+  return /^[1-9]\d*$/.test(digits) ? "L" + digits : null
 }
 
-// число линии из имени «L3» или «LV3» → 3 (для поля панели)
+// число линии из имени «L3» или «LV3» → 3
 export const lineNumber = (name: string): number => Number(name.replace(/^[A-Z]+/, ""))
 
-// префикс имени метки
-export const prefixOfName = (name: string): LinePrefix => (name.startsWith("LV") ? "LV" : "L")
+// метка вытяжки старого чертежа («LV<n>»)
+const isLegacyFanName = (name: string): boolean => name.startsWith("LV")
 
 // датчик пожарной сигнализации не коммутируется выключателем — метку не несёт (design D3)
 export const canCarryLine = (light: LightFixture): boolean => light.kind !== "smoke-detector"
@@ -69,8 +67,8 @@ export interface VisibleLine {
 export function visibleLines(lines: readonly LightLine[], lights: readonly LightFixture[], exhausts: readonly ExhaustFan[] = []): VisibleLine[] {
   return lines.flatMap((line) => {
     const light = lights.find((l) => l.id === line.targetId)
-    if (light) return prefixOfName(line.name) === "L" ? [{ line, light }] : []
+    if (light) return isLegacyFanName(line.name) ? [] : [{ line, light }]
     const fan = exhausts.find((f) => f.id === line.targetId)
-    return fan && prefixOfName(line.name) === "LV" ? [{ line, light: fan }] : []
+    return fan ? [{ line, light: fan }] : []
   })
 }

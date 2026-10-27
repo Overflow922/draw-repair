@@ -102,11 +102,11 @@ import { lineLabelBox } from "./switching/light-line-label"
 import { createExhaustTool } from "./switching/exhaust-tool"
 import type { ExhaustToolHost } from "./switching/exhaust-tool"
 import { storedExhausts } from "./switching/exhaust"
-import { lineNumber, lineLabel, parseLineName, prefixOfName, storedLines, visibleLines } from "./switching/light-lines"
-import type { LinePrefix } from "./switching/light-lines"
+import { canCarryLine, lineNumber, lineLabel, parseLineName, setLine, storedLines, visibleLines } from "./switching/light-lines"
+import { lineMenu } from "./switching/line-menu"
 import { linkedObjects } from "./switching/line-links"
 import type { LinkSelection } from "./switching/line-links"
-import { keyLabel, parseKeyCount, parseKeyLines, storedSwitches } from "./switching/light-switch"
+import { keyLabel, parseKeyLines, storedSwitches, switchLineField } from "./switching/light-switch"
 import { openingBodies } from "./switching/switch-reach"
 import { keyGeometry } from "./switching/switch-symbol"
 import { createSwitchTool } from "./switching/switch-tool"
@@ -174,11 +174,11 @@ const ceilingPanel = document.querySelector<HTMLElement>("#ceiling-panel")!
 const ceilingDropInput = document.querySelector<HTMLInputElement>("#ceiling-drop")!
 const toolLightLineBtn = document.querySelector<HTMLButtonElement>("#tool-light-line")!
 const lightLinePanel = document.querySelector<HTMLElement>("#light-line-panel")!
-const lightLineInput = document.querySelector<HTMLInputElement>("#light-line-number")!
+const lightLineInput = document.querySelector<HTMLSelectElement>("#light-line-number")!
 const toolLightSwitchBtn = document.querySelector<HTMLButtonElement>("#tool-light-switch")!
 const toolExhaustBtn = document.querySelector<HTMLButtonElement>("#tool-exhaust")!
 const lightSwitchPanel =document.querySelector<HTMLElement>("#light-switch-panel")!
-const lightSwitchInput = document.querySelector<HTMLInputElement>("#light-switch-keys")!
+const lightSwitchInput = document.querySelector<HTMLSelectElement>("#light-switch-line")!
 const toolLightBtn = document.querySelector<HTMLButtonElement>("#tool-light")!
 const lightPanel = document.querySelector<HTMLElement>("#light-panel")!
 const lightKindButtons = [...lightPanel.querySelectorAll<HTMLButtonElement>("[data-light]")].flatMap((button): [LightKind, HTMLButtonElement][] => {
@@ -1205,6 +1205,12 @@ const lightHost: LightToolHost = {
     dirty = true
   },
   redraw: () => redraw(),
+  // светильник ставится сразу с линией текущего значения; шага истории метка не добавляет (change line-dropdown, design D2)
+  placed: (light) => {
+    if (!canCarryLine(light)) return
+    lineHost.setLines(setLine(linesOf(), light.id, lineLabel(lineNumberCurrent), () => crypto.randomUUID()))
+    redraw()
+  },
   newId: () => crypto.randomUUID(),
   kind: () => lightCurrent,
   view: () => view,
@@ -1213,11 +1219,31 @@ const lightHost: LightToolHost = {
 }
 const lightTool = createLightTool(lightHost)
 
-// метки линий освещения плана «Группы включения» (change add-light-lines, design D4): номер для новых меток хранится в сеансе,
+// метки линий освещения плана «Группы включения» (change add-light-lines, design D4): текущая линия хранится в сеансе — одна на
+// меню «Линия» панелей «Линия освещения» и «Выключатель», на новые светильники и вытяжки (change line-dropdown, design D1);
 // шаг истории — снимок списка меток до операции
 const NO_LINES: LightLine[] = []
 const linesOf = (): LightLine[] => current().switching?.lines ?? NO_LINES
 let lineNumberCurrent = 1
+
+// наполняет выпадающее меню «Линия» пунктами lineMenu; пункты пересобираются только при смене набора, чтобы не закрывать открытое меню
+function showLineMenu(select: HTMLSelectElement, selected: string | null): void {
+  const menu = lineMenu(selected)
+  const signature = menu.items.map((i) => i.value).join(",")
+  if (select.dataset.items !== signature) {
+    select.dataset.items = signature
+    select.replaceChildren(
+      ...menu.items.map((item) => {
+        const option = document.createElement("option")
+        option.value = item.value
+        option.textContent = item.text
+        option.disabled = item.disabled
+        return option
+      }),
+    )
+  }
+  select.value = menu.selected
+}
 let linePanelOpen = false
 let lineEditor: { editor: NumberEditor; id: string } | null = null
 
@@ -1261,8 +1287,8 @@ function syncLinePanel(): void {
   toolLightLineBtn.classList.toggle("active", tool === "lightLine")
   const selected = lineTool.selected()
   const carrierLine = carrierId === null ? undefined : visibleLines(linesOf(), lightsOf(), exhaustsOf()).find((v) => v.light.id === carrierId)
-  const shown = selected ? String(lineNumber(selected.name)) : carrierId !== null ? (carrierLine ? String(lineNumber(carrierLine.line.name)) : "") : String(lineNumberCurrent)
-  if (document.activeElement !== lightLineInput) lightLineInput.value = shown
+  const shown = selected ? selected.name : carrierId !== null ? (carrierLine?.line.name ?? null) : lineLabel(lineNumberCurrent)
+  showLineMenu(lightLineInput, shown)
 }
 
 // выделение для подсветки связанных по имени линии объектов: выключатель, метка, вытяжка или светильник (выделения взаимоисключающие)
@@ -1285,12 +1311,10 @@ const closeLineEditor = (): void => {
 function commitLineEditor(): void {
   if (!lineEditor) return
   const { editor, id } = lineEditor
-  const name = parseLineName(editor.text(), prefixOfName(lineOf(id)?.name ?? ""))
+  const name = parseLineName(editor.text())
   closeLineEditor()
   if (name !== null) lineTool.setNameOf(id, name)
 }
-
-const lineOf = (id: string): LightLine | undefined => linesOf().find((l) => l.id === id)
 
 // сброс поля на месте, выделения и панели (смена плана, чертежа и инструмента, отмена и повтор)
 const resetLines = (): void => {
@@ -1312,7 +1336,7 @@ function openLineEditor(line: LightLine): void {
     { x: box.x + box.w / 2, y: box.y + box.h / 2 },
     line.name,
     (text) => {
-      const name = parseLineName(text, prefixOfName(line.name))
+      const name = parseLineName(text)
       if (name !== null) lineTool.setNameOf(line.id, name)
       redraw()
     },
@@ -1340,11 +1364,10 @@ function pressLines(p: Point): void {
   redraw()
 }
 
-// выключатели плана «Группы включения» (change add-light-switch, design D5): число клавиш для новых выключателей хранится в сеансе,
-// шаг истории — снимок списка выключателей до операции; грани и проёмы считаются один раз на сцену
+// выключатели плана «Группы включения» (change add-light-switch, design D5): линии для новых выключателей хранятся в сеансе
+// (change switch-line-field), шаг истории — снимок списка выключателей до операции; грани и проёмы считаются один раз на сцену
 const NO_SWITCHES: LightSwitch[] = []
 const switchesOf = (): LightSwitch[] => current().switching?.switches ?? NO_SWITCHES
-let switchKeysCurrent = 1
 let switchPanelOpen = false
 let switchEditor: { editor: NumberEditor; id: string; index: number } | null = null
 // нажатие на кружок или подпись выделенного выключателя: поле на месте откроется при отпускании без сдвига
@@ -1374,18 +1397,21 @@ const switchHost: SwitchToolHost = {
   },
   redraw: () => redraw(),
   newId: () => crypto.randomUUID(),
-  keyCount: () => switchKeysCurrent,
+  keyLine: () => lineLabel(lineNumberCurrent),
   view: () => view,
   unitsPerMm: SCREEN_METRICS.symbolMmPx,
 }
 const switchTool = createSwitchTool(switchHost)
 
-// панель «Выключатель»: число клавиш выделенного выключателя, иначе значение для новых
+// панель «Выключатель»: линия выделенного выключателя, иначе текущая линия для новых; у выключателя из нескольких клавиш или с
+// несколькими линиями в клавише меню недоступно
 function syncSwitchPanel(): void {
   lightSwitchPanel.classList.toggle("open", switchPanelOpen)
   toolLightSwitchBtn.classList.toggle("active", tool === "lightSwitch")
   const selected = switchTool.selected()
-  if (document.activeElement !== lightSwitchInput) lightSwitchInput.value = String(selected ? selected.keys.length : switchKeysCurrent)
+  const field = switchLineField(selected, lineLabel(lineNumberCurrent))
+  showLineMenu(lightSwitchInput, field.line)
+  lightSwitchInput.disabled = !field.editable
 }
 
 const closeSwitchEditor = (): void => {
@@ -1472,6 +1498,7 @@ const exhaustHost: ExhaustToolHost = {
   },
   redraw: () => redraw(),
   newId: () => crypto.randomUUID(),
+  lineNumber: () => lineNumberCurrent,
   view: () => view,
 }
 const exhaustTool = createExhaustTool(exhaustHost)
@@ -3879,13 +3906,11 @@ toolLightLineBtn.addEventListener("click", () => {
   } else linePanelOpen = !linePanelOpen
   syncLinePanel()
 })
-// поле «Линия»: меняет имя выделенной метки одним шагом истории, иначе — значение для новых; недопустимое не применяется
+// меню «Линия»: меняет имя выделенной метки (или линию выделенного светильника и вытяжки) одним шагом истории, иначе — текущую линию
 lightLineInput.addEventListener("change", () => {
   const carrierId = lineTool.selectedId() === null ? panelCarrierId() : null
-  // выделенная метка вытяжки (и сама вытяжка) принимает «LV<n>», остальное — «L<n>»; число для новых меток общее
-  const prefix: LinePrefix = carrierId !== null ? (exhaustsOf().some((f) => f.id === carrierId) ? "LV" : "L") : prefixOfName(lineTool.selected()?.name ?? "")
-  const name = parseLineName(lightLineInput.value, prefix)
-  if (name !== null) {
+  const name = lightLineInput.value
+  if (name !== "") {
     if (carrierId !== null) lineTool.setLineOf(carrierId, lineNumber(name))
     else if (lineTool.selectedId() !== null) lineTool.setSelectedName(name)
     else lineNumberCurrent = lineNumber(name)
@@ -3906,12 +3931,12 @@ toolLightSwitchBtn.addEventListener("click", () => {
   } else switchPanelOpen = !switchPanelOpen
   syncSwitchPanel()
 })
-// поле «Клавиш»: меняет число клавиш выделенного выключателя одним шагом истории, иначе — значение для новых; недопустимое не применяется
+// меню «Линия»: меняет линию выделенного выключателя одним шагом истории, иначе — текущую линию для новых
 lightSwitchInput.addEventListener("change", () => {
-  const count = parseKeyCount(lightSwitchInput.value)
-  if (count !== null) {
-    if (switchTool.selectedId() !== null) switchTool.setSelectedKeyCount(count)
-    else switchKeysCurrent = count
+  const line = lightSwitchInput.value
+  if (line !== "") {
+    if (switchTool.selectedId() !== null) switchTool.setSelectedLine(line)
+    else lineNumberCurrent = lineNumber(line)
   }
   lightSwitchInput.blur()
   syncSwitchPanel()

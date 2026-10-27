@@ -1,14 +1,14 @@
 import type { Shape } from "../communications/shape"
 import type { LightSwitch, Point, View } from "../types"
 import { PX_PER_CM } from "../types"
-import { addSwitch, moveSwitch, newSwitch, removeSwitch, setKeyCount, setKeyLines } from "./light-switch"
+import { addSwitch, moveSwitch, newSwitch, removeSwitch, setKeyLines } from "./light-switch"
 import type { SwitchPlacement } from "./light-switch"
 import { snapSwitch } from "./switch-reach"
 import { switchHit } from "./switch-symbol"
 import type { SwitchHit } from "./switch-symbol"
 
 // Инструмент «Выключатель» и правка выключателей без инструмента (change add-light-switch, design D5): постановка с призраком,
-// выделение по знаку, перетаскивание вдоль граней, правка числа клавиш и списка линий клавиши, Delete, ластик. Состояние выделения
+// выделение по знаку, перетаскивание вдоль граней, правка списка линий (в панели и на месте), Delete, ластик. Состояние выделения
 // и перетаскивания без DOM; данные плана, история и перерисовка — через явный хост (по образцу инструмента «Освещение»).
 
 export interface SwitchToolHost {
@@ -20,7 +20,7 @@ export interface SwitchToolHost {
   changed(): void
   redraw(): void
   newId(): string
-  keyCount(): number // значение поля «Клавиш» панели — для новых выключателей
+  keyLine(): string // текущая линия сеанса (меню «Линия» панели) — линия клавиши новых выключателей
   view(): View
   unitsPerMm: number // пикселей холста на мм бумаги (размер знака)
 }
@@ -41,7 +41,7 @@ export interface SwitchTool {
   selected(): LightSwitch | null
   clearSelection(): void
   deleteSelected(): boolean
-  setSelectedKeyCount(count: number): boolean // правка в панели
+  setSelectedLine(line: string): boolean // правка в панели: только выделенный выключатель из одной клавиши с не более чем одной линией
   setKeyLines(id: string, keyIndex: number, lines: string[]): boolean // правка на месте
   beginDrag(p: Point): boolean
   dragTo(p: Point): void
@@ -93,11 +93,11 @@ export function createSwitchTool(host: SwitchToolHost): SwitchTool {
   return {
     ghost(p) {
       const place = placementAt(p)
-      return place ? newSwitch("ghost", place, host.keyCount()) : null
+      return place ? newSwitch("ghost", place, host.keyLine()) : null
     },
     place(p) {
       const place = placementAt(p)
-      return place ? commit(addSwitch(host.switches(), newSwitch(host.newId(), place, host.keyCount()))) : false
+      return place ? commit(addSwitch(host.switches(), newSwitch(host.newId(), place, host.keyLine()))) : false
     },
     press(p) {
       const found = hitAt(p)
@@ -121,7 +121,10 @@ export function createSwitchTool(host: SwitchToolHost): SwitchTool {
       selected = null
       return commit(removeSwitch(host.switches(), id))
     },
-    setSelectedKeyCount: (count) => (selected === null ? false : commit(setKeyCount(host.switches(), selected, count))),
+    setSelectedLine: (line) => {
+      const target = host.switches().find((s) => s.id === selected)
+      return target?.keys.length === 1 && (target.keys[0]?.lines.length ?? 0) <= 1 ? commit(setKeyLines(host.switches(), target.id, 0, [line])) : false
+    },
     setKeyLines: (id, keyIndex, lines) => commit(setKeyLines(host.switches(), id, keyIndex, lines)),
     beginDrag(p) {
       const found = hitAt(p)

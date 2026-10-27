@@ -34,17 +34,23 @@ function setup(initial: LightLine[] = [], name = "L1") {
 }
 
 describe("метка вытяжки", () => {
-  it("клик по вытяжке ставит LV<n> с числом поля, по светильнику — L<n>", () => {
+  it("клик по вытяжке и по светильнику ставит одну и ту же L<n> из меню", () => {
     const s = setup([], "L1")
     expect(s.tool.place({ x: 300, y: 80 })).toBe(true)
     expect(s.tool.place({ x: 100, y: 80 })).toBe(true)
-    expect(s.lines().map((l) => [l.targetId, l.name])).toEqual([["f", "LV1"], ["a", "L1"]])
+    expect(s.lines().map((l) => [l.targetId, l.name])).toEqual([["f", "L1"], ["a", "L1"]])
     expect(s.records()).toBe(2)
   })
-  it("повторный клик с тем же числом шага не создаёт", () => {
-    const s = setup([{ id: "x", targetId: "f", name: "LV3" }], "L3")
+  it("повторный клик с тем же именем шага не создаёт", () => {
+    const s = setup([{ id: "x", targetId: "f", name: "L3" }], "L3")
     expect(s.tool.place({ x: 300, y: 80 })).toBe(false)
     expect(s.records()).toBe(0)
+  })
+  it("метка LV<n> из старого чертежа заменяется на L<n>", () => {
+    const s = setup([{ id: "x", targetId: "f", name: "LV3" }], "L3")
+    expect(s.tool.place({ x: 300, y: 80 })).toBe(true)
+    expect(s.lines().map((l) => l.name)).toEqual(["L3"])
+    expect(s.records()).toBe(1)
   })
   it("наведение подсвечивает вытяжку", () => {
     expect(setup().tool.hoverTarget({ x: 302, y: 80 })).toBe("f")

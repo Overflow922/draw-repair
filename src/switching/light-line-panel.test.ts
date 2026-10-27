@@ -24,14 +24,13 @@ describe("панель «Линия освещения»", () => {
     expect(anchor).not.toContain("group-tool")
   })
 
-  it("LL-91: в панели одно поле «Линия», по умолчанию 1; других полей нет", () => {
+  it("LL-91: в панели одно меню «Линия» (select); числового поля и других элементов нет", () => {
     const anchor = anchorOf("lightLine")
     const panel = anchor.slice(anchor.indexOf('id="light-line-panel"'))
-    expect([...panel.matchAll(/<input/g)]).toHaveLength(1)
+    expect([...panel.matchAll(/<select/g)]).toHaveLength(1)
     expect(panel).toContain('id="light-line-number"')
-    expect(panel).toContain('value="1"')
     expect(panel).toContain("<span>Линия</span>")
-    for (const tag of ["<select", "<textarea"]) expect(panel.includes(tag), tag).toBe(false)
+    for (const tag of ["<input", "<textarea"]) expect(panel.includes(tag), tag).toBe(false)
   })
 
   it("LL-92: значок — подпись «L1» красным цветом освещения", () => {

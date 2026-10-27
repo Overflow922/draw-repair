@@ -37,10 +37,10 @@ describe("linkedObjects: выделен выключатель", () => {
 describe("linkedObjects: выделен носитель или метка", () => {
   const switches = [sw("A", ["L1"], ["L3"]), sw("B", ["L4"])]
 
-  it("светильник: остальные с тем же именем и выключатели с этим именем", () => {
+  it("светильник: только выключатели с этим именем, другие светильники линии не подсвечиваются", () => {
     const r = result({ kind: "carrier", id: "a" }, switches)
-    expect(r.carriers).toEqual(["b", "c"])
-    expect(r.labels).toEqual(["lb", "lc"])
+    expect(r.carriers).toEqual([])
+    expect(r.labels).toEqual([])
     expect(r.switches).toEqual(["A"])
   })
 
@@ -52,6 +52,17 @@ describe("linkedObjects: выделен носитель или метка", () 
     const r = result({ kind: "carrier", id: "f" }, [sw("A", ["L3", "LV1"])])
     expect(r.carriers).toEqual([])
     expect(r.switches).toEqual(["A"])
+  })
+
+  it("вытяжка: другая вытяжка с тем же именем не подсвечивается", () => {
+    const r = linkedObjects({ kind: "carrier", id: "f" }, [...lines, line("lg", "g", "LV1")], [sw("A", ["LV1"])], lights, [...fans, fan("g")])
+    expect([...r.carrierIds]).toEqual([])
+    expect([...r.lineIds]).toEqual([])
+    expect([...r.switchIds]).toEqual(["A"])
+  })
+
+  it("линия есть у светильника, но ни в одной клавише — ничего", () => {
+    expect(result({ kind: "carrier", id: "a" }, [sw("B", ["L4"])])).toEqual({ carriers: [], labels: [], switches: [] })
   })
 
   it("светильник без метки — ничего", () => {
@@ -66,21 +77,23 @@ describe("linkedObjects: выделен носитель или метка", () 
   })
 
   it("метка удалённого светильника не подсвечивается", () => {
-    const r = linkedObjects({ kind: "carrier", id: "a" }, [...lines, line("gone", "zz", "L3")], [], lights, fans)
-    expect([...r.lineIds].sort()).toEqual(["lb", "lc"])
+    const r = linkedObjects({ kind: "carrier", id: "a" }, [...lines, line("gone", "zz", "L3")], [sw("A", ["L3"])], lights, fans)
+    expect([...r.lineIds]).toEqual([])
+    expect([...r.switchIds]).toEqual(["A"])
   })
 })
 
 describe("linkedObjects: правка имени обновляет связи", () => {
-  it("после смены метки светильника подсвечиваются объекты новой линии, прежней — нет", () => {
+  it("после смены метки светильника подсвечиваются только выключатели новой линии, прежней — нет", () => {
     const switches = [sw("A", ["L3"]), sw("B", ["L5"])]
     const before = linkedObjects({ kind: "carrier", id: "a" }, lines, switches, lights, fans)
-    expect([...before.carrierIds].sort()).toEqual(["b", "c"])
+    expect([...before.carrierIds]).toEqual([])
     expect([...before.switchIds]).toEqual(["A"])
 
     const renamed = lines.map((l) => (l.id === "la" ? { ...l, name: "L5" } : l))
     const after = linkedObjects({ kind: "carrier", id: "a" }, renamed, switches, lights, fans)
-    expect([...after.carrierIds]).toEqual(["e"])
+    expect([...after.carrierIds]).toEqual([])
+    expect([...after.lineIds]).toEqual([])
     expect([...after.switchIds]).toEqual(["B"])
   })
 })

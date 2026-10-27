@@ -3,6 +3,7 @@ import { visibleLines } from "./light-lines"
 
 // Связь выделенного объекта с остальными по имени линии (change line-edit-and-highlight, design D1): чистая функция, данные плана
 // не меняются и не хранятся. Подсвечиваются только показанные метки (см. visibleLines); сам выделенный объект в результат не входит.
+// Выключатель показывает свои светильники и вытяжки; светильник, вытяжка и метка — только выключатели (change highlight-switch-only).
 
 export type LinkSelection = { kind: "switch"; id: string } | { kind: "carrier"; id: string } | { kind: "label"; id: string }
 
@@ -29,10 +30,10 @@ export function linkedObjects(
   const names = new Set<string>(selectedSwitch ? selectedSwitch.keys.flatMap((k) => k.lines) : selectedLine ? [selectedLine.line.name] : [])
   if (names.size === 0) return NONE
 
-  const others = shown.filter((v) => names.has(v.line.name) && v.line.id !== selectedLine?.line.id)
-  return {
-    carrierIds: new Set(others.map((v) => v.light.id)),
-    lineIds: new Set(others.map((v) => v.line.id)),
-    switchIds: selectedSwitch ? new Set() : new Set(switches.filter((s) => s.keys.some((k) => k.lines.some((n) => names.has(n)))).map((s) => s.id)),
+  if (!selectedSwitch) {
+    return { ...NONE, switchIds: new Set(switches.filter((s) => s.keys.some((k) => k.lines.some((n) => names.has(n)))).map((s) => s.id)) }
   }
+
+  const linked = shown.filter((v) => names.has(v.line.name))
+  return { carrierIds: new Set(linked.map((v) => v.light.id)), lineIds: new Set(linked.map((v) => v.line.id)), switchIds: new Set() }
 }

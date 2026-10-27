@@ -12,7 +12,7 @@ const WALL: Shape = { kind: "poly", pts: [{ x: 0, y: 200 }, { x: 500, y: 200 }, 
 const fan = (id: string, x: number, y: number): ExhaustFan => ({ id, x, y })
 const mark: LightLine = { id: "m1", targetId: "f1", name: "LV1" }
 
-function setup(initial: ExhaustState = { exhausts: [], lines: [] }) {
+function setup(initial: ExhaustState = { exhausts: [], lines: [] }, lineNumber = 1) {
   let state = initial
   let n = 0
   const log = { records: 0, changes: 0 }
@@ -30,6 +30,7 @@ function setup(initial: ExhaustState = { exhausts: [], lines: [] }) {
     },
     redraw: () => {},
     newId: () => "id" + String(++n),
+    lineNumber: () => lineNumber,
     view: () => VIEW,
   })
   return { tool, log, state: () => state }
@@ -41,6 +42,23 @@ describe("постановка", () => {
     expect(s.tool.place({ x: 100.4, y: 79.6 })).toBe(true)
     expect(s.state().exhausts).toEqual([fan("id1", 100, 80)])
     expect(s.log).toEqual({ records: 1, changes: 1 })
+  })
+  // change line-dropdown (spec light-lines «Линия при постановке»): вытяжка сразу получает метку L<n> текущей линии, как светильник
+  it("вытяжка ставится с меткой L1 в том же шаге истории", () => {
+    const s = setup()
+    s.tool.place({ x: 100, y: 80 })
+    expect(s.state().lines).toEqual([{ id: "id2", targetId: "id1", name: "L1" }])
+    expect(s.log.records).toBe(1)
+  })
+  it("номер метки — текущая линия: 3 → L3", () => {
+    const s = setup({ exhausts: [], lines: [] }, 3)
+    s.tool.place({ x: 100, y: 80 })
+    expect(s.state().lines.map((l) => l.name)).toEqual(["L3"])
+  })
+  it("отказ в постановке метку не добавляет", () => {
+    const s = setup()
+    s.tool.place({ x: 100, y: 210 })
+    expect(s.state().lines).toEqual([])
   })
   it("серия постановок — по шагу на каждую, вытяжка не выделяется", () => {
     const s = setup()

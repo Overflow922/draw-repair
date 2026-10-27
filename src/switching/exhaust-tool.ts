@@ -4,6 +4,7 @@ import type { ExhaustFan, ExhaustState, Point, View } from "../types"
 import { PX_PER_CM } from "../types"
 import { addExhaust, moveExhaust, newExhaust, removeExhaust } from "./exhaust"
 import { exhaustHitRadiusPx } from "./exhaust-symbol"
+import { lineLabel, setLine } from "./light-lines"
 
 // Инструмент «Вытяжка» и правка вытяжек без инструмента (change add-exhaust-fan, design D3): постановка с призраком, выделение по
 // знаку, перетаскивание, Delete, ластик. Состояние выделения и перетаскивания без DOM; данные плана, история и перерисовка — через
@@ -17,6 +18,7 @@ export interface ExhaustToolHost {
   changed(): void
   redraw(): void
   newId(): string
+  lineNumber(): number // текущая линия сеанса (меню «Линия» панели): вытяжка ставится с меткой L<n>, как светильник (change line-dropdown)
   view(): View
 }
 
@@ -88,7 +90,8 @@ export function createExhaustTool(host: ExhaustToolHost): ExhaustTool {
       const at = placementAt(p)
       if (!at) return false
       const { exhausts, lines } = host.state()
-      return commit({ exhausts: addExhaust(exhausts, newExhaust(host.newId(), at)), lines })
+      const id = host.newId()
+      return commit({ exhausts: addExhaust(exhausts, newExhaust(id, at)), lines: setLine(lines, id, lineLabel(host.lineNumber()), host.newId) })
     },
     hitAt,
     press(p) {

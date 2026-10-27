@@ -3,7 +3,7 @@ import type { ExhaustFan, LightFixture, LightLine, Point, View } from "../types"
 import { PX_PER_CM } from "../types"
 import { exhaustHitRadiusPx } from "./exhaust-symbol"
 import { lineLabelAt } from "./light-line-label"
-import { canCarryLine, lineLabel, lineNumber, removeLine, renameLine, setLine, visibleLines } from "./light-lines"
+import { canCarryLine, lineLabel, removeLine, renameLine, setLine, visibleLines } from "./light-lines"
 import type { LineCarrier } from "./light-lines"
 
 // Инструмент «Линия освещения», выделение метки по тексту и правка (change add-light-lines, design D4): состояние выделения без
@@ -73,9 +73,6 @@ export function createLightLineTool(host: LightLineToolHost): LightLineTool {
 
   const isFan = (c: LineCarrier): c is ExhaustFan => !("kind" in c)
 
-  // имя новой метки: число из поля «Линия», префикс по виду носителя
-  const nameFor = (c: LineCarrier): string => (isFan(c) ? lineLabel(lineNumber(host.newName()), "LV") : host.newName())
-
   const carries = (c: LineCarrier): boolean => isFan(c) || canCarryLine(c)
 
   // видимые метки с точкой привязки (центр носителя) и именем — для попадания по тексту
@@ -90,7 +87,7 @@ export function createLightLineTool(host: LightLineToolHost): LightLineTool {
     place(p) {
       const carrier = carrierAt(p)
       if (!carrier || !carries(carrier)) return false
-      return commit(setLine(host.lines(), carrier.id, nameFor(carrier), host.newId))
+      return commit(setLine(host.lines(), carrier.id, host.newName(), host.newId))
     },
     hoverTarget(p) {
       const carrier = carrierAt(p)
@@ -119,7 +116,7 @@ export function createLightLineTool(host: LightLineToolHost): LightLineTool {
     setLineOf(carrierId, n) {
       const carrier = carrierById(carrierId)
       if (!carrier || !carries(carrier)) return false
-      return commit(setLine(host.lines(), carrier.id, lineLabel(n, isFan(carrier) ? "LV" : "L"), host.newId))
+      return commit(setLine(host.lines(), carrier.id, lineLabel(n), host.newId))
     },
     canCarry(carrierId) {
       const carrier = carrierById(carrierId)

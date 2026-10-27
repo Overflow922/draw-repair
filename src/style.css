@@ -327,6 +327,11 @@ body {
   width: 44px;
 }
 
+/* меню «Линия» панелей «Линия освещения» и «Выключатель» (change line-dropdown) */
+.thickness-field select {
+  width: 64px;
+}
+
 /* плашка пересечений плана «Мебель» (change furniture-plan-table, design D8): остров в правом верхнем углу, клики не перехватывает */
 #furniture-warning {
   position: absolute;

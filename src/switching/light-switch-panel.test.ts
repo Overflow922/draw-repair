@@ -24,14 +24,15 @@ describe("панель «Выключатель»", () => {
     expect(anchor).not.toContain("group-tool")
   })
 
-  it("LS-91: в панели одно поле «Клавиш», по умолчанию 1; других полей нет", () => {
+  it("LS-91: в панели одно меню «Линия» (select); поля «Клавиш», текстовых полей и других элементов нет", () => {
     const anchor = anchorOf("lightSwitch")
     const panel = anchor.slice(anchor.indexOf('id="light-switch-panel"'))
-    expect([...panel.matchAll(/<input/g)]).toHaveLength(1)
-    expect(panel).toContain('id="light-switch-keys"')
-    expect(panel).toContain('value="1"')
-    expect(panel).toContain("<span>Клавиш</span>")
-    for (const tag of ["<select", "<textarea"]) expect(panel.includes(tag), tag).toBe(false)
+    expect([...panel.matchAll(/<select/g)]).toHaveLength(1)
+    expect(panel).toContain('id="light-switch-line"')
+    expect(panel).toContain("<span>Линия</span>")
+    for (const tag of ["<input", "<textarea"]) expect(panel.includes(tag), tag).toBe(false)
+    expect(panel).not.toContain("Клавиш")
+    expect(panel).not.toContain("light-switch-keys")
   })
 
   it("LS-92: кнопка стоит сразу после кнопки «Линия освещения»", () => {

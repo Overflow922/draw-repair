@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest"
 import type { LightSwitch, SwitchingContent } from "../types"
-import { addSwitch, keyLabel, moveSwitch, newSwitch, parseKeyCount, parseKeyLines, removeSwitch, setKeyCount, setKeyLines, storedSwitches } from "./light-switch"
+import { addSwitch, keyLabel, moveSwitch, newSwitch, parseKeyLines, removeSwitch, setKeyLines, storedSwitches, switchLineField } from "./light-switch"
 
 const sw = (id: string, keys: string[][] = [[]]): LightSwitch => ({ id, at: { x: 120, y: 0 }, angle: -90, keys: keys.map((lines) => ({ lines })) })
 
@@ -24,20 +24,6 @@ describe("parseKeyLines", () => {
   })
 })
 
-describe("parseKeyCount", () => {
-  it.each([
-    ["1", 1],
-    [" 3 ", 3],
-    ["6", 6],
-  ])("%j → %i", (text, n) => {
-    expect(parseKeyCount(text)).toBe(n)
-  })
-
-  it.each(["0", "7", "2,5", "2.5", "abc", "", "-1", "03x"])("%j → null", (text) => {
-    expect(parseKeyCount(text)).toBeNull()
-  })
-})
-
 describe("keyLabel", () => {
   it("имена через запятую без пробелов", () => {
     expect(keyLabel(["L2", "LV1"])).toBe("L2,LV1")
@@ -49,10 +35,14 @@ describe("keyLabel", () => {
   })
 })
 
-describe("newSwitch / addSwitch: блок из трёх клавиш", () => {
-  it("число пустых клавиш, центр и направление", () => {
-    const s = newSwitch("s1", { at: { x: 120, y: -7.5 }, angle: -90 }, 3)
-    expect(s).toEqual({ id: "s1", at: { x: 120, y: -7.5 }, angle: -90, keys: [{ lines: [] }, { lines: [] }, { lines: [] }] })
+describe("newSwitch / addSwitch: выключатель из одной клавиши", () => {
+  it("одна клавиша с переданной линией, центр и направление", () => {
+    const s = newSwitch("s1", { at: { x: 120, y: -7.5 }, angle: -90 }, "L1")
+    expect(s).toEqual({ id: "s1", at: { x: 120, y: -7.5 }, angle: -90, keys: [{ lines: ["L1"] }] })
+  })
+
+  it("линия вытяжки сохраняется как есть", () => {
+    expect(newSwitch("s1", { at: { x: 0, y: 0 }, angle: 0 }, "LV2").keys).toEqual([{ lines: ["LV2"] }])
   })
 
   it("постановка добавляет в конец и не мутирует вход", () => {
@@ -88,33 +78,23 @@ describe("setKeyLines", () => {
   })
 })
 
-describe("setKeyCount", () => {
-  it("увеличение добавляет пустые клавиши в конец", () => {
-    const list = [sw("a", [["L1"], ["L2"]])]
-    const next = setKeyCount(list, "a", 3)
-    expect(next[0]?.keys.map((k) => k.lines)).toEqual([["L1"], ["L2"], []])
-    expect(list[0]?.keys).toHaveLength(2)
+describe("switchLineField: меню «Линия» панели", () => {
+  it("без выделения — текущая линия сеанса, меню доступно", () => {
+    expect(switchLineField(null, "L4")).toEqual({ line: "L4", editable: true })
   })
 
-  it("уменьшение отбрасывает последние клавиши вместе с линиями", () => {
-    const next = setKeyCount([sw("a", [["L1"], ["L2"], ["L3"]])], "a", 2)
-    expect(next[0]?.keys.map((k) => k.lines)).toEqual([["L1"], ["L2"]])
+  it("выделен выключатель из одной клавиши с одной линией — эта линия, меню доступно", () => {
+    expect(switchLineField(sw("a", [["L3"]]), "L4")).toEqual({ line: "L3", editable: true })
+    expect(switchLineField(sw("a", [["LV1"]]), "L4")).toEqual({ line: "LV1", editable: true })
   })
 
-  it("центр и направление сохраняются", () => {
-    const list = [sw("a", [["L1"]])]
-    const next = setKeyCount(list, "a", 4)
-    expect(next[0]?.at).toEqual({ x: 120, y: 0 })
-    expect(next[0]?.angle).toBe(-90)
+  it("выключатель из одной клавиши без линий — «—», меню доступно", () => {
+    expect(switchLineField(sw("a", [[]]), "L4")).toEqual({ line: null, editable: true })
   })
 
-  it("прежнее число и недопустимое число — тот же массив", () => {
-    const list = [sw("a", [["L1"], ["L2"]])]
-    expect(setKeyCount(list, "a", 2)).toBe(list)
-    expect(setKeyCount(list, "a", 0)).toBe(list)
-    expect(setKeyCount(list, "a", 7)).toBe(list)
-    expect(setKeyCount(list, "a", 2.5)).toBe(list)
-    expect(setKeyCount(list, "zzz", 3)).toBe(list)
+  it("несколько клавиш или несколько линий в клавише (старые чертежи) — меню недоступно", () => {
+    expect(switchLineField(sw("a", [["L1"], ["L2"]]), "L4")).toEqual({ line: null, editable: false })
+    expect(switchLineField(sw("a", [["L3", "LV1"]]), "L4")).toEqual({ line: null, editable: false })
   })
 })
 
