@@ -1,9 +1,10 @@
-import { drawCeilingScene } from "../ceiling/ceiling-render"
+import { canvasTranslucent, drawCeilingScene } from "../ceiling/ceiling-render"
 import type { CeilingOptions, CeilingView } from "../ceiling/ceiling-render"
 import { LIGHT_PALETTE } from "../theme"
 import { prepareCanvas, SCREEN_METRICS } from "../render"
-import type { Point, Unit, View } from "../types"
+import type { LightSwitch, Point, Unit, View } from "../types"
 import { drawLineLabel } from "./light-line-label"
+import { drawSwitch } from "./switch-symbol"
 
 // Отрисовка плана «Группы включения» (change add-switching-plan, design D4): снизу вверх — подложка «Реконструкции», предметы «Мебели»
 // серыми линиями без габаритов, знаки объектов освещения, метки линий (change add-light-lines, design D5), выноски и примечания.
@@ -21,11 +22,19 @@ export type SwitchingView = Pick<CeilingView, "walls" | "doorways" | "communicat
   lineLabels?: readonly LineLabelView[]
   selectedLineId?: string | null
   erasingLineId?: string | null
+  // выключатели (change add-light-switch, design D4): слой выше меток линий и ниже выносок; призрак — полупрозрачный, без подписей
+  switches?: readonly LightSwitch[]
+  switchGhost?: LightSwitch | null
+  selectedSwitchId?: string | null
+  erasingSwitchId?: string | null
 }
+
+const GHOST_ALPHA = 0.4
 
 export function drawSwitchingScene(ctx: CanvasRenderingContext2D, w: number, h: number, scene: SwitchingView, unit: Unit, view: View, opts: CeilingOptions = {}): void {
   const m = opts.metrics ?? SCREEN_METRICS
   const palette = opts.palette ?? LIGHT_PALETTE
+  const translucent = opts.translucent ?? canvasTranslucent(ctx)
   const labels = scene.lineLabels ?? []
   const aboveLights: CeilingView["aboveLights"] = (c, toScreen) => {
     for (const label of labels) {
@@ -37,6 +46,17 @@ export function drawSwitchingScene(ctx: CanvasRenderingContext2D, w: number, h: 
             : undefined
       drawLineLabel(c, label.name, toScreen(label.at), m.symbolMmPx, palette, m.font, highlight)
     }
+    for (const s of scene.switches ?? []) {
+      const highlight =
+        s.id === scene.erasingSwitchId
+          ? { color: palette.erase, lineWidth: m.contourPx * 2 }
+          : s.id === scene.selectedSwitchId
+            ? { color: palette.selection, lineWidth: m.contourPx * 2 }
+            : undefined
+      drawSwitch(c, s, toScreen(s.at), m.symbolMmPx, palette, m.font, highlight)
+    }
+    const ghost = scene.switchGhost
+    if (ghost) translucent(GHOST_ALPHA, () => drawSwitch(c, ghost, toScreen(ghost.at), m.symbolMmPx, palette, m.font))
   }
   drawCeilingScene(ctx, w, h, { ...scene, ceilings: [], aboveLights }, unit, view, opts)
 }

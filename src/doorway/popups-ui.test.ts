@@ -52,7 +52,7 @@ describe("разметка панелей", () => {
     // TCR (change reconstruction-plan, canvas-app «Вспомогательная панель инструмента»): добавлена панель «Гипсокартон»
     // TCR (change furniture-plan-table, canvas-app «Вспомогательная панель инструмента»): добавлена панель группы «Мебель»
     // TCR (change add-ceiling-plan, canvas-app «Вспомогательная панель инструмента»): добавлена панель «Натяжной потолок»
-    expect(count(toolbar, /class="[^"]*\btool-panel\b/g)).toBe(11) // TCR (change add-light-lines, canvas-app «Кнопка «Линия освещения»»): добавлена панель линии; ранее TCR (change add-ceiling-lighting, canvas-app «Вспомогательная панель инструмента»): добавлена панель группы «Освещение»
+    expect(count(toolbar, /class="[^"]*\btool-panel\b/g)).toBe(12) // TCR (change add-light-switch, canvas-app «Панель выключателя»): добавлена панель выключателя; ранее TCR (change add-light-lines, canvas-app «Кнопка «Линия освещения»»): добавлена панель линии; ранее TCR (change add-ceiling-lighting, canvas-app «Вспомогательная панель инструмента»): добавлена панель группы «Освещение»
     expect(panel("ceiling-panel").length).toBeGreaterThan(0)
     expect(panel("furniture-panel").length).toBeGreaterThan(0)
     expect(panel("drywall-panel").length).toBeGreaterThan(0)

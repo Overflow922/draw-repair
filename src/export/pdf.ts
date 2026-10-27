@@ -27,6 +27,7 @@ import { switchingScene } from "../switching/switching-scene"
 import { drawSwitchingScene } from "../switching/switching-render"
 import type { LineLabelView } from "../switching/switching-render"
 import { visibleLines } from "../switching/light-lines"
+import { switchExtent } from "../switching/switch-symbol"
 import { ceilingScene } from "../ceiling/ceiling-scene"
 import { itemCorners } from "../furniture/item"
 import { itemSizeOutsidePoints } from "../furniture/item-size-layout"
@@ -44,7 +45,7 @@ import { calloutLayout } from "../callout/callout-layout"
 import { calloutsOf } from "../callout/callout-store"
 import { notesOf } from "../notes/notes-store"
 import { CHAR_WIDTH } from "../doorway/element-label"
-import type { Battery, Callout, Communication, Dimension, Drawing, DrywallWall, LightFixture, Point, Screed, StretchCeiling, FurnitureItem, Unit, Wall, WallElement } from "../types"
+import type { Battery, Callout, Communication, Dimension, Drawing, DrywallWall, LightFixture, LightSwitch, Point, Screed, StretchCeiling, FurnitureItem, Unit, Wall, WallElement } from "../types"
 import { FONT_B64 } from "./font"
 import { PAGE_FORMATS_MM } from "./page-format"
 import type { PageFormat } from "./page-format"
@@ -205,6 +206,8 @@ export interface SwitchingLayer {
   lights: readonly LightFixture[]
   // метки линий освещения существующих светильников (change add-light-lines, design D7)
   lineLabels: readonly LineLabelView[]
+  // выключатели плана (change add-light-switch, design D7)
+  switches: readonly LightSwitch[]
 }
 
 export interface CeilingLayer {
@@ -368,6 +371,7 @@ export function pagesOf(drawing: Drawing): PlanPage[] {
             items: scene.items,
             lights: scene.lights,
             lineLabels: visibleLines(drawing.switching?.lines ?? [], scene.lights).map(({ line, light }) => ({ id: line.id, name: line.name, at: { x: light.x, y: light.y } })),
+            switches: drawing.switching?.switches ?? [],
           },
           title: plan.label,
         }
@@ -410,7 +414,9 @@ export function pageBounds(page: PlanPage, scale: number): BBox {
   // центры объектов освещения: знаки постоянного размера лежат у центров, расстояния — внутри помещений (change add-ceiling-lighting)
   const lights = (page.ceiling?.lights ?? page.switching?.lights ?? []).map((l): Point => ({ x: l.x, y: l.y }))
   const switchingItems = (page.switching?.items ?? []).flatMap(itemCorners)
-  const extra = [...marks, ...bodies, ...rects, ...calloutPoints, ...rough, ...reconstruction, ...items, ...ceilingItems, ...switchingItems, ...lights]
+  // выключатели вместе с подписями клавиш (change add-light-switch): знак постоянного размера в мм бумаги
+  const switches = (page.switching?.switches ?? []).flatMap((s) => switchExtent(s, kMm, PDF_METRICS.symbolMmPx))
+  const extra = [...marks, ...bodies, ...rects, ...calloutPoints, ...rough, ...reconstruction, ...items, ...ceilingItems, ...switchingItems, ...lights, ...switches]
   const walls = page.reconstruction ? [...page.walls, ...page.reconstruction.drywall] : page.walls
   return wallsBBox(walls, page.dimensions, 0.5 * scale, page.doorways, scale, extra, batteries, page.furniture?.items)
 }
@@ -478,7 +484,7 @@ function drawPage(
     else if (page.ceiling !== undefined)
       drawCeilingScene(ctx, w, h, { ...scene, items: page.ceiling.items, ceilings: page.ceiling.ceilings, lights: page.ceiling.lights, lightBodies: page.ceiling.lightBodies }, unit, view, { ...opts, translucent: pdfTranslucent(doc) })
     // страница «Группы включения»: те же слои без потолков и расстояний (change add-switching-plan, design D7)
-    else if (page.switching !== undefined) drawSwitchingScene(ctx, w, h, { ...scene, items: page.switching.items, lights: page.switching.lights, lineLabels: page.switching.lineLabels }, unit, view, { ...opts, translucent: pdfTranslucent(doc) })
+    else if (page.switching !== undefined) drawSwitchingScene(ctx, w, h, { ...scene, items: page.switching.items, lights: page.switching.lights, lineLabels: page.switching.lineLabels, switches: page.switching.switches }, unit, view, { ...opts, translucent: pdfTranslucent(doc) })
     else drawReconstructionScene(ctx, w, h, scene, unit, view, opts)
     return
   }

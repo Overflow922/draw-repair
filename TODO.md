@@ -1236,3 +1236,29 @@ Follow-ups from implementing `add-light-lines` (2026-10-27).
 ## Out of scope
 
 - [ ] Checks «line without a switch» and «switch without a line», and the «Количество» column of the legend (see the `add-switching-plan` section above): not part of this change.
+
+
+---
+
+Follow-ups from implementing `add-light-switch` (2026-10-27).
+
+## Bugs
+
+- [ ] Key labels of two switches standing close on one wall overlap (design «Risks» accepts it: move the block by hand); no layout pass.
+- [ ] The opening body for switch faces (`openingBodies`, `src/switching/switch-reach.ts`) reaches 10 cm past each wall face (`OPENING_PAD_CM`) so plaster and drywall faces inside a doorway are also refused; a wall parallel and closer than 10 cm to a door leaf's wall would lose a few cm of face there. Not met in the drawings tried.
+
+## Tests
+
+- [ ] `src/main.ts` wiring of the switch tool (pointerdown / pointerup / Delete / Escape / undo branches, `pressSwitches`, `releaseSwitch`, the in-place key editor) has no automated test; the tool, symbol, faces, storage, history, render and PDF are unit-tested, the DOM flow is checked by hand in the browser.
+- [ ] «Рамка не выделяет» (marquee does not select switches) holds because the plan «Группы включения» never starts a marquee; no test pins it.
+- [ ] No mutation testing tool is installed in the project; nothing in this change was mutation-tested.
+
+## Docs
+
+- [ ] Design D7 of `add-light-switch` says the `switchingPlan` history entry is one snapshot of `lines`, `switches`, `callouts`, `notes`. Implemented as a separate entry kind `switches` (snapshot of the switch list, like `switching` for lines and `callouts` / `notes` for theirs) so the existing line-history API and tests stay unchanged. Align design D7 with the code.
+- [ ] Spec «Выделение, перемещение, правка…» says Escape and focus loss of the key field apply a valid value; the shared `openNumberEditor` (ceiling label, line label) closes without applying on Escape. The switch field applies on close through `editor.text()`; the other fields keep their behaviour. Decide whether the plan's other in-place fields should follow.
+- [ ] Spec and design D4 said the key dash goes right of the stalk (north wall); `references/lines.png` shows it on the left. Changed to the left with the user's confirmation (2026-10-27) in both artifacts.
+
+## Out of scope
+
+- [ ] Checks «line without a key» and «key without a line», highlight of a line's group when a key is selected, mounting height of a switch, the «Количество» column of the legend (see the `add-switching-plan` section above): not part of this change.

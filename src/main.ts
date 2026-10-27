@@ -1,5 +1,5 @@
 import "./style.css"
-import { cloneScene, loadHistory, planHistory, record, recordCallouts, recordCeilingPlan, recordDemolition, recordFurniture, recordNotes, recordPlumbing, recordRough, recordSnapshot, redoCallouts, redoCeilingPlan, redoDemolition, redoEntry, redoFurniture, redoNotes, redoPlumbing, redoRough, saveHistory, undoCallouts, undoCeilingPlan, undoDemolition, undoEntry, undoFurniture, undoNotes, undoPlumbing, undoRough, recordSwitchingLines, redoSwitchingLines, undoSwitchingLines } from "./history"
+import { cloneScene, loadHistory, planHistory, record, recordCallouts, recordCeilingPlan, recordDemolition, recordFurniture, recordNotes, recordPlumbing, recordRough, recordSnapshot, redoCallouts, redoCeilingPlan, redoDemolition, redoEntry, redoFurniture, redoNotes, redoPlumbing, redoRough, saveHistory, undoCallouts, undoCeilingPlan, undoDemolition, undoEntry, undoFurniture, undoNotes, undoPlumbing, undoRough, recordSwitchingLines, redoSwitchingLines, undoSwitchingLines, recordSwitches, redoSwitches, undoSwitches } from "./history"
 import type { Scene } from "./history"
 import { dimLevelSnap, dimensionGeometry, dimensionOffsetAt, hitWall, nearestDimAnchor, dimPointPoint, pointsEqual, segmentIntersectsRect, snap, snapOthers, snapWithSource, zoomAt } from "./geometry"
 import type { DimGeometry, SnapResult } from "./geometry"
@@ -104,6 +104,11 @@ import { createLightLineTool } from "./switching/light-line-tool"
 import type { LightLineToolHost } from "./switching/light-line-tool"
 import { lineLabelBox } from "./switching/light-line-label"
 import { lineNumber, lineLabel, parseLineName, storedLines, visibleLines } from "./switching/light-lines"
+import { keyLabel, parseKeyCount, parseKeyLines, storedSwitches } from "./switching/light-switch"
+import { openingBodies } from "./switching/switch-reach"
+import { keyGeometry } from "./switching/switch-symbol"
+import { createSwitchTool } from "./switching/switch-tool"
+import type { SwitchToolHost } from "./switching/switch-tool"
 import { PLASTER_OBSTACLE_PREFIX } from "./reconstruction/plaster-obstacles"
 import { renderReconstruction } from "./reconstruction/reconstruction-render"
 import { reconstructionScene } from "./reconstruction/reconstruction-scene"
@@ -133,7 +138,7 @@ import { afterPlace, escapeAction, resumesAfterSelectionCleared, selectionAllowe
 import { loadThemeChoice, paletteOf, resolveTheme, saveThemeChoice, themeToggleTitle, toggledTheme } from "./theme"
 import type { Theme } from "./theme"
 import { GRID_STEP_CM, MATERIALS, PX_PER_CM } from "./types"
-import type { Battery, BatteryMark, Communication, DemolitionMark, Dimension, DimPoint, Drawing, DrywallWall, Material, PlasterMark, Point, RightAngleMark, RoomRecord, Screed, StretchCeiling, FurnitureItem, LightFixture, LightKind, LightLine, Unit, View, Wall, WallElement } from "./types"
+import type { Battery, BatteryMark, Communication, DemolitionMark, Dimension, DimPoint, Drawing, DrywallWall, Material, PlasterMark, Point, RightAngleMark, RoomRecord, Screed, StretchCeiling, FurnitureItem, LightFixture, LightKind, LightLine, LightSwitch, Unit, View, Wall, WallElement } from "./types"
 
 const canvas = document.querySelector<HTMLCanvasElement>("#canvas")!
 const canvasWrap = document.querySelector<HTMLElement>("#canvas-wrap")!
@@ -168,6 +173,9 @@ const ceilingDropInput = document.querySelector<HTMLInputElement>("#ceiling-drop
 const toolLightLineBtn = document.querySelector<HTMLButtonElement>("#tool-light-line")!
 const lightLinePanel = document.querySelector<HTMLElement>("#light-line-panel")!
 const lightLineInput = document.querySelector<HTMLInputElement>("#light-line-number")!
+const toolLightSwitchBtn = document.querySelector<HTMLButtonElement>("#tool-light-switch")!
+const lightSwitchPanel = document.querySelector<HTMLElement>("#light-switch-panel")!
+const lightSwitchInput = document.querySelector<HTMLInputElement>("#light-switch-keys")!
 const toolLightBtn = document.querySelector<HTMLButtonElement>("#tool-light")!
 const lightPanel = document.querySelector<HTMLElement>("#light-panel")!
 const lightKindButtons = [...lightPanel.querySelectorAll<HTMLButtonElement>("[data-light]")].flatMap((button): [LightKind, HTMLButtonElement][] => {
@@ -1325,6 +1333,116 @@ function pressLines(p: Point): void {
   redraw()
 }
 
+// выключатели плана «Группы включения» (change add-light-switch, design D5): число клавиш для новых выключателей хранится в сеансе,
+// шаг истории — снимок списка выключателей до операции; грани и проёмы считаются один раз на сцену
+const NO_SWITCHES: LightSwitch[] = []
+const switchesOf = (): LightSwitch[] => current().switching?.switches ?? NO_SWITCHES
+let switchKeysCurrent = 1
+let switchPanelOpen = false
+let switchEditor: { editor: NumberEditor; id: string; index: number } | null = null
+// нажатие на кружок или подпись выделенного выключателя: поле на месте откроется при отпускании без сдвига
+let switchPressEdit: { id: string; index: number } | null = null
+let switchGeometryCache: { scene: SwitchingScene; bodies: Shape[]; openings: Shape[] } | null = null
+function switchGeometry(): { bodies: Shape[]; openings: Shape[] } {
+  const s = switchingNow()
+  if (switchGeometryCache?.scene !== s) switchGeometryCache = { scene: s, bodies: furnitureReachBodies(s.base), openings: openingBodies(s.base.underlay, s.base.base.doorways) }
+  return switchGeometryCache
+}
+
+const switchHost: SwitchToolHost = {
+  bodies: () => switchGeometry().bodies,
+  openings: () => switchGeometry().openings,
+  switches: switchesOf,
+  setSwitches: (next) => {
+    const stored = storedSwitches(current().switching, next)
+    if (stored) current().switching = stored
+    else delete current().switching
+  },
+  record: () => {
+    nudgeBurst = false
+    recordSwitches(activeHistory(), switchesOf())
+  },
+  changed: () => {
+    dirty = true
+  },
+  redraw: () => redraw(),
+  newId: () => crypto.randomUUID(),
+  keyCount: () => switchKeysCurrent,
+  view: () => view,
+  unitsPerMm: SCREEN_METRICS.symbolMmPx,
+}
+const switchTool = createSwitchTool(switchHost)
+
+// панель «Выключатель»: число клавиш выделенного выключателя, иначе значение для новых
+function syncSwitchPanel(): void {
+  lightSwitchPanel.classList.toggle("open", switchPanelOpen)
+  toolLightSwitchBtn.classList.toggle("active", tool === "lightSwitch")
+  const selected = switchTool.selected()
+  if (document.activeElement !== lightSwitchInput) lightSwitchInput.value = String(selected ? selected.keys.length : switchKeysCurrent)
+}
+
+const closeSwitchEditor = (): void => {
+  switchEditor?.editor.close()
+  switchEditor = null
+}
+
+// сброс поля на месте, выделения и панели (смена плана, чертежа и инструмента, отмена и повтор)
+const resetSwitches = (): void => {
+  closeSwitchEditor()
+  switchPressEdit = null
+  switchTool.clearSelection()
+  switchPanelOpen = false
+  syncSwitchPanel()
+}
+
+// поле правки списка линий клавиши на месте её подписи; Enter, Escape и потеря фокуса применяют допустимое значение, недопустимое
+// не применяется (spec light-switch «Выделение, перемещение, правка линий и удаление выключателя»)
+function openSwitchEditor(sw: LightSwitch, index: number): void {
+  closeSwitchEditor()
+  const k = PX_PER_CM * view.zoom
+  const at = keyGeometry(sw, index, { x: (sw.at.x - view.pan.x) * k, y: (sw.at.y - view.pan.y) * k }, SCREEN_METRICS.symbolMmPx).label
+  const apply = (text: string): void => {
+    const lines = parseKeyLines(text)
+    if (lines !== null) switchTool.setKeyLines(sw.id, index, lines)
+  }
+  const editor = openNumberEditor(canvasWrap, at, keyLabel(sw.keys[index]?.lines ?? []), apply, () => {
+    if (switchEditor?.editor !== editor) return
+    switchEditor = null
+    apply(editor.text())
+    redraw()
+  })
+  switchEditor = { editor, id: sw.id, index }
+}
+
+// без инструмента: нажатие на знак выключателя выделяет его и открывает панель; нажатие на кружок или подпись выделенного
+// открывает поле на месте (при отпускании без сдвига); иначе выделение снимается. Приоритет: метка линии главнее выключателя
+function pressSwitches(p: Point, e: PointerEvent): boolean {
+  closeSwitchEditor()
+  const hit = lineTool.labelAt(p) ? null : switchTool.press(p)
+  if (!hit) {
+    resetSwitches()
+    return false
+  }
+  resetLines()
+  switchPanelOpen = true
+  if (hit.wasSelected && (hit.hit.part === "circle" || hit.hit.part === "label")) switchPressEdit = { id: hit.switch.id, index: hit.hit.keyIndex }
+  if (switchTool.beginDrag(p)) canvas.setPointerCapture(e.pointerId)
+  syncSwitchPanel()
+  redraw()
+  return true
+}
+
+// отпускание после нажатия на выключатель: перенос завершается шагом истории, нажатие без сдвига на кружок или подпись открывает поле
+function releaseSwitch(): void {
+  if (!switchTool.dragging()) return
+  const edit = switchPressEdit
+  switchPressEdit = null
+  const moved = switchTool.endDrag()
+  const sw = edit && !moved ? switchesOf().find((s) => s.id === edit.id) : undefined
+  if (edit && sw) openSwitchEditor(sw, edit.index)
+  syncSwitchPanel()
+}
+
 const lightGroupState = (): LightGroupState => ({ current: lightCurrent, active: tool === "light" ? lightCurrent : "other", panelOpen: lightPanelOpen })
 
 function applyLightGroup(next: LightGroupState): void {
@@ -1882,6 +2000,7 @@ function setTool(next: Tool): void {
   resetRough()
   resetCeiling()
   resetLines()
+  resetSwitches()
   itemTool.reset()
   furniturePanelOpen = false
   setWallPanel(false)
@@ -2043,6 +2162,7 @@ function redraw(): void {
   syncRoughPanels()
   syncCeilingPanel()
   syncLinePanel()
+  syncSwitchPanel()
   syncDrywallPanel()
   syncFurniturePanel()
   updateLengthBox()
@@ -2210,6 +2330,7 @@ function drawSwitchingPlan(): void {
   const erasingCallout = tool === "eraser" && cursor ? calloutTool.pick(cursor) : null
   const erasingLine = tool === "eraser" && cursor && !erasingCallout ? lineTool.eraseTarget(cursor) : null
   const hoveredLight = tool === "lightLine" && cursor ? lineTool.hoverTarget(cursor) : null
+  const erasingSwitch = tool === "eraser" && cursor && !erasingCallout && !erasingLine ? switchTool.eraseTarget(cursor) : null
   renderSwitching(
     canvas,
     {
@@ -2225,6 +2346,10 @@ function drawSwitchingPlan(): void {
       lineLabels: visibleLines(linesOf(), s.lights).map(({ line, light }) => ({ id: line.id, name: line.name, at: { x: light.x, y: light.y } })),
       selectedLineId: lineTool.selectedId(),
       erasingLineId: erasingLine,
+      switches: switchTool.displayed(),
+      switchGhost: tool === "lightSwitch" && cursor ? switchTool.ghost(cursor) : null,
+      selectedSwitchId: switchTool.selectedId(),
+      erasingSwitchId: erasingSwitch,
       callouts: calloutTool.displayList(),
       selectedCalloutId: calloutTool.selectedId(),
       erasingCalloutId: erasingCallout?.id ?? null,
@@ -2763,8 +2888,13 @@ canvas.addEventListener("pointermove", (e) => {
     return
   }
   if (onSwitching()) {
-    // «Линия освещения» (подсветка светильника), «Линейка», «Ластик» и «Выноска» следят за курсором; подложка и освещение не правятся
-    if (tool === "lightLine" || tool === "ruler" || tool === "eraser" || tool === "callout") {
+    // перетаскивание выключателя; «Линия освещения» (подсветка светильника), «Выключатель» (призрак), «Линейка», «Ластик» и «Выноска»
+    // следят за курсором; подложка и освещение не правятся
+    if (switchTool.dragging()) {
+      switchTool.dragTo(toWorld(e))
+      return
+    }
+    if (tool === "lightLine" || tool === "lightSwitch" || tool === "ruler" || tool === "eraser" || tool === "callout") {
       cursor = toWorld(e)
       if (tool === "callout") calloutTool.hover(cursor)
       redraw()
@@ -2821,7 +2951,7 @@ canvas.addEventListener("pointerleave", () => {
   if (tool === "plaster") plasterTool.hover(null)
   if (tool === "rightAngle") rightAngleTool.hover(null)
   if (tool === "furniture") itemTool.hover(null)
-  if ((tool === "ruler" || (tool === "eraser" && (onDemolition() || onRough() || onCeiling() || onSwitching())) || (tool === "light" && onCeiling()) || (tool === "lightLine" && onSwitching())) && cursor) cursor = null
+  if ((tool === "ruler" || (tool === "eraser" && (onDemolition() || onRough() || onCeiling() || onSwitching())) || (tool === "light" && onCeiling()) || ((tool === "lightLine" || tool === "lightSwitch") && onSwitching())) && cursor) cursor = null
   redraw()
 })
 
@@ -2906,17 +3036,18 @@ canvas.addEventListener("pointerdown", (e) => {
     return
   }
   if (onSwitching()) {
-    // без инструмента: выноска, иначе текст метки линии; подложка, мебель и освещение не выделяются
+    // без инструмента: выноска, иначе текст метки линии, иначе знак выключателя; подложка, мебель и освещение не выделяются
     if (!selectionAllowed(tool)) return
     const p = toWorld(e)
     if (calloutTool.press(p)) {
       suppressClick = true
       canvas.setPointerCapture(e.pointerId)
       resetLines()
+      resetSwitches()
       return
     }
     if (calloutTool.selectedId() !== null) calloutTool.deselect()
-    pressLines(p)
+    if (!pressSwitches(p, e)) pressLines(p)
     return
   }
   if (onDemolition()) {
@@ -3072,7 +3203,10 @@ canvas.addEventListener("pointerup", (e) => {
     if (lightTool.dragging()) lightTool.endDrag()
     return
   }
-  if (onSwitching()) return
+  if (onSwitching()) {
+    if (e.button === 0) releaseSwitch()
+    return
+  }
   if (onDemolition() && e.button === 0) {
     // поставленная пометка остаётся выделенной, инструмент снимается — как у проёма (change demolition-select-after-mark)
     if (tool === "demolition" && batteryPress) {
@@ -3234,7 +3368,8 @@ canvas.addEventListener("click", (e) => {
     const at = toWorld(e)
     if (tool === "callout") calloutTool.click(at)
     else if (tool === "lightLine") lineTool.place(at)
-    else if (tool === "eraser" && !calloutTool.eraseAt(at)) lineTool.erase(at)
+    else if (tool === "lightSwitch") switchTool.place(at)
+    else if (tool === "eraser" && !calloutTool.eraseAt(at) && !lineTool.erase(at)) switchTool.erase(at)
     return
   }
   // на плане «Демонтаж» жесты разбирает адаптер по нажатию и отпусканию (change demolition-plan, design D10);
@@ -3725,6 +3860,29 @@ lightLineInput.addEventListener("keydown", (e) => {
   e.stopPropagation()
   if (e.key === "Enter" || e.key === "Escape") lightLineInput.blur()
 })
+// «Выключатель»: кнопка включает инструмент и открывает панель, повторный клик по активному — переключает панель
+toolLightSwitchBtn.addEventListener("click", () => {
+  if (tool !== "lightSwitch") {
+    setTool("lightSwitch")
+    switchPanelOpen = true
+  } else switchPanelOpen = !switchPanelOpen
+  syncSwitchPanel()
+})
+// поле «Клавиш»: меняет число клавиш выделенного выключателя одним шагом истории, иначе — значение для новых; недопустимое не применяется
+lightSwitchInput.addEventListener("change", () => {
+  const count = parseKeyCount(lightSwitchInput.value)
+  if (count !== null) {
+    if (switchTool.selectedId() !== null) switchTool.setSelectedKeyCount(count)
+    else switchKeysCurrent = count
+  }
+  lightSwitchInput.blur()
+  syncSwitchPanel()
+  redraw()
+})
+lightSwitchInput.addEventListener("keydown", (e) => {
+  e.stopPropagation()
+  if (e.key === "Enter" || e.key === "Escape") lightSwitchInput.blur()
+})
 // группа «Освещение»: переходы кнопки группы и панели — как у групп «Проёмы» и «Коммуникации»
 toolLightBtn.addEventListener("click", () => applyLightGroup(lightGroupClick(lightGroupState())))
 for (const [kind, button] of lightKindButtons) button.addEventListener("click", () => applyLightGroup(lightGroupPick(lightGroupState(), kind)))
@@ -3788,6 +3946,7 @@ function setPlan(id: PlanId): void {
   closeNotesPanel() // панель закрывается до смены плана: поле показывает список прежнего плана
   commitCeilingEditor() // шаг истории — на прежнем плане
   commitLineEditor()
+  closeSwitchEditor()
   commitWorking()
   current().activePlan = id
   activate(store.activeId)
@@ -3814,6 +3973,7 @@ function activate(id: string): void {
   calloutTool.commitEditor()
   commitCeilingEditor()
   commitLineEditor()
+  closeSwitchEditor()
   closeNotesPanel()
   commitWorking()
   store.activeId = id
@@ -3827,6 +3987,7 @@ function activate(id: string): void {
   resetRough()
   resetCeiling()
   resetLines()
+  resetSwitches()
   itemTool.reset()
   clearChain()
   closeNumberEditor()
@@ -3884,6 +4045,7 @@ function resetEditing(): void {
   resetRough()
   resetCeiling()
   resetLines()
+  resetSwitches()
   itemTool.reset()
   clearChain()
   closeNumberEditor()
@@ -4014,6 +4176,16 @@ function stepLines(step: typeof undoSwitchingLines): void {
   redraw()
 }
 
+// отмена или повтор шага выключателей плана «Группы включения» (change add-light-switch, design D7)
+function stepSwitches(step: typeof undoSwitches): void {
+  const next = step(activeHistory(), switchesOf())
+  if (!next) return
+  switchHost.setSwitches(next)
+  dirty = true
+  resetEditing()
+  redraw()
+}
+
 function stepCallouts(step: typeof undoCallouts): void {
   const next = step(activeHistory(), calloutsOf(current(), activePlanOf(current())))
   if (!next) return
@@ -4055,6 +4227,10 @@ function undo(): void {
   }
   if (h.past[h.past.length - 1]?.kind === "switching") {
     stepLines(undoSwitchingLines)
+    return
+  }
+  if (h.past[h.past.length - 1]?.kind === "switches") {
+    stepSwitches(undoSwitches)
     return
   }
   if (h.past[h.past.length - 1]?.kind === "callouts") {
@@ -4108,6 +4284,10 @@ function redo(): void {
   }
   if (h.future[h.future.length - 1]?.kind === "switching") {
     stepLines(redoSwitchingLines)
+    return
+  }
+  if (h.future[h.future.length - 1]?.kind === "switches") {
+    stepSwitches(redoSwitches)
     return
   }
   if (h.future[h.future.length - 1]?.kind === "callouts") {
@@ -4222,11 +4402,14 @@ window.addEventListener("keydown", (e) => {
       if (!calloutTool.dragging()) calloutTool.deleteSelected()
       return
     }
-    // подложка, мебель и освещение на плане «Группы включения» не удаляются; удаляется только выделенная метка линии
+    // подложка, мебель и освещение на плане «Группы включения» не удаляются; удаляется только выделенная метка линии или выключатель
     if (onSwitching()) {
+      if (switchTool.dragging()) return
       closeLineEditor()
-      lineTool.deleteSelected()
+      closeSwitchEditor()
+      if (!lineTool.deleteSelected()) switchTool.deleteSelected()
       resetLines()
+      resetSwitches()
       return
     }
     if (onFurniture()) {
@@ -4297,15 +4480,19 @@ window.addEventListener("keydown", (e) => {
   if (e.key === "Escape" && onSwitching()) {
     const action = escapeAction({
       tool,
-      gestureActive: false,
+      gestureActive: switchTool.dragging(),
       dimensionDraft: false,
       calloutDraft: calloutTool.hasDraft(),
-      hasSelection: calloutTool.selectedId() !== null || lineTool.selectedId() !== null,
+      hasSelection: calloutTool.selectedId() !== null || lineTool.selectedId() !== null || switchTool.selectedId() !== null,
     })
-    if (action === "cancel-callout-draft") calloutTool.cancelDraft()
+    if (action === "end-gesture") {
+      resetSwitches()
+      redraw()
+    } else if (action === "cancel-callout-draft") calloutTool.cancelDraft()
     else if (action === "clear-selection") {
       calloutTool.deselect()
       resetLines()
+      resetSwitches()
       redraw()
     } else if (action === "deactivate-tool") setTool("none")
     return

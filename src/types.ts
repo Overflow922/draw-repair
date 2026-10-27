@@ -363,11 +363,26 @@ export interface LightLine {
   name: string
 }
 
-// Собственные объекты плана «Группы включения» (change add-switching-plan, design D2): метки линий освещения, выноски и
+// Клавиша выключателя (change add-light-switch, design D1): имена включаемых линий «L<n>» или «LV<n>», без повторов, в порядке ввода
+export interface SwitchKey {
+  lines: string[]
+}
+
+// Выключатель: блок из 1–6 клавиш на грани стены. at — центр блока на грани, angle — угол наружной нормали грани в градусах
+export interface LightSwitch {
+  id: string
+  at: Point
+  angle: number
+  keys: SwitchKey[]
+}
+
+// Собственные объекты плана «Группы включения» (change add-switching-plan, design D2): метки линий освещения, выключатели, выноски и
 // примечания; освещение берётся из плана «Потолки и освещение» и здесь не хранится
 export interface SwitchingContent {
   // метки в порядке постановки (change add-light-lines, design D1); пустой список не пишется
   lines?: LightLine[]
+  // выключатели в порядке постановки (change add-light-switch, design D1); пустой список не пишется
+  switches?: LightSwitch[]
   callouts?: Callout[]
   notes?: string[]
 }

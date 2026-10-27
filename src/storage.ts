@@ -1,6 +1,7 @@
 import { isDropMm } from "./ceiling/ceiling"
 import { isLightKind } from "./ceiling/lights"
 import { isLineName } from "./switching/light-lines"
+import { isKeyCount, isKeyLineName } from "./switching/light-switch"
 import { mergeAll } from "./demolition/marks"
 import { isFurnitureKind } from "./furniture/furniture-kinds"
 import { normalizeAngle } from "./furniture/item"
@@ -9,7 +10,7 @@ import { isPlanId } from "./plans"
 import { mergeAllPlaster } from "./rough/plaster-marks"
 import { PLASTER_THICKNESS, SCREED_THICKNESS, isThickness } from "./rough/rough-model"
 import { isDoor, isWindow, normalizeMaterial } from "./types"
-import type { Battery, BatteryCornerPoint, BatteryMark, Callout, CeilingContent, Communication, CornerRef, DemolitionMark, Dimension, DimPoint, Doorway, Drawing, DrawingStore, DrywallWall, EdgePoint, EdgeRef, FurnitureContent, ItemPoint, JambPoint, LightFixture, LightLine, MountingContent, PlasterMark, PlumbingContent, Point, ReconstructionContent, RightAngleMark, RoomRecord, Screed, FurnitureItem, StretchCeiling, SwitchingContent, View, Wall, WallDoor, WallElement, WallWindow } from "./types"
+import type { Battery, BatteryCornerPoint, BatteryMark, Callout, CeilingContent, Communication, CornerRef, DemolitionMark, Dimension, DimPoint, Doorway, Drawing, DrawingStore, DrywallWall, EdgePoint, EdgeRef, FurnitureContent, ItemPoint, JambPoint, LightFixture, LightLine, LightSwitch, MountingContent, PlasterMark, PlumbingContent, Point, ReconstructionContent, RightAngleMark, RoomRecord, Screed, FurnitureItem, StretchCeiling, SwitchingContent, SwitchKey, View, Wall, WallDoor, WallElement, WallWindow } from "./types"
 
 const KEY = "draw-repair:drawing"
 
@@ -449,17 +450,41 @@ export const isLightLine = (l: unknown): l is LightLine => {
 
 export const copyLightLine = (l: LightLine): LightLine => ({ id: l.id, targetId: l.targetId, name: l.name })
 
-// объекты плана «Группы включения» при загрузке (change add-switching-plan, design D2): метки линий освещения (некорректные
-// отбрасываются по одной; пустой список не пишется), выноски и примечания по общим правилам; поле, не являющееся объектом,
-// читается как отсутствующее; освещение и мебель в поле не хранятся
+// выключатель (change add-light-switch, design D1): непустой идентификатор, центр и угол — конечные числа, от одной до шести клавиш,
+// у каждой имена «L<n>» или «LV<n>» без повторов; некорректный выключатель отбрасывается целиком
+const isSwitchKey = (k: unknown): k is SwitchKey => {
+  if (typeof k !== "object" || k === null) return false
+  const lines = (k as Record<string, unknown>).lines
+  return Array.isArray(lines) && lines.every(isKeyLineName) && new Set(lines).size === lines.length
+}
+
+export const isLightSwitch = (s: unknown): s is LightSwitch => {
+  if (typeof s !== "object" || s === null) return false
+  const x = s as Record<string, unknown>
+  return typeof x.id === "string" && x.id !== "" && isPoint(x.at) && typeof x.angle === "number" && Number.isFinite(x.angle) &&
+    Array.isArray(x.keys) && isKeyCount(x.keys.length) && x.keys.every(isSwitchKey)
+}
+
+export const copyLightSwitch = (s: LightSwitch): LightSwitch => ({
+  id: s.id,
+  at: { x: s.at.x, y: s.at.y },
+  angle: s.angle,
+  keys: s.keys.map((k) => ({ lines: [...k.lines] })),
+})
+
+// объекты плана «Группы включения» при загрузке (change add-switching-plan, design D2): метки линий освещения и выключатели
+// (некорректные отбрасываются по одной; пустой список не пишется), выноски и примечания по общим правилам; поле, не являющееся
+// объектом, читается как отсутствующее; освещение и мебель в поле не хранятся
 function loadSwitching(raw: unknown): { switching?: SwitchingContent } {
   if (typeof raw !== "object" || raw === null || Array.isArray(raw)) return {}
   const x = raw as Record<string, unknown>
   const notes = loadNoteList(x.notes)
   const lines = Array.isArray(x.lines) ? x.lines.filter(isLightLine).map(copyLightLine) : []
+  const switches = Array.isArray(x.switches) ? x.switches.filter(isLightSwitch).map(copyLightSwitch) : []
   return {
     switching: {
       ...(lines.length === 0 ? null : { lines }),
+      ...(switches.length === 0 ? null : { switches }),
       ...(x.callouts === undefined ? null : { callouts: loadCalloutList(x.callouts) }),
       ...(notes === undefined ? null : { notes }),
     },

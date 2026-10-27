@@ -6,7 +6,8 @@ import { PDF_METRICS, SAMPLE_LENGTH_MM, SAMPLE_THICKNESS_MM, drawLegendSample, t
 import { LIGHT_PALETTE } from "../theme"
 import type { Palette } from "../theme"
 import { PX_PER_CM } from "../types"
-import type { Battery, Communication, LightFixture, LightKind, Point, View, Wall } from "../types"
+import type { Battery, Communication, LightFixture, LightKind, LightSwitch, Point, View, Wall } from "../types"
+import { drawSwitch } from "../switching/switch-symbol"
 import { traceLines } from "../furniture/furniture-render"
 import { kindEntry } from "../furniture/furniture-kinds"
 import type { FurnitureKind } from "../furniture/furniture-kinds"
@@ -121,6 +122,16 @@ function drawLightLineSample(ctx: CanvasRenderingContext2D, origin: Point): void
   ctx.restore()
 }
 
+// образец «Выключатель» (change add-light-switch, design D7): одна клавиша нормалью вверх без подписи, по центру образца;
+// грань стоит на 3 мм ниже середины строки, чтобы знак высотой 6 мм (кружок и стойка) лежал вокруг неё
+const SWITCH_SAMPLE_DROP_MM = 3
+
+function drawLightSwitchSample(ctx: CanvasRenderingContext2D, origin: Point): void {
+  const sample: LightSwitch = { id: "legend-switch", at: { x: 0, y: 0 }, angle: -90, keys: [{ lines: [] }] }
+  const at = { x: origin.x + SAMPLE_LENGTH_MM / 2, y: origin.y + SWITCH_SAMPLE_DROP_MM }
+  drawSwitch(ctx, sample, at, PDF_METRICS.symbolMmPx, LIGHT_PALETTE, PDF_METRICS.font)
+}
+
 // образец вида мебели (change furniture-line-drawings, design D4): рисунок вида в постоянном масштабе легенды, детали вместе с
 // габаритами не уменьшаются; под образец подгоняются только габариты — размеры по умолчанию, уменьшенные в одном отношении
 // настолько, чтобы рисунок поместился; вытянутый предмет повёрнут на 90° по часовой, чтобы длинная сторона шла вдоль образца;
@@ -224,6 +235,8 @@ function drawSample(ctx: CanvasRenderingContext2D, entry: LegendEntry, origin: P
       return drawLightSample(ctx, origin, entry.light)
     case "light-line":
       return drawLightLineSample(ctx, origin)
+    case "light-switch":
+      return drawLightSwitchSample(ctx, origin)
     case "furniture":
       return drawItemSample(ctx, origin, entry.item)
   }
