@@ -127,13 +127,29 @@ describe("страница «Группы включения»", () => {
     expect(textsOn(10)).toEqual(plain)
   })
 
-  it("SW-36: выноски и примечания плана не меняют первые девять страниц", () => {
+  // TCR (change merge-lighting-plans): выноски и примечания единого плана лежат в объектах плана ceiling и выводятся только на
+  // первой его странице (восьмой); на девятой и десятой их нет (spec pdf-export «Выноски только на первом чертеже»)
+  it("SW-36: выноски и примечания плана есть на восьмой странице и их нет на девятой и десятой", () => {
+    build(full())
+    const nineBefore = textsOn(9)
+    const tenBefore = textsOn(10)
+    const d: Drawing = { ...full(), ceiling: { ...full().ceiling, ceilings: full().ceiling?.ceilings ?? [], callouts: [callout], notes: ["Группа 1"] } }
+    build(d)
+    expect(textsOn(8)).toEqual(expect.arrayContaining(["Выключатель у двери", "Группа 1"]))
+    expect(textsOn(9)).toEqual(nineBefore)
+    expect(textsOn(10)).toEqual(tenBefore)
+  })
+
+  it("SW-36b: метки линий, выключатели и вытяжки не меняют первые девять страниц", () => {
     build(full())
     const before = Array.from({ length: 9 }, (_, i) => textsOn(i + 1))
-    const d: Drawing = { ...full(), switching: { callouts: [callout], notes: ["Группа 1"] } }
+    const d: Drawing = {
+      ...full(),
+      switching: { lines: [{ id: "m", targetId: "s", name: "L1" }], exhausts: [{ id: "f", x: 60, y: 60 }], switches: [{ id: "k", at: { x: 100, y: 0 }, angle: 90, keys: [{ lines: ["L1"] }] }] },
+    }
     build(d)
     expect(Array.from({ length: 9 }, (_, i) => textsOn(i + 1))).toEqual(before)
-    expect(textsOn(10)).toEqual(expect.arrayContaining(["Выключатель у двери", "Группа 1"]))
+    expect(textsOn(10)).toEqual(expect.arrayContaining(["L1"]))
   })
 
   it("SW-37: габариты страницы включают центры объектов освещения", () => {

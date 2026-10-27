@@ -7,6 +7,7 @@ import { isFurnitureKind } from "./furniture/furniture-kinds"
 import { normalizeAngle } from "./furniture/item"
 import { loadNoteList } from "./notes/notes-store"
 import { isPlanId } from "./plans"
+import type { PlanId } from "./plans"
 import { mergeAllPlaster } from "./rough/plaster-marks"
 import { PLASTER_THICKNESS, SCREED_THICKNESS, isThickness } from "./rough/rough-model"
 import { isDoor, isWindow, normalizeMaterial } from "./types"
@@ -481,13 +482,22 @@ export const isExhaustFan = (f: unknown): f is ExhaustFan => {
 
 export const copyExhaustFan = (f: ExhaustFan): ExhaustFan => ({ id: f.id, x: f.x, y: f.y })
 
-// объекты плана «Группы включения» при загрузке (change add-switching-plan, design D2): метки линий освещения, выключатели и
-// вытяжки (некорректные отбрасываются по одной; пустой список не пишется), выноски и примечания по общим правилам; поле, не
-// являющееся объектом, читается как отсутствующее; освещение и мебель в поле не хранятся
+// прежний идентификатор плана «Группы включения», слитого с планом «Потолки и освещение» (change merge-lighting-plans, design D1)
+const LEGACY_SWITCHING_PLAN = "switching"
+
+// активный план при загрузке: допустимый сохраняется, прежний «Группы включения» читается как ceiling, остальное отбрасывается
+function loadActivePlan(raw: unknown): { activePlan?: PlanId } {
+  if (isPlanId(raw)) return { activePlan: raw }
+  return raw === LEGACY_SWITCHING_PLAN ? { activePlan: "ceiling" } : {}
+}
+
+// метки линий освещения, выключатели и вытяжки плана «Потолки и освещение» при загрузке (change add-switching-plan, design D2;
+// поле прежнего плана «Группы включения»): некорректные отбрасываются по одной, пустой список не пишется; поле, не являющееся
+// объектом, читается как отсутствующее; освещение и мебель в поле не хранятся. Выноски и примечания прежнего плана не читаются:
+// у единого плана они лежат в объектах плана ceiling (change merge-lighting-plans, design D2)
 function loadSwitching(raw: unknown): { switching?: SwitchingContent } {
   if (typeof raw !== "object" || raw === null || Array.isArray(raw)) return {}
   const x = raw as Record<string, unknown>
-  const notes = loadNoteList(x.notes)
   const lines = Array.isArray(x.lines) ? x.lines.filter(isLightLine).map(copyLightLine) : []
   const switches = Array.isArray(x.switches) ? x.switches.filter(isLightSwitch).map(copyLightSwitch) : []
   const exhausts = Array.isArray(x.exhausts) ? x.exhausts.filter(isExhaustFan).map(copyExhaustFan) : []
@@ -496,8 +506,6 @@ function loadSwitching(raw: unknown): { switching?: SwitchingContent } {
       ...(lines.length === 0 ? null : { lines }),
       ...(switches.length === 0 ? null : { switches }),
       ...(exhausts.length === 0 ? null : { exhausts }),
-      ...(x.callouts === undefined ? null : { callouts: loadCalloutList(x.callouts) }),
-      ...(notes === undefined ? null : { notes }),
     },
   }
 }
@@ -590,7 +598,7 @@ export function parseStore(raw: string): LoadedStore | null {
           name: dr.name,
           view: dr.view,
           // активный план — необязательное поле: допустимое сохраняется, остальное отбрасывается (drawing-plans design D3)
-          ...(isPlanId(activePlan) ? { activePlan } : null),
+          ...loadActivePlan(activePlan),
           walls,
           ...loadDemolition(demolition, dr.walls),
           ...mountingPart,

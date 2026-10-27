@@ -74,12 +74,14 @@ describe("removeLine", () => {
 
 describe("storedLines", () => {
   const l3: LightLine = { id: "x", targetId: "a", name: "L3" }
-  it("метки записываются, выноски и примечания сохраняются", () => {
-    expect(storedLines({ notes: ["n"] }, [l3])).toEqual({ lines: [l3], notes: ["n"] })
+  // TCR (change merge-lighting-plans): выносок и примечаний в поле больше нет — «остальные объекты плана» представляют вытяжки
+  const fan = { id: "f", x: 1, y: 2 }
+  it("метки записываются, остальные объекты плана сохраняются", () => {
+    expect(storedLines({ exhausts: [fan] }, [l3])).toEqual({ lines: [l3], exhausts: [fan] })
   })
   it("пустой список не пишется: ключа lines нет", () => {
-    const next = storedLines({ lines: [l3], notes: ["n"] }, [])
-    expect(next).toEqual({ notes: ["n"] })
+    const next = storedLines({ lines: [l3], exhausts: [fan] }, [])
+    expect(next).toEqual({ exhausts: [fan] })
     expect(next && "lines" in next).toBe(false)
   })
   it("поля не было и меток нет — поле не появляется", () => {

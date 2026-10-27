@@ -7,10 +7,11 @@ import { drawExhaust } from "./exhaust-symbol"
 import { drawLineLabel } from "./light-line-label"
 import { drawSwitch } from "./switch-symbol"
 
-// Отрисовка плана «Группы включения» (change add-switching-plan, design D4): снизу вверх — подложка «Реконструкции», предметы «Мебели»
-// серыми линиями без габаритов, знаки объектов освещения, метки линий (change add-light-lines, design D5), выноски и примечания.
-// Это слои «Потолков и освещения» без натяжных потолков и без расстояний: поэтому сцена идёт через drawCeilingScene с пустым
-// списком потолков и без тел стен для расстояний. Одна функция для холста и PDF.
+// Отрисовка слоёв «Групп включения» (change add-switching-plan, design D4): снизу вверх — подложка «Реконструкции», предметы «Мебели»
+// серыми линиями без габаритов, знаки объектов освещения, вытяжки, метки линий (change add-light-lines, design D5), выключатели,
+// выноски и примечания. Сцена идёт через drawCeilingScene: холст единого плана «Потолки и освещение» передаёт ещё потолки и
+// расстояния светильников, страница PDF «Группы включения» — нет (пустой список потолков, тел стен для расстояний нет). Одна
+// функция для холста и PDF.
 
 // метка линии для рисования: центр светильника в координатах чертежа; выделение и подсветка ластика — только на холсте
 export interface LineLabelView {
@@ -19,7 +20,10 @@ export interface LineLabelView {
   at: Point
 }
 
-export type SwitchingView = Pick<CeilingView, "walls" | "doorways" | "communications" | "batteries" | "pieces" | "drywall" | "callouts" | "selectedCalloutId" | "erasingCalloutId" | "items" | "lights" | "selectedLightId"> & {
+// Слои потолков и расстояний (ceilings, lightBodies, призрак и выделение светильника) нужны холсту единого плана «Потолки и освещение»
+// (change merge-lighting-plans, design D3); страница PDF «Группы включения» их не передаёт
+export type SwitchingView = Pick<CeilingView, "walls" | "doorways" | "communications" | "batteries" | "pieces" | "drywall" | "callouts" | "selectedCalloutId" | "erasingCalloutId" | "items" | "lights" | "selectedLightId"> &
+  Partial<Pick<CeilingView, "ceilings" | "selectedCeilingId" | "erasingCeilingId" | "lightBodies" | "lightDistances" | "lightGhost" | "erasingLightId">> & {
   lineLabels?: readonly LineLabelView[]
   selectedLineId?: string | null
   erasingLineId?: string | null
@@ -70,7 +74,7 @@ export function drawSwitchingScene(ctx: CanvasRenderingContext2D, w: number, h: 
     const ghost = scene.switchGhost
     if (ghost) translucent(GHOST_ALPHA, () => drawSwitch(c, ghost, toScreen(ghost.at), m.symbolMmPx, palette, m.font))
   }
-  drawCeilingScene(ctx, w, h, { ...scene, ceilings: [], aboveLights }, unit, view, opts)
+  drawCeilingScene(ctx, w, h, { ...scene, ceilings: scene.ceilings ?? [], aboveLights }, unit, view, opts)
 }
 
 // то же на холсте страницы (размер и плотность пикселей как у render)

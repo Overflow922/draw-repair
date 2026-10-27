@@ -16,7 +16,7 @@ describe("каталог", () => {
   it("RC-100: «Реконструкция» (reconstruction) — пятый, последний план каталога", () => {
     // TCR (change furniture-plan-table): после «Реконструкции» добавлена «Мебель», она теперь последняя
     // TCR (change add-plumbing-plan): седьмой добавлена «Сантехника»
-    expect(PLANS.map((p) => p.id)).toEqual(["measure", "demolition", "mounting", "rough", "reconstruction", "furniture", "plumbing", "ceiling", "switching"]) // TCR (change add-ceiling-plan): восемь — восьмой план «Потолки и освещение» // TCR (change add-switching-plan): девять — девятый план «Группы включения»
+    expect(PLANS.map((p) => p.id)).toEqual(["measure", "demolition", "mounting", "rough", "reconstruction", "furniture", "plumbing", "ceiling"]) // TCR (change add-ceiling-plan): восемь — восьмой план «Потолки и освещение» // TCR (change merge-lighting-plans): снова восемь — план «Группы включения» слит с «Потолками и освещением»
     expect(PLANS[4]).toEqual({ id: "reconstruction", label: "Реконструкция" })
   })
 

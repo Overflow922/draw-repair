@@ -21,7 +21,7 @@ const initial: LightGroupState = { current: LIGHT_GROUP_DEFAULT, active: "other"
 
 describe("инструменты плана", () => {
   it("CL-G1: «Освещение» — сразу после «Натяжной потолок»; по умолчанию по-прежнему «Натяжной потолок»", () => {
-    expect(toolsOf("ceiling")).toEqual(["stretchCeiling", "light", "callout", "ruler", "notes", "eraser"])
+    expect(toolsOf("ceiling")).toEqual(["stretchCeiling", "light", "lightLine", "lightSwitch", "exhaust", "callout", "ruler", "notes", "eraser"]) // TCR (change merge-lighting-plans)
     expect(defaultToolOf("ceiling")).toBe("stretchCeiling")
   })
 

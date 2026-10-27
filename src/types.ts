@@ -389,8 +389,9 @@ export interface ExhaustState {
   lines: LightLine[]
 }
 
-// Собственные объекты плана «Группы включения» (change add-switching-plan, design D2): метки линий освещения, выключатели, вытяжки,
-// выноски и примечания; освещение берётся из плана «Потолки и освещение» и здесь не хранится
+// Метки линий освещения, выключатели и вытяжки плана «Потолки и освещение»; поле прежнего плана «Группы включения»
+// (change add-switching-plan, design D2). Освещение здесь не хранится, выноски и примечания единого плана лежат в CeilingContent
+// (change merge-lighting-plans, design D2)
 export interface SwitchingContent {
   // вытяжки в порядке постановки (change add-exhaust-fan, design D1); пустой список не пишется
   exhausts?: ExhaustFan[]
@@ -398,8 +399,6 @@ export interface SwitchingContent {
   lines?: LightLine[]
   // выключатели в порядке постановки (change add-light-switch, design D1); пустой список не пишется
   switches?: LightSwitch[]
-  callouts?: Callout[]
-  notes?: string[]
 }
 
 export interface Drawing {
@@ -449,7 +448,8 @@ export interface Drawing {
   plumbing?: PlumbingContent
   // объекты плана «Потолки и освещение»; отсутствие — пустой план, при загрузке не дописывается (add-ceiling-plan design D2)
   ceiling?: CeilingContent
-  // объекты плана «Группы включения»; отсутствие — пустой план, при загрузке не дописывается (add-switching-plan design D2)
+  // метки линий, выключатели и вытяжки плана «Потолки и освещение» (прежнее поле плана «Группы включения»); отсутствие — их нет, при
+  // загрузке не дописывается (add-switching-plan design D2)
   switching?: SwitchingContent
   view: View
 }

@@ -38,7 +38,8 @@ describe("вытяжки в документе", () => {
   })
 
   it("поле без списка вытяжек читается без вытяжек и не дописывается", () => {
-    expect(first(docOf({ notes: ["n"] })).switching).toEqual({ notes: ["n"] })
+    const lines = [{ id: "m", targetId: "t", name: "L1" }]
+    expect(first(docOf({ lines })).switching).toEqual({ lines })
   })
 
   it("пустой список не восстанавливается как поле", () => {

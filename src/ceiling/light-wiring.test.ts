@@ -43,17 +43,17 @@ describe("связки освещения в main.ts", () => {
   it("CL-W3: ластик — выноска, затем объект освещения; по числу объекта освещения потолок не стирается", () => {
     const click = main.slice(main.indexOf('canvas.addEventListener("click"'))
     const ceiling = click.slice(click.indexOf("if (onCeiling())"), click.indexOf("if (onDemolition())"))
-    expect(inOrder(ceiling, ["calloutTool.eraseAt(at)", "lightTool.erase(at)", "lightTool.numberAt(at)", "ceilingTool.erase(at)"])).toBe(true)
+    expect(inOrder(ceiling, ["calloutTool.eraseAt(at)", "lineTool.erase(at)", "switchTool.erase(at)", "exhaustTool.erase(at)", "lightTool.erase(at)", "lightTool.numberAt(at)", "ceilingTool.erase(at)"])).toBe(true)
     expect(ceiling).toContain('tool === "light") lightTool.place(at)')
     // подсветка ластика — с тем же порядком
     const draw = body("function drawCeilingPlan(")
-    expect(inOrder(draw, ["calloutTool.pick(cursor)", "lightTool.eraseTarget(cursor)", "lightTool.numberAt(cursor)", "ceilingTool.eraseTarget(cursor)"])).toBe(true)
+    expect(inOrder(draw, ["calloutTool.pick(erasing)", "lineTool.eraseTarget(erasing)", "switchTool.eraseTarget(erasing)", "exhaustTool.eraseTarget(erasing)", "lightTool.eraseTarget(erasing)", "lightTool.numberAt(erasing)", "ceilingTool.eraseTarget(erasing)"])).toBe(true)
   })
 
   it("CL-W4: без инструмента нажатие — выноска, затем число или знак объекта освещения, затем подпись потолка", () => {
     const down = main.slice(main.indexOf('canvas.addEventListener("pointerdown"'))
     const ceiling = down.slice(down.indexOf("if (onCeiling())"), down.indexOf("if (onDemolition())"))
-    expect(inOrder(ceiling, ["selectionAllowed(tool)", "calloutTool.press(p)", "lightTool.press(p)", "pressCeiling(p)"])).toBe(true)
+    expect(inOrder(ceiling, ["selectionAllowed(tool)", "calloutTool.press(p)", "lineTool.labelAt(p)", "pressSwitches(p, e)", "pressExhausts(p, e)", "lightTool.press(p)", "pressCeiling(p)"])).toBe(true)
     // выделение объекта освещения не открывает панель потолка
     expect(ceiling).toContain("ceilingPanelOpen = false")
   })

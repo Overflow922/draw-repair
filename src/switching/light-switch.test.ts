@@ -147,16 +147,17 @@ describe("removeSwitch", () => {
 
 describe("storedSwitches", () => {
   it("список записывается рядом с остальными объектами плана", () => {
-    const prev: SwitchingContent = { lines: [{ id: "l", targetId: "t", name: "L1" }], notes: ["n"] }
+    // TCR (change merge-lighting-plans): выносок и примечаний в поле больше нет — «остальные объекты» представляют вытяжки
+    const prev: SwitchingContent = { lines: [{ id: "l", targetId: "t", name: "L1" }], exhausts: [{ id: "f", x: 1, y: 2 }] }
     const stored = storedSwitches(prev, [sw("a")])
     expect(stored?.switches).toHaveLength(1)
     expect(stored?.lines).toHaveLength(1)
-    expect(stored?.notes).toEqual(["n"])
+    expect(stored?.exhausts).toEqual([{ id: "f", x: 1, y: 2 }])
   })
 
   it("пустой список не пишется; поля, которого не было, не появляется", () => {
     expect(storedSwitches(undefined, [])).toBeUndefined()
-    const stored = storedSwitches({ switches: [sw("a")], notes: ["n"] }, [])
-    expect(stored).toEqual({ notes: ["n"] })
+    const stored = storedSwitches({ switches: [sw("a")], exhausts: [{ id: "f", x: 1, y: 2 }] }, [])
+    expect(stored).toEqual({ exhausts: [{ id: "f", x: 1, y: 2 }] })
   })
 })

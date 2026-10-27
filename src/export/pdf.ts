@@ -232,6 +232,9 @@ export interface DistancesLayer {
 // название второй страницы плана «Потолки и освещение» — в графу 5 основной надписи и в полосу названия плана
 export const DISTANCES_PAGE_TITLE = "Освещение. Расстояния"
 
+// название третьей страницы плана «Потолки и освещение» — схемы по группам включения (change merge-lighting-plans, design D3)
+export const SWITCHING_PAGE_TITLE = "Группы включения"
+
 export interface RoughLayer {
   // знаки действующих пометок прямых углов (change plaster-right-angle, design D4)
   rightAngles?: readonly RightAngleSign[]
@@ -367,33 +370,32 @@ export function pagesOf(drawing: Drawing): PlanPage[] {
           title: plan.label,
         }
       }
-      // страница «Группы включения» (change add-switching-plan, design D7): подложка «Мебели» без размеров, предметы «Мебели»
-      // и все объекты освещения; потолков и расстояний нет
-      case "switching": {
-        const scene = switchingScene(drawing, reconstructionScene(drawing, mounting))
-        return {
-          walls: scene.base.underlay,
-          dimensions: [],
-          doorways: mounting.doorways,
-          ...shared,
-          ...(mounting.batteries.length ? { batteries: mounting.batteries } : null),
-          ...callouts,
-          ...notes,
-          reconstruction: { pieces: scene.base.pieces, drywall: scene.base.own },
-          switching: {
-            items: scene.items,
-            lights: scene.lights,
-            lineLabels: visibleLines(drawing.switching?.lines ?? [], scene.lights, drawing.switching?.exhausts ?? []).map(({ line, light }) => ({ id: line.id, name: line.name, at: { x: light.x, y: light.y } })),
-            switches: drawing.switching?.switches ?? [],
-            exhausts: drawing.switching?.exhausts ?? [],
-          },
-          title: plan.label,
-        }
-      }
     }
   }
-  // план «Потолки и освещение» даёт две страницы подряд (change split-ceiling-pdf-pages, design D1)
-  return PLANS.flatMap((plan): PlanPage[] => (plan.id === "ceiling" ? [planPage(plan), distancesPage(drawing, mounting)] : [planPage(plan)]))
+  // третья страница плана «Группы включения» (change add-switching-plan, design D7; слит с планом «Потолки и освещение» в change
+  // merge-lighting-plans, design D3): подложка «Мебели» без размеров, предметы «Мебели», все объекты освещения знаками, метки линий,
+  // выключатели и вытяжки; потолков, расстояний, выносок и примечаний нет — они на первой странице плана
+  const switchingPage = (): PlanPage => {
+    const scene = switchingScene(drawing, reconstructionScene(drawing, mounting))
+    return {
+      walls: scene.base.underlay,
+      dimensions: [],
+      doorways: mounting.doorways,
+      ...shared,
+      ...(mounting.batteries.length ? { batteries: mounting.batteries } : null),
+      reconstruction: { pieces: scene.base.pieces, drywall: scene.base.own },
+      switching: {
+        items: scene.items,
+        lights: scene.lights,
+        lineLabels: visibleLines(drawing.switching?.lines ?? [], scene.lights, drawing.switching?.exhausts ?? []).map(({ line, light }) => ({ id: line.id, name: line.name, at: { x: light.x, y: light.y } })),
+        switches: drawing.switching?.switches ?? [],
+        exhausts: drawing.switching?.exhausts ?? [],
+      },
+      title: SWITCHING_PAGE_TITLE,
+    }
+  }
+  // план «Потолки и освещение» даёт три страницы подряд (change split-ceiling-pdf-pages, design D1; change merge-lighting-plans)
+  return PLANS.flatMap((plan): PlanPage[] => (plan.id === "ceiling" ? [planPage(plan), distancesPage(drawing, mounting), switchingPage()] : [planPage(plan)]))
 }
 
 // вторая страница плана «Потолки и освещение» (change split-ceiling-pdf-pages, design D2): только чистовые стены подложки с проёмами,

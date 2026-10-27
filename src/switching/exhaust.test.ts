@@ -60,7 +60,9 @@ describe("storedExhausts", () => {
     expect(storedExhausts({ exhausts: [fan("a")] }, [])).toEqual({})
   })
   it("сохраняет остальные объекты плана", () => {
-    expect(storedExhausts({ notes: ["n"] }, [fan("a")])).toEqual({ notes: ["n"], exhausts: [fan("a")] })
+    // TCR (change merge-lighting-plans): выносок и примечаний в поле больше нет — «остальные объекты» представляют метки
+    const l = { id: "l", targetId: "t", name: "L1" }
+    expect(storedExhausts({ lines: [l] }, [fan("a")])).toEqual({ lines: [l], exhausts: [fan("a")] })
   })
   it("метки, правленные вместе с вытяжкой, записываются; пустой список меток не пишется", () => {
     const prev = { exhausts: [fan("a")], lines: [{ id: "l", targetId: "a", name: "LV1" }] }

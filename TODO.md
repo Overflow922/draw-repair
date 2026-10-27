@@ -1297,3 +1297,19 @@ Follow-ups from `split-ceiling-pdf-pages` (2026-10-27).
 ## Out of scope
 
 - [ ] The page «Освещение. Расстояния» has no callouts, notes or ceilings by decision; if a callout is needed there, it needs its own storage (callouts are per plan, `calloutsOf(drawing, "ceiling")` feeds page 8 only).
+
+---
+
+Follow-ups from exploring `merge-lighting-plans` (2026-10-27).
+
+## Docs
+
+- [ ] The merged plan keeps the name «Потолки и освещение»; the user first named it «Освещение». Renaming touches ~150 mentions in 10 specs (`ceiling-plan`, `ceiling-lighting`, `drawing-plans`, `drawing-storage`, `drawing-history`, `canvas-app`, `light-lines`, `exhaust-fan`, `pdf-export`) plus `PLANS` in `src/plans.ts`; the PDF page 8 title stays as is. Do it as its own change if wanted.
+- [x] The `Purpose` of `exhaust-fan` and `light-lines` mentions the plan «Группы включения»; updated by hand in `openspec/specs/` (a delta cannot change a Purpose).
+- [ ] Specs other than the delta ones still mention the plan «Группы включения» in prose/titles of scenarios (kept for the validator); clean up when renaming the plan.
+- [ ] `src/switching/switching-scene.ts` and `switchingScene` now serve only the PDF page «Группы включения»; if `ceilingScene` ever carries lines/switches/exhausts, fold them together (design D3).
+
+## Out of scope
+
+- [ ] A layer switch (ceiling fill / distances / switching groups) for the merged plan: the canvas shows everything at once, only the three PDF pages separate the layers. Needs its own UI decision (no new widgets without approval, `.claude/rules/ui.md`).
+- [ ] A callout/note choice per PDF page: callouts and notes of the merged plan go to page 8 only (user decision); pages 9 and 10 have none.

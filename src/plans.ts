@@ -12,7 +12,6 @@ export const PLANS = [
   { id: "furniture", label: "Мебель" },
   { id: "plumbing", label: "Сантехника" },
   { id: "ceiling", label: "Потолки и освещение" },
-  { id: "switching", label: "Группы включения" },
 ] as const
 
 export type PlanId = (typeof PLANS)[number]["id"]
@@ -46,10 +45,9 @@ const PLAN_TOOLS: Record<PlanId, readonly [Tool, ...Tool[]]> = {
   plumbing: ["dimension", "callout", "ruler", "notes", "eraser"],
   // «Потолки и освещение» (change add-ceiling-plan, design D1): натяжные потолки поверх результата «Мебели»; размеров нет
   // группа «Освещение» (change add-ceiling-lighting, design D7) — один инструмент, вид объекта выбирается в панели группы
-  ceiling: ["stretchCeiling", "light", "callout", "ruler", "notes", "eraser"],
-  // «Группы включения» (change add-switching-plan, design D1): результат «Потолков и освещения» — подложка; «Линия освещения» (change add-light-lines, design D4) — метки линий, по умолчанию
-  // «Вытяжка» (change add-exhaust-fan, design D3) — после «Выключателя»
-  switching: ["lightLine", "lightSwitch", "exhaust", "callout", "ruler", "notes", "eraser"],
+  // «Линия освещения» (change add-light-lines), «Выключатель» (change add-light-switch) и «Вытяжка» (change add-exhaust-fan) перешли на этот
+  // план из плана «Группы включения», слитого с ним (change merge-lighting-plans, design D7)
+  ceiling: ["stretchCeiling", "light", "lightLine", "lightSwitch", "exhaust", "callout", "ruler", "notes", "eraser"],
 }
 
 export const toolsOf = (plan: PlanId): readonly Tool[] => PLAN_TOOLS[plan]

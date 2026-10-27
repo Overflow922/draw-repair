@@ -16,8 +16,10 @@ const OTHER_PLANS = ["measure", "demolition", "mounting", "rough", "reconstructi
 
 describe("каталог", () => {
   it("CP-20: «Потолки и освещение» (ceiling) — восьмой, последний план каталога, после «Сантехники»", () => {
-    expect(PLANS.map((p) => p.id)).toEqual(["measure", "demolition", "mounting", "rough", "reconstruction", "furniture", "plumbing", "ceiling", "switching"]) // TCR (change add-switching-plan): девять — девятый план «Группы включения»
+    // TCR (change merge-lighting-plans): плана «Группы включения» в каталоге больше нет, его объекты стали объектами этого плана
+    expect(PLANS.map((p) => p.id)).toEqual(["measure", "demolition", "mounting", "rough", "reconstruction", "furniture", "plumbing", "ceiling"])
     expect(PLANS[7]).toEqual({ id: "ceiling", label: "Потолки и освещение" })
+    expect(isPlanId("switching")).toBe(false)
   })
 
   it("CP-21: isPlanId принимает ceiling; activePlanOf читает сохранённый ceiling", () => {
@@ -34,9 +36,14 @@ describe("каталог", () => {
 })
 
 describe("инструменты", () => {
-  it("CP-23: набор — «Натяжной потолок», «Выноска», «Линейка», «Примечания», «Ластик»; по умолчанию «Натяжной потолок»", () => {
-    expect(toolsOf("ceiling")).toEqual(["stretchCeiling", "light", "callout", "ruler", "notes", "eraser"]) // TCR (change add-ceiling-lighting): группа «Освещение»
+  it("CP-23: набор — «Натяжной потолок», «Освещение», «Линия освещения», «Выключатель», «Вытяжка», «Выноска», «Линейка», «Примечания», «Ластик»; по умолчанию «Натяжной потолок»", () => {
+    // TCR (change merge-lighting-plans): инструменты бывшего плана «Группы включения» стоят после группы «Освещение»
+    expect(toolsOf("ceiling")).toEqual(["stretchCeiling", "light", "lightLine", "lightSwitch", "exhaust", "callout", "ruler", "notes", "eraser"])
     expect(defaultToolOf("ceiling")).toBe("stretchCeiling")
+  })
+
+  it("CP-29: «Линия освещения», «Выключатель» и «Вытяжка» есть только на этом плане", () => {
+    for (const plan of OTHER_PLANS) for (const t of ["lightLine", "lightSwitch", "exhaust"] as const) expect(toolsOf(plan)).not.toContain(t)
   })
 
   it("CP-24: инструментов других планов, в том числе «Размер», «Стяжка» и «Мебель», на плане нет", () => {

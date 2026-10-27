@@ -3,7 +3,7 @@ import { itemDrawingInPlan, traceLines } from "../furniture/furniture-render"
 import { drawReconstructionScene } from "../reconstruction/reconstruction-render"
 import type { ReconstructionOptions, ReconstructionView } from "../reconstruction/reconstruction-render"
 import type { Shape } from "../communications/shape"
-import { drawDimensionGeom, drawUnderline, prepareCanvas, SCREEN_METRICS, tracePolygons, UNDERLINE_GAP_PX } from "../render"
+import { drawDimensionGeom, drawUnderline, SCREEN_METRICS, tracePolygons, UNDERLINE_GAP_PX } from "../render"
 import type { RenderMetrics } from "../render"
 import type { Room } from "../room-area"
 import { LIGHT_PALETTE } from "../theme"
@@ -165,10 +165,4 @@ export function drawCeilingScene(ctx: CanvasRenderingContext2D, w: number, h: nu
   }
 
   drawReconstructionScene(ctx, w, h, { ...scene, above }, unit, view, opts)
-}
-
-// то же на холсте страницы (размер и плотность пикселей как у render)
-export function renderCeiling(canvas: HTMLCanvasElement, scene: CeilingView, unit: Unit, view: View, opts: CeilingOptions = {}): void {
-  const target = prepareCanvas(canvas)
-  if (target) drawCeilingScene(target.ctx, target.w, target.h, scene, unit, view, opts)
 }

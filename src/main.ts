@@ -79,7 +79,6 @@ import { createItemTool } from "./furniture/item-tool"
 import type { ItemToolHost } from "./furniture/item-tool"
 import { warningText } from "./furniture/warning"
 import { CEILING_DROP_DEFAULT, parseDropMm } from "./ceiling/ceiling"
-import { renderCeiling } from "./ceiling/ceiling-render"
 import { ceilingScene } from "./ceiling/ceiling-scene"
 import type { CeilingScene } from "./ceiling/ceiling-scene"
 import { createCeilingTool } from "./ceiling/ceiling-tool"
@@ -96,10 +95,7 @@ import type { PlumbingScene } from "./plumbing/plumbing-scene"
 import { renderPlumbing } from "./plumbing/plumbing-render"
 import { openPlumbing, storedPlumbing } from "./plumbing/plumbing-workspace"
 import type { PlumbingWorkspace } from "./plumbing/plumbing-workspace"
-import { switchingScene } from "./switching/switching-scene"
-import type { SwitchingScene } from "./switching/switching-scene"
 import { renderSwitching } from "./switching/switching-render"
-import { openSwitching } from "./switching/switching-workspace"
 import { createLightLineTool } from "./switching/light-line-tool"
 import type { LightLineToolHost } from "./switching/light-line-tool"
 import { lineLabelBox } from "./switching/light-line-label"
@@ -522,24 +518,10 @@ function loadWorking(): void {
   fixtures = []
   ceilingCache = null
   ceilingItems = []
-  switchingCache = null
-  switchingItems = []
   obstacles = []
-  if (activePlanOf(d) === "switching") {
-    // подложка, мебель и освещение других планов только для чтения: у плана свои только выноски и примечания (design D3)
-    const s = switchingNow()
-    const opened = openSwitching(d, s)
-    walls = opened.scene.walls
-    switchingItems = opened.scene.items
-    dimensions = []
-    doorways = s.base.base.doorways
-    batteries = s.base.base.batteries
-    workspace = null
-    remnantHome = new Map()
-    return
-  }
   if (activePlanOf(d) === "ceiling") {
-    // подложка и мебель «Мебели» только для чтения: инструменты плана правят только потолки (design D4)
+    // подложка и мебель «Мебели» только для чтения: инструменты плана правят потолки, освещение, метки линий, выключатели и
+    // вытяжки (design D4; слит с планом «Группы включения», change merge-lighting-plans)
     const s = ceilingNow()
     const opened = openCeiling(d, s)
     walls = opened.scene.walls
@@ -1171,14 +1153,6 @@ let ceilingDropMm = CEILING_DROP_DEFAULT
 let ceilingPanelOpen = false
 let ceilingEditor: { editor: NumberEditor; id: string } | null = null
 
-// план «Группы включения» (change add-switching-plan, design D3): подложка, мебель и освещение берутся с чужих планов только для
-// чтения; сцена держится в кэше до изменения данных или смены плана
-const onSwitching = (): boolean => activePlanOf(current()) === "switching"
-let switchingCache: SwitchingScene | null = null
-const switchingNow = (): SwitchingScene => (switchingCache ??= switchingScene(current()))
-// мебель «Мебели» для «Линейки»: замер до предметов, как на «Мебели»; объекты освещения в замер не входят
-let switchingItems: readonly FurnitureItem[] = []
-
 // объекты освещения (change add-ceiling-lighting, design D5–D7) лежат рядом с потолками; шаг истории плана — снимок обоих списков
 const NO_LIGHTS: LightFixture[] = []
 const lightsOf = (): LightFixture[] => current().ceiling?.lights ?? NO_LIGHTS
@@ -1349,9 +1323,9 @@ let switchPanelOpen = false
 let switchEditor: { editor: NumberEditor; id: string; index: number } | null = null
 // нажатие на кружок или подпись выделенного выключателя: поле на месте откроется при отпускании без сдвига
 let switchPressEdit: { id: string; index: number } | null = null
-let switchGeometryCache: { scene: SwitchingScene; bodies: Shape[]; openings: Shape[] } | null = null
+let switchGeometryCache: { scene: CeilingScene; bodies: Shape[]; openings: Shape[] } | null = null
 function switchGeometry(): { bodies: Shape[]; openings: Shape[] } {
-  const s = switchingNow()
+  const s = ceilingNow()
   if (switchGeometryCache?.scene !== s) switchGeometryCache = { scene: s, bodies: furnitureReachBodies(s.base), openings: openingBodies(s.base.underlay, s.base.base.doorways) }
   return switchGeometryCache
 }
@@ -2242,7 +2216,6 @@ function drawPlan(): void {
   if (onFurniture()) drawFurniturePlan()
   else if (onPlumbing()) drawPlumbingPlan()
   else if (onCeiling()) drawCeilingPlan()
-  else if (onSwitching()) drawSwitchingPlan()
   else if (onReconstruction()) drawReconstructionPlan()
   else if (onRough()) drawRoughPlan()
   else if (onDemolition()) drawDemolitionPlan()
@@ -2341,15 +2314,23 @@ function drawPlumbingPlan(): void {
   )
 }
 
-// план «Потолки и освещение» (change add-ceiling-plan, design D7): заливка потолков, подложка «Мебели», мебель серыми линиями,
-// подписи потолков, выноски; «Линейка» меряет до мебели
+// план «Потолки и освещение» (change add-ceiling-plan, design D7; слит с планом «Группы включения», change merge-lighting-plans,
+// design D3): заливка потолков, подложка «Мебели», мебель серыми линиями, подписи потолков, освещение с расстояниями, вытяжки,
+// метки линий, выключатели, выноски; «Линейка» меряет до мебели. Подсветка ластика — по приоритету плана: выноска, метка линии,
+// выключатель, вытяжка, объект освещения, потолок (spec ceiling-plan «Ластик на плане «Потолки и освещение»»)
 function drawCeilingPlan(): void {
   const s = ceilingNow()
-  // выноска главнее потолка под курсором ластика
-  const erasingCallout = tool === "eraser" && cursor ? calloutTool.pick(cursor) : null
-  const erasingLight = tool === "eraser" && cursor && !erasingCallout ? lightTool.eraseTarget(cursor) : null
-  const erasingCeiling = tool === "eraser" && cursor && !erasingCallout && !erasingLight && !lightTool.numberAt(cursor) ? ceilingTool.eraseTarget(cursor) : null
-  renderCeiling(
+  const erasing = tool === "eraser" && cursor ? cursor : null
+  const erasingCallout = erasing ? calloutTool.pick(erasing) : null
+  const erasingLine = erasing && !erasingCallout ? lineTool.eraseTarget(erasing) : null
+  const hoveredLight = tool === "lightLine" && cursor ? lineTool.hoverTarget(cursor) : null
+  const erasingSwitch = erasing && !erasingCallout && !erasingLine ? switchTool.eraseTarget(erasing) : null
+  const erasingExhaust = erasing && !erasingCallout && !erasingLine && !erasingSwitch ? exhaustTool.eraseTarget(erasing) : null
+  const erasingLight = erasing && !erasingCallout && !erasingLine && !erasingSwitch && !erasingExhaust ? lightTool.eraseTarget(erasing) : null
+  const erasingCeiling = erasing && !erasingCallout && !erasingLine && !erasingSwitch && !erasingExhaust && !erasingLight && !lightTool.numberAt(erasing) ? ceilingTool.eraseTarget(erasing) : null
+  const lights = lightTool.displayed()
+  const fans = exhaustTool.displayed()
+  renderSwitching(
     canvas,
     {
       walls: s.base.underlay,
@@ -2362,48 +2343,16 @@ function drawCeilingPlan(): void {
       ceilings: s.ceilings.map((a) => ({ ceiling: a.object, room: a.item.room })),
       selectedCeilingId: ceilingTool.selectedId(),
       erasingCeilingId: erasingCeiling,
-      lights: lightTool.displayed(),
+      lights,
       lightBodies: lightBodies(),
       lightGhost: tool === "light" && cursor ? lightTool.ghost(cursor) : null,
-      selectedLightId: lightTool.selectedId(),
+      selectedLightId: hoveredLight ?? lightTool.selectedId(),
       erasingLightId: erasingLight,
-      callouts: calloutTool.displayList(),
-      selectedCalloutId: calloutTool.selectedId(),
-      erasingCalloutId: erasingCallout?.id ?? null,
-    },
-    unit,
-    view,
-    { palette: paletteOf(theme), theme, ruler: rulerOf(walls, batteries, ceilingItems) },
-  )
-}
-
-// план «Группы включения» (change add-switching-plan, design D4): подложка «Мебели», мебель серыми линиями, знаки освещения без
-// расстояний и потолков, выноски; «Линейка» меряет до мебели
-function drawSwitchingPlan(): void {
-  const s = switchingNow()
-  const erasingCallout = tool === "eraser" && cursor ? calloutTool.pick(cursor) : null
-  const erasingLine = tool === "eraser" && cursor && !erasingCallout ? lineTool.eraseTarget(cursor) : null
-  const hoveredLight = tool === "lightLine" && cursor ? lineTool.hoverTarget(cursor) : null
-  const erasingSwitch = tool === "eraser" && cursor && !erasingCallout && !erasingLine ? switchTool.eraseTarget(cursor) : null
-  const erasingExhaust = tool === "eraser" && cursor && !erasingCallout && !erasingLine && !erasingSwitch ? exhaustTool.eraseTarget(cursor) : null
-  const fans = exhaustTool.displayed()
-  renderSwitching(
-    canvas,
-    {
-      walls: s.base.underlay,
-      doorways,
-      communications: communicationsOf(),
-      batteries,
-      pieces: s.base.pieces,
-      drywall: s.base.own,
-      items: s.items,
-      lights: s.lights,
-      selectedLightId: hoveredLight,
       exhausts: fans,
       exhaustGhost: tool === "exhaust" && cursor ? exhaustTool.ghost(cursor) : null,
       selectedExhaustId: hoveredLight ?? exhaustTool.selectedId(),
       erasingExhaustId: erasingExhaust,
-      lineLabels: visibleLines(linesOf(), s.lights, fans).map(({ line, light }) => ({ id: line.id, name: line.name, at: { x: light.x, y: light.y } })),
+      lineLabels: visibleLines(linesOf(), lights, fans).map(({ line, light }) => ({ id: line.id, name: line.name, at: { x: light.x, y: light.y } })),
       selectedLineId: lineTool.selectedId(),
       erasingLineId: erasingLine,
       switches: switchTool.displayed(),
@@ -2416,7 +2365,7 @@ function drawSwitchingPlan(): void {
     },
     unit,
     view,
-    { palette: paletteOf(theme), theme, ruler: rulerOf(walls, batteries, switchingItems) },
+    { palette: paletteOf(theme), theme, ruler: rulerOf(walls, batteries, ceilingItems) },
   )
 }
 
@@ -2935,21 +2884,12 @@ canvas.addEventListener("pointermove", (e) => {
     return
   }
   if (onCeiling()) {
-    // перетаскивание объекта освещения; «Освещение» (призрак), «Линейка», «Ластик» и «Выноска» следят за курсором
+    // перетаскивание объекта освещения, выключателя или вытяжки; «Освещение», «Линия освещения» (подсветка светильника),
+    // «Выключатель» и «Вытяжка» (призрак), «Линейка», «Ластик» и «Выноска» следят за курсором
     if (lightTool.dragging()) {
       lightTool.dragTo(toWorld(e))
       return
     }
-    if (tool === "light" || tool === "ruler" || tool === "eraser" || tool === "callout") {
-      cursor = toWorld(e)
-      if (tool === "callout") calloutTool.hover(cursor)
-      redraw()
-    }
-    return
-  }
-  if (onSwitching()) {
-    // перетаскивание выключателя; «Линия освещения» (подсветка светильника), «Выключатель» (призрак), «Линейка», «Ластик» и «Выноска»
-    // следят за курсором; подложка и освещение не правятся
     if (switchTool.dragging()) {
       switchTool.dragTo(toWorld(e))
       return
@@ -2958,7 +2898,7 @@ canvas.addEventListener("pointermove", (e) => {
       exhaustTool.dragTo(toWorld(e))
       return
     }
-    if (tool === "lightLine" || tool === "lightSwitch" || tool === "exhaust" || tool === "ruler" || tool === "eraser" || tool === "callout") {
+    if (tool === "light" || tool === "lightLine" || tool === "lightSwitch" || tool === "exhaust" || tool === "ruler" || tool === "eraser" || tool === "callout") {
       cursor = toWorld(e)
       if (tool === "callout") calloutTool.hover(cursor)
       redraw()
@@ -3015,7 +2955,7 @@ canvas.addEventListener("pointerleave", () => {
   if (tool === "plaster") plasterTool.hover(null)
   if (tool === "rightAngle") rightAngleTool.hover(null)
   if (tool === "furniture") itemTool.hover(null)
-  if ((tool === "ruler" || (tool === "eraser" && (onDemolition() || onRough() || onCeiling() || onSwitching())) || (tool === "light" && onCeiling()) || ((tool === "lightLine" || tool === "lightSwitch" || tool === "exhaust") && onSwitching())) && cursor) cursor = null
+  if ((tool === "ruler" || (tool === "eraser" && (onDemolition() || onRough() || onCeiling())) || ((tool === "light" || tool === "lightLine" || tool === "lightSwitch" || tool === "exhaust") && onCeiling())) && cursor) cursor = null
   redraw()
 })
 
@@ -3073,17 +3013,37 @@ canvas.addEventListener("pointerdown", (e) => {
     return
   }
   if (onCeiling()) {
-    // без инструмента: выноска, иначе подпись потолка; мебель и подложка не выделяются
+    // без инструмента в порядке приоритета плана (spec ceiling-plan «Выделение и приоритет объектов…»): выноска, текст метки линии,
+    // знак выключателя, знак вытяжки, число и знак объекта освещения, подпись потолка; мебель и подложка не выделяются
     if (!selectionAllowed(tool)) return
     const p = toWorld(e)
     if (calloutTool.press(p)) {
       suppressClick = true
       canvas.setPointerCapture(e.pointerId)
       resetCeiling()
+      resetLines()
+      resetSwitches()
+      resetExhausts()
       return
     }
     if (calloutTool.selectedId() !== null) calloutTool.deselect()
-    // число объекта освещения, затем знак (перетаскивание), затем подпись потолка
+    if (lineTool.labelAt(p)) {
+      resetCeiling()
+      resetSwitches()
+      resetExhausts()
+      pressLines(p)
+      return
+    }
+    if (pressSwitches(p, e)) {
+      resetCeiling()
+      resetExhausts()
+      return
+    }
+    if (pressExhausts(p, e)) {
+      resetCeiling()
+      return
+    }
+    resetLines()
     closeLightEditor()
     const hit = lightTool.press(p)
     if (hit) {
@@ -3097,28 +3057,6 @@ canvas.addEventListener("pointerdown", (e) => {
       return
     }
     pressCeiling(p)
-    return
-  }
-  if (onSwitching()) {
-    // без инструмента: выноска, иначе текст метки линии, иначе знак выключателя; подложка, мебель и освещение не выделяются
-    if (!selectionAllowed(tool)) return
-    const p = toWorld(e)
-    if (calloutTool.press(p)) {
-      suppressClick = true
-      canvas.setPointerCapture(e.pointerId)
-      resetLines()
-      resetSwitches()
-      resetExhausts()
-      return
-    }
-    if (calloutTool.selectedId() !== null) calloutTool.deselect()
-    if (pressSwitches(p, e)) {
-      resetExhausts()
-      return
-    }
-    if (!lineTool.labelAt(p) && pressExhausts(p, e)) return
-    resetExhausts()
-    pressLines(p)
     return
   }
   if (onDemolition()) {
@@ -3272,13 +3210,8 @@ canvas.addEventListener("pointerup", (e) => {
   }
   if (onCeiling() && e.button === 0) {
     if (lightTool.dragging()) lightTool.endDrag()
-    return
-  }
-  if (onSwitching()) {
-    if (e.button === 0) {
-      releaseSwitch()
-      if (exhaustTool.dragging()) exhaustTool.endDrag()
-    }
+    releaseSwitch()
+    if (exhaustTool.dragging()) exhaustTool.endDrag()
     return
   }
   if (onDemolition() && e.button === 0) {
@@ -3428,23 +3361,18 @@ canvas.addEventListener("click", (e) => {
     else if (tool === "eraser" && !calloutTool.eraseAt(at) && !rightAngleTool.erase(at) && !plasterTool.erase(at)) screedTool.erase(at)
     return
   }
-  // на плане «Потолки и освещение»: «Натяжной потолок» ставится кликом, «Ластик» стирает выноску, иначе потолок под курсором
+  // на плане «Потолки и освещение»: «Натяжной потолок», «Освещение», «Линия освещения», «Выключатель» и «Вытяжка» ставятся кликом,
+  // «Ластик» стирает один объект по приоритету плана: выноска, метка линии, выключатель, вытяжка, объект освещения, потолок
+  // (число расстояния ничего не стирает)
   if (onCeiling()) {
     const at = toWorld(e)
     if (tool === "callout") calloutTool.click(at)
     else if (tool === "stretchCeiling") ceilingTool.place(at)
     else if (tool === "light") lightTool.place(at)
-    else if (tool === "eraser" && !calloutTool.eraseAt(at) && !lightTool.erase(at) && !lightTool.numberAt(at)) ceilingTool.erase(at)
-    return
-  }
-  // на плане «Группы включения» «Выноска» ставится кликом, «Ластик» стирает только выноску (change add-switching-plan, design D5)
-  if (onSwitching()) {
-    const at = toWorld(e)
-    if (tool === "callout") calloutTool.click(at)
     else if (tool === "lightLine") lineTool.place(at)
     else if (tool === "lightSwitch") switchTool.place(at)
     else if (tool === "exhaust") exhaustTool.place(at)
-    else if (tool === "eraser" && !calloutTool.eraseAt(at) && !lineTool.erase(at) && !switchTool.erase(at)) exhaustTool.erase(at)
+    else if (tool === "eraser" && !calloutTool.eraseAt(at) && !lineTool.erase(at) && !switchTool.erase(at) && !exhaustTool.erase(at) && !lightTool.erase(at) && !lightTool.numberAt(at)) ceilingTool.erase(at)
     return
   }
   // на плане «Демонтаж» жесты разбирает адаптер по нажатию и отпусканию (change demolition-plan, design D10);
@@ -4500,17 +4428,6 @@ window.addEventListener("keydown", (e) => {
       if (!calloutTool.dragging()) calloutTool.deleteSelected()
       return
     }
-    // подложка, мебель и освещение на плане «Группы включения» не удаляются; удаляется только выделенная метка линии или выключатель
-    if (onSwitching()) {
-      if (switchTool.dragging() || exhaustTool.dragging()) return
-      closeLineEditor()
-      closeSwitchEditor()
-      if (!lineTool.deleteSelected() && !switchTool.deleteSelected()) exhaustTool.deleteSelected()
-      resetLines()
-      resetSwitches()
-      resetExhausts()
-      return
-    }
     if (onFurniture()) {
       if (!itemTool.dragging() && !dimDrag && !panDrag) deleteFurnitureSelection()
       return
@@ -4523,13 +4440,18 @@ window.addEventListener("keydown", (e) => {
       resumePlasterTool()
       return
     }
-    // мебель и подложка не удаляются: Delete удаляет выделенный объект освещения или потолок
+    // мебель и подложка не удаляются: Delete удаляет выделенную метку линии, выключатель, вытяжку, объект освещения или потолок
     if (onCeiling()) {
-      if (lightTool.dragging()) return
+      if (lightTool.dragging() || switchTool.dragging() || exhaustTool.dragging()) return
       closeCeilingEditor()
       closeLightEditor()
-      if (!lightTool.deleteSelected()) ceilingTool.deleteSelected()
+      closeLineEditor()
+      closeSwitchEditor()
+      if (!lineTool.deleteSelected() && !switchTool.deleteSelected() && !exhaustTool.deleteSelected() && !lightTool.deleteSelected()) ceilingTool.deleteSelected()
       resetCeiling()
+      resetLines()
+      resetSwitches()
+      resetExhausts()
       return
     }
     if (onDemolition()) {
@@ -4563,38 +4485,23 @@ window.addEventListener("keydown", (e) => {
   if (e.key === "Escape" && onCeiling()) {
     const action = escapeAction({
       tool,
-      gestureActive: lightTool.dragging(),
+      gestureActive: lightTool.dragging() || switchTool.dragging() || exhaustTool.dragging(),
       dimensionDraft: false,
       calloutDraft: calloutTool.hasDraft(),
-      hasSelection: ceilingTool.selectedId() !== null || lightTool.selectedId() !== null || calloutTool.selectedId() !== null,
-    })
-    if (action === "end-gesture") resetCeiling()
-    else if (action === "cancel-callout-draft") calloutTool.cancelDraft()
-    else if (action === "clear-selection") {
-      calloutTool.deselect()
-      resetCeiling()
-    } else if (action === "deactivate-tool") setTool("none")
-    return
-  }
-  if (e.key === "Escape" && onSwitching()) {
-    const action = escapeAction({
-      tool,
-      gestureActive: switchTool.dragging() || exhaustTool.dragging(),
-      dimensionDraft: false,
-      calloutDraft: calloutTool.hasDraft(),
-      hasSelection: calloutTool.selectedId() !== null || lineTool.selectedId() !== null || switchTool.selectedId() !== null || exhaustTool.selectedId() !== null,
+      hasSelection:
+        ceilingTool.selectedId() !== null || lightTool.selectedId() !== null || lineTool.selectedId() !== null || switchTool.selectedId() !== null || exhaustTool.selectedId() !== null || calloutTool.selectedId() !== null,
     })
     if (action === "end-gesture") {
+      resetCeiling()
       resetSwitches()
       resetExhausts()
-      redraw()
     } else if (action === "cancel-callout-draft") calloutTool.cancelDraft()
     else if (action === "clear-selection") {
       calloutTool.deselect()
+      resetCeiling()
       resetLines()
       resetSwitches()
       resetExhausts()
-      redraw()
     } else if (action === "deactivate-tool") setTool("none")
     return
   }
@@ -4643,7 +4550,7 @@ window.addEventListener("keydown", (e) => {
     return
   }
   // на плане «Демонтаж» нет стен, материалов и элементов: стрелки ничего не двигают и не переключают
-  if (onDemolition() || onRough() || onCeiling() || onSwitching()) return
+  if (onDemolition() || onRough() || onCeiling()) return
   if (groupMove || endpointDrag || panDrag || dimDrag || doorwayTool.dragging() || communicationTool.dragging() || batteryTool.dragging()) return
   // выделенная коммуникация и выноска стрелками не двигаются и материал не переключается (spec communications)
   if (selectedCommunication || calloutTool.selectedId() !== null || selectedRoom !== null) return
