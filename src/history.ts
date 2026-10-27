@@ -1,8 +1,8 @@
 import { isNoteList } from "./notes/notes-store"
 import { historyKey } from "./plans"
 import type { PlanId } from "./plans"
-import { copyStretchCeiling, isBattery, isBatteryMark, isCallout, isCommunication, isDemolitionMark, isDimension, isDrawing, isDrywallWall, isPlasterMark, isRightAngle, isRoomRecord, isScreed, isFurnitureItem, isPlumbingDimension, isStretchCeiling, isWall, isWallElement, readFurnitureItem } from "./storage"
-import type { Battery, BatteryMark, Callout, Communication, DemolitionMark, Dimension, DimPoint, Drawing, PlasterMark, RightAngleMark, RoomRecord, Screed, FurnitureItem, StretchCeiling, Wall, WallElement } from "./types"
+import { copyLightFixture, copyStretchCeiling, isBattery, isLightFixture, isBatteryMark, isCallout, isCommunication, isDemolitionMark, isDimension, isDrawing, isDrywallWall, isPlasterMark, isRightAngle, isRoomRecord, isScreed, isFurnitureItem, isPlumbingDimension, isStretchCeiling, isWall, isWallElement, readFurnitureItem } from "./storage"
+import type { Battery, BatteryMark, Callout, Communication, DemolitionMark, Dimension, DimPoint, Drawing, LightFixture, PlasterMark, RightAngleMark, RoomRecord, Screed, FurnitureItem, StretchCeiling, Wall, WallElement } from "./types"
 
 const KEY = "draw-repair:history"
 export const HISTORY_LIMIT = 50
@@ -37,8 +37,9 @@ export type HistoryEntry =
   | { kind: "furniture"; items: FurnitureItem[]; dimensions: Dimension[] }
   // шаг плана «Сантехника» (change add-plumbing-plan, design D6): размеры плана до операции; приборы — объекты «Мебели»
   | { kind: "plumbing"; dimensions: Dimension[] }
-  // шаг плана «Потолки и освещение» (change add-ceiling-plan, design D6): натяжные потолки плана до операции
-  | { kind: "ceiling"; ceilings: StretchCeiling[] }
+  // шаг плана «Потолки и освещение» (change add-ceiling-plan, design D6): натяжные потолки плана до операции и объекты освещения
+  // (change add-ceiling-lighting, design D9); у записи, сохранённой до введения освещения, поля нет
+  | { kind: "ceiling"; ceilings: StretchCeiling[]; lights?: LightFixture[] }
 
 export interface DrawingHistory {
   past: HistoryEntry[]
@@ -291,6 +292,42 @@ export function redoCeiling(history: DrawingHistory, current: readonly StretchCe
   return e.ceilings.map(copyStretchCeiling)
 }
 
+// Весь план «Потолки и освещение» (change add-ceiling-lighting, design D9): снимок потолков и объектов освещения; запись без
+// поля объектов освещения при отмене и повторе список объектов не меняет
+export interface CeilingState {
+  ceilings: readonly StretchCeiling[]
+  lights: readonly LightFixture[]
+}
+
+const ceilingPlanEntry = (s: CeilingState): HistoryEntry => ({ kind: "ceiling", ceilings: s.ceilings.map(copyStretchCeiling), lights: s.lights.map(copyLightFixture) })
+
+const ceilingStateOf = (e: { ceilings: StretchCeiling[]; lights?: LightFixture[] }, current: CeilingState): { ceilings: StretchCeiling[]; lights: LightFixture[] } => ({
+  ceilings: e.ceilings.map(copyStretchCeiling),
+  lights: (e.lights ?? current.lights).map(copyLightFixture),
+})
+
+export function recordCeilingPlan(history: DrawingHistory, state: CeilingState): void {
+  history.past.push(ceilingPlanEntry(state))
+  if (history.past.length > HISTORY_LIMIT) history.past.shift()
+  history.future = []
+}
+
+export function undoCeilingPlan(history: DrawingHistory, current: CeilingState): { ceilings: StretchCeiling[]; lights: LightFixture[] } | null {
+  const e = history.past[history.past.length - 1]
+  if (!e || e.kind !== "ceiling") return null
+  history.past.pop()
+  history.future.push(ceilingPlanEntry(current))
+  return ceilingStateOf(e, current)
+}
+
+export function redoCeilingPlan(history: DrawingHistory, current: CeilingState): { ceilings: StretchCeiling[]; lights: LightFixture[] } | null {
+  const e = history.future[history.future.length - 1]
+  if (!e || e.kind !== "ceiling") return null
+  history.future.pop()
+  history.past.push(ceilingPlanEntry(current))
+  return ceilingStateOf(e, current)
+}
+
 // отмена: снимок из past возвращается, текущие пометки кладутся в future (в истории плана «Демонтаж» только такие записи)
 export function undoMarks(history: DrawingHistory, current: readonly DemolitionMark[]): DemolitionMark[] | null {
   const e = history.past[history.past.length - 1]
@@ -390,7 +427,8 @@ const isHistoryEntry = (e: unknown): e is HistoryEntry => {
       (x.angles === undefined || (Array.isArray(x.angles) && x.angles.every(isRightAngle)))
   if (x.kind === "furniture") return Array.isArray(x.items) && x.items.every(isFurnitureItem) && Array.isArray(x.dimensions) && x.dimensions.every(isDimension)
   if (x.kind === "plumbing") return Array.isArray(x.dimensions) && x.dimensions.every(isPlumbingDimension)
-  if (x.kind === "ceiling") return Array.isArray(x.ceilings) && x.ceilings.every(isStretchCeiling)
+  if (x.kind === "ceiling")
+    return Array.isArray(x.ceilings) && x.ceilings.every(isStretchCeiling) && (x.lights === undefined || (Array.isArray(x.lights) && x.lights.every(isLightFixture)))
   return x.kind === "close" && typeof x.drawingId === "string" &&
     typeof x.index === "number" && Number.isInteger(x.index) && x.index >= 0
 }

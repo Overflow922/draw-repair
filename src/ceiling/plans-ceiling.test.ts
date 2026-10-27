@@ -35,7 +35,7 @@ describe("каталог", () => {
 
 describe("инструменты", () => {
   it("CP-23: набор — «Натяжной потолок», «Выноска», «Линейка», «Примечания», «Ластик»; по умолчанию «Натяжной потолок»", () => {
-    expect(toolsOf("ceiling")).toEqual(["stretchCeiling", "callout", "ruler", "notes", "eraser"])
+    expect(toolsOf("ceiling")).toEqual(["stretchCeiling", "light", "callout", "ruler", "notes", "eraser"]) // TCR (change add-ceiling-lighting): группа «Освещение»
     expect(defaultToolOf("ceiling")).toBe("stretchCeiling")
   })
 

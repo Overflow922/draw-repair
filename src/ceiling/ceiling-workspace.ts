@@ -1,4 +1,4 @@
-import type { CeilingContent, Drawing, FurnitureItem, StretchCeiling, Wall } from "../types"
+import type { CeilingContent, Drawing, FurnitureItem, LightFixture, StretchCeiling, Wall } from "../types"
 import { ceilingScene } from "./ceiling-scene"
 import type { CeilingScene } from "./ceiling-scene"
 
@@ -24,11 +24,13 @@ export function openCeiling(drawing: Drawing, s: CeilingScene = ceilingScene(dra
   }
 }
 
-// хранимое содержимое плана: потолки, выноски и примечания плана как есть
-export function storedCeiling(ceilings: readonly StretchCeiling[], drawing: Drawing): CeilingContent {
+// хранимое содержимое плана: потолки, объекты освещения (по умолчанию — прежние; пустой список не пишется, add-ceiling-lighting
+// design D1), выноски и примечания плана как есть
+export function storedCeiling(ceilings: readonly StretchCeiling[], drawing: Drawing, lights: readonly LightFixture[] = drawing.ceiling?.lights ?? []): CeilingContent {
   const stored = drawing.ceiling
   return {
     ceilings: [...ceilings],
+    ...(lights.length > 0 ? { lights: [...lights] } : null),
     ...(stored?.callouts !== undefined ? { callouts: stored.callouts } : null),
     ...(stored?.notes !== undefined ? { notes: stored.notes } : null),
   }

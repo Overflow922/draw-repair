@@ -44,6 +44,7 @@ export interface RenderMetrics {
   dimArrowPx: number
   dimTextGapPx: number
   font: string
+  symbolMmPx: number // единиц носителя на мм бумаги для условных знаков постоянного размера (change add-ceiling-lighting, design D4)
 }
 
 export const SCREEN_METRICS: RenderMetrics = {
@@ -55,6 +56,7 @@ export const SCREEN_METRICS: RenderMetrics = {
   dimArrowPx: 9,
   dimTextGapPx: DIM_TEXT_GAP_PX,
   font: "sans-serif",
+  symbolMmPx: 4,
 }
 
 export const PDF_METRICS: RenderMetrics = {
@@ -66,6 +68,7 @@ export const PDF_METRICS: RenderMetrics = {
   dimArrowPx: 2.5,
   dimTextGapPx: 0.6,
   font: "PTSans",
+  symbolMmPx: 1,
 }
 
 export interface RenderOptions {

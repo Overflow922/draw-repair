@@ -36,6 +36,7 @@ const KEYS: (keyof Palette)[] = [
   "sill",
   "concreteFill", // заливка «Бетона» (change new-wall-materials, design D5)
   "ceiling", // TCR (change add-ceiling-plan): заливка натяжного потолка, design D7
+  "lightingRed", "lightingOrange", // TCR (change add-ceiling-lighting): цвета знаков освещения, design D8
 ]
 
 describe("parseTheme", () => {
@@ -140,7 +141,7 @@ describe("запоминание выбора", () => {
 
 describe("палитры", () => {
   it("LIGHT-EXACT-1: светлая палитра — прежние цвета отрисовки (и новый цвет заливки «Бетона», change new-wall-materials)", () => {
-    const { concreteFill, ceiling, ...rest } = LIGHT_PALETTE // TCR (change add-ceiling-plan): новый цвет заливки потолка
+    const { concreteFill, ceiling, lightingRed: _red, lightingOrange: _orange, ...rest } = LIGHT_PALETTE // TCR (change add-ceiling-plan): новый цвет заливки потолка; TCR (change add-ceiling-lighting): цвета освещения
     expect(concreteFill).toMatch(/^(#[0-9a-f]{3,6}|rgba?\(.+\))$/i)
     expect(ceiling).toMatch(/^#[0-9a-f]{6}$/i)
     expect(rest).toEqual({

@@ -1,8 +1,9 @@
 import { CHAR_WIDTH } from "../doorway/element-label"
 import { FURNITURE_KIND_ORDER, kindEntry } from "../furniture/furniture-kinds"
 import type { FurnitureKind } from "../furniture/furniture-kinds"
+import { LIGHT_KINDS } from "../ceiling/lights"
 import { MATERIALS, normalizeMaterial } from "../types"
-import type { Material } from "../types"
+import type { LightKind, Material } from "../types"
 import type { PlanPage } from "./pdf"
 
 // Легенда страницы PDF (change pdf-legend): состав записей страницы, перенос подписи и ширина столбца легенды документа.
@@ -18,6 +19,7 @@ export type LegendEntry =
   | { kind: "screed"; label: string }
   | { kind: "drywall"; label: string }
   | { kind: "ceiling"; label: string }
+  | { kind: "light"; light: LightKind; label: string }
   | { kind: "furniture"; item: FurnitureKind; label: string }
 
 export const LEGEND_PAD_LEFT_MM = 8
@@ -59,6 +61,8 @@ export function legendEntries(page: PlanPage): LegendEntry[] {
   // натяжной потолок — на странице «Потолки и освещение» при действующих потолках; её предметы — подложка, записей видов не дают
   // (change add-ceiling-plan, design D8)
   if ((page.ceiling?.ceilings.length ?? 0) > 0) entries.push({ kind: "ceiling", label: "Натяжной потолок" })
+  // виды освещения, чьи объекты есть на странице, в порядке каталога видов освещения (change add-ceiling-lighting, design D8)
+  for (const { kind, title } of LIGHT_KINDS) if (page.ceiling?.lights.some((l) => l.kind === kind)) entries.push({ kind: "light", light: kind, label: title })
   // мебель: запись на каждый вид каталога, чьи предметы есть на странице, в порядке каталога (change furniture-items-catalog, design D6)
   for (const item of FURNITURE_KIND_ORDER)
     if (page.furniture?.items.some((i) => i.kind === item)) entries.push({ kind: "furniture", item, label: kindEntry(item).label })

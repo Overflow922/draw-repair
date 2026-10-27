@@ -26,6 +26,8 @@ import { drawCeilingScene } from "../ceiling/ceiling-render"
 import { ceilingScene } from "../ceiling/ceiling-scene"
 import { itemCorners } from "../furniture/item"
 import { itemSizeOutsidePoints } from "../furniture/item-size-layout"
+import { furnitureReachBodies } from "../furniture/item-wall-reach"
+import type { Shape } from "../communications/shape"
 import { drawReconstructionScene } from "../reconstruction/reconstruction-render"
 import { reconstructionScene } from "../reconstruction/reconstruction-scene"
 import { drawRoughScene, roughExtent } from "../rough/rough-render"
@@ -38,7 +40,7 @@ import { calloutLayout } from "../callout/callout-layout"
 import { calloutsOf } from "../callout/callout-store"
 import { notesOf } from "../notes/notes-store"
 import { CHAR_WIDTH } from "../doorway/element-label"
-import type { Battery, Callout, Communication, Dimension, Drawing, DrywallWall, Point, Screed, StretchCeiling, FurnitureItem, Unit, Wall, WallElement } from "../types"
+import type { Battery, Callout, Communication, Dimension, Drawing, DrywallWall, LightFixture, Point, Screed, StretchCeiling, FurnitureItem, Unit, Wall, WallElement } from "../types"
 import { FONT_B64 } from "./font"
 import { PAGE_FORMATS_MM } from "./page-format"
 import type { PageFormat } from "./page-format"
@@ -194,6 +196,9 @@ export interface PlanPage {
 export interface CeilingLayer {
   items: readonly FurnitureItem[]
   ceilings: readonly { ceiling: StretchCeiling; room: Room }[]
+  // объекты освещения и чистовые грани подложки, до которых показаны их расстояния (change add-ceiling-lighting, design D8)
+  lights: readonly LightFixture[]
+  lightBodies: readonly Shape[]
 }
 
 export interface RoughLayer {
@@ -323,7 +328,12 @@ export function pagesOf(drawing: Drawing): PlanPage[] {
           ...callouts,
           ...notes,
           reconstruction: { pieces: scene.base.pieces, drywall: scene.base.own },
-          ceiling: { items: scene.items, ceilings: scene.ceilings.map((a) => ({ ceiling: a.object, room: a.item.room })) },
+          ceiling: {
+            items: scene.items,
+            ceilings: scene.ceilings.map((a) => ({ ceiling: a.object, room: a.item.room })),
+            lights: drawing.ceiling?.lights ?? [],
+            lightBodies: furnitureReachBodies(scene.base),
+          },
           title: plan.label,
         }
       }
@@ -362,7 +372,9 @@ export function pageBounds(page: PlanPage, scale: number): BBox {
   const items = (page.furniture?.items ?? []).flatMap((t) => [...itemCorners(t), ...itemSizeOutsidePoints(t, kMm, PDF_METRICS)])
   // предметы страницы «Потолки и освещение» — без габаритов; подписи потолков лежат внутри помещений и габариты не расширяют
   const ceilingItems = (page.ceiling?.items ?? []).flatMap(itemCorners)
-  const extra = [...marks, ...bodies, ...rects, ...calloutPoints, ...rough, ...reconstruction, ...items, ...ceilingItems]
+  // центры объектов освещения: знаки постоянного размера лежат у центров, расстояния — внутри помещений (change add-ceiling-lighting)
+  const lights = (page.ceiling?.lights ?? []).map((l): Point => ({ x: l.x, y: l.y }))
+  const extra = [...marks, ...bodies, ...rects, ...calloutPoints, ...rough, ...reconstruction, ...items, ...ceilingItems, ...lights]
   const walls = page.reconstruction ? [...page.walls, ...page.reconstruction.drywall] : page.walls
   return wallsBBox(walls, page.dimensions, 0.5 * scale, page.doorways, scale, extra, batteries, page.furniture?.items)
 }
@@ -428,7 +440,7 @@ function drawPage(
     if (page.furniture !== undefined) drawFurnitureScene(ctx, w, h, { ...scene, items: page.furniture.items }, unit, view, opts)
     // страница «Потолки и освещение»: подложка, предметы серым, полупрозрачная заливка потолков, подписи (change add-ceiling-plan, design D8)
     else if (page.ceiling !== undefined)
-      drawCeilingScene(ctx, w, h, { ...scene, items: page.ceiling.items, ceilings: page.ceiling.ceilings }, unit, view, { ...opts, translucent: pdfTranslucent(doc) })
+      drawCeilingScene(ctx, w, h, { ...scene, items: page.ceiling.items, ceilings: page.ceiling.ceilings, lights: page.ceiling.lights, lightBodies: page.ceiling.lightBodies }, unit, view, { ...opts, translucent: pdfTranslucent(doc) })
     else drawReconstructionScene(ctx, w, h, scene, unit, view, opts)
     return
   }

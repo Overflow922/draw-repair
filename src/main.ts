@@ -1,5 +1,5 @@
 import "./style.css"
-import { cloneScene, loadHistory, planHistory, record, recordCallouts, recordCeiling, recordDemolition, recordFurniture, recordNotes, recordPlumbing, recordRough, recordSnapshot, redoCallouts, redoCeiling, redoDemolition, redoEntry, redoFurniture, redoNotes, redoPlumbing, redoRough, saveHistory, undoCallouts, undoCeiling, undoDemolition, undoEntry, undoFurniture, undoNotes, undoPlumbing, undoRough } from "./history"
+import { cloneScene, loadHistory, planHistory, record, recordCallouts, recordCeilingPlan, recordDemolition, recordFurniture, recordNotes, recordPlumbing, recordRough, recordSnapshot, redoCallouts, redoCeilingPlan, redoDemolition, redoEntry, redoFurniture, redoNotes, redoPlumbing, redoRough, saveHistory, undoCallouts, undoCeilingPlan, undoDemolition, undoEntry, undoFurniture, undoNotes, undoPlumbing, undoRough } from "./history"
 import type { Scene } from "./history"
 import { dimLevelSnap, dimensionGeometry, dimensionOffsetAt, hitWall, nearestDimAnchor, dimPointPoint, pointsEqual, segmentIntersectsRect, snap, snapOthers, snapWithSource, zoomAt } from "./geometry"
 import type { DimGeometry, SnapResult } from "./geometry"
@@ -85,6 +85,12 @@ import type { CeilingScene } from "./ceiling/ceiling-scene"
 import { createCeilingTool } from "./ceiling/ceiling-tool"
 import type { CeilingToolHost } from "./ceiling/ceiling-tool"
 import { openCeiling, storedCeiling } from "./ceiling/ceiling-workspace"
+import { groupButtonActive as lightGroupActive, groupButtonClick as lightGroupClick, groupPick as lightGroupPick, LIGHT_GROUP_DEFAULT } from "./ceiling/light-group"
+import type { LightGroupState } from "./ceiling/light-group"
+import type { LightNumber } from "./ceiling/light-numbers"
+import { createLightTool } from "./ceiling/light-tool"
+import type { LightToolHost } from "./ceiling/light-tool"
+import { isLightKind } from "./ceiling/lights"
 import { plumbingScene } from "./plumbing/plumbing-scene"
 import type { PlumbingScene } from "./plumbing/plumbing-scene"
 import { renderPlumbing } from "./plumbing/plumbing-render"
@@ -119,7 +125,7 @@ import { afterPlace, escapeAction, resumesAfterSelectionCleared, selectionAllowe
 import { loadThemeChoice, paletteOf, resolveTheme, saveThemeChoice, themeToggleTitle, toggledTheme } from "./theme"
 import type { Theme } from "./theme"
 import { GRID_STEP_CM, MATERIALS, PX_PER_CM } from "./types"
-import type { Battery, BatteryMark, Communication, DemolitionMark, Dimension, DimPoint, Drawing, DrywallWall, Material, PlasterMark, Point, RightAngleMark, RoomRecord, Screed, StretchCeiling, FurnitureItem, Unit, View, Wall, WallElement } from "./types"
+import type { Battery, BatteryMark, Communication, DemolitionMark, Dimension, DimPoint, Drawing, DrywallWall, Material, PlasterMark, Point, RightAngleMark, RoomRecord, Screed, StretchCeiling, FurnitureItem, LightFixture, LightKind, Unit, View, Wall, WallElement } from "./types"
 
 const canvas = document.querySelector<HTMLCanvasElement>("#canvas")!
 const canvasWrap = document.querySelector<HTMLElement>("#canvas-wrap")!
@@ -151,6 +157,12 @@ const screedThicknessInput = document.querySelector<HTMLInputElement>("#screed-t
 const toolStretchCeilingBtn = document.querySelector<HTMLButtonElement>("#tool-stretch-ceiling")!
 const ceilingPanel = document.querySelector<HTMLElement>("#ceiling-panel")!
 const ceilingDropInput = document.querySelector<HTMLInputElement>("#ceiling-drop")!
+const toolLightBtn = document.querySelector<HTMLButtonElement>("#tool-light")!
+const lightPanel = document.querySelector<HTMLElement>("#light-panel")!
+const lightKindButtons = [...lightPanel.querySelectorAll<HTMLButtonElement>("[data-light]")].flatMap((button): [LightKind, HTMLButtonElement][] => {
+  const kind = button.dataset.light
+  return kind !== undefined && isLightKind(kind) ? [[kind, button]] : []
+})
 const toolbar = document.querySelector<HTMLElement>("#toolbar")!
 const wallPanel = document.querySelector<HTMLElement>("#wall-panel")!
 const toolDrywallBtn = document.querySelector<HTMLButtonElement>("#tool-drywall")!
@@ -1121,6 +1133,25 @@ let ceilingDropMm = CEILING_DROP_DEFAULT
 let ceilingPanelOpen = false
 let ceilingEditor: { editor: NumberEditor; id: string } | null = null
 
+// объекты освещения (change add-ceiling-lighting, design D5–D7) лежат рядом с потолками; шаг истории плана — снимок обоих списков
+const NO_LIGHTS: LightFixture[] = []
+const lightsOf = (): LightFixture[] => current().ceiling?.lights ?? NO_LIGHTS
+const recordCeilingStep = (): void => {
+  nudgeBurst = false
+  recordCeilingPlan(activeHistory(), { ceilings: ceilingsOf(), lights: lightsOf() })
+}
+// чистовые грани подложки для расстояний освещения: считаются один раз на сцену
+let lightBodiesCache: { scene: CeilingScene; bodies: Shape[] } | null = null
+function lightBodies(): Shape[] {
+  const s = ceilingNow()
+  if (lightBodiesCache?.scene !== s) lightBodiesCache = { scene: s, bodies: furnitureReachBodies(s.base) }
+  return lightBodiesCache.bodies
+}
+// вид для новых объектов и панель группы «Освещение»: запоминаются в сеансе
+let lightCurrent: LightKind = LIGHT_GROUP_DEFAULT
+let lightPanelOpen = false
+let lightEditor: NumberEditor | null = null
+
 const ceilingHost: CeilingToolHost = {
   scene: ceilingNow,
   ceilings: ceilingsOf,
@@ -1128,10 +1159,7 @@ const ceilingHost: CeilingToolHost = {
     current().ceiling = storedCeiling(next, current())
     ceilingCache = null
   },
-  record: () => {
-    nudgeBurst = false
-    recordCeiling(activeHistory(), ceilingsOf())
-  },
+  record: recordCeilingStep,
   changed: () => {
     dirty = true
   },
@@ -1142,6 +1170,71 @@ const ceilingHost: CeilingToolHost = {
   labelPx: SCREEN_METRICS.labelPx,
 }
 const ceilingTool = createCeilingTool(ceilingHost)
+
+const lightHost: LightToolHost = {
+  bodies: lightBodies,
+  lights: lightsOf,
+  setLights: (next) => {
+    current().ceiling = storedCeiling(ceilingsOf(), current(), next)
+  },
+  record: recordCeilingStep,
+  changed: () => {
+    dirty = true
+  },
+  redraw: () => redraw(),
+  newId: () => crypto.randomUUID(),
+  kind: () => lightCurrent,
+  view: () => view,
+  unit: () => unit,
+  metrics: SCREEN_METRICS,
+}
+const lightTool = createLightTool(lightHost)
+
+const lightGroupState = (): LightGroupState => ({ current: lightCurrent, active: tool === "light" ? lightCurrent : "other", panelOpen: lightPanelOpen })
+
+function applyLightGroup(next: LightGroupState): void {
+  if (next.active !== "other" && tool !== "light") setTool("light")
+  lightCurrent = next.current
+  lightPanelOpen = next.panelOpen
+  syncLightUI()
+  redraw()
+}
+
+function syncLightUI(): void {
+  const s = lightGroupState()
+  lightPanel.classList.toggle("open", s.panelOpen)
+  toolLightBtn.classList.toggle("active", lightGroupActive(s))
+  for (const [kind, button] of lightKindButtons) button.classList.toggle("active", kind === s.current)
+}
+
+function closeLightPanel(): void {
+  lightPanelOpen = false
+  syncLightUI()
+}
+
+const closeLightEditor = (): void => {
+  lightEditor?.close()
+  lightEditor = null
+}
+
+// поле на месте числа выделенного объекта освещения: Enter применяет (одним шагом, если объект сдвинулся), как у чисел мебели
+function openLightEditor(n: LightNumber): void {
+  closeEditors()
+  const k = PX_PER_CM * view.zoom
+  const at = { x: (n.center.x - view.pan.x) * k, y: (n.center.y - view.pan.y) * k }
+  lightEditor = openNumberEditor(
+    canvasWrap,
+    at,
+    formatCm(n.valueCm, unit),
+    (text) => {
+      lightTool.setDistance(n.lightId, n.axis, parseFloat(text.replace(",", ".")) * UNIT_TO_CM[unit])
+      redraw()
+    },
+    () => {
+      lightEditor = null
+    },
+  )
+}
 
 // панель «Натяжной потолок»: опускание выделенного потолка, иначе значение для новых
 function syncCeilingPanel(): void {
@@ -1168,6 +1261,8 @@ function commitCeilingEditor(): void {
 // сброс поля ввода, выделения и панели (смена плана, чертежа и инструмента, отмена и повтор)
 const resetCeiling = (): void => {
   closeCeilingEditor()
+  closeLightEditor()
+  lightTool.clearSelection()
   ceilingTool.clearSelection()
   ceilingPanelOpen = false
   syncCeilingPanel()
@@ -1177,6 +1272,8 @@ const resetCeiling = (): void => {
 // (мебель не выделяется)
 function pressCeiling(p: Point): void {
   closeCeilingEditor()
+  closeLightEditor()
+  lightTool.clearSelection()
   const ceiling = ceilingTool.labelAt(p)
   if (!ceiling) {
     resetCeiling()
@@ -1620,6 +1717,7 @@ function syncToolUI(): void {
   syncFurniturePanel()
   syncOpeningsUI()
   syncCommunicationsUI()
+  syncLightUI()
   syncToolbar()
   canvas.classList.toggle("tool-eraser", tool === "eraser")
 }
@@ -1653,6 +1751,7 @@ function setTool(next: Tool): void {
   setWallPanel(false)
   closeOpeningsPanel()
   closeCommunicationsPanel()
+  closeLightPanel()
   syncToolUI()
   syncThicknessBox()
   redraw()
@@ -1936,7 +2035,8 @@ function drawCeilingPlan(): void {
   const s = ceilingNow()
   // выноска главнее потолка под курсором ластика
   const erasingCallout = tool === "eraser" && cursor ? calloutTool.pick(cursor) : null
-  const erasingCeiling = tool === "eraser" && cursor && !erasingCallout ? ceilingTool.eraseTarget(cursor) : null
+  const erasingLight = tool === "eraser" && cursor && !erasingCallout ? lightTool.eraseTarget(cursor) : null
+  const erasingCeiling = tool === "eraser" && cursor && !erasingCallout && !erasingLight && !lightTool.numberAt(cursor) ? ceilingTool.eraseTarget(cursor) : null
   renderCeiling(
     canvas,
     {
@@ -1950,6 +2050,11 @@ function drawCeilingPlan(): void {
       ceilings: s.ceilings.map((a) => ({ ceiling: a.object, room: a.item.room })),
       selectedCeilingId: ceilingTool.selectedId(),
       erasingCeilingId: erasingCeiling,
+      lights: lightTool.displayed(),
+      lightBodies: lightBodies(),
+      lightGhost: tool === "light" && cursor ? lightTool.ghost(cursor) : null,
+      selectedLightId: lightTool.selectedId(),
+      erasingLightId: erasingLight,
       callouts: calloutTool.displayList(),
       selectedCalloutId: calloutTool.selectedId(),
       erasingCalloutId: erasingCallout?.id ?? null,
@@ -2475,8 +2580,12 @@ canvas.addEventListener("pointermove", (e) => {
     return
   }
   if (onCeiling()) {
-    // «Линейка», «Ластик» и «Выноска» следят за курсором
-    if (tool === "ruler" || tool === "eraser" || tool === "callout") {
+    // перетаскивание объекта освещения; «Освещение» (призрак), «Линейка», «Ластик» и «Выноска» следят за курсором
+    if (lightTool.dragging()) {
+      lightTool.dragTo(toWorld(e))
+      return
+    }
+    if (tool === "light" || tool === "ruler" || tool === "eraser" || tool === "callout") {
       cursor = toWorld(e)
       if (tool === "callout") calloutTool.hover(cursor)
       redraw()
@@ -2533,7 +2642,7 @@ canvas.addEventListener("pointerleave", () => {
   if (tool === "plaster") plasterTool.hover(null)
   if (tool === "rightAngle") rightAngleTool.hover(null)
   if (tool === "furniture") itemTool.hover(null)
-  if ((tool === "ruler" || (tool === "eraser" && (onDemolition() || onRough() || onCeiling()))) && cursor) cursor = null
+  if ((tool === "ruler" || (tool === "eraser" && (onDemolition() || onRough() || onCeiling())) || (tool === "light" && onCeiling())) && cursor) cursor = null
   redraw()
 })
 
@@ -2601,6 +2710,19 @@ canvas.addEventListener("pointerdown", (e) => {
       return
     }
     if (calloutTool.selectedId() !== null) calloutTool.deselect()
+    // число объекта освещения, затем знак (перетаскивание), затем подпись потолка
+    closeLightEditor()
+    const hit = lightTool.press(p)
+    if (hit) {
+      closeCeilingEditor()
+      ceilingTool.clearSelection()
+      ceilingPanelOpen = false
+      if (hit.kind === "number") {
+        if (hit.wasSelected) openLightEditor(hit.number)
+      } else if (lightTool.beginDrag(p)) canvas.setPointerCapture(e.pointerId)
+      redraw()
+      return
+    }
     pressCeiling(p)
     return
   }
@@ -2753,7 +2875,10 @@ canvas.addEventListener("pointerup", (e) => {
     if (tool === "plaster" && plasterTool.up(toWorld(e), screenPoint(e)) !== null && plasterTool.selectedId() !== null) leavePlasterTool()
     return
   }
-  if (onCeiling() && e.button === 0) return
+  if (onCeiling() && e.button === 0) {
+    if (lightTool.dragging()) lightTool.endDrag()
+    return
+  }
   if (onDemolition() && e.button === 0) {
     // поставленная пометка остаётся выделенной, инструмент снимается — как у проёма (change demolition-select-after-mark)
     if (tool === "demolition" && batteryPress) {
@@ -2906,7 +3031,8 @@ canvas.addEventListener("click", (e) => {
     const at = toWorld(e)
     if (tool === "callout") calloutTool.click(at)
     else if (tool === "stretchCeiling") ceilingTool.place(at)
-    else if (tool === "eraser" && !calloutTool.eraseAt(at)) ceilingTool.erase(at)
+    else if (tool === "light") lightTool.place(at)
+    else if (tool === "eraser" && !calloutTool.eraseAt(at) && !lightTool.erase(at) && !lightTool.numberAt(at)) ceilingTool.erase(at)
     return
   }
   // на плане «Демонтаж» жесты разбирает адаптер по нажатию и отпусканию (change demolition-plan, design D10);
@@ -3374,6 +3500,9 @@ toolStretchCeilingBtn.addEventListener("click", () => {
   } else ceilingPanelOpen = !ceilingPanelOpen
   syncCeilingPanel()
 })
+// группа «Освещение»: переходы кнопки группы и панели — как у групп «Проёмы» и «Коммуникации»
+toolLightBtn.addEventListener("click", () => applyLightGroup(lightGroupClick(lightGroupState())))
+for (const [kind, button] of lightKindButtons) button.addEventListener("click", () => applyLightGroup(lightGroupPick(lightGroupState(), kind)))
 // поле опускания: меняет выделенный потолок одним шагом истории, иначе — значение для новых; недопустимое не применяется
 ceilingDropInput.addEventListener("change", () => {
   const mm = parseDropMm(ceilingDropInput.value)
@@ -3482,6 +3611,7 @@ function activate(id: string): void {
   calloutTool.reset()
   closeOpeningsPanel()
   closeCommunicationsPanel()
+  closeLightPanel()
   dimDraft = emptyDraft()
   dimDrag = null
   lengthDirty = false
@@ -3580,10 +3710,10 @@ function stepFurniture(step: typeof undoFurniture): void {
 }
 
 // отмена или повтор шага плана «Потолки и освещение» (change add-ceiling-plan, design D6): подставляется список потолков до операции
-function stepCeiling(step: typeof undoCeiling): void {
-  const next = step(activeHistory(), ceilingsOf())
+function stepCeiling(step: typeof undoCeilingPlan): void {
+  const next = step(activeHistory(), { ceilings: ceilingsOf(), lights: lightsOf() })
   if (!next) return
-  current().ceiling = storedCeiling(next, current())
+  current().ceiling = storedCeiling(next.ceilings, current(), next.lights)
   ceilingCache = null
   dirty = true
   resetEditing()
@@ -3681,7 +3811,7 @@ function undo(): void {
     return
   }
   if (h.past[h.past.length - 1]?.kind === "ceiling") {
-    stepCeiling(undoCeiling)
+    stepCeiling(undoCeilingPlan)
     return
   }
   if (h.past[h.past.length - 1]?.kind === "callouts") {
@@ -3730,7 +3860,7 @@ function redo(): void {
     return
   }
   if (h.future[h.future.length - 1]?.kind === "ceiling") {
-    stepCeiling(redoCeiling)
+    stepCeiling(redoCeilingPlan)
     return
   }
   if (h.future[h.future.length - 1]?.kind === "callouts") {
@@ -3857,10 +3987,12 @@ window.addEventListener("keydown", (e) => {
       resumePlasterTool()
       return
     }
-    // мебель и подложка не удаляются: Delete удаляет только выделенный потолок
+    // мебель и подложка не удаляются: Delete удаляет выделенный объект освещения или потолок
     if (onCeiling()) {
+      if (lightTool.dragging()) return
       closeCeilingEditor()
-      ceilingTool.deleteSelected()
+      closeLightEditor()
+      if (!lightTool.deleteSelected()) ceilingTool.deleteSelected()
       resetCeiling()
       return
     }
@@ -3895,12 +4027,13 @@ window.addEventListener("keydown", (e) => {
   if (e.key === "Escape" && onCeiling()) {
     const action = escapeAction({
       tool,
-      gestureActive: false,
+      gestureActive: lightTool.dragging(),
       dimensionDraft: false,
       calloutDraft: calloutTool.hasDraft(),
-      hasSelection: ceilingTool.selectedId() !== null || calloutTool.selectedId() !== null,
+      hasSelection: ceilingTool.selectedId() !== null || lightTool.selectedId() !== null || calloutTool.selectedId() !== null,
     })
-    if (action === "cancel-callout-draft") calloutTool.cancelDraft()
+    if (action === "end-gesture") resetCeiling()
+    else if (action === "cancel-callout-draft") calloutTool.cancelDraft()
     else if (action === "clear-selection") {
       calloutTool.deselect()
       resetCeiling()

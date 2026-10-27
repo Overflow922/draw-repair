@@ -1148,7 +1148,7 @@ Follow-ups from `add-ceiling-plan` (2026-10-26).
 
 - [ ] **Drywall bulkhead ("выпуск гипсокартона") on the ceiling plan.** The user explicitly left it out of this change
   (see the user's reference pictures). Needs its own tool on «Потолки и освещение».
-- [ ] **Light fixtures.** The plan is named «Потолки и освещение», but it only has the stretch ceiling so far; no light
+- [x] **Light fixtures.** Done in `add-ceiling-lighting` (2026-10-27). The plan is named «Потолки и освещение», but it only has the stretch ceiling so far; no light
   objects, legend entries or PDF output for them.
 - [ ] **Rooms that take drywall into account.** Ceiling rooms come from «Монтаж» walls (like screed and the room
   explication), so a store-room enclosed by drywall gets no ceiling of its own and the fill runs under the drywall
@@ -1163,3 +1163,29 @@ Follow-ups from `add-ceiling-plan` (2026-10-26).
 - [ ] (add-ceiling-plan) Render test for a rotated item on the ceiling plan (`src/ceiling/ceiling-render.test.ts`): scenario
   «Повёрнутый предмет» is covered only at scene level (CP-61, same centre, size and angle) and by the shared
   `itemDrawingInPlan`.
+
+---
+
+Follow-ups from `add-ceiling-lighting` (2026-10-27).
+
+## Out of scope (decided, revisit if needed)
+
+- [ ] **Number clutter.** Every light always shows two distances (bra — one); a grid of spots stacks many parallel dimension
+  lines and a light placed on a ceiling label overlaps «-50мм». No de-cluttering or chained dimensions (design, Risks).
+- [ ] **Bra does not follow its wall.** A bra stores a free point and an angle, not a wall reference: moving or deleting the
+  wall on «Монтаж» leaves the bra where it was (`src/ceiling/lights.ts`, design D2).
+- [ ] **Bra mounting height** is not stored or shown.
+
+## Tests
+
+- [ ] (add-ceiling-lighting) `src/main.ts` light wiring is covered only at source level (`src/ceiling/light-wiring.test.ts`:
+  press, eraser and Delete order, panel closing on plan/tab switch). Drag with pointer capture, the in-place number field and
+  the group buttons have no DOM-level test; checked by hand in the browser.
+- [ ] (add-ceiling-lighting) Hand check «wall moved on «Монтаж» → light numbers recomputed» was not done in the browser;
+  covered only by the numbers being computed from the live scene (`lightBodies` in `src/main.ts`).
+
+## Docs
+
+- [ ] (add-ceiling-lighting) `recordCeiling` / `undoCeiling` / `redoCeiling` (`src/history.ts`) are no longer used by the
+  app (replaced by `*CeilingPlan`); they stay because `src/ceiling/history-ceiling.test.ts` specifies them. Remove together
+  with those tests once the spec drops the ceilings-only entry.

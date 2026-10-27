@@ -101,6 +101,35 @@
                 </label>
               </div>
             </div>
+            <div class="tool-anchor" data-tools="light">
+              <button id="tool-light" class="tool" title="Освещение" type="button">
+                <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="7"/><path d="M5 12h14M12 5v14"/></svg>
+              </button>
+              <div id="light-panel" class="panel tool-panel">
+                <div class="group-tools" aria-label="Инструменты группы «Освещение»">
+                  <button class="group-tool active" data-light="spot" title="Точечный встроенный светильник" type="button">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--lighting-red)" stroke-width="1.8"><circle cx="12" cy="12" r="6"/><path d="M6 12h12M12 6v12"/></svg>
+                    <span>Точечный встроенный светильник</span>
+                  </button>
+                  <button class="group-tool" data-light="smoke-detector" title="Датчик пожарной сигнализации потолочный" type="button">
+                    <svg width="20" height="20" viewBox="0 0 24 24"><circle cx="8" cy="12" r="6" fill="var(--lighting-red)"/><circle cx="8" cy="12" r="3" fill="none" stroke="var(--paper)" stroke-width="1.5"/><text x="15" y="15.5" font-size="8" font-family="sans-serif" fill="var(--lighting-red)">ДПС</text></svg>
+                    <span>Датчик пожарной сигнализации потолочный</span>
+                  </button>
+                  <button class="group-tool" data-light="chandelier" title="Люстра" type="button">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="5.5" stroke="var(--lighting-red)" stroke-width="3.5"/><path d="M2 12h20M12 2v20" stroke="currentColor" stroke-width="1.5"/></svg>
+                    <span>Люстра</span>
+                  </button>
+                  <button class="group-tool" data-light="sconce" title="Бра" type="button">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--lighting-red)" stroke-width="1.8" stroke-linejoin="round"><path d="M3 17a9 9 0 0 1 18 0z"/><path d="M5.6 10.6L16.5 17M18.4 10.6L7.5 17"/></svg>
+                    <span>Бра</span>
+                  </button>
+                  <button class="group-tool" data-light="lighting-outlet" title="Электровывод для освещения" type="button">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--lighting-orange)" stroke-width="1.8" stroke-linecap="round"><circle cx="8" cy="15" r="4.5" fill="var(--lighting-orange)" stroke="none"/><path d="M12 12c2-3 4 1 6-2s2-3 3-3"/></svg>
+                    <span>Электровывод для освещения</span>
+                  </button>
+                </div>
+              </div>
+            </div>
             <div class="tool-anchor" data-tools="wall">
               <button id="tool-wall" class="tool active" title="Стена" type="button">
                 <svg width="32" height="32" viewBox="0 0 24 24" fill="currentColor"><rect x="3" y="5" width="8" height="4" rx=".8"/><rect x="12.5" y="5" width="8.5" height="4" rx=".8"/><rect x="3" y="10.5" width="3.5" height="4" rx=".8"/><rect x="8" y="10.5" width="8" height="4" rx=".8"/><rect x="17.5" y="10.5" width="3.5" height="4" rx=".8"/><rect x="3" y="16" width="8" height="4" rx=".8"/><rect x="12.5" y="16" width="8.5" height="4" rx=".8"/></svg>

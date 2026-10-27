@@ -336,10 +336,21 @@ export interface StretchCeiling {
   dropMm: number
 }
 
+// Объект освещения (change add-ceiling-lighting, design D1): центр — целые сантиметры; бра стоит на грани стены и хранит угол
+// наружной нормали грани (направление дуги в помещение), остальные виды — точки на потолке
+export type CeilingLightKind = "spot" | "smoke-detector" | "chandelier" | "lighting-outlet"
+export type LightKind = CeilingLightKind | "sconce"
+
+export type LightFixture =
+  | { id: string; kind: CeilingLightKind; x: number; y: number }
+  | { id: string; kind: "sconce"; x: number; y: number; angleDeg: number }
+
 // Собственные объекты плана «Потолки и освещение» (change add-ceiling-plan, design D2): натяжные потолки в порядке постановки,
+// объекты освещения в порядке постановки (отсутствие — нет объектов, пустой список не пишется; add-ceiling-lighting design D1),
 // выноски и примечания; мебель берётся из плана «Мебель» и здесь не хранится
 export interface CeilingContent {
   ceilings: StretchCeiling[]
+  lights?: LightFixture[]
   callouts?: Callout[]
   notes?: string[]
 }

@@ -1,4 +1,5 @@
 import { isDropMm } from "./ceiling/ceiling"
+import { isLightKind } from "./ceiling/lights"
 import { mergeAll } from "./demolition/marks"
 import { isFurnitureKind } from "./furniture/furniture-kinds"
 import { normalizeAngle } from "./furniture/item"
@@ -7,7 +8,7 @@ import { isPlanId } from "./plans"
 import { mergeAllPlaster } from "./rough/plaster-marks"
 import { PLASTER_THICKNESS, SCREED_THICKNESS, isThickness } from "./rough/rough-model"
 import { isDoor, isWindow, normalizeMaterial } from "./types"
-import type { Battery, BatteryCornerPoint, BatteryMark, Callout, CeilingContent, Communication, CornerRef, DemolitionMark, Dimension, DimPoint, Doorway, Drawing, DrawingStore, DrywallWall, EdgePoint, EdgeRef, FurnitureContent, ItemPoint, JambPoint, MountingContent, PlasterMark, PlumbingContent, Point, ReconstructionContent, RightAngleMark, RoomRecord, Screed, FurnitureItem, StretchCeiling, View, Wall, WallDoor, WallElement, WallWindow } from "./types"
+import type { Battery, BatteryCornerPoint, BatteryMark, Callout, CeilingContent, Communication, CornerRef, DemolitionMark, Dimension, DimPoint, Doorway, Drawing, DrawingStore, DrywallWall, EdgePoint, EdgeRef, FurnitureContent, ItemPoint, JambPoint, LightFixture, MountingContent, PlasterMark, PlumbingContent, Point, ReconstructionContent, RightAngleMark, RoomRecord, Screed, FurnitureItem, StretchCeiling, View, Wall, WallDoor, WallElement, WallWindow } from "./types"
 
 const KEY = "draw-repair:drawing"
 
@@ -446,6 +447,21 @@ export const isStretchCeiling = (c: unknown): c is StretchCeiling => {
 
 export const copyStretchCeiling = (c: StretchCeiling): StretchCeiling => ({ id: c.id, at: { x: c.at.x, y: c.at.y }, dropMm: c.dropMm })
 
+// объект освещения (change add-ceiling-lighting, design D1): непустой идентификатор, известный вид; центр точки — целые числа,
+// центр бра — точка грани (конечные числа) и конечный угол
+const isFiniteNumber = (v: unknown): v is number => typeof v === "number" && Number.isFinite(v)
+
+export const isLightFixture = (l: unknown): l is LightFixture => {
+  if (typeof l !== "object" || l === null) return false
+  const x = l as Record<string, unknown>
+  if (typeof x.id !== "string" || x.id === "" || !isLightKind(x.kind)) return false
+  if (x.kind === "sconce") return isFiniteNumber(x.x) && isFiniteNumber(x.y) && isFiniteNumber(x.angleDeg)
+  return Number.isSafeInteger(x.x) && Number.isSafeInteger(x.y)
+}
+
+export const copyLightFixture = (l: LightFixture): LightFixture =>
+  l.kind === "sconce" ? { id: l.id, kind: l.kind, x: l.x, y: l.y, angleDeg: l.angleDeg } : { id: l.id, kind: l.kind, x: l.x, y: l.y }
+
 // объекты плана «Потолки и освещение» при загрузке: некорректные потолки отбрасываются по одному, порядок списка сохраняется;
 // потолки вне помещений сохраняются; поле, не являющееся объектом, читается как отсутствующее; выноски и примечания — по общим
 // правилам; мебель в поле не хранится
@@ -456,6 +472,7 @@ function loadCeiling(raw: unknown): { ceiling?: CeilingContent } {
   return {
     ceiling: {
       ceilings: (Array.isArray(x.ceilings) ? x.ceilings : []).filter(isStretchCeiling).map(copyStretchCeiling),
+      ...(Array.isArray(x.lights) ? { lights: x.lights.filter(isLightFixture).map(copyLightFixture) } : null),
       ...(x.callouts === undefined ? null : { callouts: loadCalloutList(x.callouts) }),
       ...(notes === undefined ? null : { notes }),
     },

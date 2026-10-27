@@ -44,7 +44,8 @@ const PLAN_TOOLS: Record<PlanId, readonly [Tool, ...Tool[]]> = {
   // «Сантехника» (change add-plumbing-plan, design D1): приборы «Мебели» — подложка, своих предметов нет; по умолчанию «Размер»
   plumbing: ["dimension", "callout", "ruler", "notes", "eraser"],
   // «Потолки и освещение» (change add-ceiling-plan, design D1): натяжные потолки поверх результата «Мебели»; размеров нет
-  ceiling: ["stretchCeiling", "callout", "ruler", "notes", "eraser"],
+  // группа «Освещение» (change add-ceiling-lighting, design D7) — один инструмент, вид объекта выбирается в панели группы
+  ceiling: ["stretchCeiling", "light", "callout", "ruler", "notes", "eraser"],
 }
 
 export const toolsOf = (plan: PlanId): readonly Tool[] => PLAN_TOOLS[plan]
