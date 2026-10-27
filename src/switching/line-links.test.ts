@@ -71,6 +71,20 @@ describe("linkedObjects: выделен носитель или метка", () 
   })
 })
 
+describe("linkedObjects: правка имени обновляет связи", () => {
+  it("после смены метки светильника подсвечиваются объекты новой линии, прежней — нет", () => {
+    const switches = [sw("A", ["L3"]), sw("B", ["L5"])]
+    const before = linkedObjects({ kind: "carrier", id: "a" }, lines, switches, lights, fans)
+    expect([...before.carrierIds].sort()).toEqual(["b", "c"])
+    expect([...before.switchIds]).toEqual(["A"])
+
+    const renamed = lines.map((l) => (l.id === "la" ? { ...l, name: "L5" } : l))
+    const after = linkedObjects({ kind: "carrier", id: "a" }, renamed, switches, lights, fans)
+    expect([...after.carrierIds]).toEqual(["e"])
+    expect([...after.switchIds]).toEqual(["B"])
+  })
+})
+
 describe("linkedObjects: без выделения", () => {
   it("null — ничего", () => {
     expect(result(null)).toEqual({ carriers: [], labels: [], switches: [] })

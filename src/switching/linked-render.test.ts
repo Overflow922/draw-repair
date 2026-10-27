@@ -55,7 +55,22 @@ describe("подсветка связанных объектов", () => {
     expect(both).toBeGreaterThan(only)
   })
 
-  it("ластик главнее подсветки", () => {
+  it("страница PDF: набор полей, который передаёт pdf.ts, подсветки не даёт", () => {
+    const page = { items: [], lights: [spot], lineLabels: [label], switches: [block], exhausts: [fan] }
+    expect(selection(viewOf(page))).toBe(0)
+  })
+
+  it.each([
+    ["светильник", { lights: [spot], linkedLightIds: new Set(["a"]), erasingLightId: "a" }],
+    ["вытяжка", { exhausts: [fan], linkedExhaustIds: new Set(["f"]), erasingExhaustId: "f" }],
+    ["метка", { lineLabels: [label], linkedLineIds: new Set(["l"]), erasingLineId: "l" }],
+  ] satisfies [string, Partial<SwitchingView>][])("ластик главнее подсветки: %s", (_name, extra) => {
+    const ops = draw(viewOf(extra))
+    expect(strokes(ops, LIGHT_PALETTE.selection)).toEqual([])
+    expect(strokes(ops, LIGHT_PALETTE.erase).length).toBeGreaterThan(0)
+  })
+
+  it("ластик главнее подсветки: выключатель", () => {
     const ops = draw(viewOf({ switches: [block], linkedSwitchIds: new Set(["s"]), erasingSwitchId: "s" }))
     expect(strokes(ops, LIGHT_PALETTE.selection)).toEqual([])
     expect(strokes(ops, LIGHT_PALETTE.erase).length).toBeGreaterThan(0)
