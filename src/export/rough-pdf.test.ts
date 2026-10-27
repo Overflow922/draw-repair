@@ -66,7 +66,7 @@ describe("pagesOf: страница «Черновые работы»", () => {
   // TCR (change reconstruction-plan): после «Черновых работ» в каталоге пятый план, страниц пять
   it("RW-110: страниц пять; четвёртая — «Черновые работы» с подложкой «Монтажа», без размеров и пометок сноса", () => {
     const pages = pagesOf(rough({ roughPlaster: ALL_FACES }))
-    expect(pages).toHaveLength(8) // TCR (change furniture-plan-table): шесть // TCR (change add-plumbing-plan): семь — седьмой план «Сантехника» // TCR (change add-ceiling-plan): восемь — восьмой план «Потолки и освещение»
+    expect(pages).toHaveLength(9) // TCR (change furniture-plan-table): шесть // TCR (change add-plumbing-plan): семь — седьмой план «Сантехника» // TCR (change add-ceiling-plan): восемь — восьмой план «Потолки и освещение» // TCR (change add-switching-plan): девять — девятый план «Группы включения»
     const fourth = pages[3]
     expect(fourth?.title).toBe("Черновые работы")
     expect(fourth?.walls.map((w) => w.id)).toEqual(["k1~0", "k2~0", "k3~0", "k4~0"])
@@ -109,7 +109,7 @@ describe("страница «Черновые работы» в документ
   // TCR (change reconstruction-plan): страниц пять; на пятой штукатурка серая, фиолетового нет и там
   it("RW-120: PDF содержит пять страниц; штукатурка фиолетовая только на четвёртой", () => {
     const doc = build(rough({ roughPlaster: ALL_FACES }))
-    expect(doc.getNumberOfPages()).toBe(8) // TCR (change furniture-plan-table): шесть // TCR (change add-plumbing-plan): семь — седьмой план «Сантехника» // TCR (change add-ceiling-plan): восемь — восьмой план «Потолки и освещение»
+    expect(doc.getNumberOfPages()).toBe(9) // TCR (change furniture-plan-table): шесть // TCR (change add-plumbing-plan): семь — седьмой план «Сантехника» // TCR (change add-ceiling-plan): восемь — восьмой план «Потолки и освещение» // TCR (change add-switching-plan): девять — девятый план «Группы включения»
     expect(purpleFills(doc, 4).length).toBeGreaterThan(0)
     for (const n of [1, 2, 3, 5]) expect(purpleFills(doc, n), `страница ${n}`).toEqual([])
   })
@@ -125,7 +125,7 @@ describe("страница «Черновые работы» в документ
     const doc = build(rough({ roughScreeds: [screed("s", 200, 260, 65)] }))
     expect(textsOn(4)).toContain("h = 65мм")
     for (const n of [1, 2, 3, 5]) expect(textsOn(n).includes("h = 65мм"), `страница ${n}`).toBe(false)
-    expect(doc.getNumberOfPages()).toBe(8) // TCR (change reconstruction-plan) // TCR (change furniture-plan-table): шесть // TCR (change add-plumbing-plan): семь — седьмой план «Сантехника» // TCR (change add-ceiling-plan): восемь — восьмой план «Потолки и освещение»
+    expect(doc.getNumberOfPages()).toBe(9) // TCR (change reconstruction-plan) // TCR (change furniture-plan-table): шесть // TCR (change add-plumbing-plan): семь — седьмой план «Сантехника» // TCR (change add-ceiling-plan): восемь — восьмой план «Потолки и освещение» // TCR (change add-switching-plan): девять — девятый план «Группы включения»
   })
 
   it("RW-123: стяжка штрихует помещение: на четвёртой странице больше диагональных штрихов, чем без стяжки", () => {

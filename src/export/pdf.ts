@@ -23,6 +23,8 @@ import { drawFurnitureScene } from "../furniture/furniture-render"
 import { furnitureScene } from "../furniture/furniture-scene"
 import { plumbingScene } from "../plumbing/plumbing-scene"
 import { drawCeilingScene } from "../ceiling/ceiling-render"
+import { switchingScene } from "../switching/switching-scene"
+import { drawSwitchingScene } from "../switching/switching-render"
 import { ceilingScene } from "../ceiling/ceiling-scene"
 import { itemCorners } from "../furniture/item"
 import { itemSizeOutsidePoints } from "../furniture/item-size-layout"
@@ -191,6 +193,14 @@ export interface PlanPage {
   // слой плана «Потолки и освещение» (change add-ceiling-plan, design D8): предметы «Мебели» серой подложкой (записей видов мебели
   // в легенде не дают) и действующие натяжные потолки с помещениями; рядом лежит reconstruction (подложка)
   ceiling?: CeilingLayer
+  // слой плана «Группы включения» (change add-switching-plan, design D7): предметы «Мебели» серой подложкой и все объекты освещения
+  // знаками, без потолков и расстояний; рядом лежит reconstruction (подложка)
+  switching?: SwitchingLayer
+}
+
+export interface SwitchingLayer {
+  items: readonly FurnitureItem[]
+  lights: readonly LightFixture[]
 }
 
 export interface CeilingLayer {
@@ -337,6 +347,23 @@ export function pagesOf(drawing: Drawing): PlanPage[] {
           title: plan.label,
         }
       }
+      // страница «Группы включения» (change add-switching-plan, design D7): подложка «Мебели» без размеров, предметы «Мебели»
+      // и все объекты освещения; потолков и расстояний нет
+      case "switching": {
+        const scene = switchingScene(drawing, reconstructionScene(drawing, mounting))
+        return {
+          walls: scene.base.underlay,
+          dimensions: [],
+          doorways: mounting.doorways,
+          ...shared,
+          ...(mounting.batteries.length ? { batteries: mounting.batteries } : null),
+          ...callouts,
+          ...notes,
+          reconstruction: { pieces: scene.base.pieces, drywall: scene.base.own },
+          switching: { items: scene.items, lights: scene.lights },
+          title: plan.label,
+        }
+      }
     }
   })
 }
@@ -373,8 +400,9 @@ export function pageBounds(page: PlanPage, scale: number): BBox {
   // предметы страницы «Потолки и освещение» — без габаритов; подписи потолков лежат внутри помещений и габариты не расширяют
   const ceilingItems = (page.ceiling?.items ?? []).flatMap(itemCorners)
   // центры объектов освещения: знаки постоянного размера лежат у центров, расстояния — внутри помещений (change add-ceiling-lighting)
-  const lights = (page.ceiling?.lights ?? []).map((l): Point => ({ x: l.x, y: l.y }))
-  const extra = [...marks, ...bodies, ...rects, ...calloutPoints, ...rough, ...reconstruction, ...items, ...ceilingItems, ...lights]
+  const lights = (page.ceiling?.lights ?? page.switching?.lights ?? []).map((l): Point => ({ x: l.x, y: l.y }))
+  const switchingItems = (page.switching?.items ?? []).flatMap(itemCorners)
+  const extra = [...marks, ...bodies, ...rects, ...calloutPoints, ...rough, ...reconstruction, ...items, ...ceilingItems, ...switchingItems, ...lights]
   const walls = page.reconstruction ? [...page.walls, ...page.reconstruction.drywall] : page.walls
   return wallsBBox(walls, page.dimensions, 0.5 * scale, page.doorways, scale, extra, batteries, page.furniture?.items)
 }
@@ -441,6 +469,8 @@ function drawPage(
     // страница «Потолки и освещение»: подложка, предметы серым, полупрозрачная заливка потолков, подписи (change add-ceiling-plan, design D8)
     else if (page.ceiling !== undefined)
       drawCeilingScene(ctx, w, h, { ...scene, items: page.ceiling.items, ceilings: page.ceiling.ceilings, lights: page.ceiling.lights, lightBodies: page.ceiling.lightBodies }, unit, view, { ...opts, translucent: pdfTranslucent(doc) })
+    // страница «Группы включения»: те же слои без потолков и расстояний (change add-switching-plan, design D7)
+    else if (page.switching !== undefined) drawSwitchingScene(ctx, w, h, { ...scene, items: page.switching.items, lights: page.switching.lights }, unit, view, { ...opts, translucent: pdfTranslucent(doc) })
     else drawReconstructionScene(ctx, w, h, scene, unit, view, opts)
     return
   }

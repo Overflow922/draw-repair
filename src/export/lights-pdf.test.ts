@@ -88,7 +88,7 @@ describe("освещение на странице PDF", () => {
   it("CL-P1: на восьмой странице знаки и размеры «100», «80» светильника и «120» бра", () => {
     const d = withLights([spot("s", 100, 80), sconce])
     const doc = build(d)
-    expect(doc.getNumberOfPages()).toBe(8)
+    expect(doc.getNumberOfPages()).toBe(9) // TCR (change add-switching-plan): девять — девятый план «Группы включения»
     expect(textsOn(8)).toEqual(expect.arrayContaining(["100", "80", "120"]))
     expect(redBars(parsePaint(doc, 8)).length).toBeGreaterThan(0)
   })

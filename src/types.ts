@@ -355,6 +355,13 @@ export interface CeilingContent {
   notes?: string[]
 }
 
+// Собственные объекты плана «Группы включения» (change add-switching-plan, design D2): пока только выноски и примечания;
+// освещение берётся из плана «Потолки и освещение» и здесь не хранится
+export interface SwitchingContent {
+  callouts?: Callout[]
+  notes?: string[]
+}
+
 export interface Drawing {
   id: string
   name: string
@@ -402,6 +409,8 @@ export interface Drawing {
   plumbing?: PlumbingContent
   // объекты плана «Потолки и освещение»; отсутствие — пустой план, при загрузке не дописывается (add-ceiling-plan design D2)
   ceiling?: CeilingContent
+  // объекты плана «Группы включения»; отсутствие — пустой план, при загрузке не дописывается (add-switching-plan design D2)
+  switching?: SwitchingContent
   view: View
 }
 

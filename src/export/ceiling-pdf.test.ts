@@ -115,10 +115,10 @@ describe("страница «Потолки и освещение» в PDF", () 
   it("CP-140: страниц восемь; восьмая — заливка помещения жёлтым, стол серыми линиями без габаритов, подпись «-50мм»", () => {
     const d = full()
     const pages = pagesOf(d)
-    expect(pages).toHaveLength(8)
+    expect(pages).toHaveLength(9) // TCR (change add-switching-plan): девять — девятый план «Группы включения»
     expect(pages[7]?.title).toBe("Потолки и освещение")
     const doc = build(d)
-    expect(doc.getNumberOfPages()).toBe(8)
+    expect(doc.getNumberOfPages()).toBe(9) // TCR (change add-switching-plan): девять — девятый план «Группы включения»
     const ops = parsePaint(doc, 8)
     expect(roomFillIndex(ops)).toBeGreaterThanOrEqual(0)
     // стол 80 × 160 см при 1:50 — 16 × 32 мм: серые линии, без заливки и без чёрных линий
@@ -188,7 +188,7 @@ describe("страница «Потолки и освещение» в PDF", () 
     const page = pagesOf(d)[7]
     expect(page?.walls).toEqual(pagesOf(d)[5]?.walls)
     expect(page?.ceiling?.ceilings).toEqual([])
-    expect(build(d).getNumberOfPages()).toBe(8)
+    expect(build(d).getNumberOfPages()).toBe(9) // TCR (change add-switching-plan): девять — девятый план «Группы включения»
   })
 
   it("CP-145: заливка того же жёлтого, что на светлой схеме: страница не зависит от схемы экрана", () => {
@@ -212,7 +212,7 @@ describe("легенда страницы «Потолки и освещение
   })
 
   it("CP-151: «Натяжной потолок» только на своей странице", () => {
-    expect(pagesOf(full()).map((p) => labels(p).includes("Натяжной потолок"))).toEqual([false, false, false, false, false, false, false, true])
+    expect(pagesOf(full()).map((p) => labels(p).includes("Натяжной потолок"))).toEqual([false, false, false, false, false, false, false, true, false]) // TCR (change add-switching-plan): девять — девятый план «Группы включения»
   })
 
   it("CP-152: недействующий потолок записи не даёт", () => {
@@ -220,11 +220,11 @@ describe("легенда страницы «Потолки и освещение
   })
 
   it("CP-153: «Гипсокартон» на «Реконструкции», «Мебели», «Сантехнике» и «Потолках и освещении»", () => {
-    expect(pagesOf(full()).map((p) => labels(p).includes("Гипсокартон"))).toEqual([false, false, false, false, true, true, true, true])
+    expect(pagesOf(full()).map((p) => labels(p).includes("Гипсокартон"))).toEqual([false, false, false, false, true, true, true, true, true]) // TCR (change add-switching-plan): девять — девятый план «Группы включения»
   })
 
   it("CP-154: «Стол» только на странице «Мебель»", () => {
-    expect(pagesOf(full()).map((p) => labels(p).includes("Стол"))).toEqual([false, false, false, false, false, true, false, false])
+    expect(pagesOf(full()).map((p) => labels(p).includes("Стол"))).toEqual([false, false, false, false, false, true, false, false, false]) // TCR (change add-switching-plan): девять — девятый план «Группы включения»
   })
 
   it("CP-155: образец «Натяжной потолок» — жёлтая заливка с тёмным контуром", () => {

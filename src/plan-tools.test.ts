@@ -80,6 +80,7 @@ describe("план «Демонтаж» в каталоге", () => {
       ["furniture", "Мебель"], // TCR (change furniture-plan-table)
       ["plumbing", "Сантехника"], // TCR (change add-plumbing-plan)
       ["ceiling", "Потолки и освещение"], // TCR (change add-ceiling-plan)
+      ["switching", "Группы включения"], // TCR (change add-switching-plan)
     ])
   })
 

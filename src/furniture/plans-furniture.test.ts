@@ -17,7 +17,7 @@ const table: FurnitureItem = { id: "t", kind: "table", x: 0, y: 0, widthCm: 80, 
 describe("каталог", () => {
   it("FP-200: «Мебель» (furniture) — шестой, последний план каталога", () => {
     // TCR (change add-plumbing-plan): после «Мебели» добавлена «Сантехника», она теперь последняя
-    expect(PLANS.map((p) => p.id)).toEqual(["measure", "demolition", "mounting", "rough", "reconstruction", "furniture", "plumbing", "ceiling"]) // TCR (change add-ceiling-plan): восемь — восьмой план «Потолки и освещение»
+    expect(PLANS.map((p) => p.id)).toEqual(["measure", "demolition", "mounting", "rough", "reconstruction", "furniture", "plumbing", "ceiling", "switching"]) // TCR (change add-ceiling-plan): восемь — восьмой план «Потолки и освещение» // TCR (change add-switching-plan): девять — девятый план «Группы включения»
     expect(PLANS[5]).toEqual({ id: "furniture", label: "Мебель" })
   })
 

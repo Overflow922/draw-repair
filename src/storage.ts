@@ -8,7 +8,7 @@ import { isPlanId } from "./plans"
 import { mergeAllPlaster } from "./rough/plaster-marks"
 import { PLASTER_THICKNESS, SCREED_THICKNESS, isThickness } from "./rough/rough-model"
 import { isDoor, isWindow, normalizeMaterial } from "./types"
-import type { Battery, BatteryCornerPoint, BatteryMark, Callout, CeilingContent, Communication, CornerRef, DemolitionMark, Dimension, DimPoint, Doorway, Drawing, DrawingStore, DrywallWall, EdgePoint, EdgeRef, FurnitureContent, ItemPoint, JambPoint, LightFixture, MountingContent, PlasterMark, PlumbingContent, Point, ReconstructionContent, RightAngleMark, RoomRecord, Screed, FurnitureItem, StretchCeiling, View, Wall, WallDoor, WallElement, WallWindow } from "./types"
+import type { Battery, BatteryCornerPoint, BatteryMark, Callout, CeilingContent, Communication, CornerRef, DemolitionMark, Dimension, DimPoint, Doorway, Drawing, DrawingStore, DrywallWall, EdgePoint, EdgeRef, FurnitureContent, ItemPoint, JambPoint, LightFixture, MountingContent, PlasterMark, PlumbingContent, Point, ReconstructionContent, RightAngleMark, RoomRecord, Screed, FurnitureItem, StretchCeiling, SwitchingContent, View, Wall, WallDoor, WallElement, WallWindow } from "./types"
 
 const KEY = "draw-repair:drawing"
 
@@ -438,6 +438,20 @@ function loadPlumbing(raw: unknown): { plumbing?: PlumbingContent } {
   }
 }
 
+// объекты плана «Группы включения» при загрузке (change add-switching-plan, design D2): только выноски и примечания по общим
+// правилам; поле, не являющееся объектом, читается как отсутствующее; освещение и мебель в поле не хранятся
+function loadSwitching(raw: unknown): { switching?: SwitchingContent } {
+  if (typeof raw !== "object" || raw === null || Array.isArray(raw)) return {}
+  const x = raw as Record<string, unknown>
+  const notes = loadNoteList(x.notes)
+  return {
+    switching: {
+      ...(x.callouts === undefined ? null : { callouts: loadCalloutList(x.callouts) }),
+      ...(notes === undefined ? null : { notes }),
+    },
+  }
+}
+
 // натяжной потолок (change add-ceiling-plan, design D2): непустой идентификатор, опорная точка, опускание — целое больше нуля
 export const isStretchCeiling = (c: unknown): c is StretchCeiling => {
   if (typeof c !== "object" || c === null) return false
@@ -548,6 +562,7 @@ export function parseStore(raw: string): LoadedStore | null {
           ...loadFurniture(dr.furniture),
           ...loadPlumbing(dr.plumbing),
           ...loadCeiling(dr.ceiling),
+          ...loadSwitching(dr.switching),
           dimensions: (Array.isArray(dr.dimensions) ? dr.dimensions : []).filter(isDimension).map(copyDimension),
         }
       })

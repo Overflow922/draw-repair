@@ -99,7 +99,7 @@ describe("pagesOf: страница демонтажа", () => {
     const pages = pagesOf(d)
     // TCR-5 (change mounting-plan): третья страница плана «Монтаж»; вторая по-прежнему демонтаж
     // TCR (change add-rough-works-plan): страниц четыре — четвёртая «Черновые работы»; TCR (change reconstruction-plan): пять
-    expect(pages).toHaveLength(8) // TCR (change furniture-plan-table): шесть // TCR (change add-plumbing-plan): семь — седьмой план «Сантехника» // TCR (change add-ceiling-plan): восемь — восьмой план «Потолки и освещение»
+    expect(pages).toHaveLength(9) // TCR (change furniture-plan-table): шесть // TCR (change add-plumbing-plan): семь — седьмой план «Сантехника» // TCR (change add-ceiling-plan): восемь — восьмой план «Потолки и освещение» // TCR (change add-switching-plan): девять — девятый план «Группы включения»
     expect(pages[1]?.walls).toEqual([W1])
     expect(pages[1]?.dimensions).toEqual([])
     expect(pages[1]?.demolition).toEqual(effectiveMarks([M1], [W1]))
@@ -159,7 +159,7 @@ describe("страница демонтажа в документе PDF", () => 
   // TCR (change reconstruction-plan): страниц пять; красного нет и на пятой
   it("PG-02: PDF содержит пять страниц; красное и красная штриховка только на второй", () => {
     const doc = build(drawing())
-    expect(doc.getNumberOfPages()).toBe(8) // TCR (change furniture-plan-table): шесть // TCR (change add-plumbing-plan): семь — седьмой план «Сантехника» // TCR (change add-ceiling-plan): восемь — восьмой план «Потолки и освещение»
+    expect(doc.getNumberOfPages()).toBe(9) // TCR (change furniture-plan-table): шесть // TCR (change add-plumbing-plan): семь — седьмой план «Сантехника» // TCR (change add-ceiling-plan): восемь — восьмой план «Потолки и освещение» // TCR (change add-switching-plan): девять — девятый план «Группы включения»
     expect(redOn(doc, 1)).toEqual([])
     expect(redOn(doc, 3)).toEqual([])
     expect(redOn(doc, 4)).toEqual([])
@@ -258,7 +258,7 @@ describe("страница демонтажа в документе PDF", () => 
   it("PG-14: без пометок вторая страница — только серая подложка, красного нет", () => {
     const doc = build(drawing({ demolition: [] }))
     // TCR-5 (change mounting-plan): страниц три; TCR (change add-rough-works-plan): страниц четыре; TCR (change reconstruction-plan): пять
-    expect(doc.getNumberOfPages()).toBe(8) // TCR (change furniture-plan-table): шесть // TCR (change add-plumbing-plan): семь — седьмой план «Сантехника» // TCR (change add-ceiling-plan): восемь — восьмой план «Потолки и освещение»
+    expect(doc.getNumberOfPages()).toBe(9) // TCR (change furniture-plan-table): шесть // TCR (change add-plumbing-plan): семь — седьмой план «Сантехника» // TCR (change add-ceiling-plan): восемь — восьмой план «Потолки и освещение» // TCR (change add-switching-plan): девять — девятый план «Группы включения»
     expect(redOn(doc, 2)).toEqual([])
   })
 
@@ -420,7 +420,7 @@ describe("форматы и доступность экспорта", () => {
     const pages = pagesOf(d)
     expect(pages.every((p) => p.walls.length === 0)).toBe(true)
     const doc = build(d)
-    expect(doc.getNumberOfPages()).toBe(8) // TCR (change furniture-plan-table): шесть // TCR (change add-plumbing-plan): семь — седьмой план «Сантехника» // TCR (change add-ceiling-plan): восемь — восьмой план «Потолки и освещение»
+    expect(doc.getNumberOfPages()).toBe(9) // TCR (change furniture-plan-table): шесть // TCR (change add-plumbing-plan): семь — седьмой план «Сантехника» // TCR (change add-ceiling-plan): восемь — восьмой план «Потолки и освещение» // TCR (change add-switching-plan): девять — девятый план «Группы включения»
     expect(rectEdgesDrawn(strokeSegments(parsePaths(doc, 2)), frameRect("A4"), FRAME_LINE_MM)).toBe(true)
   })
 })

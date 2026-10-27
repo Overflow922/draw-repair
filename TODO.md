@@ -1208,3 +1208,16 @@ Follow-ups from exploring `add-switching-plan` (2026-10-27).
 - [ ] **Legend «Количество» column** (changes `add-light-lines`, `add-light-switch`, `add-exhaust-fan`): the user's sample legend has a quantity column (lights, lines, switches, extractors); the app legend is «sample — label» only, so the column is not part of the lighting changes. Needs its own change for every plan's legend.
 - [ ] **Scheme integrity checks** (after `add-exhaust-fan`): a line with no switch key, a key naming a line that does not exist, highlight of a line's group when a key is selected.
 - [ ] **Order of the lighting changes:** `add-switching-plan` → `add-light-lines` → `add-light-switch` → `add-exhaust-fan`; the later ones validate against main specs only after the earlier ones are archived.
+
+---
+
+Follow-ups from implementing `add-switching-plan` (2026-10-27).
+
+## Bugs
+
+- [ ] Plan switcher with nine segments is ~711 px wide and does not wrap or scroll (`#plan-switch`, `src/style.css:515`): in a window narrower than ~760 px the last segments are clipped by the panel (eight segments clipped below ~640 px, so not new, but worse now). Needs a wrapping or scrolling switcher; design D1 assumed it fits.
+
+## Docs
+
+- [ ] Task 2.3 of `add-switching-plan` named `storedSwitching`; it was not written: the plan has no own objects yet, so nothing would call it (callouts and notes go through `callout-store.ts` and `notes-store.ts`). `add-light-lines` adds it together with its first own list (`SwitchingContent.lines`), as `storedCeiling` does for lights; update that change's tasks accordingly.
+- [ ] The project has no formatter or linter configured (no prettier/eslint config, no `lint` script), so quality gates 1–2 of CLAUDE.md Rule 7 only ran as `tsc --noEmit` and the test suite.

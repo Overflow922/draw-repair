@@ -62,7 +62,10 @@ export function legendEntries(page: PlanPage): LegendEntry[] {
   // (change add-ceiling-plan, design D8)
   if ((page.ceiling?.ceilings.length ?? 0) > 0) entries.push({ kind: "ceiling", label: "Натяжной потолок" })
   // виды освещения, чьи объекты есть на странице, в порядке каталога видов освещения (change add-ceiling-lighting, design D8)
-  for (const { kind, title } of LIGHT_KINDS) if (page.ceiling?.lights.some((l) => l.kind === kind)) entries.push({ kind: "light", light: kind, label: title })
+  // страница «Группы включения» даёт те же записи видов освещения, но без «Натяжного потолка» и видов мебели (change
+  // add-switching-plan, design D7)
+  const lights = page.ceiling?.lights ?? page.switching?.lights ?? []
+  for (const { kind, title } of LIGHT_KINDS) if (lights.some((l) => l.kind === kind)) entries.push({ kind: "light", light: kind, label: title })
   // мебель: запись на каждый вид каталога, чьи предметы есть на странице, в порядке каталога (change furniture-items-catalog, design D6)
   for (const item of FURNITURE_KIND_ORDER)
     if (page.furniture?.items.some((i) => i.kind === item)) entries.push({ kind: "furniture", item, label: kindEntry(item).label })
