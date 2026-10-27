@@ -65,37 +65,37 @@ const FIVE: LightLine[] = SPOTS.map((s, i) => line("m" + String(i), s.id, "L3"))
 
 const room = (): Drawing => drawing({ walls: rectWalls("k", -10, -10, 410, 310) })
 const withLines = (lines: LightLine[]): Drawing => ({ ...room(), ceiling: { ceilings: [], lights: [...SPOTS, chandelier] }, switching: { lines } })
-const switchingPage = (d: Drawing): PlanPage | undefined => pagesOf(d)[8]
+const switchingPage = (d: Drawing): PlanPage | undefined => pagesOf(d)[9]
 const labels = (page: PlanPage | undefined): string[] => (page ? legendEntries(page).map((e) => e.label) : [])
 const count = (list: string[], text: string): number => list.filter((t) => t === text).length
 
 describe("метки линий на странице «Группы включения»", () => {
-  it("LL-100: пять светильников — пять подписей «L3» на девятой странице", () => {
+  it("LL-100: пять светильников — пять подписей «L3» на десятой странице", () => {
     build(withLines(FIVE))
-    expect(count(textsOn(9), "L3")).toBe(5)
+    expect(count(textsOn(10), "L3")).toBe(5)
   })
 
-  it("LL-101: подписи есть только на девятой странице", () => {
+  it("LL-101: подписи есть только на десятой странице", () => {
     build(withLines(FIVE))
-    for (let page = 1; page <= 8; page++) expect(textsOn(page)).not.toContain("L3")
+    for (let page = 1; page <= 9; page++) expect(textsOn(page)).not.toContain("L3")
   })
 
   it("LL-102: метка люстры «L2» нарисована отдельно от «L3»", () => {
     build(withLines([...FIVE, line("mx", "x", "L2")]))
-    expect(count(textsOn(9), "L2")).toBe(1)
-    expect(count(textsOn(9), "L3")).toBe(5)
+    expect(count(textsOn(10), "L2")).toBe(1)
+    expect(count(textsOn(10), "L3")).toBe(5)
   })
 
   it("LL-103: метка светильника, которого нет, не рисуется", () => {
     build(withLines([line("m", "нет-такого", "L3")]))
-    expect(textsOn(9)).not.toContain("L3")
+    expect(textsOn(10)).not.toContain("L3")
   })
 
-  it("LL-104: метки не меняют первые восемь страниц", () => {
+  it("LL-104: метки не меняют первые девять страниц", () => {
     build(withLines([]))
-    const before = Array.from({ length: 8 }, (_, i) => textsOn(i + 1))
+    const before = Array.from({ length: 9 }, (_, i) => textsOn(i + 1))
     build(withLines(FIVE))
-    expect(Array.from({ length: 8 }, (_, i) => textsOn(i + 1))).toEqual(before)
+    expect(Array.from({ length: 9 }, (_, i) => textsOn(i + 1))).toEqual(before)
   })
 })
 
@@ -104,20 +104,20 @@ describe("легенда страницы «Группы включения»: �
     const page = switchingPage(withLines(FIVE))
     expect(labels(page)).toEqual(["Кирпич", "Точечный встроенный светильник", "Люстра", "Линия освещения"])
     build(withLines(FIVE))
-    expect(textsOn(9)).toContain("L1")
+    expect(textsOn(10)).toContain("L1")
     // подпись легенды переносится по пробелам
-    expect(textsOn(9)).toEqual(expect.arrayContaining(["Линия", "освещения"]))
+    expect(textsOn(10)).toEqual(expect.arrayContaining(["Линия", "освещения"]))
   })
 
   it("LL-106: нет показанных меток — записи нет, в том числе когда светильника нет", () => {
     expect(labels(switchingPage(withLines([])))).not.toContain("Линия освещения")
     expect(labels(switchingPage(withLines([line("m", "нет-такого", "L3")])))).not.toContain("Линия освещения")
     build(withLines([]))
-    expect(textsOn(9)).not.toContain("L1")
+    expect(textsOn(10)).not.toContain("L1")
   })
 
   it("LL-107: записи «Линия освещения» нет в легендах других страниц", () => {
     const pages = pagesOf(withLines(FIVE))
-    expect(pages.slice(0, 8).flatMap((p) => labels(p))).not.toContain("Линия освещения")
+    expect(pages.slice(0, 9).flatMap((p) => labels(p))).not.toContain("Линия освещения")
   })
 })

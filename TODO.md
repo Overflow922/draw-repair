@@ -1281,3 +1281,19 @@ Follow-ups from `add-exhaust-fan` (2026-10-27).
 ## Out of scope
 
 - [ ] Schema integrity checks, highlight of a group by key, height and power of a fan, a fan on «Потолки и освещение» with distances to walls (design D1: needs a separate change moving it to `ceiling.lights`), the «Количество» column of the legend.
+
+---
+
+Follow-ups from `split-ceiling-pdf-pages` (2026-10-27).
+
+## Docs
+
+- [ ] The general `pdf-export` requirement «Легенда на странице PDF» still lists pages by name and by "first seven"; the legend of the page «Освещение. Расстояния» lives in its own requirement. Fold the lists together at the next legend change (same drift as the «Группы включения» item above).
+
+## Tests
+
+- [ ] The click on «Экспорт PDF» in `src/main.ts` (`pagesOf` → `fitScale` → `exportPages`) was not run through the UI; ten pages were checked by building the PDF from a sample drawing and opening it in the browser. No mutation testing tool is installed in the project.
+
+## Out of scope
+
+- [ ] The page «Освещение. Расстояния» has no callouts, notes or ceilings by decision; if a callout is needed there, it needs its own storage (callouts are per plan, `calloutsOf(drawing, "ceiling")` feeds page 8 only).

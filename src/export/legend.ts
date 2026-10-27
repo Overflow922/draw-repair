@@ -67,7 +67,8 @@ export function legendEntries(page: PlanPage): LegendEntry[] {
   // виды освещения, чьи объекты есть на странице, в порядке каталога видов освещения (change add-ceiling-lighting, design D8)
   // страница «Группы включения» даёт те же записи видов освещения, но без «Натяжного потолка» и видов мебели (change
   // add-switching-plan, design D7)
-  const lights = page.ceiling?.lights ?? page.switching?.lights ?? []
+  // страница «Освещение. Расстояния» (change split-ceiling-pdf-pages, design D4) даёт те же записи видов освещения
+  const lights = page.ceiling?.lights ?? page.distances?.lights ?? page.switching?.lights ?? []
   for (const { kind, title } of LIGHT_KINDS) if (lights.some((l) => l.kind === kind)) entries.push({ kind: "light", light: kind, label: title })
   // «Вытяжка» — после видов освещения и до «Линии освещения», если на странице есть хотя бы одна вытяжка (change add-exhaust-fan, design D6)
   if ((page.switching?.exhausts.length ?? 0) > 0) entries.push({ kind: "exhaust-fan", label: "Вытяжка" })

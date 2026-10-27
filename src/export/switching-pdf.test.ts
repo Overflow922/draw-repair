@@ -8,7 +8,7 @@ import type { PlanPage } from "./pdf"
 import { parsePaint } from "./pdf-paint.test-utils"
 import type { PaintOp } from "./pdf-paint.test-utils"
 
-// change add-switching-plan: девятая страница PDF «Группы включения» и её легенда
+// change add-switching-plan: десятая страница PDF «Группы включения» и её легенда
 // (spec pdf-export «Страница плана «Группы включения»», «Легенда страницы «Группы включения»»; design D7)
 //
 //  вид сверху, схематично, не в масштабе. Комната: стены толщиной 20 см по осям [-10,410]×[-10,310], внутренние грани
@@ -85,61 +85,61 @@ const redBars = (ops: PaintOp[]): number[] =>
 const YELLOW_FILLS = (ops: PaintOp[]): PaintOp[] => ops.filter((op) => op.kind === "fill" && op.color[0] > 0.9 && op.color[1] > 0.8 && op.color[2] < 0.7)
 
 describe("страница «Группы включения»", () => {
-  it("SW-30: страница девятая; на ней знаки светильника и люстры, без расстояний и подписи потолка", () => {
+  it("SW-30: страница десятая; на ней знаки светильника и люстры, без расстояний и подписи потолка", () => {
     const doc = build(full())
-    expect(doc.getNumberOfPages()).toBe(9)
-    expect(redBars(parsePaint(doc, 9)).length).toBeGreaterThan(0)
-    const shown = textsOn(9)
+    expect(doc.getNumberOfPages()).toBe(10)
+    expect(redBars(parsePaint(doc, 10)).length).toBeGreaterThan(0)
+    const shown = textsOn(10)
     for (const t of ["100", "80", "-50мм"]) expect(shown).not.toContain(t)
   })
 
   it("SW-31: у стола нет габаритов «80» и «160»", () => {
     build(full())
-    const shown = textsOn(9)
+    const shown = textsOn(10)
     for (const t of ["80", "160"]) expect(shown).not.toContain(t)
   })
 
-  it("SW-32: жёлтой заливки натяжного потолка нет на девятой странице, а на восьмой есть", () => {
+  it("SW-32: жёлтой заливки натяжного потолка нет на десятой странице, а на восьмой есть", () => {
     const doc = build(full())
-    expect(YELLOW_FILLS(parsePaint(doc, 9))).toEqual([])
+    expect(YELLOW_FILLS(parsePaint(doc, 10))).toEqual([])
     expect(YELLOW_FILLS(parsePaint(doc, 8)).length).toBeGreaterThan(0)
   })
 
   it("SW-33: страница без мебели и освещения остаётся", () => {
     const doc = build(room())
-    expect(doc.getNumberOfPages()).toBe(9)
-    expect(redBars(parsePaint(doc, 9))).toEqual([])
+    expect(doc.getNumberOfPages()).toBe(10)
+    expect(redBars(parsePaint(doc, 10))).toEqual([])
   })
 
   it("SW-34: знак 3 мм при 1:50 и 1:100", () => {
     for (const scale of [50, 100]) {
-      const bars = redBars(parsePaint(build(full(), scale), 9))
+      const bars = redBars(parsePaint(build(full(), scale), 10))
       expect(bars.some((w) => Math.abs(w - 3) < 0.01)).toBe(true)
     }
   })
 
-  it("SW-35: размер плана «Мебель» на девятой странице не выводится", () => {
+  it("SW-35: размер плана «Мебель» на десятой странице не выводится", () => {
     const dim: Dimension = { from: { a: { wallId: "k1", edge: 0 }, b: { wallId: "k2", edge: 1 } }, to: { a: { wallId: "k3", edge: 0 }, b: { wallId: "k4", edge: 1 } }, offset: 20 }
     const d: Drawing = { ...full(), furniture: { items: [table], dimensions: [dim] } }
     build(full())
-    const plain = textsOn(9)
+    const plain = textsOn(10)
     build(d)
-    expect(textsOn(9)).toEqual(plain)
+    expect(textsOn(10)).toEqual(plain)
   })
 
-  it("SW-36: выноски и примечания плана не меняют первые восемь страниц", () => {
+  it("SW-36: выноски и примечания плана не меняют первые девять страниц", () => {
     build(full())
-    const before = Array.from({ length: 8 }, (_, i) => textsOn(i + 1))
+    const before = Array.from({ length: 9 }, (_, i) => textsOn(i + 1))
     const d: Drawing = { ...full(), switching: { callouts: [callout], notes: ["Группа 1"] } }
     build(d)
-    expect(Array.from({ length: 8 }, (_, i) => textsOn(i + 1))).toEqual(before)
-    expect(textsOn(9)).toEqual(expect.arrayContaining(["Выключатель у двери", "Группа 1"]))
+    expect(Array.from({ length: 9 }, (_, i) => textsOn(i + 1))).toEqual(before)
+    expect(textsOn(10)).toEqual(expect.arrayContaining(["Выключатель у двери", "Группа 1"]))
   })
 
   it("SW-37: габариты страницы включают центры объектов освещения", () => {
     const d: Drawing = { ...room(), ceiling: { ceilings: [], lights: [spot("s", 700, 80)] } }
-    const page = pagesOf(d)[8]
-    const bare = pagesOf(room())[8]
+    const page = pagesOf(d)[9]
+    const bare = pagesOf(room())[9]
     if (!page || !bare) throw new Error("нет страницы")
     expect(pageBounds(page, 50).maxX).toBeGreaterThanOrEqual(700)
     expect(pageBounds(bare, 50).maxX).toBeLessThan(700)
@@ -147,19 +147,19 @@ describe("страница «Группы включения»", () => {
 
   it("SW-38: подложка — стена гипсокартона входит в страницу", () => {
     const d: Drawing = { ...room(), reconstruction: content([drywall("g", 50, 100, 150, 100)]) }
-    expect(labels(pagesOf(d)[8])).toContain("Гипсокартон")
+    expect(labels(pagesOf(d)[9])).toContain("Гипсокартон")
   })
 })
 
 describe("легенда страницы «Группы включения»", () => {
   it("SW-40: «Кирпич», «Точечный встроенный светильник», «Люстра»; записей «Натяжной потолок» и «Стол» нет", () => {
     const d: Drawing = { ...full(), ceiling: { ceilings: [stretch], lights: [spot("s1", 100, 80), spot("s2", 150, 80), chandelier] } }
-    expect(labels(pagesOf(d)[8])).toEqual(["Кирпич", "Точечный встроенный светильник", "Люстра"])
+    expect(labels(pagesOf(d)[9])).toEqual(["Кирпич", "Точечный встроенный светильник", "Люстра"])
   })
 
   it("SW-41: без объектов освещения записей видов освещения нет", () => {
     const d: Drawing = { ...room(), furniture: { items: [table], dimensions: [] } }
-    expect(labels(pagesOf(d)[8])).toEqual(["Кирпич"])
+    expect(labels(pagesOf(d)[9])).toEqual(["Кирпич"])
   })
 
   it("SW-42: записи освещения есть на страницах «Потолки и освещение» и «Группы включения», в первых семи их нет", () => {
@@ -167,6 +167,6 @@ describe("легенда страницы «Группы включения»", 
     const titles = ["Точечный встроенный светильник", "Люстра"]
     for (const page of pages.slice(0, 7)) expect(labels(page).filter((l) => titles.includes(l))).toEqual([])
     expect(labels(pages[7]).filter((l) => titles.includes(l))).toEqual(titles)
-    expect(labels(pages[8]).filter((l) => titles.includes(l))).toEqual(titles)
+    expect(labels(pages[9]).filter((l) => titles.includes(l))).toEqual(titles)
   })
 })

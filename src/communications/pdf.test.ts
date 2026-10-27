@@ -80,14 +80,26 @@ const hasSegment = (paths: readonly PdfPath[], a: Pt, b: Pt, tol = 0.03): boolea
     }),
   )
 
+// страницы, на которых коммуникации рисуются: все, кроме «Освещение. Расстояния» (change split-ceiling-pdf-pages)
+const withCommunications = (pages: ReturnType<typeof pagesOf>): ReturnType<typeof pagesOf> => pages.filter((p) => p.distances === undefined)
+
 describe("страницы PDF", () => {
   it("CF-01: коммуникации лежат на каждой странице pagesOf", () => {
     const list = [riser(250, 150, 11), duct(100, 150)]
     const pages = pagesOf(base(list))
     // TCR (change add-rough-works-plan): страниц четыре — коммуникации лежат и на странице «Черновые работы»;
     // TCR (change reconstruction-plan): пять — и на странице «Реконструкция»
-    expect(pages).toHaveLength(9) // TCR (change furniture-plan-table): шесть — и на странице «Мебель» // TCR (change add-plumbing-plan): семь — седьмой план «Сантехника» // TCR (change add-ceiling-plan): восемь — восьмой план «Потолки и освещение» // TCR (change add-switching-plan): девять — девятый план «Группы включения»
-    for (const p of pages) expect(p.communications).toEqual(list)
+    expect(pages).toHaveLength(10) // TCR (change furniture-plan-table): шесть — и на странице «Мебель» // TCR (change add-plumbing-plan): семь — седьмой план «Сантехника» // TCR (change add-ceiling-plan): восемь — восьмой план «Потолки и освещение» // TCR (change add-switching-plan): девять — девятый план «Группы включения» // TCR (change split-ceiling-pdf-pages): десять — вторая страница плана «Потолки и освещение»
+    for (const p of withCommunications(pages)) expect(p.communications).toEqual(list)
+  })
+
+  // change split-ceiling-pdf-pages (spec communications «Коммуникации в PDF»): на странице «Освещение. Расстояния» коммуникаций нет
+  it("CF-01a: на странице «Освещение. Расстояния» коммуникаций нет, на остальных девяти они есть", () => {
+    const pages = pagesOf(base([riser(250, 150, 11), duct(100, 150)]))
+    const distances = pages.filter((p) => p.distances !== undefined)
+    expect(distances).toHaveLength(1)
+    expect(distances[0]?.communications).toBeUndefined()
+    expect(withCommunications(pages)).toHaveLength(9)
   })
 
   it("CF-01b: без коммуникаций страницы их не несут", () => {
@@ -99,14 +111,14 @@ describe("страницы PDF", () => {
 
   it("CF-02: габариты каждой страницы включают стояк Ø11 за габаритами стен точно: maxY = 900 + 5,5 + запас", () => {
     const pages = pagesOf(base([riser(250, 900, 11)]))
-    for (const p of pages) expect(pageBounds(p, SCALE).maxY).toBeCloseTo(900 + 5.5 + PAD, 6)
+    for (const p of withCommunications(pages)) expect(pageBounds(p, SCALE).maxY).toBeCloseTo(900 + 5.5 + PAD, 6)
     const without = pagesOf(base())
     for (const p of without) expect(pageBounds(p, SCALE).maxY).toBeLessThan(900)
   })
 
   it("CF-02b: коммуникации слева и справа: minX = −300 − 10 − запас (стояк Ø20), maxX = 900 + 20 + запас (воздуховод 40×20: полуширина 20)", () => {
     const pages = pagesOf(base([riser(-300, 100, 20), duct(900, 100, 40, 20)]))
-    for (const p of pages) {
+    for (const p of withCommunications(pages)) {
       const b = pageBounds(p, SCALE)
       expect(b.minX).toBeCloseTo(-300 - 10 - PAD, 6)
       expect(b.maxX).toBeCloseTo(900 + 20 + PAD, 6)
@@ -115,7 +127,7 @@ describe("страницы PDF", () => {
 
   it("CF-02d: ось Y воздуховода 40×20 (глубина 20 → полуглубина 10): maxY = 900 + 10 + запас, minY = −700 − 10 − запас", () => {
     const pages = pagesOf(base([duct(250, 900, 40, 20, "dd"), duct(250, -700, 40, 20, "du")]))
-    for (const p of pages) {
+    for (const p of withCommunications(pages)) {
       const b = pageBounds(p, SCALE)
       expect(b.maxY).toBeCloseTo(900 + 10 + PAD, 6)
       expect(b.minY).toBeCloseTo(-700 - 10 - PAD, 6)
@@ -124,7 +136,7 @@ describe("страницы PDF", () => {
 
   it("CF-02e: у воздуховода ширина и глубина не перепутаны: узкий и глубокий 20×60 → maxX/maxY дают 10 и 30", () => {
     const pages = pagesOf(base([duct(900, 900, 20, 60)]))
-    for (const p of pages) {
+    for (const p of withCommunications(pages)) {
       const b = pageBounds(p, SCALE)
       expect(b.maxX).toBeCloseTo(900 + 10 + PAD, 6)
       expect(b.maxY).toBeCloseTo(900 + 30 + PAD, 6)

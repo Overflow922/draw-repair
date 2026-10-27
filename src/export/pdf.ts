@@ -11,6 +11,7 @@ import { demolitionColor, drawDemolitionScene } from "../demolition/demolition-r
 import { markDimensionExtent } from "../demolition/mark-dimensions"
 import { effectiveMarks } from "../demolition/marks"
 import { mountingScene } from "../mounting/mounting-scene"
+import type { MountingScene } from "../mounting/mounting-scene"
 import type { ResolvedMark } from "../demolition/marks"
 import { PLANS } from "../plans"
 import { findRooms } from "../room-area"
@@ -196,6 +197,9 @@ export interface PlanPage {
   // слой плана «Потолки и освещение» (change add-ceiling-plan, design D8): предметы «Мебели» серой подложкой (записей видов мебели
   // в легенде не дают) и действующие натяжные потолки с помещениями; рядом лежит reconstruction (подложка)
   ceiling?: CeilingLayer
+  // слой второй страницы плана «Потолки и освещение» «Освещение. Расстояния» (change split-ceiling-pdf-pages, design D2): объекты освещения
+  // и чистовые грани подложки, до которых показаны их расстояния; рядом лежит reconstruction (подложка), мебели, батарей и коммуникаций нет
+  distances?: DistancesLayer
   // слой плана «Группы включения» (change add-switching-plan, design D7): предметы «Мебели» серой подложкой и все объекты освещения
   // знаками, без потолков и расстояний; рядом лежит reconstruction (подложка)
   switching?: SwitchingLayer
@@ -215,10 +219,18 @@ export interface SwitchingLayer {
 export interface CeilingLayer {
   items: readonly FurnitureItem[]
   ceilings: readonly { ceiling: StretchCeiling; room: Room }[]
-  // объекты освещения и чистовые грани подложки, до которых показаны их расстояния (change add-ceiling-lighting, design D8)
+  // объекты освещения: знаки без расстояний (расстояния — на странице «Освещение. Расстояния»)
+  lights: readonly LightFixture[]
+}
+
+// объекты освещения и чистовые грани подложки, до которых показаны их расстояния (change add-ceiling-lighting, design D8)
+export interface DistancesLayer {
   lights: readonly LightFixture[]
   lightBodies: readonly Shape[]
 }
+
+// название второй страницы плана «Потолки и освещение» — в графу 5 основной надписи и в полосу названия плана
+export const DISTANCES_PAGE_TITLE = "Освещение. Расстояния"
 
 export interface RoughLayer {
   // знаки действующих пометок прямых углов (change plaster-right-angle, design D4)
@@ -244,7 +256,7 @@ export function pagesOf(drawing: Drawing): PlanPage[] {
   const demolished = drawing.batteries
     ? { demolishedBatteryIds: new Set(demolishedBatteries(drawing.batteryDemolition ?? [], drawing.batteries).map((b) => b.id)) }
     : null
-  return PLANS.map((plan): PlanPage => {
+  const planPage = (plan: (typeof PLANS)[number]): PlanPage => {
     // выноски страницы — только своего плана (change add-callout, design D10)
     const own = calloutsOf(drawing, plan.id)
     const callouts = own.length ? { callouts: own } : null
@@ -351,7 +363,6 @@ export function pagesOf(drawing: Drawing): PlanPage[] {
             items: scene.items,
             ceilings: scene.ceilings.map((a) => ({ ceiling: a.object, room: a.item.room })),
             lights: drawing.ceiling?.lights ?? [],
-            lightBodies: furnitureReachBodies(scene.base),
           },
           title: plan.label,
         }
@@ -380,7 +391,23 @@ export function pagesOf(drawing: Drawing): PlanPage[] {
         }
       }
     }
-  })
+  }
+  // план «Потолки и освещение» даёт две страницы подряд (change split-ceiling-pdf-pages, design D1)
+  return PLANS.flatMap((plan): PlanPage[] => (plan.id === "ceiling" ? [planPage(plan), distancesPage(drawing, mounting)] : [planPage(plan)]))
+}
+
+// вторая страница плана «Потолки и освещение» (change split-ceiling-pdf-pages, design D2): только чистовые стены подложки с проёмами,
+// штукатуркой и гипсокартоном и объекты освещения с расстояниями; мебели, батарей, коммуникаций, потолков, выносок и примечаний нет
+function distancesPage(drawing: Drawing, mounting: MountingScene): PlanPage {
+  const scene = ceilingScene(drawing, reconstructionScene(drawing, mounting))
+  return {
+    walls: scene.base.underlay,
+    dimensions: [],
+    doorways: mounting.doorways,
+    reconstruction: { pieces: scene.base.pieces, drywall: scene.base.own },
+    distances: { lights: drawing.ceiling?.lights ?? [], lightBodies: furnitureReachBodies(scene.base) },
+    title: DISTANCES_PAGE_TITLE,
+  }
 }
 
 // габариты страницы с запасом: стены, размеры и элементы (страница демонтажа — без размеров, но с элементами)
@@ -415,7 +442,7 @@ export function pageBounds(page: PlanPage, scale: number): BBox {
   // предметы страницы «Потолки и освещение» — без габаритов; подписи потолков лежат внутри помещений и габариты не расширяют
   const ceilingItems = (page.ceiling?.items ?? []).flatMap(itemCorners)
   // центры объектов освещения: знаки постоянного размера лежат у центров, расстояния — внутри помещений (change add-ceiling-lighting)
-  const lights = (page.ceiling?.lights ?? page.switching?.lights ?? []).map((l): Point => ({ x: l.x, y: l.y }))
+  const lights = (page.ceiling?.lights ?? page.distances?.lights ?? page.switching?.lights ?? []).map((l): Point => ({ x: l.x, y: l.y }))
   const switchingItems = (page.switching?.items ?? []).flatMap(itemCorners)
   // выключатели вместе с подписями клавиш (change add-light-switch): знак постоянного размера в мм бумаги
   const switches = (page.switching?.switches ?? []).flatMap((s) => switchExtent(s, kMm, PDF_METRICS.symbolMmPx))
@@ -487,7 +514,10 @@ function drawPage(
     if (page.furniture !== undefined) drawFurnitureScene(ctx, w, h, { ...scene, items: page.furniture.items }, unit, view, opts)
     // страница «Потолки и освещение»: подложка, предметы серым, полупрозрачная заливка потолков, подписи (change add-ceiling-plan, design D8)
     else if (page.ceiling !== undefined)
-      drawCeilingScene(ctx, w, h, { ...scene, items: page.ceiling.items, ceilings: page.ceiling.ceilings, lights: page.ceiling.lights, lightBodies: page.ceiling.lightBodies }, unit, view, { ...opts, translucent: pdfTranslucent(doc) })
+      drawCeilingScene(ctx, w, h, { ...scene, items: page.ceiling.items, ceilings: page.ceiling.ceilings, lights: page.ceiling.lights, lightDistances: false }, unit, view, { ...opts, translucent: pdfTranslucent(doc) })
+    // страница «Освещение. Расстояния»: подложка и объекты освещения с расстояниями, без предметов и потолков (change split-ceiling-pdf-pages)
+    else if (page.distances !== undefined)
+      drawCeilingScene(ctx, w, h, { ...scene, items: [], ceilings: [], lights: page.distances.lights, lightBodies: page.distances.lightBodies }, unit, view, { ...opts, translucent: pdfTranslucent(doc) })
     // страница «Группы включения»: те же слои без потолков и расстояний (change add-switching-plan, design D7)
     else if (page.switching !== undefined) drawSwitchingScene(ctx, w, h, { ...scene, items: page.switching.items, lights: page.switching.lights, lineLabels: page.switching.lineLabels, switches: page.switching.switches, exhausts: page.switching.exhausts }, unit, view, { ...opts, translucent: pdfTranslucent(doc) })
     else drawReconstructionScene(ctx, w, h, scene, unit, view, opts)

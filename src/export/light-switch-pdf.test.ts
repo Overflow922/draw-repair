@@ -69,7 +69,7 @@ const withSwitches = (switches: LightSwitch[], lines: LightLine[] = []): Drawing
   ceiling: { ceilings: [], lights: [spot] },
   switching: { ...(lines.length > 0 ? { lines } : null), ...(switches.length > 0 ? { switches } : null) },
 })
-const switchingPage = (d: Drawing): PlanPage | undefined => pagesOf(d)[8]
+const switchingPage = (d: Drawing): PlanPage | undefined => pagesOf(d)[9]
 const labels = (page: PlanPage | undefined): string[] => (page ? legendEntries(page).map((e) => e.label) : [])
 
 const RED = [0xe0, 0x1b, 0x1b].map((v) => v / 255)
@@ -91,31 +91,31 @@ const circles = (ops: PaintOp[]): string[] => {
 }
 
 describe("выключатель на странице «Группы включения»", () => {
-  it("LS-100: три подписи клавиш на девятой странице", () => {
+  it("LS-100: три подписи клавиш на десятой странице", () => {
     build(withSwitches([block]))
-    const shown = textsOn(9)
+    const shown = textsOn(10)
     for (const t of ["L2,LV1", "L3", "L4,L5"]) expect(shown).toContain(t)
   })
 
   it("LS-101: подписей выключателя нет на первых восьми страницах", () => {
     build(withSwitches([block]))
-    for (let page = 1; page <= 8; page++) expect(textsOn(page)).not.toContain("L2,LV1")
+    for (let page = 1; page <= 9; page++) expect(textsOn(page)).not.toContain("L2,LV1")
   })
 
   it("LS-102: диаметр кружка клавиши 3 мм при 1:50 и при 1:100", () => {
-    for (const scale of [50, 100]) expect(circles(parsePaint(build(withSwitches([block]), scale), 9)).length).toBeGreaterThan(0)
+    for (const scale of [50, 100]) expect(circles(parsePaint(build(withSwitches([block]), scale), 10)).length).toBeGreaterThan(0)
   })
 
-  it("LS-103: выключатели не меняют первые восемь страниц", () => {
+  it("LS-103: выключатели не меняют первые девять страниц", () => {
     build(withSwitches([]))
-    const before = Array.from({ length: 8 }, (_, i) => textsOn(i + 1))
+    const before = Array.from({ length: 9 }, (_, i) => textsOn(i + 1))
     build(withSwitches([block]))
-    expect(Array.from({ length: 8 }, (_, i) => textsOn(i + 1))).toEqual(before)
+    expect(Array.from({ length: 9 }, (_, i) => textsOn(i + 1))).toEqual(before)
   })
 
   it("LS-104: клавиша без линий — без подписи", () => {
     build(withSwitches([{ ...block, keys: [{ lines: [] }] }]))
-    expect(textsOn(9).filter((t) => t.startsWith("L"))).toEqual([])
+    expect(textsOn(10).filter((t) => t.startsWith("L"))).toEqual([])
   })
 })
 
@@ -130,15 +130,15 @@ describe("легенда страницы «Группы включения»: �
 
   it("LS-107: нет выключателей — записи нет, в других легендах тоже", () => {
     expect(labels(switchingPage(withSwitches([])))).not.toContain("Выключатель")
-    expect(pagesOf(withSwitches([block])).slice(0, 8).flatMap((p) => labels(p))).not.toContain("Выключатель")
+    expect(pagesOf(withSwitches([block])).slice(0, 9).flatMap((p) => labels(p))).not.toContain("Выключатель")
   })
 
   it("LS-108: без выключателей кружков нет вовсе — ни на плане, ни образцом в легенде; образец без подписи", () => {
     // светильника нет: его знак тоже кружок 3 мм и мешал бы счёту
     const bare = (switches: LightSwitch[]): Drawing => ({ ...room(), ...(switches.length > 0 ? { switching: { switches } } : null) })
-    expect(circles(parsePaint(build(bare([])), 9))).toHaveLength(0)
+    expect(circles(parsePaint(build(bare([])), 10))).toHaveLength(0)
     const one: LightSwitch = { ...block, keys: [{ lines: [] }] }
-    expect(circles(parsePaint(build(bare([one])), 9)).length).toBeGreaterThan(0)
-    expect(textsOn(9).filter((t) => t.startsWith("L"))).toEqual([])
+    expect(circles(parsePaint(build(bare([one])), 10)).length).toBeGreaterThan(0)
+    expect(textsOn(10).filter((t) => t.startsWith("L"))).toEqual([])
   })
 })

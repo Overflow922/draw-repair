@@ -28,6 +28,8 @@ export interface CeilingView extends Omit<ReconstructionView, "preview" | "outli
   // призрак, выделение (числа подчёркнуты — правятся) и подсветка ластика — только на холсте
   lights?: readonly LightFixture[]
   lightBodies?: readonly Shape[]
+  // расстояния объектов освещения показаны, пока не сказано обратное; страница PDF «Потолки и освещение» их не рисует (change split-ceiling-pdf-pages, design D3)
+  lightDistances?: boolean
   lightGhost?: LightFixture | null
   selectedLightId?: string | null
   erasingLightId?: string | null
@@ -143,13 +145,15 @@ export function drawCeilingScene(ctx: CanvasRenderingContext2D, w: number, h: nu
     const ghost = scene.lightGhost ?? null
     const k = PX_PER_CM * view.zoom
     const numbersOf = (l: LightFixture): LightNumber[] => lightNumberLayout(l, bodies, unit, k, m)
-    c.save()
-    c.font = `${m.labelPx}px ${m.font}`
-    c.textAlign = "center"
-    c.textBaseline = "bottom"
-    for (const l of lights) drawLightNumbers(c, numbersOf(l), l.id === scene.selectedLightId, view, m, palette)
-    if (ghost) translucent(GHOST_ALPHA, () => drawLightNumbers(c, numbersOf(ghost), false, view, m, palette))
-    c.restore()
+    if (scene.lightDistances !== false) {
+      c.save()
+      c.font = `${m.labelPx}px ${m.font}`
+      c.textAlign = "center"
+      c.textBaseline = "bottom"
+      for (const l of lights) drawLightNumbers(c, numbersOf(l), l.id === scene.selectedLightId, view, m, palette)
+      if (ghost) translucent(GHOST_ALPHA, () => drawLightNumbers(c, numbersOf(ghost), false, view, m, palette))
+      c.restore()
+    }
     for (const l of lights) {
       const at = toScreen({ x: l.x, y: l.y })
       if (l.id === scene.erasingLightId) ringAround(c, at, l, palette.erase, m)

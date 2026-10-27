@@ -85,12 +85,16 @@ const redBars = (ops: PaintOp[]): number[] =>
     .map((sp) => Math.abs((sp[1]?.x ?? 0) - (sp[0]?.x ?? 0)))
 
 describe("освещение на странице PDF", () => {
-  it("CL-P1: на восьмой странице знаки и размеры «100», «80» светильника и «120» бра", () => {
+  // TCR (change split-ceiling-pdf-pages): расстояния светильников переехали на девятую страницу «Освещение. Расстояния»
+  // (spec pdf-export «Страница плана «Потолки и освещение»», сценарий «Светильники с расстояниями»)
+  it("CL-P1: на восьмой странице знаки светильника и бра без размеров, размеры «100», «80» светильника и «120» бра — на девятой", () => {
     const d = withLights([spot("s", 100, 80), sconce])
     const doc = build(d)
-    expect(doc.getNumberOfPages()).toBe(9) // TCR (change add-switching-plan): девять — девятый план «Группы включения»
-    expect(textsOn(8)).toEqual(expect.arrayContaining(["100", "80", "120"]))
+    expect(doc.getNumberOfPages()).toBe(10) // TCR (change add-switching-plan): девять — девятый план «Группы включения» // TCR (change split-ceiling-pdf-pages): десять — вторая страница плана «Потолки и освещение»
     expect(redBars(parsePaint(doc, 8)).length).toBeGreaterThan(0)
+    for (const distance of ["100", "80", "120"]) expect(textsOn(8)).not.toContain(distance)
+    expect(textsOn(9)).toEqual(expect.arrayContaining(["100", "80", "120"]))
+    expect(redBars(parsePaint(doc, 9)).length).toBeGreaterThan(0)
   })
 
   it("CL-P2: знак 3 мм при 1:50 и 1:100", () => {

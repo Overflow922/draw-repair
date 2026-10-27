@@ -69,7 +69,7 @@ const withFans = (exhausts: ExhaustFan[], lines: LightLine[] = []): Drawing => (
   ceiling: { ceilings: [], lights: [spot] },
   switching: { ...(lines.length > 0 ? { lines } : null), ...(exhausts.length > 0 ? { exhausts } : null) },
 })
-const switchingPage = (d: Drawing): PlanPage | undefined => pagesOf(d)[8]
+const switchingPage = (d: Drawing): PlanPage | undefined => pagesOf(d)[9]
 const labels = (page: PlanPage | undefined): string[] => (page ? legendEntries(page).map((e) => e.label) : [])
 
 const RED = [0xe0, 0x1b, 0x1b].map((v) => v / 255)
@@ -86,29 +86,29 @@ const squares = (ops: PaintOp[]): number =>
   redSubpaths(ops).filter((sp) => sp.length >= 4 && Math.abs(sizeOf(sp).w - 3.5) < 0.05 && Math.abs(sizeOf(sp).h - 3.5) < 0.05).length
 
 describe("вытяжка на странице «Группы включения»", () => {
-  it("знак вытяжки со стороной 3,5 мм при 1:50 и при 1:100, подпись «LV1» на девятой странице", () => {
+  it("знак вытяжки со стороной 3,5 мм при 1:50 и при 1:100, подпись «LV1» на десятой странице", () => {
     for (const scale of [50, 100]) {
       const pdf = build(withFans([fan], [mark]), scale)
-      expect(squares(parsePaint(pdf, 9))).toBeGreaterThan(0)
-      expect(textsOn(9)).toContain("LV1")
+      expect(squares(parsePaint(pdf, 10))).toBeGreaterThan(0)
+      expect(textsOn(10)).toContain("LV1")
     }
   })
 
   it("без вытяжек квадратов нет", () => {
-    expect(squares(parsePaint(build(withFans([])), 9))).toBe(0)
+    expect(squares(parsePaint(build(withFans([])), 10))).toBe(0)
   })
 
-  it("вытяжка не попадает на первые восемь страниц и не меняет их", () => {
+  it("вытяжка не попадает на первые девять страниц и не меняет их", () => {
     build(withFans([]))
-    const before = Array.from({ length: 8 }, (_, i) => textsOn(i + 1))
+    const before = Array.from({ length: 9 }, (_, i) => textsOn(i + 1))
     build(withFans([fan], [mark]))
-    expect(Array.from({ length: 8 }, (_, i) => textsOn(i + 1))).toEqual(before)
-    for (let page = 1; page <= 8; page++) expect(squares(parsePaint(build(withFans([fan], [mark])), page))).toBe(0)
+    expect(Array.from({ length: 9 }, (_, i) => textsOn(i + 1))).toEqual(before)
+    for (let page = 1; page <= 9; page++) expect(squares(parsePaint(build(withFans([fan], [mark])), page))).toBe(0)
   })
 
   it("метка LV1 у светильника не показывается", () => {
     build(withFans([fan], [{ id: "x", targetId: "a", name: "LV1" }]))
-    expect(textsOn(9)).not.toContain("LV1")
+    expect(textsOn(10)).not.toContain("LV1")
   })
 })
 
@@ -118,11 +118,11 @@ describe("легенда страницы «Группы включения»: �
   })
   it("нет вытяжек — записи нет, в других легендах тоже", () => {
     expect(labels(switchingPage(withFans([])))).not.toContain("Вытяжка")
-    expect(pagesOf(withFans([fan])).slice(0, 8).flatMap((p) => labels(p))).not.toContain("Вытяжка")
+    expect(pagesOf(withFans([fan])).slice(0, 9).flatMap((p) => labels(p))).not.toContain("Вытяжка")
   })
   it("образец рисует знак вытяжки в тех же 3,5 мм", () => {
     const bare: Drawing = { ...room(), switching: { exhausts: [fan] } }
     // на плане и в легенде — по квадрату
-    expect(squares(parsePaint(build(bare), 9))).toBeGreaterThanOrEqual(2)
+    expect(squares(parsePaint(build(bare), 10))).toBeGreaterThanOrEqual(2)
   })
 })
