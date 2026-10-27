@@ -1189,3 +1189,22 @@ Follow-ups from `add-ceiling-lighting` (2026-10-27).
 - [ ] (add-ceiling-lighting) `recordCeiling` / `undoCeiling` / `redoCeiling` (`src/history.ts`) are no longer used by the
   app (replaced by `*CeilingPlan`); they stay because `src/ceiling/history-ceiling.test.ts` specifies them. Remove together
   with those tests once the spec drops the ceilings-only entry.
+
+---
+
+Follow-ups from exploring `add-switching-plan` (2026-10-27).
+
+## Out of scope (decided, revisit if needed)
+
+- [ ] **Tool «Линия освещения»** (next change after `add-switching-plan`): метка `L1…Ln` на светильнике, один светильник — одна линия; счётчик легенды «Линия освещения» (число разных линий).
+- [ ] **Tool «Выключатель»** (after «Линия освещения»): ключи на грани стены, блок из нескольких ключей, подпись ключа — включаемые линии (`L2,LV1`); счётчик легенды «Выключатели» (число ключей).
+- [ ] **Kind «Вытяжка»** (after «Выключатель»): нагрузка со своей линией (`LV1`); знак — красный квадрат с ломаной внутри; счётчик легенды «Вытяжка».
+- [ ] Reference pictures for the three new symbols: `references/lighting.png` has no switch, line label or extractor — ask the user for a picture before designing the drawings (`.claude/rules/references.md`).
+
+## Docs
+
+- [ ] (add-switching-plan) The page lists in the general `pdf-export` requirement «Легенда на странице PDF» still name eight pages (`Потолки и освещение` is the last); the ninth page is covered by the separate requirement «Легенда страницы «Группы включения»» — fold the lists together at the next legend change.
+
+- [ ] **Legend «Количество» column** (changes `add-light-lines`, `add-light-switch`, `add-exhaust-fan`): the user's sample legend has a quantity column (lights, lines, switches, extractors); the app legend is «sample — label» only, so the column is not part of the lighting changes. Needs its own change for every plan's legend.
+- [ ] **Scheme integrity checks** (after `add-exhaust-fan`): a line with no switch key, a key naming a line that does not exist, highlight of a line's group when a key is selected.
+- [ ] **Order of the lighting changes:** `add-switching-plan` → `add-light-lines` → `add-light-switch` → `add-exhaust-fan`; the later ones validate against main specs only after the earlier ones are archived.
