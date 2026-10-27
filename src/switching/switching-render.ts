@@ -23,9 +23,13 @@ export interface LineLabelView {
 // Слои потолков и расстояний (ceilings, lightBodies, призрак и выделение светильника) нужны холсту единого плана «Потолки и освещение»
 // (change merge-lighting-plans, design D3); страница PDF «Группы включения» их не передаёт
 export type SwitchingView = Pick<CeilingView, "walls" | "doorways" | "communications" | "batteries" | "pieces" | "drywall" | "callouts" | "selectedCalloutId" | "erasingCalloutId" | "items" | "lights" | "selectedLightId"> &
-  Partial<Pick<CeilingView, "ceilings" | "selectedCeilingId" | "erasingCeilingId" | "lightBodies" | "lightDistances" | "lightGhost" | "erasingLightId">> & {
+  Partial<Pick<CeilingView, "ceilings" | "selectedCeilingId" | "erasingCeilingId" | "lightBodies" | "lightDistances" | "lightGhost" | "erasingLightId" | "linkedLightIds">> & {
   lineLabels?: readonly LineLabelView[]
   selectedLineId?: string | null
+  // объекты той же линии, что у выделенного (change line-edit-and-highlight): цвет выделения, только на холсте
+  linkedLineIds?: ReadonlySet<string>
+  linkedExhaustIds?: ReadonlySet<string>
+  linkedSwitchIds?: ReadonlySet<string>
   erasingLineId?: string | null
   // выключатели (change add-light-switch, design D4): слой выше меток линий и ниже выносок; призрак — полупрозрачный, без подписей
   switches?: readonly LightSwitch[]
@@ -48,7 +52,7 @@ export function drawSwitchingScene(ctx: CanvasRenderingContext2D, w: number, h: 
   const labels = scene.lineLabels ?? []
   const aboveLights: CeilingView["aboveLights"] = (c, toScreen) => {
     for (const f of scene.exhausts ?? []) {
-      const color = f.id === scene.erasingExhaustId ? palette.erase : f.id === scene.selectedExhaustId ? palette.selection : undefined
+      const color = f.id === scene.erasingExhaustId ? palette.erase : f.id === scene.selectedExhaustId || scene.linkedExhaustIds?.has(f.id) ? palette.selection : undefined
       drawExhaust(c, toScreen({ x: f.x, y: f.y }), m.symbolMmPx, palette, color)
     }
     const fanGhost = scene.exhaustGhost
@@ -57,7 +61,7 @@ export function drawSwitchingScene(ctx: CanvasRenderingContext2D, w: number, h: 
       const highlight =
         label.id === scene.erasingLineId
           ? { color: palette.erase, lineWidth: m.contourPx * 2 }
-          : label.id === scene.selectedLineId
+          : label.id === scene.selectedLineId || scene.linkedLineIds?.has(label.id)
             ? { color: palette.selection, lineWidth: m.contourPx * 2 }
             : undefined
       drawLineLabel(c, label.name, toScreen(label.at), m.symbolMmPx, palette, m.font, highlight)
@@ -66,7 +70,7 @@ export function drawSwitchingScene(ctx: CanvasRenderingContext2D, w: number, h: 
       const highlight =
         s.id === scene.erasingSwitchId
           ? { color: palette.erase, lineWidth: m.contourPx * 2 }
-          : s.id === scene.selectedSwitchId
+          : s.id === scene.selectedSwitchId || scene.linkedSwitchIds?.has(s.id)
             ? { color: palette.selection, lineWidth: m.contourPx * 2 }
             : undefined
       drawSwitch(c, s, toScreen(s.at), m.symbolMmPx, palette, m.font, highlight)

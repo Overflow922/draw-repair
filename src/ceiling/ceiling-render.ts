@@ -32,6 +32,8 @@ export interface CeilingView extends Omit<ReconstructionView, "preview" | "outli
   lightDistances?: boolean
   lightGhost?: LightFixture | null
   selectedLightId?: string | null
+  // объекты освещения той же линии, что у выделенного объекта (change line-edit-and-highlight): подсвечены цветом выделения, только на холсте
+  linkedLightIds?: ReadonlySet<string>
   erasingLightId?: string | null
   // слой поверх знаков освещения и до выносок (план «Группы включения», change add-light-lines: метки линий)
   aboveLights?: (c: CanvasRenderingContext2D, toScreen: (p: Point) => Point) => void
@@ -157,7 +159,7 @@ export function drawCeilingScene(ctx: CanvasRenderingContext2D, w: number, h: nu
     for (const l of lights) {
       const at = toScreen({ x: l.x, y: l.y })
       if (l.id === scene.erasingLightId) ringAround(c, at, l, palette.erase, m)
-      else if (l.id === scene.selectedLightId) ringAround(c, at, l, palette.selection, m)
+      else if (l.id === scene.selectedLightId || scene.linkedLightIds?.has(l.id)) ringAround(c, at, l, palette.selection, m)
       drawLightSymbol(c, l, at, m.symbolMmPx, palette, m.font)
     }
     if (ghost) translucent(GHOST_ALPHA, () => drawLightSymbol(c, ghost, toScreen({ x: ghost.x, y: ghost.y }), m.symbolMmPx, palette, m.font))

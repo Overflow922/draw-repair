@@ -1313,3 +1313,15 @@ Follow-ups from exploring `merge-lighting-plans` (2026-10-27).
 
 - [ ] A layer switch (ceiling fill / distances / switching groups) for the merged plan: the canvas shows everything at once, only the three PDF pages separate the layers. Needs its own UI decision (no new widgets without approval, `.claude/rules/ui.md`).
 - [ ] A callout/note choice per PDF page: callouts and notes of the merged plan go to page 8 only (user decision); pages 9 and 10 have none.
+
+---
+
+Follow-ups from `line-edit-and-highlight` (2026-10-27).
+
+## Tests
+
+- [ ] `src/main.ts` wiring has no automated test: `panelCarrierId` / `syncLinePanel` (panel opens for a selected light or exhaust fan, empty field without a label), the `change` handler branch that calls `lineTool.setLineOf`, and `linkSelection` → `linkedObjects` → `renderSwitching`. Only the pure parts are unit-tested (`line-links`, `setLineOf`, `linked*` render options); the DOM flow was checked by hand in the browser (a light with and without a label, an exhaust fan, a smoke detector, a selected switch).
+
+## Out of scope (decided, revisit if needed)
+
+- [ ] Linked objects use the same selection colour as the selected one (design D2); a second shade needs its own change if they are hard to tell apart.

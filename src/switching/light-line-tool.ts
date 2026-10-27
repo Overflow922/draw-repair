@@ -33,6 +33,8 @@ export interface LightLineTool {
   deleteSelected(): boolean
   setSelectedName(name: string): boolean // правка в панели
   setNameOf(id: string, name: string): boolean // правка на месте
+  setLineOf(carrierId: string, n: number): boolean // поле панели у выделенного светильника или вытяжки: поставить или сменить метку
+  canCarry(carrierId: string): boolean // светильник или вытяжка, который может нести метку
   labelAt(p: Point): LightLine | null
   erase(p: Point): boolean // ластик: метка под текстом
   eraseTarget(p: Point): string | null
@@ -80,6 +82,8 @@ export function createLightLineTool(host: LightLineToolHost): LightLineTool {
   const anchors = (): { at: Point; name: string; line: LightLine }[] =>
     visibleLines(host.lines(), host.lights(), exhausts()).map(({ line, light }) => ({ at: { x: light.x, y: light.y }, name: line.name, line }))
 
+  const carrierById = (id: string): LineCarrier | undefined => exhausts().find((f) => f.id === id) ?? host.lights().find((l) => l.id === id)
+
   const labelAt = (p: Point): LightLine | null => lineLabelAt(p, anchors(), host.view(), host.unitsPerMm)?.line ?? null
 
   return {
@@ -112,6 +116,15 @@ export function createLightLineTool(host: LightLineToolHost): LightLineTool {
     },
     setSelectedName: (name) => (selectedLine === null ? false : commit(renameLine(host.lines(), selectedLine, name))),
     setNameOf: (id, name) => commit(renameLine(host.lines(), id, name)),
+    setLineOf(carrierId, n) {
+      const carrier = carrierById(carrierId)
+      if (!carrier || !carries(carrier)) return false
+      return commit(setLine(host.lines(), carrier.id, lineLabel(n, isFan(carrier) ? "LV" : "L"), host.newId))
+    },
+    canCarry(carrierId) {
+      const carrier = carrierById(carrierId)
+      return carrier !== undefined && carries(carrier)
+    },
     labelAt,
     erase(p) {
       const hit = labelAt(p)

@@ -103,6 +103,9 @@ import { createExhaustTool } from "./switching/exhaust-tool"
 import type { ExhaustToolHost } from "./switching/exhaust-tool"
 import { storedExhausts } from "./switching/exhaust"
 import { lineNumber, lineLabel, parseLineName, prefixOfName, storedLines, visibleLines } from "./switching/light-lines"
+import type { LinePrefix } from "./switching/light-lines"
+import { linkedObjects } from "./switching/line-links"
+import type { LinkSelection } from "./switching/line-links"
 import { keyLabel, parseKeyCount, parseKeyLines, storedSwitches } from "./switching/light-switch"
 import { openingBodies } from "./switching/switch-reach"
 import { keyGeometry } from "./switching/switch-symbol"
@@ -1242,12 +1245,35 @@ const lineHost: LightLineToolHost = {
 }
 const lineTool = createLightLineTool(lineHost)
 
-// панель «Линия освещения»: номер выделенной метки, иначе значение для новых
+// светильник или вытяжка, выделенные без инструмента и способные нести метку: панель «Линия освещения» правит их линию
+// (change line-edit-and-highlight, design D3); состояние не хранится — выводится из выделения при каждой синхронизации панели
+function panelCarrierId(): string | null {
+  if (!onCeiling() || !selectionAllowed(tool)) return null
+  const id = lightTool.selectedId() ?? exhaustTool.selectedId()
+  return id !== null && lineTool.canCarry(id) ? id : null
+}
+
+// панель «Линия освещения»: номер выделенной метки; у выделенного светильника или вытяжки — номер их метки или пустое поле;
+// иначе значение для новых
 function syncLinePanel(): void {
-  lightLinePanel.classList.toggle("open", linePanelOpen)
+  const carrierId = panelCarrierId()
+  lightLinePanel.classList.toggle("open", linePanelOpen || carrierId !== null)
   toolLightLineBtn.classList.toggle("active", tool === "lightLine")
   const selected = lineTool.selected()
-  if (document.activeElement !== lightLineInput) lightLineInput.value = String(selected ? lineNumber(selected.name) : lineNumberCurrent)
+  const carrierLine = carrierId === null ? undefined : visibleLines(linesOf(), lightsOf(), exhaustsOf()).find((v) => v.light.id === carrierId)
+  const shown = selected ? String(lineNumber(selected.name)) : carrierId !== null ? (carrierLine ? String(lineNumber(carrierLine.line.name)) : "") : String(lineNumberCurrent)
+  if (document.activeElement !== lightLineInput) lightLineInput.value = shown
+}
+
+// выделение для подсветки связанных по имени линии объектов: выключатель, метка, вытяжка или светильник (выделения взаимоисключающие)
+function linkSelection(): LinkSelection | null {
+  if (!selectionAllowed(tool)) return null
+  const sw = switchTool.selectedId()
+  if (sw !== null) return { kind: "switch", id: sw }
+  const label = lineTool.selectedId()
+  if (label !== null) return { kind: "label", id: label }
+  const carrier = exhaustTool.selectedId() ?? lightTool.selectedId()
+  return carrier !== null ? { kind: "carrier", id: carrier } : null
 }
 
 const closeLineEditor = (): void => {
@@ -2330,6 +2356,7 @@ function drawCeilingPlan(): void {
   const erasingCeiling = erasing && !erasingCallout && !erasingLine && !erasingSwitch && !erasingExhaust && !erasingLight && !lightTool.numberAt(erasing) ? ceilingTool.eraseTarget(erasing) : null
   const lights = lightTool.displayed()
   const fans = exhaustTool.displayed()
+  const linked = linkedObjects(linkSelection(), linesOf(), switchesOf(), lights, fans)
   renderSwitching(
     canvas,
     {
@@ -2347,17 +2374,21 @@ function drawCeilingPlan(): void {
       lightBodies: lightBodies(),
       lightGhost: tool === "light" && cursor ? lightTool.ghost(cursor) : null,
       selectedLightId: hoveredLight ?? lightTool.selectedId(),
+      linkedLightIds: linked.carrierIds,
       erasingLightId: erasingLight,
       exhausts: fans,
       exhaustGhost: tool === "exhaust" && cursor ? exhaustTool.ghost(cursor) : null,
       selectedExhaustId: hoveredLight ?? exhaustTool.selectedId(),
+      linkedExhaustIds: linked.carrierIds,
       erasingExhaustId: erasingExhaust,
       lineLabels: visibleLines(linesOf(), lights, fans).map(({ line, light }) => ({ id: line.id, name: line.name, at: { x: light.x, y: light.y } })),
       selectedLineId: lineTool.selectedId(),
+      linkedLineIds: linked.lineIds,
       erasingLineId: erasingLine,
       switches: switchTool.displayed(),
       switchGhost: tool === "lightSwitch" && cursor ? switchTool.ghost(cursor) : null,
       selectedSwitchId: switchTool.selectedId(),
+      linkedSwitchIds: linked.switchIds,
       erasingSwitchId: erasingSwitch,
       callouts: calloutTool.displayList(),
       selectedCalloutId: calloutTool.selectedId(),
@@ -3850,10 +3881,13 @@ toolLightLineBtn.addEventListener("click", () => {
 })
 // поле «Линия»: меняет имя выделенной метки одним шагом истории, иначе — значение для новых; недопустимое не применяется
 lightLineInput.addEventListener("change", () => {
-  // выделенная метка вытяжки принимает «LV<n>», остальное — «L<n>»; число для новых меток общее
-  const name = parseLineName(lightLineInput.value, prefixOfName(lineTool.selected()?.name ?? ""))
+  const carrierId = lineTool.selectedId() === null ? panelCarrierId() : null
+  // выделенная метка вытяжки (и сама вытяжка) принимает «LV<n>», остальное — «L<n>»; число для новых меток общее
+  const prefix: LinePrefix = carrierId !== null ? (exhaustsOf().some((f) => f.id === carrierId) ? "LV" : "L") : prefixOfName(lineTool.selected()?.name ?? "")
+  const name = parseLineName(lightLineInput.value, prefix)
   if (name !== null) {
-    if (lineTool.selectedId() !== null) lineTool.setSelectedName(name)
+    if (carrierId !== null) lineTool.setLineOf(carrierId, lineNumber(name))
+    else if (lineTool.selectedId() !== null) lineTool.setSelectedName(name)
     else lineNumberCurrent = lineNumber(name)
   }
   lightLineInput.blur()
