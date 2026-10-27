@@ -47,8 +47,8 @@ const PLAN_TOOLS: Record<PlanId, readonly [Tool, ...Tool[]]> = {
   // «Потолки и освещение» (change add-ceiling-plan, design D1): натяжные потолки поверх результата «Мебели»; размеров нет
   // группа «Освещение» (change add-ceiling-lighting, design D7) — один инструмент, вид объекта выбирается в панели группы
   ceiling: ["stretchCeiling", "light", "callout", "ruler", "notes", "eraser"],
-  // «Группы включения» (change add-switching-plan, design D1): результат «Потолков и освещения» — подложка; свои объекты пока только выноски
-  switching: ["callout", "ruler", "notes", "eraser"],
+  // «Группы включения» (change add-switching-plan, design D1): результат «Потолков и освещения» — подложка; «Линия освещения» (change add-light-lines, design D4) — метки линий, по умолчанию
+  switching: ["lightLine", "callout", "ruler", "notes", "eraser"],
 }
 
 export const toolsOf = (plan: PlanId): readonly Tool[] => PLAN_TOOLS[plan]

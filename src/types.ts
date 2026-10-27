@@ -355,9 +355,19 @@ export interface CeilingContent {
   notes?: string[]
 }
 
-// Собственные объекты плана «Группы включения» (change add-switching-plan, design D2): пока только выноски и примечания;
-// освещение берётся из плана «Потолки и освещение» и здесь не хранится
+// Метка линии освещения (change add-light-lines, design D1): имя вида «L3», привязанное к одному объекту-носителю
+// (сейчас светильнику плана «Потолки и освещение»); группа включения — все метки с одним именем
+export interface LightLine {
+  id: string
+  targetId: string
+  name: string
+}
+
+// Собственные объекты плана «Группы включения» (change add-switching-plan, design D2): метки линий освещения, выноски и
+// примечания; освещение берётся из плана «Потолки и освещение» и здесь не хранится
 export interface SwitchingContent {
+  // метки в порядке постановки (change add-light-lines, design D1); пустой список не пишется
+  lines?: LightLine[]
   callouts?: Callout[]
   notes?: string[]
 }

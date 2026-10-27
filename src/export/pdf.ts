@@ -25,6 +25,8 @@ import { plumbingScene } from "../plumbing/plumbing-scene"
 import { drawCeilingScene } from "../ceiling/ceiling-render"
 import { switchingScene } from "../switching/switching-scene"
 import { drawSwitchingScene } from "../switching/switching-render"
+import type { LineLabelView } from "../switching/switching-render"
+import { visibleLines } from "../switching/light-lines"
 import { ceilingScene } from "../ceiling/ceiling-scene"
 import { itemCorners } from "../furniture/item"
 import { itemSizeOutsidePoints } from "../furniture/item-size-layout"
@@ -201,6 +203,8 @@ export interface PlanPage {
 export interface SwitchingLayer {
   items: readonly FurnitureItem[]
   lights: readonly LightFixture[]
+  // метки линий освещения существующих светильников (change add-light-lines, design D7)
+  lineLabels: readonly LineLabelView[]
 }
 
 export interface CeilingLayer {
@@ -360,7 +364,11 @@ export function pagesOf(drawing: Drawing): PlanPage[] {
           ...callouts,
           ...notes,
           reconstruction: { pieces: scene.base.pieces, drywall: scene.base.own },
-          switching: { items: scene.items, lights: scene.lights },
+          switching: {
+            items: scene.items,
+            lights: scene.lights,
+            lineLabels: visibleLines(drawing.switching?.lines ?? [], scene.lights).map(({ line, light }) => ({ id: line.id, name: line.name, at: { x: light.x, y: light.y } })),
+          },
           title: plan.label,
         }
       }
@@ -470,7 +478,7 @@ function drawPage(
     else if (page.ceiling !== undefined)
       drawCeilingScene(ctx, w, h, { ...scene, items: page.ceiling.items, ceilings: page.ceiling.ceilings, lights: page.ceiling.lights, lightBodies: page.ceiling.lightBodies }, unit, view, { ...opts, translucent: pdfTranslucent(doc) })
     // страница «Группы включения»: те же слои без потолков и расстояний (change add-switching-plan, design D7)
-    else if (page.switching !== undefined) drawSwitchingScene(ctx, w, h, { ...scene, items: page.switching.items, lights: page.switching.lights }, unit, view, { ...opts, translucent: pdfTranslucent(doc) })
+    else if (page.switching !== undefined) drawSwitchingScene(ctx, w, h, { ...scene, items: page.switching.items, lights: page.switching.lights, lineLabels: page.switching.lineLabels }, unit, view, { ...opts, translucent: pdfTranslucent(doc) })
     else drawReconstructionScene(ctx, w, h, scene, unit, view, opts)
     return
   }

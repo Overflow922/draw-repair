@@ -11,7 +11,7 @@ import { traceLines } from "../furniture/furniture-render"
 import { kindEntry } from "../furniture/furniture-kinds"
 import type { FurnitureKind } from "../furniture/furniture-kinds"
 import { CEILING_ALPHA, canvasTranslucent } from "../ceiling/ceiling-render"
-import { drawLightSymbol } from "../ceiling/light-symbol"
+import { SMOKE_FONT_MM, drawLightSymbol } from "../ceiling/light-symbol"
 import type { Translucent } from "../ceiling/ceiling-render"
 import { drywallColors } from "../reconstruction/reconstruction-render"
 import { plasterColors } from "../rough/rough-render"
@@ -107,6 +107,18 @@ function drawLightSample(ctx: CanvasRenderingContext2D, origin: Point, kind: Lig
   const center = { x: origin.x + SAMPLE_LENGTH_MM / 2, y: origin.y }
   const sample: LightFixture = kind === "sconce" ? { id: "legend-light", kind, ...center, angleDeg: -90 } : { id: "legend-light", kind, ...center }
   drawLightSymbol(ctx, sample, center, PDF_METRICS.symbolMmPx, LIGHT_PALETTE, PDF_METRICS.font)
+}
+
+// образец «Линия освещения» (change add-light-lines, design D7): подпись «L1» красным цветом освещения того же кегля, что метки на
+// странице, по центру образца
+function drawLightLineSample(ctx: CanvasRenderingContext2D, origin: Point): void {
+  ctx.save()
+  ctx.font = `${SMOKE_FONT_MM * PDF_METRICS.symbolMmPx}px ${PDF_METRICS.font}`
+  ctx.fillStyle = LIGHT_PALETTE.lightingRed
+  ctx.textAlign = "center"
+  ctx.textBaseline = "middle"
+  ctx.fillText("L1", origin.x + SAMPLE_LENGTH_MM / 2, origin.y)
+  ctx.restore()
 }
 
 // образец вида мебели (change furniture-line-drawings, design D4): рисунок вида в постоянном масштабе легенды, детали вместе с
@@ -210,6 +222,8 @@ function drawSample(ctx: CanvasRenderingContext2D, entry: LegendEntry, origin: P
       return drawCeilingSample(ctx, origin, translucent)
     case "light":
       return drawLightSample(ctx, origin, entry.light)
+    case "light-line":
+      return drawLightLineSample(ctx, origin)
     case "furniture":
       return drawItemSample(ctx, origin, entry.item)
   }

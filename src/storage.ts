@@ -1,5 +1,6 @@
 import { isDropMm } from "./ceiling/ceiling"
 import { isLightKind } from "./ceiling/lights"
+import { isLineName } from "./switching/light-lines"
 import { mergeAll } from "./demolition/marks"
 import { isFurnitureKind } from "./furniture/furniture-kinds"
 import { normalizeAngle } from "./furniture/item"
@@ -8,7 +9,7 @@ import { isPlanId } from "./plans"
 import { mergeAllPlaster } from "./rough/plaster-marks"
 import { PLASTER_THICKNESS, SCREED_THICKNESS, isThickness } from "./rough/rough-model"
 import { isDoor, isWindow, normalizeMaterial } from "./types"
-import type { Battery, BatteryCornerPoint, BatteryMark, Callout, CeilingContent, Communication, CornerRef, DemolitionMark, Dimension, DimPoint, Doorway, Drawing, DrawingStore, DrywallWall, EdgePoint, EdgeRef, FurnitureContent, ItemPoint, JambPoint, LightFixture, MountingContent, PlasterMark, PlumbingContent, Point, ReconstructionContent, RightAngleMark, RoomRecord, Screed, FurnitureItem, StretchCeiling, SwitchingContent, View, Wall, WallDoor, WallElement, WallWindow } from "./types"
+import type { Battery, BatteryCornerPoint, BatteryMark, Callout, CeilingContent, Communication, CornerRef, DemolitionMark, Dimension, DimPoint, Doorway, Drawing, DrawingStore, DrywallWall, EdgePoint, EdgeRef, FurnitureContent, ItemPoint, JambPoint, LightFixture, LightLine, MountingContent, PlasterMark, PlumbingContent, Point, ReconstructionContent, RightAngleMark, RoomRecord, Screed, FurnitureItem, StretchCeiling, SwitchingContent, View, Wall, WallDoor, WallElement, WallWindow } from "./types"
 
 const KEY = "draw-repair:drawing"
 
@@ -438,14 +439,27 @@ function loadPlumbing(raw: unknown): { plumbing?: PlumbingContent } {
   }
 }
 
-// объекты плана «Группы включения» при загрузке (change add-switching-plan, design D2): только выноски и примечания по общим
-// правилам; поле, не являющееся объектом, читается как отсутствующее; освещение и мебель в поле не хранятся
+// метка линии освещения (change add-light-lines, design D1): непустые идентификаторы метки и светильника, имя вида «L<n>»;
+// светильник может отсутствовать — такая метка хранится и не показывается
+export const isLightLine = (l: unknown): l is LightLine => {
+  if (typeof l !== "object" || l === null) return false
+  const x = l as Record<string, unknown>
+  return typeof x.id === "string" && x.id !== "" && typeof x.targetId === "string" && x.targetId !== "" && isLineName(x.name)
+}
+
+export const copyLightLine = (l: LightLine): LightLine => ({ id: l.id, targetId: l.targetId, name: l.name })
+
+// объекты плана «Группы включения» при загрузке (change add-switching-plan, design D2): метки линий освещения (некорректные
+// отбрасываются по одной; пустой список не пишется), выноски и примечания по общим правилам; поле, не являющееся объектом,
+// читается как отсутствующее; освещение и мебель в поле не хранятся
 function loadSwitching(raw: unknown): { switching?: SwitchingContent } {
   if (typeof raw !== "object" || raw === null || Array.isArray(raw)) return {}
   const x = raw as Record<string, unknown>
   const notes = loadNoteList(x.notes)
+  const lines = Array.isArray(x.lines) ? x.lines.filter(isLightLine).map(copyLightLine) : []
   return {
     switching: {
+      ...(lines.length === 0 ? null : { lines }),
       ...(x.callouts === undefined ? null : { callouts: loadCalloutList(x.callouts) }),
       ...(notes === undefined ? null : { notes }),
     },

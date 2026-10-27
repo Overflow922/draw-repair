@@ -1,5 +1,5 @@
 import "./style.css"
-import { cloneScene, loadHistory, planHistory, record, recordCallouts, recordCeilingPlan, recordDemolition, recordFurniture, recordNotes, recordPlumbing, recordRough, recordSnapshot, redoCallouts, redoCeilingPlan, redoDemolition, redoEntry, redoFurniture, redoNotes, redoPlumbing, redoRough, saveHistory, undoCallouts, undoCeilingPlan, undoDemolition, undoEntry, undoFurniture, undoNotes, undoPlumbing, undoRough } from "./history"
+import { cloneScene, loadHistory, planHistory, record, recordCallouts, recordCeilingPlan, recordDemolition, recordFurniture, recordNotes, recordPlumbing, recordRough, recordSnapshot, redoCallouts, redoCeilingPlan, redoDemolition, redoEntry, redoFurniture, redoNotes, redoPlumbing, redoRough, saveHistory, undoCallouts, undoCeilingPlan, undoDemolition, undoEntry, undoFurniture, undoNotes, undoPlumbing, undoRough, recordSwitchingLines, redoSwitchingLines, undoSwitchingLines } from "./history"
 import type { Scene } from "./history"
 import { dimLevelSnap, dimensionGeometry, dimensionOffsetAt, hitWall, nearestDimAnchor, dimPointPoint, pointsEqual, segmentIntersectsRect, snap, snapOthers, snapWithSource, zoomAt } from "./geometry"
 import type { DimGeometry, SnapResult } from "./geometry"
@@ -100,6 +100,10 @@ import { switchingScene } from "./switching/switching-scene"
 import type { SwitchingScene } from "./switching/switching-scene"
 import { renderSwitching } from "./switching/switching-render"
 import { openSwitching } from "./switching/switching-workspace"
+import { createLightLineTool } from "./switching/light-line-tool"
+import type { LightLineToolHost } from "./switching/light-line-tool"
+import { lineLabelBox } from "./switching/light-line-label"
+import { lineNumber, lineLabel, parseLineName, storedLines, visibleLines } from "./switching/light-lines"
 import { PLASTER_OBSTACLE_PREFIX } from "./reconstruction/plaster-obstacles"
 import { renderReconstruction } from "./reconstruction/reconstruction-render"
 import { reconstructionScene } from "./reconstruction/reconstruction-scene"
@@ -129,7 +133,7 @@ import { afterPlace, escapeAction, resumesAfterSelectionCleared, selectionAllowe
 import { loadThemeChoice, paletteOf, resolveTheme, saveThemeChoice, themeToggleTitle, toggledTheme } from "./theme"
 import type { Theme } from "./theme"
 import { GRID_STEP_CM, MATERIALS, PX_PER_CM } from "./types"
-import type { Battery, BatteryMark, Communication, DemolitionMark, Dimension, DimPoint, Drawing, DrywallWall, Material, PlasterMark, Point, RightAngleMark, RoomRecord, Screed, StretchCeiling, FurnitureItem, LightFixture, LightKind, Unit, View, Wall, WallElement } from "./types"
+import type { Battery, BatteryMark, Communication, DemolitionMark, Dimension, DimPoint, Drawing, DrywallWall, Material, PlasterMark, Point, RightAngleMark, RoomRecord, Screed, StretchCeiling, FurnitureItem, LightFixture, LightKind, LightLine, Unit, View, Wall, WallElement } from "./types"
 
 const canvas = document.querySelector<HTMLCanvasElement>("#canvas")!
 const canvasWrap = document.querySelector<HTMLElement>("#canvas-wrap")!
@@ -161,6 +165,9 @@ const screedThicknessInput = document.querySelector<HTMLInputElement>("#screed-t
 const toolStretchCeilingBtn = document.querySelector<HTMLButtonElement>("#tool-stretch-ceiling")!
 const ceilingPanel = document.querySelector<HTMLElement>("#ceiling-panel")!
 const ceilingDropInput = document.querySelector<HTMLInputElement>("#ceiling-drop")!
+const toolLightLineBtn = document.querySelector<HTMLButtonElement>("#tool-light-line")!
+const lightLinePanel = document.querySelector<HTMLElement>("#light-line-panel")!
+const lightLineInput = document.querySelector<HTMLInputElement>("#light-line-number")!
 const toolLightBtn = document.querySelector<HTMLButtonElement>("#tool-light")!
 const lightPanel = document.querySelector<HTMLElement>("#light-panel")!
 const lightKindButtons = [...lightPanel.querySelectorAll<HTMLButtonElement>("[data-light]")].flatMap((button): [LightKind, HTMLButtonElement][] => {
@@ -1217,6 +1224,107 @@ const lightHost: LightToolHost = {
 }
 const lightTool = createLightTool(lightHost)
 
+// метки линий освещения плана «Группы включения» (change add-light-lines, design D4): номер для новых меток хранится в сеансе,
+// шаг истории — снимок списка меток до операции
+const NO_LINES: LightLine[] = []
+const linesOf = (): LightLine[] => current().switching?.lines ?? NO_LINES
+let lineNumberCurrent = 1
+let linePanelOpen = false
+let lineEditor: { editor: NumberEditor; id: string } | null = null
+
+const lineHost: LightLineToolHost = {
+  lines: linesOf,
+  setLines: (next) => {
+    const stored = storedLines(current().switching, next)
+    if (stored) current().switching = stored
+    else delete current().switching
+  },
+  lights: lightsOf,
+  record: () => {
+    nudgeBurst = false
+    recordSwitchingLines(activeHistory(), linesOf())
+  },
+  changed: () => {
+    dirty = true
+  },
+  redraw: () => redraw(),
+  newId: () => crypto.randomUUID(),
+  newName: () => lineLabel(lineNumberCurrent),
+  view: () => view,
+  unitsPerMm: SCREEN_METRICS.symbolMmPx,
+}
+const lineTool = createLightLineTool(lineHost)
+
+// панель «Линия освещения»: номер выделенной метки, иначе значение для новых
+function syncLinePanel(): void {
+  lightLinePanel.classList.toggle("open", linePanelOpen)
+  toolLightLineBtn.classList.toggle("active", tool === "lightLine")
+  const selected = lineTool.selected()
+  if (document.activeElement !== lightLineInput) lightLineInput.value = String(selected ? lineNumber(selected.name) : lineNumberCurrent)
+}
+
+const closeLineEditor = (): void => {
+  lineEditor?.editor.close()
+  lineEditor = null
+}
+
+// поле на месте применяет допустимое значение при смене плана и вкладки; недопустимое не применяется
+function commitLineEditor(): void {
+  if (!lineEditor) return
+  const { editor, id } = lineEditor
+  const name = parseLineName(editor.text())
+  closeLineEditor()
+  if (name !== null) lineTool.setNameOf(id, name)
+}
+
+// сброс поля на месте, выделения и панели (смена плана, чертежа и инструмента, отмена и повтор)
+const resetLines = (): void => {
+  closeLineEditor()
+  lineTool.clearSelection()
+  linePanelOpen = false
+  syncLinePanel()
+}
+
+// поле правки имени на месте текста метки (экранные координаты — по рамке текста)
+function openLineEditor(line: LightLine): void {
+  closeLineEditor()
+  const light = visibleLines([line], lightsOf())[0]?.light
+  if (!light) return
+  const k = PX_PER_CM * view.zoom
+  const box = lineLabelBox({ x: (light.x - view.pan.x) * k, y: (light.y - view.pan.y) * k }, line.name, SCREEN_METRICS.symbolMmPx)
+  const editor = openNumberEditor(
+    canvasWrap,
+    { x: box.x + box.w / 2, y: box.y + box.h / 2 },
+    line.name,
+    (text) => {
+      const name = parseLineName(text)
+      if (name !== null) lineTool.setNameOf(line.id, name)
+      redraw()
+    },
+    () => {
+      if (lineEditor?.editor === editor) lineEditor = null
+    },
+  )
+  lineEditor = { editor, id: line.id }
+}
+
+// без инструмента: нажатие на текст метки выделяет её и открывает панель; нажатие на выделенную открывает поле на месте;
+// иначе выделение снимается (светильники и мебель не выделяются)
+function pressLines(p: Point): void {
+  const hit = lineTool.labelAt(p)
+  if (!hit) {
+    resetLines()
+    redraw()
+    return
+  }
+  const wasSelected = lineTool.selectedId() === hit.id
+  closeLineEditor()
+  lineTool.select(p)
+  linePanelOpen = true
+  if (wasSelected) openLineEditor(hit)
+  redraw()
+}
+
 const lightGroupState = (): LightGroupState => ({ current: lightCurrent, active: tool === "light" ? lightCurrent : "other", panelOpen: lightPanelOpen })
 
 function applyLightGroup(next: LightGroupState): void {
@@ -1773,6 +1881,7 @@ function setTool(next: Tool): void {
   resetDemolition()
   resetRough()
   resetCeiling()
+  resetLines()
   itemTool.reset()
   furniturePanelOpen = false
   setWallPanel(false)
@@ -1933,6 +2042,7 @@ function redraw(): void {
   frame.request()
   syncRoughPanels()
   syncCeilingPanel()
+  syncLinePanel()
   syncDrywallPanel()
   syncFurniturePanel()
   updateLengthBox()
@@ -2098,6 +2208,8 @@ function drawCeilingPlan(): void {
 function drawSwitchingPlan(): void {
   const s = switchingNow()
   const erasingCallout = tool === "eraser" && cursor ? calloutTool.pick(cursor) : null
+  const erasingLine = tool === "eraser" && cursor && !erasingCallout ? lineTool.eraseTarget(cursor) : null
+  const hoveredLight = tool === "lightLine" && cursor ? lineTool.hoverTarget(cursor) : null
   renderSwitching(
     canvas,
     {
@@ -2109,6 +2221,10 @@ function drawSwitchingPlan(): void {
       drywall: s.base.own,
       items: s.items,
       lights: s.lights,
+      selectedLightId: hoveredLight,
+      lineLabels: visibleLines(linesOf(), s.lights).map(({ line, light }) => ({ id: line.id, name: line.name, at: { x: light.x, y: light.y } })),
+      selectedLineId: lineTool.selectedId(),
+      erasingLineId: erasingLine,
       callouts: calloutTool.displayList(),
       selectedCalloutId: calloutTool.selectedId(),
       erasingCalloutId: erasingCallout?.id ?? null,
@@ -2647,8 +2763,8 @@ canvas.addEventListener("pointermove", (e) => {
     return
   }
   if (onSwitching()) {
-    // «Линейка», «Ластик» и «Выноска» следят за курсором; подложка и освещение не правятся
-    if (tool === "ruler" || tool === "eraser" || tool === "callout") {
+    // «Линия освещения» (подсветка светильника), «Линейка», «Ластик» и «Выноска» следят за курсором; подложка и освещение не правятся
+    if (tool === "lightLine" || tool === "ruler" || tool === "eraser" || tool === "callout") {
       cursor = toWorld(e)
       if (tool === "callout") calloutTool.hover(cursor)
       redraw()
@@ -2705,7 +2821,7 @@ canvas.addEventListener("pointerleave", () => {
   if (tool === "plaster") plasterTool.hover(null)
   if (tool === "rightAngle") rightAngleTool.hover(null)
   if (tool === "furniture") itemTool.hover(null)
-  if ((tool === "ruler" || (tool === "eraser" && (onDemolition() || onRough() || onCeiling() || onSwitching())) || (tool === "light" && onCeiling())) && cursor) cursor = null
+  if ((tool === "ruler" || (tool === "eraser" && (onDemolition() || onRough() || onCeiling() || onSwitching())) || (tool === "light" && onCeiling()) || (tool === "lightLine" && onSwitching())) && cursor) cursor = null
   redraw()
 })
 
@@ -2790,16 +2906,17 @@ canvas.addEventListener("pointerdown", (e) => {
     return
   }
   if (onSwitching()) {
-    // без инструмента: выноска; подложка, мебель и освещение не выделяются
+    // без инструмента: выноска, иначе текст метки линии; подложка, мебель и освещение не выделяются
     if (!selectionAllowed(tool)) return
     const p = toWorld(e)
     if (calloutTool.press(p)) {
       suppressClick = true
       canvas.setPointerCapture(e.pointerId)
-    } else if (calloutTool.selectedId() !== null) {
-      calloutTool.deselect()
-      redraw()
+      resetLines()
+      return
     }
+    if (calloutTool.selectedId() !== null) calloutTool.deselect()
+    pressLines(p)
     return
   }
   if (onDemolition()) {
@@ -3116,7 +3233,8 @@ canvas.addEventListener("click", (e) => {
   if (onSwitching()) {
     const at = toWorld(e)
     if (tool === "callout") calloutTool.click(at)
-    else if (tool === "eraser") calloutTool.eraseAt(at)
+    else if (tool === "lightLine") lineTool.place(at)
+    else if (tool === "eraser" && !calloutTool.eraseAt(at)) lineTool.erase(at)
     return
   }
   // на плане «Демонтаж» жесты разбирает адаптер по нажатию и отпусканию (change demolition-plan, design D10);
@@ -3584,6 +3702,29 @@ toolStretchCeilingBtn.addEventListener("click", () => {
   } else ceilingPanelOpen = !ceilingPanelOpen
   syncCeilingPanel()
 })
+// «Линия освещения»: кнопка включает инструмент и открывает панель, повторный клик по активному — переключает панель
+toolLightLineBtn.addEventListener("click", () => {
+  if (tool !== "lightLine") {
+    setTool("lightLine")
+    linePanelOpen = true
+  } else linePanelOpen = !linePanelOpen
+  syncLinePanel()
+})
+// поле «Линия»: меняет имя выделенной метки одним шагом истории, иначе — значение для новых; недопустимое не применяется
+lightLineInput.addEventListener("change", () => {
+  const name = parseLineName(lightLineInput.value)
+  if (name !== null) {
+    if (lineTool.selectedId() !== null) lineTool.setSelectedName(name)
+    else lineNumberCurrent = lineNumber(name)
+  }
+  lightLineInput.blur()
+  syncLinePanel()
+  redraw()
+})
+lightLineInput.addEventListener("keydown", (e) => {
+  e.stopPropagation()
+  if (e.key === "Enter" || e.key === "Escape") lightLineInput.blur()
+})
 // группа «Освещение»: переходы кнопки группы и панели — как у групп «Проёмы» и «Коммуникации»
 toolLightBtn.addEventListener("click", () => applyLightGroup(lightGroupClick(lightGroupState())))
 for (const [kind, button] of lightKindButtons) button.addEventListener("click", () => applyLightGroup(lightGroupPick(lightGroupState(), kind)))
@@ -3646,6 +3787,7 @@ function setPlan(id: PlanId): void {
   calloutTool.commitEditor()
   closeNotesPanel() // панель закрывается до смены плана: поле показывает список прежнего плана
   commitCeilingEditor() // шаг истории — на прежнем плане
+  commitLineEditor()
   commitWorking()
   current().activePlan = id
   activate(store.activeId)
@@ -3671,6 +3813,7 @@ function newDrawing(): void {
 function activate(id: string): void {
   calloutTool.commitEditor()
   commitCeilingEditor()
+  commitLineEditor()
   closeNotesPanel()
   commitWorking()
   store.activeId = id
@@ -3683,6 +3826,7 @@ function activate(id: string): void {
   resetDemolition()
   resetRough()
   resetCeiling()
+  resetLines()
   itemTool.reset()
   clearChain()
   closeNumberEditor()
@@ -3739,6 +3883,7 @@ function resetEditing(): void {
   resetDemolition()
   resetRough()
   resetCeiling()
+  resetLines()
   itemTool.reset()
   clearChain()
   closeNumberEditor()
@@ -3859,6 +4004,16 @@ function restoreScene(e: Scene): void {
 }
 
 // отмена или повтор шага выносок плана (change add-callout, design D3): подставляется список выносок до операции
+// отмена или повтор шага меток линий плана «Группы включения» (change add-light-lines, design D7): подставляется список до операции
+function stepLines(step: typeof undoSwitchingLines): void {
+  const next = step(activeHistory(), linesOf())
+  if (!next) return
+  lineHost.setLines(next)
+  dirty = true
+  resetEditing()
+  redraw()
+}
+
 function stepCallouts(step: typeof undoCallouts): void {
   const next = step(activeHistory(), calloutsOf(current(), activePlanOf(current())))
   if (!next) return
@@ -3896,6 +4051,10 @@ function undo(): void {
   }
   if (h.past[h.past.length - 1]?.kind === "ceiling") {
     stepCeiling(undoCeilingPlan)
+    return
+  }
+  if (h.past[h.past.length - 1]?.kind === "switching") {
+    stepLines(undoSwitchingLines)
     return
   }
   if (h.past[h.past.length - 1]?.kind === "callouts") {
@@ -3945,6 +4104,10 @@ function redo(): void {
   }
   if (h.future[h.future.length - 1]?.kind === "ceiling") {
     stepCeiling(redoCeilingPlan)
+    return
+  }
+  if (h.future[h.future.length - 1]?.kind === "switching") {
+    stepLines(redoSwitchingLines)
     return
   }
   if (h.future[h.future.length - 1]?.kind === "callouts") {
@@ -4059,8 +4222,13 @@ window.addEventListener("keydown", (e) => {
       if (!calloutTool.dragging()) calloutTool.deleteSelected()
       return
     }
-    // подложка, мебель и освещение на плане «Группы включения» не удаляются
-    if (onSwitching()) return
+    // подложка, мебель и освещение на плане «Группы включения» не удаляются; удаляется только выделенная метка линии
+    if (onSwitching()) {
+      closeLineEditor()
+      lineTool.deleteSelected()
+      resetLines()
+      return
+    }
     if (onFurniture()) {
       if (!itemTool.dragging() && !dimDrag && !panDrag) deleteFurnitureSelection()
       return
@@ -4132,11 +4300,12 @@ window.addEventListener("keydown", (e) => {
       gestureActive: false,
       dimensionDraft: false,
       calloutDraft: calloutTool.hasDraft(),
-      hasSelection: calloutTool.selectedId() !== null,
+      hasSelection: calloutTool.selectedId() !== null || lineTool.selectedId() !== null,
     })
     if (action === "cancel-callout-draft") calloutTool.cancelDraft()
     else if (action === "clear-selection") {
       calloutTool.deselect()
+      resetLines()
       redraw()
     } else if (action === "deactivate-tool") setTool("none")
     return

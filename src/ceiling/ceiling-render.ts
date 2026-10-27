@@ -31,6 +31,8 @@ export interface CeilingView extends Omit<ReconstructionView, "preview" | "outli
   lightGhost?: LightFixture | null
   selectedLightId?: string | null
   erasingLightId?: string | null
+  // слой поверх знаков освещения и до выносок (план «Группы включения», change add-light-lines: метки линий)
+  aboveLights?: (c: CanvasRenderingContext2D, toScreen: (p: Point) => Point) => void
 }
 
 const GHOST_ALPHA = 0.4
@@ -155,6 +157,7 @@ export function drawCeilingScene(ctx: CanvasRenderingContext2D, w: number, h: nu
       drawLightSymbol(c, l, at, m.symbolMmPx, palette, m.font)
     }
     if (ghost) translucent(GHOST_ALPHA, () => drawLightSymbol(c, ghost, toScreen({ x: ghost.x, y: ghost.y }), m.symbolMmPx, palette, m.font))
+    scene.aboveLights?.(c, toScreen)
   }
 
   drawReconstructionScene(ctx, w, h, { ...scene, above }, unit, view, opts)

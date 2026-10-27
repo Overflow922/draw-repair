@@ -34,9 +34,9 @@ describe("каталог", () => {
 })
 
 describe("инструменты", () => {
-  it("SW-04: набор — «Выноска», «Линейка», «Примечания», «Ластик»; по умолчанию «Выноска»", () => {
-    expect(toolsOf("switching")).toEqual(["callout", "ruler", "notes", "eraser"])
-    expect(defaultToolOf("switching")).toBe("callout")
+  it("SW-04: набор — «Линия освещения», «Выноска», «Линейка», «Примечания», «Ластик»; по умолчанию «Линия освещения»", () => {
+    expect(toolsOf("switching")).toEqual(["lightLine", "callout", "ruler", "notes", "eraser"]) // TCR (change add-light-lines): добавлен инструмент «Линия освещения»
+    expect(defaultToolOf("switching")).toBe("lightLine") // TCR (change add-light-lines): по умолчанию «Линия освещения»
   })
 
   it("SW-05: инструментов других планов, в том числе «Освещение» и «Натяжной потолок», на плане нет", () => {

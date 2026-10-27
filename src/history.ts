@@ -1,8 +1,8 @@
 import { isNoteList } from "./notes/notes-store"
 import { historyKey } from "./plans"
 import type { PlanId } from "./plans"
-import { copyLightFixture, copyStretchCeiling, isBattery, isLightFixture, isBatteryMark, isCallout, isCommunication, isDemolitionMark, isDimension, isDrawing, isDrywallWall, isPlasterMark, isRightAngle, isRoomRecord, isScreed, isFurnitureItem, isPlumbingDimension, isStretchCeiling, isWall, isWallElement, readFurnitureItem } from "./storage"
-import type { Battery, BatteryMark, Callout, Communication, DemolitionMark, Dimension, DimPoint, Drawing, LightFixture, PlasterMark, RightAngleMark, RoomRecord, Screed, FurnitureItem, StretchCeiling, Wall, WallElement } from "./types"
+import { copyLightFixture, copyLightLine, copyStretchCeiling, isBattery, isLightLine, isLightFixture, isBatteryMark, isCallout, isCommunication, isDemolitionMark, isDimension, isDrawing, isDrywallWall, isPlasterMark, isRightAngle, isRoomRecord, isScreed, isFurnitureItem, isPlumbingDimension, isStretchCeiling, isWall, isWallElement, readFurnitureItem } from "./storage"
+import type { Battery, BatteryMark, Callout, Communication, DemolitionMark, Dimension, DimPoint, Drawing, LightFixture, LightLine, PlasterMark, RightAngleMark, RoomRecord, Screed, FurnitureItem, StretchCeiling, Wall, WallElement } from "./types"
 
 const KEY = "draw-repair:history"
 export const HISTORY_LIMIT = 50
@@ -40,6 +40,9 @@ export type HistoryEntry =
   // шаг плана «Потолки и освещение» (change add-ceiling-plan, design D6): натяжные потолки плана до операции и объекты освещения
   // (change add-ceiling-lighting, design D9); у записи, сохранённой до введения освещения, поля нет
   | { kind: "ceiling"; ceilings: StretchCeiling[]; lights?: LightFixture[] }
+  // шаг плана «Группы включения» (change add-light-lines, design D7): метки линий освещения до операции; выноски и примечания
+  // плана пишутся своими записями
+  | { kind: "switching"; lines: LightLine[] }
 
 export interface DrawingHistory {
   past: HistoryEntry[]
@@ -383,9 +386,35 @@ export function redoDemolition(history: DrawingHistory, current: DemolitionState
   return stateOf(e, current)
 }
 
+// Метки линий плана «Группы включения» (change add-light-lines, design D7): работают только с верхней записью вида «switching»,
+// при другой записи возвращают null и стеки не меняют
+const switchingEntry = (lines: readonly LightLine[]): HistoryEntry => ({ kind: "switching", lines: lines.map(copyLightLine) })
+
+export function recordSwitchingLines(history: DrawingHistory, lines: readonly LightLine[]): void {
+  history.past.push(switchingEntry(lines))
+  if (history.past.length > HISTORY_LIMIT) history.past.shift()
+  history.future = []
+}
+
+export function undoSwitchingLines(history: DrawingHistory, current: readonly LightLine[]): LightLine[] | null {
+  const e = history.past[history.past.length - 1]
+  if (!e || e.kind !== "switching") return null
+  history.past.pop()
+  history.future.push(switchingEntry(current))
+  return e.lines.map(copyLightLine)
+}
+
+export function redoSwitchingLines(history: DrawingHistory, current: readonly LightLine[]): LightLine[] | null {
+  const e = history.future[history.future.length - 1]
+  if (!e || e.kind !== "switching") return null
+  history.future.pop()
+  history.past.push(switchingEntry(current))
+  return e.lines.map(copyLightLine)
+}
+
 export function undoEntry(history: DrawingHistory, scene: Scene): HistoryEntry | null {
   const e = history.past[history.past.length - 1]
-  if (!e || e.kind === "callouts" || e.kind === "notes" || e.kind === "rough" || e.kind === "furniture" || e.kind === "plumbing" || e.kind === "ceiling") return null
+  if (!e || e.kind === "callouts" || e.kind === "notes" || e.kind === "rough" || e.kind === "furniture" || e.kind === "plumbing" || e.kind === "ceiling" || e.kind === "switching") return null
   history.past.pop()
   history.future.push(e.kind === "walls" ? { kind: "walls", ...cloneScene(scene) } : e)
   return e
@@ -393,7 +422,7 @@ export function undoEntry(history: DrawingHistory, scene: Scene): HistoryEntry |
 
 export function redoEntry(history: DrawingHistory, scene: Scene): HistoryEntry | null {
   const e = history.future[history.future.length - 1]
-  if (!e || e.kind === "callouts" || e.kind === "notes" || e.kind === "rough" || e.kind === "furniture" || e.kind === "plumbing" || e.kind === "ceiling") return null
+  if (!e || e.kind === "callouts" || e.kind === "notes" || e.kind === "rough" || e.kind === "furniture" || e.kind === "plumbing" || e.kind === "ceiling" || e.kind === "switching") return null
   history.future.pop()
   history.past.push(e.kind === "walls" ? { kind: "walls", ...cloneScene(scene) } : e)
   return e
@@ -429,6 +458,7 @@ const isHistoryEntry = (e: unknown): e is HistoryEntry => {
   if (x.kind === "plumbing") return Array.isArray(x.dimensions) && x.dimensions.every(isPlumbingDimension)
   if (x.kind === "ceiling")
     return Array.isArray(x.ceilings) && x.ceilings.every(isStretchCeiling) && (x.lights === undefined || (Array.isArray(x.lights) && x.lights.every(isLightFixture)))
+  if (x.kind === "switching") return Array.isArray(x.lines) && x.lines.every(isLightLine)
   return x.kind === "close" && typeof x.drawingId === "string" &&
     typeof x.index === "number" && Number.isInteger(x.index) && x.index >= 0
 }

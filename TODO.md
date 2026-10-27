@@ -1196,10 +1196,9 @@ Follow-ups from exploring `add-switching-plan` (2026-10-27).
 
 ## Out of scope (decided, revisit if needed)
 
-- [ ] **Tool «Линия освещения»** (next change after `add-switching-plan`): метка `L1…Ln` на светильнике, один светильник — одна линия; счётчик легенды «Линия освещения» (число разных линий).
 - [ ] **Tool «Выключатель»** (after «Линия освещения»): ключи на грани стены, блок из нескольких ключей, подпись ключа — включаемые линии (`L2,LV1`); счётчик легенды «Выключатели» (число ключей).
 - [ ] **Kind «Вытяжка»** (after «Выключатель»): нагрузка со своей линией (`LV1`); знак — красный квадрат с ломаной внутри; счётчик легенды «Вытяжка».
-- [ ] Reference pictures for the three new symbols: `references/lighting.png` has no switch, line label or extractor — ask the user for a picture before designing the drawings (`.claude/rules/references.md`).
+- [ ] Reference pictures for the two remaining new symbols: `references/lighting.png` has no switch or extractor — ask the user for a picture before designing the drawings (`.claude/rules/references.md`). The line label now has `references/lines.png`.
 
 ## Docs
 
@@ -1219,5 +1218,21 @@ Follow-ups from implementing `add-switching-plan` (2026-10-27).
 
 ## Docs
 
-- [ ] Task 2.3 of `add-switching-plan` named `storedSwitching`; it was not written: the plan has no own objects yet, so nothing would call it (callouts and notes go through `callout-store.ts` and `notes-store.ts`). `add-light-lines` adds it together with its first own list (`SwitchingContent.lines`), as `storedCeiling` does for lights; update that change's tasks accordingly.
 - [ ] The project has no formatter or linter configured (no prettier/eslint config, no `lint` script), so quality gates 1–2 of CLAUDE.md Rule 7 only ran as `tsc --noEmit` and the test suite.
+
+---
+
+Follow-ups from implementing `add-light-lines` (2026-10-27).
+
+## Bugs
+
+- [ ] Line labels of neighbouring lights overlap in a dense grid (design D5 accepts it: move the light on «Потолки и освещение»); a layout that avoids overlaps would be its own change.
+
+## Docs
+
+- [ ] Design D6 of `add-light-lines` says the label is italic, while the spec says «the same size and style as the «ДПС» caption» (upright). Implemented per the spec (upright); the italic look in `references/lines.png` is the CAD font of the sample. Decide whether the label should be italic and align design and spec.
+- [ ] `references/lines.png` is a copy of the user screenshot `img_2.png` (root, uncommitted). Task 0.2 was closed from that picture, without asking the user explicitly.
+
+## Out of scope
+
+- [ ] Checks «line without a switch» and «switch without a line», and the «Количество» column of the legend (see the `add-switching-plan` section above): not part of this change.
