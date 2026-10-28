@@ -1322,3 +1322,17 @@ Follow-ups from `line-edit-and-highlight` (2026-10-27).
 ## Out of scope (decided, revisit if needed)
 
 - [ ] Linked objects use the same selection colour as the selected one (design D2); a second shade needs its own change if they are hard to tell apart.
+
+---
+
+Follow-ups from `add-furniture-tropical-shower` (2026-10-28).
+
+## Out of scope
+
+- [ ] The tropical shower is not on the «Сантехника» plan: its catalog entry has no `water: true` (the toilet has it). The user asked only for the furniture kind; whether the shower head should appear there is a spec-level decision for `plumbing-plan` (`src/furniture/furniture-kinds.ts` `tropicalShower`).
+- [ ] The shower has no overlap exemptions: a ceiling-mounted head standing over a bath or a shower tray would be flagged, but the catalog has neither. Revisit when such a kind is added (`furniture-plan` «Пересечения стола»).
+- [ ] The shower drawing follows the user's sketch (variant A of the HTML page), not a picture in `references/`; replace the drawing in `src/furniture/tropical-shower-drawing.ts` if a picture is added.
+
+## Docs
+
+- [ ] The `pdf-export` scenario «Тридцать первая запись в третьем столбце» still says «двадцать три вида» and «33 записи»; the catalog has 25 kinds, so the legend of a page with all kinds has 35 entries (15 + 15 + 5). The test `src/export/legend-three-columns.test.ts` L3-01 already says 35; align the scenario at the next legend change.

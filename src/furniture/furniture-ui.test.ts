@@ -37,7 +37,7 @@ describe("разметка группы «Мебель»", () => {
     // TCR (change add-furniture-tv-wall-cabinet): в каталоге новые виды
     // TCR (change add-furniture-bed-nightstand): в каталоге новые виды
     // TCR (change add-furniture-wardrobes): в каталоге новые виды
-    expect(FURNITURE_KIND_ORDER).toEqual(["table", "chair", "sofa", "desk", "officeChair", "tv", "wallCabinet", "bed", "nightstand", "slidingWardrobe", "doubleWardrobe", "curtains", "kitchenCabinet", "fridge", "wineCabinet", "hob", "dishwasher", "sink", "kitchenColumn", "oven", "microwave", "washer", "dryer", "toilet"]) // TCR (change add-furniture-kitchen-cabinet-fridge, add-furniture-kitchen-objects, add-furniture-appliances, add-toilet): в каталоге новые виды
+    expect(FURNITURE_KIND_ORDER).toEqual(["table", "chair", "sofa", "desk", "officeChair", "tv", "wallCabinet", "bed", "nightstand", "slidingWardrobe", "doubleWardrobe", "curtains", "kitchenCabinet", "fridge", "wineCabinet", "hob", "dishwasher", "sink", "kitchenColumn", "oven", "microwave", "washer", "dryer", "toilet", "tropicalShower"]) // TCR (change add-furniture-kitchen-cabinet-fridge, add-furniture-kitchen-objects, add-furniture-appliances, add-toilet, add-furniture-tropical-shower): в каталоге новые виды
     expect(main).toContain("FURNITURE_KIND_ORDER.map((kind)")
     expect(main).toContain("button.id = `tool-furniture-${kind}`")
     expect(main).toContain('button.className = "group-tool"')

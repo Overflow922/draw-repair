@@ -17,7 +17,11 @@ describe("каталог видов мебели", () => {
     // TCR (change add-furniture-kitchen-objects): в каталоге новые виды
     // TCR (change add-furniture-appliances): в каталоге новые виды
     // TCR (change add-toilet): в каталоге новый вид
-    expect(FURNITURE_KIND_ORDER).toEqual(["table", "chair", "sofa", "desk", "officeChair", "tv", "wallCabinet", "bed", "nightstand", "slidingWardrobe", "doubleWardrobe", "curtains", "kitchenCabinet", "fridge", "wineCabinet", "hob", "dishwasher", "sink", "kitchenColumn", "oven", "microwave", "washer", "dryer", "toilet"])
+    // TCR (change add-furniture-tropical-shower): в каталоге новый вид
+    expect(FURNITURE_KIND_ORDER).toEqual(["table", "chair", "sofa", "desk", "officeChair", "tv", "wallCabinet", "bed", "nightstand", "slidingWardrobe", "doubleWardrobe", "curtains", "kitchenCabinet", "fridge", "wineCabinet", "hob", "dishwasher", "sink", "kitchenColumn", "oven", "microwave", "washer", "dryer", "toilet", "tropicalShower"])
+    expect(kindEntry("tropicalShower").label).toBe("Тропический душ")
+    expect(kindEntry("tropicalShower").plaqueWord).toBe("тропический душ")
+    expect(kindEntry("tropicalShower").defaults).toEqual({ widthCm: 40, lengthCm: 30, angleDeg: 0 })
     expect(kindEntry("kitchenColumn").defaults).toEqual({ widthCm: 60, lengthCm: 62, angleDeg: 0 })
     expect(kindEntry("oven").defaults).toEqual({ widthCm: 60, lengthCm: 62, angleDeg: 0 })
     expect(kindEntry("microwave").defaults).toEqual({ widthCm: 60, lengthCm: 62, angleDeg: 0 })

@@ -23,6 +23,7 @@ import { dishwasherDrawing, wineCabinetDrawing } from "./kitchen-module-drawing"
 import { dryerDrawing, washerDrawing } from "./laundry-drawing"
 import { TOILET_DEFAULTS, toiletBounds } from "./toilet"
 import { toiletDrawing } from "./toilet-drawing"
+import { tropicalShowerDrawing } from "./tropical-shower-drawing"
 import type { ToiletSizes } from "../types"
 import type { ObstacleKind } from "./overlap"
 import { doubleWardrobeDrawing, slidingWardrobeDrawing } from "./wardrobe-drawing"
@@ -244,6 +245,14 @@ export const FURNITURE_KINDS = {
     drawing: toiletDrawing,
     icon: '<rect x="3" y="3" width="18" height="5"/><path d="M3 3l18 5M21 3L3 8"/><path d="M8 8v6a4 4 0 0 0 8 0V8"/><ellipse cx="12" cy="15" rx="2" ry="2.5"/>',
     water: true,
+  },
+  // потолочная лейка тропического душа (change add-furniture-tropical-shower, набросок варианта A): к воде пока не подключена
+  tropicalShower: {
+    label: "Тропический душ",
+    plaqueWord: "тропический душ",
+    defaults: { widthCm: 40, lengthCm: 30, angleDeg: 0 },
+    drawing: tropicalShowerDrawing,
+    icon: '<rect x="3" y="6" width="18" height="12" rx="2.500"/><rect x="5.500" y="8.500" width="13" height="7" rx="1"/><circle cx="8.500" cy="11" r="0.700"/><circle cx="12" cy="11" r="0.700"/><circle cx="15.500" cy="11" r="0.700"/><circle cx="8.500" cy="13.500" r="0.700"/><circle cx="12" cy="13.500" r="0.700"/><circle cx="15.500" cy="13.500" r="0.700"/>',
   },
 } as const satisfies Record<string, FurnitureKindEntry>
 
