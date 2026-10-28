@@ -183,6 +183,12 @@ describe("легенда страницы «Сантехника»", () => {
     expect(labels(pagesOf(d)[6])).toEqual(["Кирпич", "Штукатурка", "Гипсокартон", "Раковина", "Трап в стену"])
   })
 
+  it("PP-10d: умывальник — прибор страницы «Сантехника»: его запись есть в легенде седьмой страницы рядом с «Раковиной» (change add-washbasin)", () => {
+    const basin: FurnitureItem = { id: "u", kind: "washbasin", x: 150, y: 220, widthCm: 60, lengthCm: 48, angleDeg: 0 }
+    const d = withFurniture(base(), [table(), sink(), basin])
+    expect(labels(pagesOf(d)[6])).toEqual(["Кирпич", "Штукатурка", "Гипсокартон", "Раковина", "Умывальник"])
+  })
+
   it("PP-10: «Кирпич», «Штукатурка», «Гипсокартон», «Раковина», «Стиральная машина»; стола и кухонного шкафа нет", () => {
     const d = withFurniture(base(), [table(), item("w", "washer", 200), item("k", "kitchenCabinet", 300), sink()])
     expect(labels(pagesOf(d)[6])).toEqual(["Кирпич", "Штукатурка", "Гипсокартон", "Раковина", "Стиральная машина"])

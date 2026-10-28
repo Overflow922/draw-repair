@@ -62,7 +62,7 @@ describe("легенда: образец трапа в стену", () => {
     expect(filled).toEqual([])
   })
 
-  it("WSL-02: запись «Трап в стену» последняя в легенде страницы со всеми видами, после «Тропического душа»; все записи помещаются по высоте на A3", () => {
+  it("WSL-02: запись «Трап в стену» в легенде страницы со всеми видами после «Тропического душа»; все записи помещаются по высоте на A3", () => {
     const battery: Battery = { id: "b1", wallId: "k1", face: 1, anchor: "a", offsetCm: 100, lengthCm: 70, thicknessCm: 10, gapCm: 3 }
     const materials = ["blocks", "brick", "concrete", "gkl", "wood-long"] as const
     const walls = [...rectWalls("k", 0, 0, 420, 320), ...materials.map((m, i) => wall(`m${i}`, 600, i * 60, 800, i * 60, 10, m))]
@@ -74,8 +74,9 @@ describe("легенда: образец трапа в стену", () => {
     const page = pagesOf(d)[5]
     if (!page) throw new Error("страницы «Мебель» нет")
     const labels = legendEntries(page).map((e) => e.label)
-    expect(labels.at(-1)).toBe("Трап в стену")
-    expect(labels.at(-2)).toBe("Тропический душ")
+    // TCR (change add-washbasin): после «Трапа в стену» в каталоге идёт «Умывальник»
+    expect(labels.at(-2)).toBe("Трап в стену")
+    expect(labels.at(-3)).toBe("Тропический душ")
     expect(Math.ceil(labels.length / LEGEND_COLUMN_CAPACITY) * LEGEND_COLUMN_CAPACITY).toBeGreaterThanOrEqual(labels.length)
     expect(LEGEND_COLUMN_CAPACITY * LEGEND_ROW_PITCH_MM).toBeLessThanOrEqual(222)
   })

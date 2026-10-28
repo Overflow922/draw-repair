@@ -25,6 +25,7 @@ import { TOILET_DEFAULTS, toiletBounds } from "./toilet"
 import { toiletDrawing } from "./toilet-drawing"
 import { tropicalShowerDrawing } from "./tropical-shower-drawing"
 import { wallShowerDrainDrawing } from "./wall-shower-drain-drawing"
+import { washbasinDrawing } from "./washbasin-drawing"
 import type { ToiletSizes } from "../types"
 import type { ObstacleKind } from "./overlap"
 import { doubleWardrobeDrawing, slidingWardrobeDrawing } from "./wardrobe-drawing"
@@ -265,6 +266,16 @@ export const FURNITURE_KINDS = {
     drawing: wallShowerDrainDrawing,
     icon: '<rect x="2" y="6" width="20" height="10" rx="1"/><rect x="4" y="8" width="16" height="4" rx="0.500"/><rect x="5" y="14" width="14" height="1" rx="0.500"/>',
     overlapExemptions: { obstacles: ["wall", "drywall", "plaster"] },
+    water: true,
+  },
+  // умывальник для ванной (change add-washbasin, набросок варианта B): смеситель и вентили у задней стороны, прибор плана «Сантехника»;
+  // кухонная «Раковина» — отдельный вид
+  washbasin: {
+    label: "Умывальник",
+    plaqueWord: "умывальник",
+    defaults: { widthCm: 60, lengthCm: 48, angleDeg: 0 },
+    drawing: washbasinDrawing,
+    icon: '<rect x="3" y="4" width="18" height="16" rx="1"/><rect x="5.500" y="9" width="13" height="8.500" rx="3"/><circle cx="12" cy="13.500" r="1"/><circle cx="12" cy="6.500" r="0.900"/><circle cx="8.500" cy="6.500" r="0.600"/><circle cx="15.500" cy="6.500" r="0.600"/>',
     water: true,
   },
 } as const satisfies Record<string, FurnitureKindEntry>

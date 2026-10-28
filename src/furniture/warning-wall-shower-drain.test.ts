@@ -10,9 +10,10 @@ const hit = (kind: Overlap["kind"], itemKind: Overlap["itemKind"]): Overlap => (
 const pair = (itemKind: Overlap["itemKind"], otherKind: Overlap["itemKind"]): Overlap => ({ kind: "furniture", itemId: "a", itemKind, otherKind, region: [] })
 
 describe("каталог: трап в стену", () => {
-  it("WWD-01: двадцать шестой и последний вид — «Трап в стену» 70 × 8, угол 0", () => {
-    expect(FURNITURE_KIND_ORDER).toHaveLength(26)
-    expect(FURNITURE_KIND_ORDER.at(-1)).toBe("wallShowerDrain")
+  it("WWD-01: двадцать шестой вид — «Трап в стену» 70 × 8, угол 0", () => {
+    // TCR (change add-washbasin): после «Трапа в стену» в каталоге идёт «Умывальник», видов двадцать семь
+    expect(FURNITURE_KIND_ORDER).toHaveLength(27)
+    expect(FURNITURE_KIND_ORDER.at(-2)).toBe("wallShowerDrain")
     expect(kindEntry("wallShowerDrain").defaults).toEqual({ widthCm: 70, lengthCm: 8, angleDeg: 0 })
   })
 })

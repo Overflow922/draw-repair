@@ -71,7 +71,8 @@ const EXPECTED = [
   // TCR (change add-toilet): в каталоге новый вид «Унитаз» — тридцать четвёртая запись в третьем столбце
   // TCR (change add-furniture-tropical-shower): в каталоге новый вид «Тропический душ» — тридцать пятая запись в третьем столбце
   // TCR (change add-wall-shower-drain): в каталоге новый вид «Трап в стену» — тридцать шестая запись в третьем столбце
-  ["Микроволновка", "Стиральная машина", "Сушильная машина", "Унитаз", "Тропический душ", "Трап в стену"],
+  // TCR (change add-washbasin): в каталоге новый вид «Умывальник» — тридцать седьмая запись в третьем столбце
+  ["Микроволновка", "Стиральная машина", "Сушильная машина", "Унитаз", "Тропический душ", "Трап в стену", "Умывальник"],
 ]
 
 function build(pages: PlanPage[], format: PageFormat): void {
@@ -87,7 +88,7 @@ const legendTexts = (n: number, pages: PlanPage[], format: PageFormat): TextCall
 }
 
 describe("легенда в три столбца", () => {
-  it("L3-01: тридцать шесть записей по столбцам 15 + 15 + 6 в порядке спеки", () => {
+  it("L3-01: тридцать семь записей по столбцам 15 + 15 + 7 в порядке спеки", () => {
     const labels = legendEntries(FULL).map((e) => e.label)
     expect(labels).toEqual(EXPECTED.flat())
     const byColumn = [0, 1, 2].map((c) => labels.filter((_, i) => legendCell(i).column === c))

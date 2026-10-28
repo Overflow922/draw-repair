@@ -1334,7 +1334,7 @@ Follow-ups from `add-furniture-tropical-shower` (2026-10-28).
 
 ## Docs
 
-- [ ] The `pdf-export` scenario «Тридцать первая запись в третьем столбце» still says «двадцать три вида» and «33 записи»; the catalog has 26 kinds (after `add-wall-shower-drain`), so the legend of a page with all kinds has 36 entries (15 + 15 + 6). The test `src/export/legend-three-columns.test.ts` L3-01 already says 36; align the scenario at the next legend change.
+- [ ] The `pdf-export` scenario «Тридцать первая запись в третьем столбце» still says «двадцать три вида» and «33 записи»; the catalog has 27 kinds (after `add-washbasin`), so the legend of a page with all kinds has 37 entries (15 + 15 + 7). The test `src/export/legend-three-columns.test.ts` L3-01 already says 37; align the scenario at the next legend change.
 ---
 
 Follow-ups from `add-wall-shower-drain` (2026-10-28).
@@ -1347,3 +1347,16 @@ Follow-ups from `add-wall-shower-drain` (2026-10-28).
 ## Docs
 
 - [ ] The tray body is a solid line in the catalog; the sketch drew it dashed. A dashed line would need short segments in the drawing (as the nightstand does) and is hard to read in the 14 × 1.6 mm legend sample; revisit with the picture above.
+
+---
+
+Follow-ups from `add-washbasin` (2026-10-28).
+
+## Out of scope
+
+- [ ] The washbasin has no overlap exemptions: a basin on a vanity unit or standing in a drywall wall is flagged as an overlap (the catalog has no vanity unit). Revisit when such a kind is added or if bathrooms get false overlaps (`furniture-plan` «Пересечения стола»).
+- [ ] Variants A, C, D, E of the sketch (round bowl on a counter, wall-hung with a shelf, corner, double on a vanity) are not drawn; only variant B is in the catalog.
+
+## Docs
+
+- [ ] The washbasin drawing follows the user's sketch (variant B of the HTML page), not a picture in `references/`; compare the numbers with a picture and replace the drawing in `src/furniture/washbasin-drawing.ts` if one is added (`.claude/rules/references.md`).
