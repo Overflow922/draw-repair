@@ -10,6 +10,7 @@ import type { Battery, Communication, LightFixture, LightKind, LightSwitch, Poin
 import { drawExhaust } from "../switching/exhaust-symbol"
 import { drawSwitch } from "../switching/switch-symbol"
 import { traceLines } from "../furniture/furniture-render"
+import { scaleToilet } from "../furniture/toilet"
 import { kindEntry } from "../furniture/furniture-kinds"
 import type { FurnitureKind } from "../furniture/furniture-kinds"
 import { CEILING_ALPHA, canvasTranslucent } from "../ceiling/ceiling-render"
@@ -143,7 +144,7 @@ function drawItemSample(ctx: CanvasRenderingContext2D, origin: Point, kind: Furn
   const longCm = turned ? defaults.lengthCm : defaults.widthCm
   const shortCm = turned ? defaults.widthCm : defaults.lengthCm
   const fit = Math.min(1, SAMPLE_LENGTH_MM / (LEGEND_ITEM_MM_PER_CM * longCm), SAMPLE_THICKNESS_MM / (LEGEND_ITEM_MM_PER_CM * shortCm))
-  const size = { widthCm: defaults.widthCm * fit, lengthCm: defaults.lengthCm * fit }
+  const size = { widthCm: defaults.widthCm * fit, lengthCm: defaults.lengthCm * fit, ...(defaults.toilet ? { toilet: scaleToilet(defaults.toilet, fit) } : null) }
   const wMm = (turned ? size.lengthCm : size.widthCm) * LEGEND_ITEM_MM_PER_CM
   const hMm = (turned ? size.widthCm : size.lengthCm) * LEGEND_ITEM_MM_PER_CM
   const left = origin.x + (SAMPLE_LENGTH_MM - wMm) / 2

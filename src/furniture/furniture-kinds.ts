@@ -21,6 +21,9 @@ import { kitchenCabinetDrawing } from "./kitchen-cabinet-drawing"
 import { hobDrawing, sinkDrawing } from "./kitchen-inset-drawing"
 import { dishwasherDrawing, wineCabinetDrawing } from "./kitchen-module-drawing"
 import { dryerDrawing, washerDrawing } from "./laundry-drawing"
+import { TOILET_DEFAULTS, toiletBounds } from "./toilet"
+import { toiletDrawing } from "./toilet-drawing"
+import type { ToiletSizes } from "../types"
 import type { ObstacleKind } from "./overlap"
 import { doubleWardrobeDrawing, slidingWardrobeDrawing } from "./wardrobe-drawing"
 
@@ -28,6 +31,8 @@ export interface ItemDefaults {
   widthCm: number
   lengthCm: number
   angleDeg: number
+  // только у вида «Унитаз» (change add-toilet): четыре размера, из которых выведены ширина и длина
+  toilet?: ToiletSizes
 }
 
 export interface FurnitureKindEntry {
@@ -230,6 +235,15 @@ export const FURNITURE_KINDS = {
     drawing: dryerDrawing,
     icon: '<rect x="3" y="5" width="18" height="16"/><path d="M4 5V3h3v2M8 5V3h3v2M13 5V3h7v2"/><circle cx="12" cy="13.5" r="5"/><path d="M11 13.5a1 1 0 0 1 2 0a2 2 0 0 1-4 0a3 3 0 0 1 6 0a4 4 0 0 1-8 0"/>',
     overlapExemptions: { furniture: ["washer"] },
+  },
+  // унитаз с инсталляцией (change add-toilet, references/toilet.png): блок зашивается гипсокартоном, ёршика нет
+  toilet: {
+    label: "Унитаз",
+    plaqueWord: "унитаз",
+    defaults: { ...toiletBounds(TOILET_DEFAULTS), angleDeg: 0, toilet: TOILET_DEFAULTS },
+    drawing: toiletDrawing,
+    icon: '<rect x="3" y="3" width="18" height="5"/><path d="M3 3l18 5M21 3L3 8"/><path d="M8 8v6a4 4 0 0 0 8 0V8"/><ellipse cx="12" cy="15" rx="2" ry="2.5"/>',
+    water: true,
   },
 } as const satisfies Record<string, FurnitureKindEntry>
 

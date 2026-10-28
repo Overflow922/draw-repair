@@ -310,6 +310,17 @@ export interface FurnitureItem {
   widthCm: number
   lengthCm: number
   angleDeg: number
+  // только у вида «Унитаз» (change add-toilet, design D1): widthCm и lengthCm выводятся из этих размеров
+  toilet?: ToiletSizes
+}
+
+// Четыре размера унитаза: чаша и блок инсталляции у стены (change add-toilet): ширина предмета = ширина блока,
+// длина предмета = длина чаши + глубина блока; чаша по центру блока, блок у верхней стороны при угле 0
+export interface ToiletSizes {
+  bowlWidthCm: number
+  bowlLengthCm: number
+  blockWidthCm: number
+  blockDepthCm: number
 }
 
 // Собственные объекты плана «Мебель» (change furniture-plan-table, design D2): столы и размеры плана, выноски и примечания

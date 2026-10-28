@@ -1,4 +1,4 @@
-import type { FurnitureItem, ItemPointAt, Point } from "../types"
+import type { FurnitureItem, ItemPointAt, Point, ToiletSizes } from "../types"
 import type { FurnitureKind } from "./furniture-kinds"
 
 // Предмет мебели плана «Мебель» (change furniture-plan-table, design D2, D5): прямоугольник вокруг центра. Ширина — вдоль оси X при
@@ -10,7 +10,7 @@ export const normalizeAngle = (deg: number): number => {
   return a === 0 ? 0 : a
 }
 
-export const newItem = (id: string, kind: FurnitureKind, center: Point, params: { widthCm: number; lengthCm: number; angleDeg: number }): FurnitureItem => ({
+export const newItem = (id: string, kind: FurnitureKind, center: Point, params: { widthCm: number; lengthCm: number; angleDeg: number; toilet?: ToiletSizes }): FurnitureItem => ({
   id,
   kind,
   x: center.x,
@@ -18,6 +18,7 @@ export const newItem = (id: string, kind: FurnitureKind, center: Point, params: 
   widthCm: params.widthCm,
   lengthCm: params.lengthCm,
   angleDeg: normalizeAngle(params.angleDeg),
+  ...(params.toilet ? { toilet: params.toilet } : null),
 })
 
 const toRadians = (deg: number): number => (deg * Math.PI) / 180

@@ -20,7 +20,7 @@ import { itemSizeLayout } from "./item-size-layout"
 
 // рисунок вида предмета в чертеже: точки поворачиваются и смещаются вместе с предметом
 export function itemDrawingInPlan(t: FurnitureItem): ItemDrawing {
-  const drawing = kindEntry(t.kind).drawing({ widthCm: t.widthCm, lengthCm: t.lengthCm })
+  const drawing = kindEntry(t.kind).drawing({ widthCm: t.widthCm, lengthCm: t.lengthCm, ...(t.toilet ? { toilet: t.toilet } : null) })
   const place = (p: Point): Point => itemLocalToWorld(t, p)
   return { outline: drawing.outline.map(place), lines: drawing.lines.map((line) => line.map(place)) }
 }

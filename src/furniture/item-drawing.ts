@@ -1,4 +1,4 @@
-import type { Point } from "../types"
+import type { Point, ToiletSizes } from "../types"
 
 // Рисунки видов мебели (change furniture-line-drawings, design D1, D2): схематичный вид сверху — силуэт и линии в сантиметрах
 // в системе координат предмета при угле 0 (начало — левый верхний угол прямоугольника, X — вдоль ширины, Y — вдоль длины).
@@ -14,6 +14,8 @@ export interface ItemDrawing {
 export interface ItemSize {
   widthCm: number
   lengthCm: number
+  // четыре размера унитаза (change add-toilet): только у вида «Унитаз», остальные виды их не читают
+  toilet?: ToiletSizes
 }
 
 // detailScale — коэффициент деталей вместо вычисляемого по размеру предмета: образец легенды рисует габариты, подогнанные под образец,

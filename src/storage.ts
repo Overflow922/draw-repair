@@ -5,13 +5,14 @@ import { isKeyCount, isKeyLineName } from "./switching/light-switch"
 import { mergeAll } from "./demolition/marks"
 import { isFurnitureKind } from "./furniture/furniture-kinds"
 import { normalizeAngle } from "./furniture/item"
+import { isValidToilet, toiletBounds } from "./furniture/toilet"
 import { loadNoteList } from "./notes/notes-store"
 import { isPlanId } from "./plans"
 import type { PlanId } from "./plans"
 import { mergeAllPlaster } from "./rough/plaster-marks"
 import { PLASTER_THICKNESS, SCREED_THICKNESS, isThickness } from "./rough/rough-model"
 import { isDoor, isWindow, normalizeMaterial } from "./types"
-import type { Battery, BatteryCornerPoint, BatteryMark, Callout, CeilingContent, Communication, CornerRef, DemolitionMark, Dimension, DimPoint, Doorway, Drawing, DrawingStore, DrywallWall, EdgePoint, EdgeRef, ExhaustFan, FurnitureContent, ItemPoint, JambPoint, LightFixture, LightLine, LightSwitch, MountingContent, PlasterMark, PlumbingContent, Point, ReconstructionContent, RightAngleMark, RoomRecord, Screed, FurnitureItem, StretchCeiling, SwitchingContent, SwitchKey, View, Wall, WallDoor, WallElement, WallWindow } from "./types"
+import type { Battery, BatteryCornerPoint, BatteryMark, Callout, CeilingContent, Communication, CornerRef, DemolitionMark, Dimension, DimPoint, Doorway, Drawing, DrawingStore, DrywallWall, EdgePoint, EdgeRef, ExhaustFan, FurnitureContent, ItemPoint, JambPoint, LightFixture, LightLine, LightSwitch, MountingContent, PlasterMark, PlumbingContent, Point, ReconstructionContent, RightAngleMark, RoomRecord, Screed, FurnitureItem, StretchCeiling, ToiletSizes, SwitchingContent, SwitchKey, View, Wall, WallDoor, WallElement, WallWindow } from "./types"
 
 const KEY = "draw-repair:drawing"
 
@@ -390,12 +391,21 @@ function loadReconstruction(raw: unknown): { reconstruction?: ReconstructionCont
   }
 }
 
+// четыре размера унитаза (change add-toilet, design D7): положительные числа, чаша не шире блока, длина чаши не меньше половины ширины
+function readToilet(raw: unknown): ToiletSizes | null {
+  if (typeof raw !== "object" || raw === null) return null
+  const x = raw as Record<string, unknown>
+  if (!num(x.bowlWidthCm) || !num(x.bowlLengthCm) || !num(x.blockWidthCm) || !num(x.blockDepthCm)) return null
+  const sizes = { bowlWidthCm: x.bowlWidthCm, bowlLengthCm: x.bowlLengthCm, blockWidthCm: x.blockWidthCm, blockDepthCm: x.blockDepthCm }
+  return isValidToilet(sizes) ? sizes : null
+}
+
 // предмет мебели плана «Мебель» (change furniture-plan-table, design D9; change furniture-items-catalog, design D1): вид из
-// каталога, непустой идентификатор, числа центра и угла, ширина и длина больше нуля
+// каталога, непустой идентификатор, числа центра и угла, ширина и длина больше нуля; у унитаза — ещё допустимые четыре размера
 export const isFurnitureItem = (t: unknown): t is FurnitureItem => {
   if (typeof t !== "object" || t === null) return false
   const x = t as Record<string, unknown>
-  return isFurnitureKind(x.kind) && typeof x.id === "string" && x.id !== "" && num(x.x) && num(x.y) && num(x.angleDeg) && num(x.widthCm) && x.widthCm > 0 && num(x.lengthCm) && x.lengthCm > 0
+  return isFurnitureKind(x.kind) && typeof x.id === "string" && x.id !== "" && num(x.x) && num(x.y) && num(x.angleDeg) && num(x.widthCm) && x.widthCm > 0 && num(x.lengthCm) && x.lengthCm > 0 && (x.kind !== "toilet" || readToilet(x.toilet) !== null)
 }
 
 // предмет из документа или истории: без вида (до введения каталога видов) читается как стол, неизвестный вид — битый (null);
@@ -404,7 +414,11 @@ export function readFurnitureItem(raw: unknown): FurnitureItem | null {
   if (typeof raw !== "object" || raw === null) return null
   const item = "kind" in raw ? raw : { ...raw, kind: "table" }
   if (!isFurnitureItem(item)) return null
-  return { id: item.id, kind: item.kind, x: item.x, y: item.y, widthCm: item.widthCm, lengthCm: item.lengthCm, angleDeg: normalizeAngle(item.angleDeg) }
+  const base = { id: item.id, kind: item.kind, x: item.x, y: item.y, angleDeg: normalizeAngle(item.angleDeg) }
+  if (item.kind !== "toilet") return { ...base, widthCm: item.widthCm, lengthCm: item.lengthCm }
+  // ширина и длина унитаза выводятся из четырёх размеров, а не берутся из документа
+  const toilet = readToilet(item.toilet)
+  return toilet ? { ...base, ...toiletBounds(toilet), toilet } : null
 }
 
 // объекты плана «Мебель» при загрузке: некорректные столы и размеры отбрасываются по одному; размеры на отсутствующие стены

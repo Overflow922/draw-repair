@@ -9,6 +9,8 @@ import { clipHalfPlane, displayPolygons, polygonArea } from "../wall-geometry"
 import { kindEntry } from "./furniture-kinds"
 import type { FurnitureKind } from "./furniture-kinds"
 import { itemCorners } from "./item"
+import { toiletParts } from "./toilet"
+import type { ToiletZone } from "./toilet"
 
 // Пересечения стола с другими объектами (change furniture-plan-table, design D4): препятствия приводятся к многоугольникам,
 // пересечение — отсечение многоугольника препятствия сторонами прямоугольника стола. Касание граней пересечением не является:
@@ -124,20 +126,38 @@ const exemptFromObstacle = (item: FurnitureKind, obstacle: ObstacleKind): boolea
 const exemptPair = (a: FurnitureKind, b: FurnitureKind): boolean =>
   (kindEntry(a).overlapExemptions?.furniture?.includes(b) ?? false) || (kindEntry(b).overlapExemptions?.furniture?.includes(a) ?? false)
 
+// зона предмета, которой разрешено лежать на препятствии (change add-toilet, design D3): блок унитаза зашивается гипсокартоном
+const exemptZone = (zone: ToiletZone | null, obstacle: ObstacleKind): boolean => zone === "block" && obstacle === "drywall"
+
+// часть предмета для пересечений: прямоугольник и зона; у унитаза — блок и чаша (design D2), у остальных — весь прямоугольник
+interface Piece {
+  rect: FurnitureItem
+  zone: ToiletZone | null
+}
+const piecesOf = (t: FurnitureItem): readonly Piece[] => (t.toilet ? toiletParts(t, t.toilet) : [{ rect: t, zone: null }])
+
 // пересечения одного стола с препятствиями и с другими столами (для призрака и выделенного стола)
 export function itemOverlaps(table: FurnitureItem, obstacles: readonly Obstacle[], others: readonly FurnitureItem[] = []): Overlap[] {
   const out: Overlap[] = []
+  const pieces = piecesOf(table)
   for (const o of obstacles) {
     if (exemptFromObstacle(table.kind, o.kind)) continue
-    for (const poly of o.polygons) {
-      const region = overlapRegion(poly, table)
-      if (region) out.push({ kind: o.kind, itemId: table.id, itemKind: table.kind, region })
+    for (const piece of pieces) {
+      if (exemptZone(piece.zone, o.kind)) continue
+      for (const poly of o.polygons) {
+        const region = overlapRegion(poly, piece.rect)
+        if (region) out.push({ kind: o.kind, itemId: table.id, itemKind: table.kind, region })
+      }
     }
   }
   for (const other of others) {
     if (other.id === table.id || exemptPair(table.kind, other.kind)) continue
-    const region = overlapRegion(itemCorners(other), table)
-    if (region) out.push({ kind: "furniture", itemId: table.id, itemKind: table.kind, otherKind: other.kind, region })
+    for (const otherPiece of piecesOf(other)) {
+      for (const piece of pieces) {
+        const region = overlapRegion(itemCorners(otherPiece.rect), piece.rect)
+        if (region) out.push({ kind: "furniture", itemId: table.id, itemKind: table.kind, otherKind: other.kind, region })
+      }
+    }
   }
   return out
 }

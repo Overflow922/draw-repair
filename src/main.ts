@@ -140,7 +140,7 @@ import { afterPlace, escapeAction, resumesAfterSelectionCleared, selectionAllowe
 import { loadThemeChoice, paletteOf, resolveTheme, saveThemeChoice, themeToggleTitle, toggledTheme } from "./theme"
 import type { Theme } from "./theme"
 import { GRID_STEP_CM, MATERIALS, PX_PER_CM } from "./types"
-import type { Battery, BatteryMark, Communication, DemolitionMark, Dimension, DimPoint, Drawing, DrywallWall, ExhaustFan, Material, PlasterMark, Point, RightAngleMark, RoomRecord, Screed, StretchCeiling, FurnitureItem, LightFixture, LightKind, LightLine, LightSwitch, Unit, View, Wall, WallElement } from "./types"
+import type { Battery, BatteryMark, Communication, DemolitionMark, Dimension, DimPoint, Drawing, DrywallWall, ExhaustFan, Material, PlasterMark, Point, RightAngleMark, RoomRecord, Screed, StretchCeiling, FurnitureItem, LightFixture, LightKind, LightLine, LightSwitch, ToiletSizes, Unit, View, Wall, WallElement } from "./types"
 
 const canvas = document.querySelector<HTMLCanvasElement>("#canvas")!
 const canvasWrap = document.querySelector<HTMLElement>("#canvas-wrap")!
@@ -215,6 +215,20 @@ const furnitureLengthInput = document.querySelector<HTMLInputElement>("#furnitur
 const furnitureAngleInput = document.querySelector<HTMLInputElement>("#furniture-angle")!
 const furnitureWidthUnit = document.querySelector<HTMLElement>("#furniture-width-unit")!
 const furnitureLengthUnit = document.querySelector<HTMLElement>("#furniture-length-unit")!
+// поля панели: ширина и длина — у всех видов, кроме унитаза; четыре размера — только у унитаза (change add-toilet)
+const furnitureSizeFields = [...document.querySelectorAll<HTMLElement>("[data-size-field]")]
+const furnitureToiletFields = [...document.querySelectorAll<HTMLElement>("[data-toilet-field]")]
+const TOILET_PANEL_FIELDS = [
+  { key: "bowlWidthCm", id: "furniture-bowl-width", label: "Ширина чаши" },
+  { key: "bowlLengthCm", id: "furniture-bowl-length", label: "Длина чаши" },
+  { key: "blockWidthCm", id: "furniture-block-width", label: "Ширина блока" },
+  { key: "blockDepthCm", id: "furniture-block-depth", label: "Глубина блока" },
+] as const
+const toiletPanelFields = TOILET_PANEL_FIELDS.map((f) => ({
+  ...f,
+  input: document.querySelector<HTMLInputElement>(`#${f.id}`)!,
+  unit: document.querySelector<HTMLElement>(`#${f.id}-unit`)!,
+}))
 const furnitureWarning = document.querySelector<HTMLElement>("#furniture-warning")!
 const roomEditor = document.querySelector<HTMLElement>("#room-editor")!
 const roomNameInput = document.querySelector<HTMLInputElement>("#room-name")!
@@ -1886,17 +1900,41 @@ function syncFurniturePanel(): void {
   for (const [kind, button] of furnitureKindButtons) button.classList.toggle("active", tool === "furniture" && kind === furnitureKind)
   furnitureWidthUnit.textContent = `Ширина, ${UNIT_LABEL[unit]}`
   furnitureLengthUnit.textContent = `Длина, ${UNIT_LABEL[unit]}`
-  const shown = itemPanelValues(itemParamsOf(furnitureKind), itemTool.selectedItem())
+  const selected = itemTool.selectedItem()
+  const shown = itemPanelValues(itemParamsOf(furnitureKind), selected)
+  const toiletPanel = (selected?.kind ?? furnitureKind) === "toilet"
+  for (const el of furnitureSizeFields) el.hidden = toiletPanel
+  for (const el of furnitureToiletFields) el.hidden = !toiletPanel
+  for (const f of toiletPanelFields) {
+    f.unit.textContent = `${f.label}, ${UNIT_LABEL[unit]}`
+    const value = shown.toilet?.[f.key]
+    if (value !== undefined && document.activeElement !== f.input) f.input.value = formatCm(value, unit)
+  }
   if (document.activeElement !== furnitureWidthInput) furnitureWidthInput.value = formatCm(shown.widthCm, unit)
   if (document.activeElement !== furnitureLengthInput) furnitureLengthInput.value = formatCm(shown.lengthCm, unit)
   if (document.activeElement !== furnitureAngleInput) furnitureAngleInput.value = String(Math.round(shown.angleDeg * 100) / 100)
 }
 
 // правка поля панели: единственный выделенный стол меняется одним шагом, иначе меняются значения для новых; недопустимое значение не применяется
-function applyItemField(field: keyof ItemParams, input: HTMLInputElement): void {
+function applyItemField(field: "widthCm" | "lengthCm" | "angleDeg", input: HTMLInputElement): void {
   const value = field === "angleDeg" ? parseAngleField(input.value) : parseLengthField(input.value, unit)
   if (value !== null) {
     const edited = editItemParams(itemParamsOf(furnitureKind), itemTool.selectedItem(), { [field]: value })
+    kindParams = withKindParams(kindParams, furnitureKind, edited.params)
+    if (edited.table) itemTool.replaceSelected(edited.table)
+  }
+  input.blur()
+  syncFurniturePanel()
+  redraw()
+}
+
+// правка одного из четырёх размеров унитаза в панели: как поле ширины или длины у других видов
+function applyToiletField(key: keyof ToiletSizes, input: HTMLInputElement): void {
+  const value = parseLengthField(input.value, unit)
+  if (value !== null) {
+    const patch: Partial<ToiletSizes> = {}
+    patch[key] = value
+    const edited = editItemParams(itemParamsOf(furnitureKind), itemTool.selectedItem(), { toilet: patch })
     kindParams = withKindParams(kindParams, furnitureKind, edited.params)
     if (edited.table) itemTool.replaceSelected(edited.table)
   }
@@ -3799,7 +3837,8 @@ for (const [kind, button] of furnitureKindButtons) button.addEventListener("clic
 furnitureWidthInput.addEventListener("change", () => applyItemField("widthCm", furnitureWidthInput))
 furnitureLengthInput.addEventListener("change", () => applyItemField("lengthCm", furnitureLengthInput))
 furnitureAngleInput.addEventListener("change", () => applyItemField("angleDeg", furnitureAngleInput))
-for (const input of [furnitureWidthInput, furnitureLengthInput, furnitureAngleInput]) {
+for (const f of toiletPanelFields) f.input.addEventListener("change", () => applyToiletField(f.key, f.input))
+for (const input of [furnitureWidthInput, furnitureLengthInput, furnitureAngleInput, ...toiletPanelFields.map((f) => f.input)]) {
   input.addEventListener("keydown", (e) => {
     e.stopPropagation()
     if (e.key === "Enter" || e.key === "Escape") input.blur()

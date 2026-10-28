@@ -16,7 +16,8 @@ describe("каталог видов мебели", () => {
     // TCR (change add-furniture-kitchen-cabinet-fridge): в каталоге новые виды
     // TCR (change add-furniture-kitchen-objects): в каталоге новые виды
     // TCR (change add-furniture-appliances): в каталоге новые виды
-    expect(FURNITURE_KIND_ORDER).toEqual(["table", "chair", "sofa", "desk", "officeChair", "tv", "wallCabinet", "bed", "nightstand", "slidingWardrobe", "doubleWardrobe", "curtains", "kitchenCabinet", "fridge", "wineCabinet", "hob", "dishwasher", "sink", "kitchenColumn", "oven", "microwave", "washer", "dryer"])
+    // TCR (change add-toilet): в каталоге новый вид
+    expect(FURNITURE_KIND_ORDER).toEqual(["table", "chair", "sofa", "desk", "officeChair", "tv", "wallCabinet", "bed", "nightstand", "slidingWardrobe", "doubleWardrobe", "curtains", "kitchenCabinet", "fridge", "wineCabinet", "hob", "dishwasher", "sink", "kitchenColumn", "oven", "microwave", "washer", "dryer", "toilet"])
     expect(kindEntry("kitchenColumn").defaults).toEqual({ widthCm: 60, lengthCm: 62, angleDeg: 0 })
     expect(kindEntry("oven").defaults).toEqual({ widthCm: 60, lengthCm: 62, angleDeg: 0 })
     expect(kindEntry("microwave").defaults).toEqual({ widthCm: 60, lengthCm: 62, angleDeg: 0 })

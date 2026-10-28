@@ -27,36 +27,49 @@ const textWidthCm = (text: string, k: number, m: SizeMetrics): number => (text.l
 interface SizeFrame {
   size: ItemSize
   valueCm: number
-  acrossCm: number // сторона предмета поперёк линии
+  acrossCm: number // сторона части предмета поперёк линии
   axis: Point // направление линии в системе предмета
+  center: Point // центр части предмета, к которой относится размер, в системе предмета
   sides: readonly [readonly [Point, Point], readonly [Point, Point]] // две стороны вдоль линии: концы в системе предмета по оси
 }
 
-// ширина — вдоль оси x предмета; длина — вдоль −y (снизу вверх), так что при угле 0 её число читается снизу вверх у левой стороны
-function frames(t: FurnitureItem): readonly SizeFrame[] {
-  const w = t.widthCm
-  const l = t.lengthCm
+// ширина — вдоль оси x части; длина — вдоль −y (снизу вверх), так что при угле 0 её число читается снизу вверх у левой стороны
+function rectFrames(x0: number, y0: number, w: number, l: number, widthSize: ItemSize, lengthSize: ItemSize): readonly SizeFrame[] {
+  const center = { x: x0 + w / 2, y: y0 + l / 2 }
   return [
     {
-      size: "width",
+      size: widthSize,
       valueCm: w,
       acrossCm: l,
       axis: { x: 1, y: 0 },
+      center,
       sides: [
-        [{ x: 0, y: 0 }, { x: w, y: 0 }],
-        [{ x: 0, y: l }, { x: w, y: l }],
+        [{ x: x0, y: y0 }, { x: x0 + w, y: y0 }],
+        [{ x: x0, y: y0 + l }, { x: x0 + w, y: y0 + l }],
       ],
     },
     {
-      size: "length",
+      size: lengthSize,
       valueCm: l,
       acrossCm: w,
       axis: { x: 0, y: -1 },
+      center,
       sides: [
-        [{ x: 0, y: l }, { x: 0, y: 0 }],
-        [{ x: w, y: l }, { x: w, y: 0 }],
+        [{ x: x0, y: y0 + l }, { x: x0, y: y0 }],
+        [{ x: x0 + w, y: y0 + l }, { x: x0 + w, y: y0 }],
       ],
     },
+  ]
+}
+
+// у предмета — ширина и длина; у унитаза (change add-toilet, design D4) — по два размера у блока и у чаши, каждый по правилам
+// прямоугольника своей части
+function frames(t: FurnitureItem): readonly SizeFrame[] {
+  const s = t.toilet
+  if (!s) return rectFrames(0, 0, t.widthCm, t.lengthCm, "width", "length")
+  return [
+    ...rectFrames((t.widthCm - s.blockWidthCm) / 2, 0, s.blockWidthCm, s.blockDepthCm, "blockWidth", "blockDepth"),
+    ...rectFrames((t.widthCm - s.bowlWidthCm) / 2, s.blockDepthCm, s.bowlWidthCm, s.bowlLengthCm, "bowlWidth", "bowlLength"),
   ]
 }
 
@@ -75,7 +88,7 @@ function placeFrame(t: FurnitureItem, frame: SizeFrame): Placed {
   const [a0, b0] = world(s0)
   const [a1, b1] = world(s1)
   const dir = textDirection(sub(b0, a0))
-  const center = itemLocalToWorld(t, { x: t.widthCm / 2, y: t.lengthCm / 2 })
+  const center = itemLocalToWorld(t, frame.center)
   const mid0 = mul(add(a0, b0), 0.5)
   const towards0 = dot(sub(mid0, center), upOf(dir)) >= 0
   const [start, end] = towards0 ? [a0, b0] : [a1, b1]

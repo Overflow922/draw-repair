@@ -3,8 +3,9 @@ import type { Direction } from "../communications/geometry"
 import type { Shape } from "../communications/shape"
 import type { Point, FurnitureItem } from "../types"
 import { hitItem, itemCorners } from "./item"
-import type { ItemNumberField } from "./item-number"
+import type { ItemNumberField, ItemSize } from "./item-number"
 import { editParams } from "./item-params"
+import type { ItemParamsPatch } from "./item-params"
 import { itemWallReach } from "./item-wall-reach"
 
 // Правка столов (change furniture-plan-table, design D6): чистые функции над массивом столов; входы не мутируются.
@@ -31,13 +32,31 @@ export const removeItems = (items: readonly FurnitureItem[], ids: ReadonlySet<st
 
 export const replaceItem = (items: readonly FurnitureItem[], next: FurnitureItem): FurnitureItem[] => items.map((t) => (t.id === next.id ? next : t))
 
+// ввод в число габарита: у предмета ширина или длина, у унитаза один из четырёх размеров (change add-toilet)
+function sizePatch(size: ItemSize, valueCm: number): ItemParamsPatch {
+  switch (size) {
+    case "width":
+      return { widthCm: valueCm }
+    case "length":
+      return { lengthCm: valueCm }
+    case "bowlWidth":
+      return { toilet: { bowlWidthCm: valueCm } }
+    case "bowlLength":
+      return { toilet: { bowlLengthCm: valueCm } }
+    case "blockWidth":
+      return { toilet: { blockWidthCm: valueCm } }
+    case "blockDepth":
+      return { toilet: { blockDepthCm: valueCm } }
+  }
+}
+
 // ввод в число выделенного предмета (change furniture-dimensions, design D3): габарит — как поле панели (центр и угол на месте),
 // расстояние — сдвиг вдоль нормали стороны, чтобы расстояние до той же грани стало введённым, без центровки и без
 // ограничения препятствиями; null — значение недопустимо, грани нет или предмет не изменился
 const SAME_CM = 1e-9
 
 export function applyItemNumber(t: FurnitureItem, field: ItemNumberField, valueCm: number, bodies: readonly Shape[]): FurnitureItem | null {
-  if (field.kind === "size") return editParams(t, t, field.size === "width" ? { widthCm: valueCm } : { lengthCm: valueCm }).table
+  if (field.kind === "size") return editParams(t, t, sizePatch(field.size, valueCm)).table
   if (!Number.isFinite(valueCm) || valueCm < 0) return null
   const reach = itemWallReach(t, field.side, bodies)
   if (!reach) return null

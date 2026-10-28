@@ -7,7 +7,10 @@ import type { Point } from "../types"
 // сторона прямоугольника предмета в его системе при угле 0: left — x = 0, right — x = w, top — y = 0, bottom — y = l
 export type ItemSide = "left" | "right" | "top" | "bottom"
 
-export type ItemSize = "width" | "length"
+// у унитаза (change add-toilet) вместо ширины и длины предмета — четыре размера его частей
+export type ToiletSize = "bowlWidth" | "bowlLength" | "blockWidth" | "blockDepth"
+
+export type ItemSize = "width" | "length" | ToiletSize
 
 export type ItemNumberField = { kind: "size"; size: ItemSize } | { kind: "distance"; side: ItemSide }
 

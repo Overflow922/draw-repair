@@ -29,13 +29,29 @@
               </button>
               <div id="furniture-panel" class="panel tool-panel">
                 <div id="furniture-kinds" class="group-tools" aria-label="Инструменты группы «Мебель»"></div>
-                <label class="thickness-field" title="Ширина (вдоль X при угле 0)">
+                <label class="thickness-field" data-size-field title="Ширина (вдоль X при угле 0)">
                   <span id="furniture-width-unit">Ширина, мм</span>
                   <input id="furniture-width" type="text" inputmode="decimal" />
                 </label>
-                <label class="thickness-field" title="Длина (вдоль Y при угле 0)">
+                <label class="thickness-field" data-size-field title="Длина (вдоль Y при угле 0)">
                   <span id="furniture-length-unit">Длина, мм</span>
                   <input id="furniture-length" type="text" inputmode="decimal" />
+                </label>
+                <label class="thickness-field" data-toilet-field hidden title="Ширина чаши (вдоль X при угле 0)">
+                  <span id="furniture-bowl-width-unit">Ширина чаши, мм</span>
+                  <input id="furniture-bowl-width" type="text" inputmode="decimal" />
+                </label>
+                <label class="thickness-field" data-toilet-field hidden title="Длина чаши от носа до блока (вдоль Y при угле 0)">
+                  <span id="furniture-bowl-length-unit">Длина чаши, мм</span>
+                  <input id="furniture-bowl-length" type="text" inputmode="decimal" />
+                </label>
+                <label class="thickness-field" data-toilet-field hidden title="Ширина блока инсталляции (вдоль X при угле 0)">
+                  <span id="furniture-block-width-unit">Ширина блока, мм</span>
+                  <input id="furniture-block-width" type="text" inputmode="decimal" />
+                </label>
+                <label class="thickness-field" data-toilet-field hidden title="Глубина блока инсталляции (вдоль Y при угле 0)">
+                  <span id="furniture-block-depth-unit">Глубина блока, мм</span>
+                  <input id="furniture-block-depth" type="text" inputmode="decimal" />
                 </label>
                 <label class="thickness-field" title="Угол поворота по часовой стрелке, градусы">
                   <span>Угол, °</span>

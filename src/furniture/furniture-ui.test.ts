@@ -37,7 +37,7 @@ describe("разметка группы «Мебель»", () => {
     // TCR (change add-furniture-tv-wall-cabinet): в каталоге новые виды
     // TCR (change add-furniture-bed-nightstand): в каталоге новые виды
     // TCR (change add-furniture-wardrobes): в каталоге новые виды
-    expect(FURNITURE_KIND_ORDER).toEqual(["table", "chair", "sofa", "desk", "officeChair", "tv", "wallCabinet", "bed", "nightstand", "slidingWardrobe", "doubleWardrobe", "curtains", "kitchenCabinet", "fridge", "wineCabinet", "hob", "dishwasher", "sink", "kitchenColumn", "oven", "microwave", "washer", "dryer"]) // TCR (change add-furniture-kitchen-cabinet-fridge, add-furniture-kitchen-objects, add-furniture-appliances): в каталоге новые виды
+    expect(FURNITURE_KIND_ORDER).toEqual(["table", "chair", "sofa", "desk", "officeChair", "tv", "wallCabinet", "bed", "nightstand", "slidingWardrobe", "doubleWardrobe", "curtains", "kitchenCabinet", "fridge", "wineCabinet", "hob", "dishwasher", "sink", "kitchenColumn", "oven", "microwave", "washer", "dryer", "toilet"]) // TCR (change add-furniture-kitchen-cabinet-fridge, add-furniture-kitchen-objects, add-furniture-appliances, add-toilet): в каталоге новые виды
     expect(main).toContain("FURNITURE_KIND_ORDER.map((kind)")
     expect(main).toContain("button.id = `tool-furniture-${kind}`")
     expect(main).toContain('button.className = "group-tool"')
@@ -46,7 +46,9 @@ describe("разметка группы «Мебель»", () => {
 
   it("FP-362: поля панели — «Ширина», «Длина», «Угол»; других полей у группы нет", () => {
     const inputs = [...panel.matchAll(/<input[^>]*id="([^"]+)"/g)].map((m) => m[1])
-    expect(inputs).toEqual(["furniture-width", "furniture-length", "furniture-angle"])
+    // TCR (change add-toilet): четыре поля унитаза скрыты, пока активен и выделен не унитаз (spec furniture-plan «Панель унитаза»);
+    // общие поля остались теми же, других общих полей нет
+    expect(inputs).toEqual(["furniture-width", "furniture-length", "furniture-bowl-width", "furniture-bowl-length", "furniture-block-width", "furniture-block-depth", "furniture-angle"])
     expect(panel).toContain("Ширина")
     expect(panel).toContain("Длина")
     expect(panel).toContain("Угол")
