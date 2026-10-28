@@ -3,10 +3,10 @@ import type { Point, Wall, WallDoor } from "../types"
 import { doorLeaf } from "./doorway-layout"
 import type { DoorLeaf } from "./doorway-layout"
 import { expectPoint, sceneF, sceneR, w } from "./doorway.test-utils"
-import { COS95, DR, SIN95, dr, expectedLeaf } from "./door.test-utils"
+import { DR, dr, expectedLeaf } from "./door.test-utils"
 import type { Hinge, Swing } from "./door.test-utils"
 
-// change add-door: геометрия обозначения двери — петля, полотно 4 см под 95° и дуга открывания
+// change add-door: геометрия обозначения двери — петля, полотно 4 см под 90° и дуга открывания
 // (spec door «Отображение двери», «Дверь — элемент стены»; design D3). Эталоны — по формулам спецификации.
 
 const LEAF_CM = 4
@@ -49,31 +49,31 @@ function expectMatches(l: DoorLeaf, a: Point, b: Point, t1: number, t2: number, 
 }
 
 describe("дверь на стене 20 см", () => {
-  it("DG-01: a/left — петля (100, −10), полотно до (92.156, −99.658), дуга от (190, −10)", () => {
+  it("DG-01: a/left — петля (100, −10), полотно до (100, −100), дуга от (190, −10)", () => {
     const { walls } = sceneF()
     const l = leafOf(DR("a", "left"), walls)
     expectPoint(l.hinge, 100, -10)
     expectPoint(l.arcFrom, 190, -10)
-    expectPoint(l.arcTo, 100 + 90 * COS95, -10 - 90 * SIN95)
-    expectPoint(l.arcTo, 92.156, -99.658)
+    expectPoint(l.arcTo, 100, -100)
     expect(l.radius).toBeCloseTo(90, 6)
     // прямоугольник полотна — по ту же сторону, что (190, −10): x больше линии полотна, углы по спецификации
-    expectLeafRect(l, { x: 100, y: -10 }, { x: 92.156, y: -99.658 }, { x: 190, y: -10 })
-    expectCorner(l, 100 + 4 * SIN95, -10 + 4 * COS95)
-    expectCorner(l, 92.156 + 4 * SIN95, -99.658 + 4 * COS95)
-    expectCorner(l, 103.985, -10.349)
-    expectCorner(l, 96.141, -100.007)
+    expectLeafRect(l, { x: 100, y: -10 }, { x: 100, y: -100 }, { x: 190, y: -10 })
+    expectCorner(l, 100, -10)
+    expectCorner(l, 100, -100)
+    expectCorner(l, 104, -100)
+    expectCorner(l, 104, -10)
   })
 
-  it("DG-02: b/right — петля (190, 10), полотно до (197.844, 99.658), дуга от (100, 10)", () => {
+  it("DG-02: b/right — петля (190, 10), полотно до (190, 100), дуга от (100, 10)", () => {
     const { walls } = sceneF()
     const l = leafOf(DR("b", "right"), walls)
     expectPoint(l.hinge, 190, 10)
     expectPoint(l.arcFrom, 100, 10)
-    expectPoint(l.arcTo, 197.844, 99.658)
-    expectLeafRect(l, { x: 190, y: 10 }, { x: 197.844, y: 99.658 }, { x: 100, y: 10 })
-    expectCorner(l, 193.859, 100.007)
-    expectCorner(l, 186.015, 10.349)
+    expectPoint(l.arcTo, 190, 100)
+    expectLeafRect(l, { x: 190, y: 10 }, { x: 190, y: 100 }, { x: 100, y: 10 })
+    expectCorner(l, 190, 100)
+    expectCorner(l, 186, 100)
+    expectCorner(l, 186, 10)
   })
 
   it("DG-03: все четыре направления — по формулам спецификации", () => {
@@ -88,11 +88,11 @@ describe("дверь на стене 20 см", () => {
     const ar = leafOf(DR("a", "right"), walls)
     expectPoint(ar.hinge, 100, 10)
     expectPoint(ar.arcFrom, 190, 10)
-    expect(ar.arcTo.y).toBeGreaterThan(90)
+    expectPoint(ar.arcTo, 100, 100)
     const bl = leafOf(DR("b", "left"), walls)
     expectPoint(bl.hinge, 190, -10)
     expectPoint(bl.arcFrom, 100, -10)
-    expect(bl.arcTo.y).toBeLessThan(-90)
+    expectPoint(bl.arcTo, 190, -100)
   })
 })
 
@@ -126,7 +126,7 @@ describe("независимость обозначения", () => {
     const l = leafOf(DR("a", "left"), [V])
     expectPoint(l.hinge, 10, 100)
     expectPoint(l.arcFrom, 10, 190)
-    expect(l.arcTo.x).toBeGreaterThan(95)
+    expectPoint(l.arcTo, 100, 100)
     expectMatches(l, { x: 0, y: 0 }, { x: 0, y: 500 }, 100, 190, 20, "a", "left", 90)
   })
 
@@ -135,19 +135,19 @@ describe("независимость обозначения", () => {
     const l = leafOf(dr("W", "a", 100, "a", "left"), [Rv])
     // откос у a — x = 400, петля на грани y = +10
     expectPoint(l.hinge, 400, 10)
-    expect(l.arcTo.y).toBeGreaterThan(90)
+    expectPoint(l.arcTo, 400, 100)
   })
 })
 
 describe("инварианты обозначения", () => {
-  it("DG-07: угол открывания 95°, радиус и длина полотна равны ширине (наклонная стена)", () => {
+  it("DG-07: угол открывания 90°, радиус и длина полотна равны ширине (наклонная стена)", () => {
     const S = w(0, 0, 400, 300, "W")
     for (const hinge of ["a", "b"] as const)
       for (const swing of ["left", "right"] as const) {
         const l = leafOf(dr("W", "a", 120, hinge, swing, 80), [S])
         expect(len(sub(l.arcFrom, l.hinge))).toBeCloseTo(80, 6)
         expect(len(sub(l.arcTo, l.hinge))).toBeCloseTo(80, 6)
-        expect(angleDeg(sub(l.arcFrom, l.hinge), sub(l.arcTo, l.hinge))).toBeCloseTo(95, 6)
+        expect(angleDeg(sub(l.arcFrom, l.hinge), sub(l.arcTo, l.hinge))).toBeCloseTo(90, 6)
         expectMatches(l, { x: 0, y: 0 }, { x: 400, y: 300 }, 120, 200, 20, hinge, swing, 80)
       }
   })
@@ -164,8 +164,9 @@ describe("инварианты обозначения", () => {
     expectPoint(l.hinge, 700, 5)
     for (const c of l.leaf) expect(c.y).toBeGreaterThanOrEqual(5 - 1e-9)
     expectCorner(l, 700, 5)
-    expectCorner(l, 700 - 4 * SIN95, 5 - 4 * COS95)
-    expect(700 - 4 * SIN95).toBeLessThan(700)
+    expectCorner(l, 696, 5)
+    expectCorner(l, 700, 85)
+    expectCorner(l, 696, 85)
   })
 
   it("DG-09: дверь вплотную к углу: петля на грани у x = 10", () => {

@@ -22,8 +22,8 @@ export const dr = (
 // DR(h, s) — дверь на W: привязка a, 100, ширина 90 (участок x 100…190)
 export const DR = (hinge: Hinge = "a", swing: Swing = "left"): WallDoor => dr("W", "a", 100, hinge, swing)
 
-export const COS95 = Math.cos((95 * Math.PI) / 180)
-export const SIN95 = Math.sin((95 * Math.PI) / 180)
+export const COS90 = Math.cos((90 * Math.PI) / 180)
+export const SIN90 = Math.sin((90 * Math.PI) / 180)
 
 // эталон обозначения по спецификации для стены с осью a → b, участком [t1, t2] по оси, толщиной t
 export interface ExpectedLeaf {
@@ -43,7 +43,7 @@ export function expectedLeaf(a: Point, b: Point, t1: number, t2: number, thickne
   const u = hinge === "a" ? d : { x: -d.x, y: -d.y }
   const axis = { x: a.x + d.x * tHinge, y: a.y + d.y * tHinge }
   const h = { x: axis.x + (n.x * thickness) / 2, y: axis.y + (n.y * thickness) / 2 }
-  const v = { x: u.x * COS95 + n.x * SIN95, y: u.y * COS95 + n.y * SIN95 }
+  const v = { x: u.x * COS90 + n.x * SIN90, y: u.y * COS90 + n.y * SIN90 }
   return {
     hinge: h,
     arcFrom: { x: h.x + u.x * width, y: h.y + u.y * width },

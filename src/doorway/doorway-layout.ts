@@ -145,7 +145,7 @@ export function windowLines(w: WallWindow, walls: readonly Wall[], elements: rea
   }
 }
 
-const DOOR_OPEN_RAD = (95 * Math.PI) / 180
+const DOOR_OPEN_RAD = (90 * Math.PI) / 180
 const LEAF_CM = 4
 
 export interface DoorLeaf {
@@ -158,7 +158,7 @@ export interface DoorLeaf {
 }
 
 // обозначение двери (change add-door, design D3): петля на грани стороны открывания у откоса петель, полотно
-// длиной в ширину под 95° от грани в сторону открывания, толщиной 4 см внутри сектора (угол у петли — угол откоса),
+// длиной в ширину под 90° от грани в сторону открывания, толщиной 4 см внутри сектора (угол у петли — угол откоса),
 // дуга от закрытого положения
 export function doorLeaf(d: WallDoor, walls: readonly Wall[]): DoorLeaf | null {
   const host = hostOf(d, walls)
@@ -230,7 +230,7 @@ export function doorZones(d: WallDoor, walls: readonly Wall[]): DoorZone[] {
 }
 
 // тень направления (hinge, swing): сектор открывания — точки в пределах ширины от петли между закрытым положением
-// и открытым полотном (до 95° в сторону открывания) — и прямоугольник полотна (spec door «Направление выделенной двери»)
+// и открытым полотном (до 90° в сторону открывания) — и прямоугольник полотна (spec door «Направление выделенной двери»)
 function inShadow(p: Point, d: WallDoor, walls: readonly Wall[], dir: DoorDirection): boolean {
   const host = hostOf(d, walls)
   const leaf = doorLeaf({ ...d, ...dir }, walls)

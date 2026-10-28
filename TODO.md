@@ -144,9 +144,6 @@ Follow-ups from `add-door` test validation (2026-10-07, revision 2, VERDICT: PAS
 
 ## Tests
 
-- [ ] F6: `expectArc95` (`src/doorway/door-render.test.ts`) and the arc check in DP-01 (`src/doorway/door-pdf.test.ts`)
-  accept an arc ending anywhere in [93°, 100°); a 98° sweep survived mutation. Move the outside check point from
-  100° to ~97°. The exact 95° is pinned only in geometry (DG-07, `src/doorway/door-leaf.test.ts`).
 - [ ] F7: DP-01 checks the PDF leaf only via "more strokes than a doorway"; the leaf geometry itself is checked on the
   canvas (DR-01, DR-05). Add a device-space check of the leaf in the PDF.
 - [ ] F8: DH-03 (`src/doorway/door-storage.test.ts`) has no history snapshot with a missing or `null` `swing`; covered

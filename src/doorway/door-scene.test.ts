@@ -14,8 +14,8 @@ describe("попадание по двери", () => {
   it("DC-01: клик внутри прямоугольника полотна вне стены не выделяет дверь; на участке — дверь", () => {
     const { walls } = sceneF()
     const d = DR("a", "left")
-    // полотно a/left: от (100, −10) к (92.16, −99.66), толщина 4 см в сторону x меньше — (94, −60) внутри
-    expect(hitDoorway({ x: 94, y: -60 }, walls, [d], 3)).toBeNull()
+    // полотно a/left: от (100, −10) к (100, −100), толщина 4 см в сторону x больше — (102, −60) внутри
+    expect(hitDoorway({ x: 102, y: -60 }, walls, [d], 3)).toBeNull()
     // на дуге открывания (100, −100)
     expect(hitDoorway({ x: 100, y: -100 }, walls, [d], 3)).toBeNull()
     expect(hitDoorway({ x: 150, y: 0 }, walls, [d], 3)).toBe(d)
@@ -24,7 +24,7 @@ describe("попадание по двери", () => {
   it("DC-01b: ластик над полотном вне стены дверь не выбирает", () => {
     const { walls } = sceneF()
     const d = DR("a", "left")
-    const pick = erasePick({ x: 94, y: -60 }, { walls, dimensions: [], doorways: [d] }, 3, 1)
+    const pick = erasePick({ x: 102, y: -60 }, { walls, dimensions: [], doorways: [d] }, 3, 1)
     expect(pick === null || (pick.kind !== "doorway")).toBe(true)
   })
 })

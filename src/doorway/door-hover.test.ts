@@ -26,8 +26,9 @@ describe("hoverDirection: направление под курсором", () =>
   it("HV-1: в зоне альтернативного направления — это направление (прямоугольник, сектор, полотно)", () => {
     const { editing } = setup()
     expect(editing.hoverDirection({ x: 170, y: 40 })).toEqual({ hinge: "b", swing: "right" })
-    expect(editing.hoverDirection({ x: 99.5, y: 70 })).toEqual({ hinge: "a", swing: "right" })
-    expect(editing.hoverDirection({ x: 192, y: 50 })).toEqual({ hinge: "b", swing: "right" })
+    expect(editing.hoverDirection({ x: 100.5, y: 70 })).toEqual({ hinge: "a", swing: "right" })
+    expect(editing.hoverDirection({ x: 188, y: 50 })).toEqual({ hinge: "b", swing: "right" })
+    expect(editing.hoverDirection({ x: 192, y: 50 })).toBeNull() // правее полотна, за 90°
     expect(editing.hoverDirection({ x: 170, y: -40 })).toEqual({ hinge: "b", swing: "left" })
   })
 
@@ -35,7 +36,8 @@ describe("hoverDirection: направление под курсором", () =>
     const { editing } = setup()
     expect(editing.hoverDirection({ x: 170, y: 120 })).toBeNull()
     expect(editing.hoverDirection({ x: 120, y: -60 })).toBeNull()
-    expect(editing.hoverDirection({ x: 97, y: -70 })).toBeNull() // сектор текущего направления
+    expect(editing.hoverDirection({ x: 101, y: -70 })).toBeNull() // сектор текущего направления
+    expect(editing.hoverDirection({ x: 97, y: -70 })).toBeNull() // левее откоса петель, за 90°
     expect(editing.hoverDirection({ x: 145, y: 0 })).toBeNull()
   })
 

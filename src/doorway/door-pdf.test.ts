@@ -50,7 +50,7 @@ describe("двери в PDF", () => {
     // проём той же ширины — без полотна и дуги: у двери обводок больше (полотно, дуга)
     const asDoorway = exportOps([{ id: "d0", wallId: "W", anchor: "a", offsetCm: 100, widthCm: 90, heightCm: 210 }])
     expect(strokeCount(withDoor.ops)).toBeGreaterThan(strokeCount(asDoorway.ops))
-    // дуга с центром в петле от закрытого положения ровно на 95°: точки у концов пролёта есть, сразу за ними и
+    // дуга с центром в петле от закрытого положения ровно на 90°: точки у концов пролёта есть, сразу за ними и
     // со стороны, противоположной открыванию, — нет. Ломаная засчитывается, только если её вершины на окружности дуги
     const e = expectedLeaf({ x: 0, y: 0 }, { x: 500, y: 0 }, 100, 190, 20, "a", "left", 90)
     const k = PX_PER_CM * withDoor.view.zoom
@@ -59,14 +59,14 @@ describe("двери в PDF", () => {
     const drawn = (p: Point): boolean =>
       onStrokedArc(withDoor.arcs, dev(p), tol) !== null ||
       onPolylineArc(strokes(withDoor.ops).flatMap(segments), dev(e.hinge), 90 * k, dev(p), tol)
-    for (const deg of [3, 20, 47.5, 80, 93]) expect(drawn(arcPointAt(e, 90, deg)), `${deg}°`).toBe(true)
-    for (const deg of [-45, -5, 100, 140]) expect(drawn(arcPointAt(e, 90, deg)), `${deg}°`).toBe(false)
+    for (const deg of [3, 20, 47.5, 80, 88]) expect(drawn(arcPointAt(e, 90, deg)), `${deg}°`).toBe(true)
+    for (const deg of [-45, -5, 92, 140]) expect(drawn(arcPointAt(e, 90, deg)), `${deg}°`).toBe(false)
   })
 
   it("DP-02: габариты учитывают полотно и дугу двери", () => {
     const plain = wallsBBox([W], [], 0)
     const withDoor = wallsBBox([W], [], 0, [d])
-    // открытый конец полотна (92.16, −99.66) и точка дуги (100, −100)
+    // открытый конец полотна и конец дуги совпадают в (100, −100)
     expect(withDoor.minY).toBeLessThanOrEqual(-99.6)
     expect(withDoor.minY).toBeLessThan(plain.minY - 80)
     const other = wallsBBox([W], [], 0, [DR("a", "right")])
@@ -75,8 +75,8 @@ describe("двери в PDF", () => {
 
   it("DP-02b: габариты учитывают дугу и не выходят за торец стены (дверь у конца a стены)", () => {
     // дверь a/left вплотную к концу a: петля (0, −10); полотно 4 см лежит внутри сектора (change
-    // fix-opening-fill-and-door-leaf-corner), левее торца стены (x = −10) ничего нет; дуга доходит до (0, −100) —
-    // выше открытого конца полотна (y ≈ −99.66)
+    // fix-opening-fill-and-door-leaf-corner), левее торца стены (x = −10) ничего нет; дуга и открытое полотно
+    // доходят до (0, −100)
     const edge = dr("W", "a", 0, "a", "left")
     const b = wallsBBox([W], [], 0, [edge])
     expect(b.minX).toBeCloseTo(-10, 6)

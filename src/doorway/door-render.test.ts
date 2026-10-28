@@ -49,10 +49,10 @@ function onThinArc(ops: Op[], arcs: ArcCall[], world: Point, center: Point): boo
   return onPolylineArc(thin(ops).flatMap(segments), S(center), W90 * K, p, 1.5)
 }
 
-// дуга от закрытого положения ровно на 95°: точки у обоих концов пролёта есть, сразу за концами — нет
-function expectArc95(ops: Op[], arcs: ArcCall[], e: ExpectedLeaf): void {
-  for (const deg of [3, 20, 47.5, 80, 93]) expect(onThinArc(ops, arcs, arcPointAt(e, W90, deg), e.hinge), `${deg}°`).toBe(true)
-  for (const deg of [-45, -5, 100, 140]) expect(onThinArc(ops, arcs, arcPointAt(e, W90, deg), e.hinge), `${deg}°`).toBe(false)
+// дуга от закрытого положения ровно на 90°: точки у обоих концов пролёта есть, сразу за концами — нет
+function expectArc90(ops: Op[], arcs: ArcCall[], e: ExpectedLeaf): void {
+  for (const deg of [3, 20, 47.5, 80, 88]) expect(onThinArc(ops, arcs, arcPointAt(e, W90, deg), e.hinge), `${deg}°`).toBe(true)
+  for (const deg of [-45, -5, 92, 140]) expect(onThinArc(ops, arcs, arcPointAt(e, W90, deg), e.hinge), `${deg}°`).toBe(false)
 }
 
 const ref = (hinge: "a" | "b", swing: "left" | "right") => expectedLeaf({ x: 0, y: 0 }, { x: 500, y: 0 }, 100, 190, 20, hinge, swing, W90)
@@ -74,8 +74,8 @@ describe("обозначение двери", () => {
     const h2 = { x: e.hinge.x + off.x, y: e.hinge.y + off.y }
     const t2 = { x: e.arcTo.x + off.x, y: e.arcTo.y + off.y }
     expect(covered(c, S(lerp(h2, t2, 0.05)), S(lerp(h2, t2, 0.95)))).toBe(true)
-    // дуга: тонкая, с центром в петле, от закрытого положения ровно на 95° в сторону открывания
-    expectArc95(ops, arcs, e)
+    // дуга: тонкая, с центром в петле, от закрытого положения ровно на 90° в сторону открывания
+    expectArc90(ops, arcs, e)
     // подпись высоты
     expect(texts(ops).some((t) => t.text === "H=210")).toBe(true)
   })
@@ -84,7 +84,7 @@ describe("обозначение двери", () => {
     const { walls } = sceneF()
     const { ops, arcs } = draw(walls, { doorways: [DR("b", "right")] })
     const e = ref("b", "right")
-    expectArc95(ops, arcs, e)
+    expectArc90(ops, arcs, e)
     expect(covered(contour(ops), S(lerp(e.hinge, e.arcTo, 0.05)), S(lerp(e.hinge, e.arcTo, 0.95)))).toBe(true)
   })
 
@@ -105,7 +105,7 @@ describe("обозначение двери", () => {
     const { walls } = sceneF()
     const { ops, arcs } = draw(walls, { doorways: [], doorwayGhost: DR("a", "left") })
     const e = ref("a", "left")
-    expectArc95(ops, arcs, e)
+    expectArc90(ops, arcs, e)
   })
 
   it("DR-04: выделенная дверь подсвечивается по контуру участка между откосами", () => {
