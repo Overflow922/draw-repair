@@ -171,6 +171,12 @@ describe("страница «Сантехника» в PDF", () => {
 })
 
 describe("легенда страницы «Сантехника»", () => {
+  it("PP-10b: тропический душ — прибор страницы «Сантехника»: его запись есть в легенде седьмой страницы (change add-plumbing-tropical-shower)", () => {
+    const shower: FurnitureItem = { id: "h", kind: "tropicalShower", x: 150, y: 80, widthCm: 40, lengthCm: 30, angleDeg: 0 }
+    const d = withFurniture(base(), [table(), sink(), shower])
+    expect(labels(pagesOf(d)[6])).toEqual(["Кирпич", "Штукатурка", "Гипсокартон", "Раковина", "Тропический душ"])
+  })
+
   it("PP-10: «Кирпич», «Штукатурка», «Гипсокартон», «Раковина», «Стиральная машина»; стола и кухонного шкафа нет", () => {
     const d = withFurniture(base(), [table(), item("w", "washer", 200), item("k", "kitchenCabinet", 300), sink()])
     expect(labels(pagesOf(d)[6])).toEqual(["Кирпич", "Штукатурка", "Гипсокартон", "Раковина", "Стиральная машина"])

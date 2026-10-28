@@ -246,13 +246,14 @@ export const FURNITURE_KINDS = {
     icon: '<rect x="3" y="3" width="18" height="5"/><path d="M3 3l18 5M21 3L3 8"/><path d="M8 8v6a4 4 0 0 0 8 0V8"/><ellipse cx="12" cy="15" rx="2" ry="2.5"/>',
     water: true,
   },
-  // потолочная лейка тропического душа (change add-furniture-tropical-shower, набросок варианта A): к воде пока не подключена
+  // потолочная лейка тропического душа (change add-furniture-tropical-shower, набросок варианта A): прибор плана «Сантехника» (change add-plumbing-tropical-shower)
   tropicalShower: {
     label: "Тропический душ",
     plaqueWord: "тропический душ",
     defaults: { widthCm: 40, lengthCm: 30, angleDeg: 0 },
     drawing: tropicalShowerDrawing,
     icon: '<rect x="3" y="6" width="18" height="12" rx="2.500"/><rect x="5.500" y="8.500" width="13" height="7" rx="1"/><circle cx="8.500" cy="11" r="0.700"/><circle cx="12" cy="11" r="0.700"/><circle cx="15.500" cy="11" r="0.700"/><circle cx="8.500" cy="13.500" r="0.700"/><circle cx="12" cy="13.500" r="0.700"/><circle cx="15.500" cy="13.500" r="0.700"/>',
+    water: true,
   },
 } as const satisfies Record<string, FurnitureKindEntry>
 

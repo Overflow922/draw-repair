@@ -9,9 +9,10 @@ import { isWaterKind, waterItems } from "./water-items"
 const item = (id: string, kind: FurnitureItem["kind"]): FurnitureItem => ({ id, kind, x: 0, y: 0, widthCm: 60, lengthCm: 60, angleDeg: 0 })
 
 describe("приборы", () => {
-  it("WI-01: приборы — ровно «Раковина», «Посудомойка», «Стиральная машина», «Унитаз»", () => {
+  it("WI-01: приборы — ровно «Раковина», «Посудомойка», «Стиральная машина», «Унитаз», «Тропический душ»", () => {
     // TCR (change add-toilet): «Унитаз» — прибор (spec plumbing-plan «Приборы плана «Сантехника»»)
-    expect(FURNITURE_KIND_ORDER.filter(isWaterKind)).toEqual(["dishwasher", "sink", "washer", "toilet"])
+    // TCR (change add-plumbing-tropical-shower): «Тропический душ» — прибор
+    expect(FURNITURE_KIND_ORDER.filter(isWaterKind)).toEqual(["dishwasher", "sink", "washer", "toilet", "tropicalShower"])
   })
 
   it("WI-02: сушильная машина, варочная панель и холодильник — не приборы", () => {

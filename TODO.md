@@ -1329,7 +1329,6 @@ Follow-ups from `add-furniture-tropical-shower` (2026-10-28).
 
 ## Out of scope
 
-- [ ] The tropical shower is not on the «Сантехника» plan: its catalog entry has no `water: true` (the toilet has it). The user asked only for the furniture kind; whether the shower head should appear there is a spec-level decision for `plumbing-plan` (`src/furniture/furniture-kinds.ts` `tropicalShower`).
 - [ ] The shower has no overlap exemptions: a ceiling-mounted head standing over a bath or a shower tray would be flagged, but the catalog has neither. Revisit when such a kind is added (`furniture-plan` «Пересечения стола»).
 - [ ] The shower drawing follows the user's sketch (variant A of the HTML page), not a picture in `references/`; replace the drawing in `src/furniture/tropical-shower-drawing.ts` if a picture is added.
 
