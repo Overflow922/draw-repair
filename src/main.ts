@@ -58,8 +58,10 @@ import { UNIT_TO_CM } from "./format-length"
 import { isDrywallWall, loadStore, saveStore } from "./storage"
 import { DRYWALL_DEFAULTS, editParams, newDrywallWall, panelValues, parseLengthField } from "./reconstruction/drywall-params"
 import type { DrywallParams } from "./reconstruction/drywall-params"
-import { FURNITURE_KIND_ORDER, kindEntry } from "./furniture/furniture-kinds"
-import type { FurnitureKind } from "./furniture/furniture-kinds"
+import { FURNITURE_GROUPS, FURNITURE_KIND_ORDER, groupOf, kindEntry } from "./furniture/furniture-kinds"
+import type { FurnitureGroup, FurnitureKind } from "./furniture/furniture-kinds"
+import { clickGroup, groupIsActive, initialMenu, pickKind, placed, revealSelection } from "./furniture/furniture-groups"
+import type { FurnitureMenu } from "./furniture/furniture-groups"
 import { renderFurniture } from "./furniture/furniture-render"
 import { furnitureScene } from "./furniture/furniture-scene"
 import type { FurnitureScene } from "./furniture/furniture-scene"
@@ -193,9 +195,15 @@ const drywallThicknessInput = document.querySelector<HTMLInputElement>("#drywall
 const drywallHeightInput = document.querySelector<HTMLInputElement>("#drywall-height")!
 const drywallThicknessUnit = document.querySelector<HTMLElement>("#drywall-thickness-unit")!
 const drywallHeightUnit = document.querySelector<HTMLElement>("#drywall-height-unit")!
-const toolFurnitureBtn = document.querySelector<HTMLButtonElement>("#tool-furniture")!
+// кнопки групп видов мебели и их якоря; панель одна и стоит под кнопкой открытой группы (spec furniture-plan «Группы видов мебели»)
+const furnitureGroupButtons = new Map<FurnitureGroup, HTMLButtonElement>(
+  FURNITURE_GROUPS.map(({ key }) => [key, document.querySelector<HTMLButtonElement>(`#tool-furniture-group-${key}`)!]),
+)
+const furnitureAnchors = new Map<FurnitureGroup, HTMLElement>(
+  FURNITURE_GROUPS.map(({ key }) => [key, document.querySelector<HTMLElement>(`[data-furniture-group="${key}"]`)!]),
+)
 const furniturePanel = document.querySelector<HTMLElement>("#furniture-panel")!
-// кнопки видов в панели группы «Мебель» — по одной на вид каталога, в порядке каталога (spec furniture-plan «Каталог видов мебели»)
+// кнопки видов в панели группы — по одной на вид каталога, в порядке каталога; показываются кнопки вида открытой группы (spec furniture-plan «Каталог видов мебели»)
 const furnitureKindsRow = document.querySelector<HTMLElement>("#furniture-kinds")!
 const furnitureKindButtons = new Map<FurnitureKind, HTMLButtonElement>(
   FURNITURE_KIND_ORDER.map((kind) => {
@@ -294,7 +302,9 @@ let furnitureCache: FurnitureScene | null = null
 let furnitureKind: FurnitureKind = "table"
 let kindParams = initialKindParams()
 const itemParamsOf = (kind: FurnitureKind): ItemParams => paramsOfKind(kindParams, kind)
-let furniturePanelOpen = false
+// текущий вид каждой группы и группа открытой панели: в сеансе, в чертеже не сохраняются
+let furnitureCurrent = initialMenu().current
+let furniturePanelGroup: FurnitureGroup | null = null
 // рабочий набор плана «Сантехника» (change add-plumbing-plan, design D3): walls — подложка «Мебели» только для чтения, fixtures —
 // приборы «Мебели» только для чтения (по ним разрешаются точки размеров); в чертёж пишутся только размеры плана (commitPlumbing)
 let plumbingWorkspace: PlumbingWorkspace | null = null
@@ -1885,7 +1895,7 @@ const itemHost: ItemToolHost = {
   redraw: () => redraw(),
   selected: () => {
     clearNonItemSelection()
-    furniturePanelOpen = true
+    revealItemPanel()
   },
   newId: () => crypto.randomUUID(),
   walls: () => walls,
@@ -1893,11 +1903,26 @@ const itemHost: ItemToolHost = {
 }
 const itemTool = createItemTool(itemHost)
 
-// панель группы «Мебель»: значения единственного выделенного стола, иначе значения для новых; единицы — текущие
+const furnitureMenu = (): FurnitureMenu => ({ kind: furnitureKind, active: tool === "furniture", current: furnitureCurrent, panel: furniturePanelGroup })
+
+// выделение предмета открывает панель группы его вида; при нескольких выделенных — группы первого из них (spec furniture-plan «Группы видов мебели»)
+function revealItemPanel(): void {
+  const first = items.find((t) => itemTool.selectedIds().has(t.id))
+  if (first) furniturePanelGroup = revealSelection(furnitureMenu(), first.kind).panel
+}
+
+// панель группы вида: значения единственного выделенного предмета, иначе значения для новых; единицы — текущие.
+// Панель одна и стоит под кнопкой открытой группы; кнопки видов — только вида этой группы
 function syncFurniturePanel(): void {
-  furniturePanel.classList.toggle("open", furniturePanelOpen)
-  toolFurnitureBtn.classList.toggle("active", tool === "furniture")
-  for (const [kind, button] of furnitureKindButtons) button.classList.toggle("active", tool === "furniture" && kind === furnitureKind)
+  const menu = furnitureMenu()
+  furniturePanel.classList.toggle("open", menu.panel !== null)
+  const anchor = menu.panel === null ? undefined : furnitureAnchors.get(menu.panel)
+  if (anchor && furniturePanel.parentElement !== anchor) anchor.append(furniturePanel)
+  for (const [group, button] of furnitureGroupButtons) button.classList.toggle("active", groupIsActive(menu, group))
+  for (const [kind, button] of furnitureKindButtons) {
+    button.classList.toggle("active", menu.active && kind === menu.current[groupOf(kind)])
+    button.hidden = menu.panel === null || groupOf(kind) !== menu.panel
+  }
   furnitureWidthUnit.textContent = `Ширина, ${UNIT_LABEL[unit]}`
   furnitureLengthUnit.textContent = `Длина, ${UNIT_LABEL[unit]}`
   const selected = itemTool.selectedItem()
@@ -1943,20 +1968,19 @@ function applyToiletField(key: keyof ToiletSizes, input: HTMLInputElement): void
   redraw()
 }
 
-const furnitureGroupState = (): GroupState<FurnitureKind> => ({ current: furnitureKind, active: tool === "furniture" ? furnitureKind : "other", panelOpen: furniturePanelOpen })
-
-function applyFurnitureGroup(next: GroupState<FurnitureKind>): void {
-  furnitureKind = next.current
-  if (next.active !== "other" && tool !== "furniture") setTool("furniture")
-  furniturePanelOpen = next.panelOpen
+function applyFurnitureMenu(next: FurnitureMenu): void {
+  furnitureKind = next.kind
+  furnitureCurrent = next.current
+  if (next.active && tool !== "furniture") setTool("furniture")
+  furniturePanelGroup = next.panel
   syncFurniturePanel()
 }
 
-// установка стола снимает инструмент, поставленный стол остаётся выделенным, панель остаётся открытой (spec furniture-plan «Постановка стола»)
+// установка предмета снимает инструмент, поставленный предмет остаётся выделенным, панель его группы остаётся открытой (spec furniture-plan «Постановка стола»)
 function leaveItemPlacing(): void {
   tool = "none"
   itemTool.hover(null)
-  furniturePanelOpen = true
+  furniturePanelGroup = placed(furnitureMenu()).panel
   syncToolUI()
   redraw()
 }
@@ -2121,7 +2145,7 @@ function setTool(next: Tool): void {
   resetSwitches()
   resetExhausts()
   itemTool.reset()
-  furniturePanelOpen = false
+  furniturePanelGroup = null
   setWallPanel(false)
   closeOpeningsPanel()
   closeCommunicationsPanel()
@@ -3422,7 +3446,7 @@ function finishMarquee(rect: { x1: number; y1: number; x2: number; y2: number },
   if (onFurniture()) {
     // столы плана «Мебель» выделяются рамкой вместе с размерами; с Shift — добавляются к выделенным
     itemTool.select([...(additive ? previousItems : []), ...picks.items.map((t) => t.id)])
-    if (itemTool.hasSelection()) furniturePanelOpen = true
+    if (itemTool.hasSelection()) revealItemPanel()
   }
   if (!selectedDoorways.length && !selectedBatteries.length && selectedWalls.length === 1 && !selectedDimensions.length) {
     syncThicknessBox()
@@ -3830,9 +3854,9 @@ for (const input of [drywallThicknessInput, drywallHeightInput]) {
   })
 }
 
-// кнопка группы «Мебель» и кнопка её инструмента «Стол» (spec furniture-plan «Панель группы «Мебель» и инструмента «Стол»»)
-toolFurnitureBtn.addEventListener("click", () => applyFurnitureGroup(groupButtonClick(furnitureGroupState())))
-for (const [kind, button] of furnitureKindButtons) button.addEventListener("click", () => applyFurnitureGroup(groupPick(furnitureGroupState(), kind)))
+// кнопки групп видов мебели и кнопки видов в панели (spec furniture-plan «Группы видов мебели»)
+for (const [group, button] of furnitureGroupButtons) button.addEventListener("click", () => applyFurnitureMenu(clickGroup(furnitureMenu(), group)))
+for (const [kind, button] of furnitureKindButtons) button.addEventListener("click", () => applyFurnitureMenu(pickKind(furnitureMenu(), kind)))
 // поля панели применяются по фиксации ввода; клавиши поля не доходят до холста
 furnitureWidthInput.addEventListener("change", () => applyItemField("widthCm", furnitureWidthInput))
 furnitureLengthInput.addEventListener("change", () => applyItemField("lengthCm", furnitureLengthInput))
@@ -4082,7 +4106,7 @@ function activate(id: string): void {
   commitWorking()
   store.activeId = id
   drywallPanelOpen = false
-  furniturePanelOpen = false
+  furniturePanelGroup = null
   loadWorking()
   view = current().view
   tool = defaultToolOf(activePlanOf(current()))

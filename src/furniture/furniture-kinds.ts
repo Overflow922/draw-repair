@@ -38,9 +38,14 @@ export interface ItemDefaults {
   toilet?: ToiletSizes
 }
 
+// группа вида на панели инструментов (change furniture-kind-groups, spec furniture-plan «Группы видов мебели»)
+export type FurnitureGroup = "room" | "bedroom" | "kitchen" | "bathroom"
+
 export interface FurnitureKindEntry {
   // название вида: подпись кнопки, запись легенды PDF, начало плашки пересечений
   label: string
+  // группа, в панели которой стоит кнопка вида
+  group: FurnitureGroup
   // слово вида в плашке пересечений, когда другой предмет — этого вида («Стол пересекается: стена, стол»)
   plaqueWord: string
   defaults: ItemDefaults
@@ -64,6 +69,7 @@ export interface OverlapExemptions {
 export const FURNITURE_KINDS = {
   table: {
     label: "Стол",
+    group: "room",
     plaqueWord: "стол",
     defaults: { widthCm: 80, lengthCm: 160, angleDeg: 0 },
     drawing: tableDrawing,
@@ -71,6 +77,7 @@ export const FURNITURE_KINDS = {
   },
   chair: {
     label: "Стул",
+    group: "room",
     plaqueWord: "стул",
     defaults: { widthCm: 45, lengthCm: 45, angleDeg: 0 },
     drawing: chairDrawing,
@@ -78,6 +85,7 @@ export const FURNITURE_KINDS = {
   },
   sofa: {
     label: "Диван",
+    group: "room",
     plaqueWord: "диван",
     defaults: { widthCm: 200, lengthCm: 90, angleDeg: 0 },
     drawing: sofaDrawing,
@@ -85,6 +93,7 @@ export const FURNITURE_KINDS = {
   },
   desk: {
     label: "Письменный стол",
+    group: "room",
     plaqueWord: "письменный стол",
     defaults: { widthCm: 100, lengthCm: 50, angleDeg: 0 },
     drawing: deskDrawing,
@@ -92,6 +101,7 @@ export const FURNITURE_KINDS = {
   },
   officeChair: {
     label: "Компьютерное кресло",
+    group: "room",
     plaqueWord: "компьютерное кресло",
     defaults: { widthCm: 60, lengthCm: 60, angleDeg: 0 },
     drawing: officeChairDrawing,
@@ -99,6 +109,7 @@ export const FURNITURE_KINDS = {
   },
   tv: {
     label: "Телевизор",
+    group: "room",
     plaqueWord: "телевизор",
     defaults: { widthCm: 91, lengthCm: 11, angleDeg: 0 },
     drawing: tvDrawing,
@@ -107,6 +118,7 @@ export const FURNITURE_KINDS = {
   },
   wallCabinet: {
     label: "Подвесная тумба",
+    group: "room",
     plaqueWord: "подвесная тумба",
     defaults: { widthCm: 180, lengthCm: 42, angleDeg: 0 },
     drawing: wallCabinetDrawing,
@@ -114,6 +126,7 @@ export const FURNITURE_KINDS = {
   },
   bed: {
     label: "Кровать",
+    group: "bedroom",
     plaqueWord: "кровать",
     defaults: { widthCm: 160, lengthCm: 200, angleDeg: 0 },
     drawing: bedDrawing,
@@ -121,6 +134,7 @@ export const FURNITURE_KINDS = {
   },
   nightstand: {
     label: "Прикроватный столик",
+    group: "bedroom",
     plaqueWord: "прикроватный столик",
     defaults: { widthCm: 30, lengthCm: 60, angleDeg: 0 },
     drawing: nightstandDrawing,
@@ -128,6 +142,7 @@ export const FURNITURE_KINDS = {
   },
   slidingWardrobe: {
     label: "Шкаф-купе",
+    group: "bedroom",
     plaqueWord: "шкаф-купе",
     defaults: { widthCm: 300, lengthCm: 60, angleDeg: 0 },
     drawing: slidingWardrobeDrawing,
@@ -135,6 +150,7 @@ export const FURNITURE_KINDS = {
   },
   doubleWardrobe: {
     label: "Шкаф двустворчатый",
+    group: "bedroom",
     plaqueWord: "шкаф двустворчатый",
     defaults: { widthCm: 100, lengthCm: 60, angleDeg: 0 },
     drawing: doubleWardrobeDrawing,
@@ -142,6 +158,7 @@ export const FURNITURE_KINDS = {
   },
   curtains: {
     label: "Шторы",
+    group: "room",
     plaqueWord: "шторы",
     defaults: { widthCm: 300, lengthCm: 13, angleDeg: 0 },
     drawing: curtainsDrawing,
@@ -150,6 +167,7 @@ export const FURNITURE_KINDS = {
   },
   kitchenCabinet: {
     label: "Кухонный шкаф",
+    group: "kitchen",
     plaqueWord: "кухонный шкаф",
     defaults: { widthCm: 60, lengthCm: 62, angleDeg: 0 },
     drawing: kitchenCabinetDrawing,
@@ -157,6 +175,7 @@ export const FURNITURE_KINDS = {
   },
   fridge: {
     label: "Холодильник двустворчатый",
+    group: "kitchen",
     plaqueWord: "холодильник двустворчатый",
     defaults: { widthCm: 100, lengthCm: 90, angleDeg: 0 },
     drawing: fridgeDrawing,
@@ -165,6 +184,7 @@ export const FURNITURE_KINDS = {
   // объекты кухни (change add-furniture-kitchen-objects): встроенные стоят в кухонном шкафу, врезные — на нём и над встроенными
   wineCabinet: {
     label: "Винный шкаф",
+    group: "kitchen",
     plaqueWord: "винный шкаф",
     defaults: { widthCm: 30, lengthCm: 62, angleDeg: 0 },
     drawing: wineCabinetDrawing,
@@ -173,6 +193,7 @@ export const FURNITURE_KINDS = {
   },
   hob: {
     label: "Варочная панель",
+    group: "kitchen",
     plaqueWord: "варочная панель",
     defaults: { widthCm: 52, lengthCm: 30, angleDeg: 0 },
     drawing: hobDrawing,
@@ -181,6 +202,7 @@ export const FURNITURE_KINDS = {
   },
   dishwasher: {
     label: "Посудомойка",
+    group: "kitchen",
     plaqueWord: "посудомойка",
     defaults: { widthCm: 60, lengthCm: 62, angleDeg: 0 },
     drawing: dishwasherDrawing,
@@ -190,6 +212,7 @@ export const FURNITURE_KINDS = {
   },
   sink: {
     label: "Раковина",
+    group: "kitchen",
     plaqueWord: "раковина",
     defaults: { widthCm: 45, lengthCm: 40, angleDeg: 0 },
     drawing: sinkDrawing,
@@ -201,6 +224,7 @@ export const FURNITURE_KINDS = {
   // машина — встроенные объекты кухни, сушильная машина стоит на стиральной; отдельно стоящей техники нет
   kitchenColumn: {
     label: "Кухонная колонна",
+    group: "kitchen",
     plaqueWord: "кухонная колонна",
     defaults: { widthCm: 60, lengthCm: 62, angleDeg: 0 },
     drawing: kitchenColumnDrawing,
@@ -208,6 +232,7 @@ export const FURNITURE_KINDS = {
   },
   oven: {
     label: "Духовой шкаф",
+    group: "kitchen",
     plaqueWord: "духовой шкаф",
     defaults: { widthCm: 60, lengthCm: 62, angleDeg: 0 },
     drawing: ovenDrawing,
@@ -216,6 +241,7 @@ export const FURNITURE_KINDS = {
   },
   microwave: {
     label: "Микроволновка",
+    group: "kitchen",
     plaqueWord: "микроволновка",
     defaults: { widthCm: 60, lengthCm: 62, angleDeg: 0 },
     drawing: microwaveDrawing,
@@ -224,6 +250,7 @@ export const FURNITURE_KINDS = {
   },
   washer: {
     label: "Стиральная машина",
+    group: "kitchen",
     plaqueWord: "стиральная машина",
     defaults: { widthCm: 60, lengthCm: 60, angleDeg: 0 },
     drawing: washerDrawing,
@@ -233,6 +260,7 @@ export const FURNITURE_KINDS = {
   },
   dryer: {
     label: "Сушильная машина",
+    group: "kitchen",
     plaqueWord: "сушильная машина",
     defaults: { widthCm: 60, lengthCm: 60, angleDeg: 0 },
     drawing: dryerDrawing,
@@ -242,6 +270,7 @@ export const FURNITURE_KINDS = {
   // унитаз с инсталляцией (change add-toilet, references/toilet.png): блок зашивается гипсокартоном, ёршика нет
   toilet: {
     label: "Унитаз",
+    group: "bathroom",
     plaqueWord: "унитаз",
     defaults: { ...toiletBounds(TOILET_DEFAULTS), angleDeg: 0, toilet: TOILET_DEFAULTS },
     drawing: toiletDrawing,
@@ -251,6 +280,7 @@ export const FURNITURE_KINDS = {
   // потолочная лейка тропического душа (change add-furniture-tropical-shower, набросок варианта A): прибор плана «Сантехника» (change add-plumbing-tropical-shower)
   tropicalShower: {
     label: "Тропический душ",
+    group: "bathroom",
     plaqueWord: "тропический душ",
     defaults: { widthCm: 40, lengthCm: 30, angleDeg: 0 },
     drawing: tropicalShowerDrawing,
@@ -261,6 +291,7 @@ export const FURNITURE_KINDS = {
   // стоит в стене, поэтому наложение на стену, стену гипсокартона и штукатурку не пересечение
   wallShowerDrain: {
     label: "Трап в стену",
+    group: "bathroom",
     plaqueWord: "трап в стену",
     defaults: { widthCm: 70, lengthCm: 8, angleDeg: 0 },
     drawing: wallShowerDrainDrawing,
@@ -272,6 +303,7 @@ export const FURNITURE_KINDS = {
   // кухонная «Раковина» — отдельный вид
   washbasin: {
     label: "Умывальник",
+    group: "bathroom",
     plaqueWord: "умывальник",
     defaults: { widthCm: 60, lengthCm: 48, angleDeg: 0 },
     drawing: washbasinDrawing,
@@ -290,3 +322,23 @@ export function isFurnitureKind(x: unknown): x is FurnitureKind {
 }
 
 export const kindEntry = (kind: FurnitureKind): FurnitureKindEntry => FURNITURE_KINDS[kind]
+
+export interface FurnitureGroupEntry {
+  key: FurnitureGroup
+  label: string
+  // вид, иконка которого служит иконкой кнопки группы
+  iconKind: FurnitureKind
+}
+
+// группы в порядке кнопок на панели инструментов
+export const FURNITURE_GROUPS: readonly FurnitureGroupEntry[] = [
+  { key: "room", label: "Комната", iconKind: "sofa" },
+  { key: "bedroom", label: "Спальня", iconKind: "bed" },
+  { key: "kitchen", label: "Кухня", iconKind: "kitchenCabinet" },
+  { key: "bathroom", label: "Санузел", iconKind: "toilet" },
+]
+
+export const groupOf = (kind: FurnitureKind): FurnitureGroup => kindEntry(kind).group
+
+// виды группы в порядке каталога
+export const kindsOfGroup = (group: FurnitureGroup): FurnitureKind[] => FURNITURE_KIND_ORDER.filter((kind) => groupOf(kind) === group)

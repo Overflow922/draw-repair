@@ -15,22 +15,38 @@ const main = readFileSync(new URL("../main.ts", import.meta.url), "utf8")
   .replace(/\/\*[\s\S]*?\*\//g, "")
   .replace(/(^|[^:"'`])\/\/[^\n]*/g, "$1")
 
-const anchorStart = toolbar.indexOf('data-tools="furniture"')
-const anchor = toolbar.slice(anchorStart, toolbar.indexOf('class="tool-anchor"', anchorStart + 1))
-const panel = anchor.slice(anchor.indexOf('id="furniture-panel"'))
+const groups = readFileSync(new URL("./furniture-groups.ts", import.meta.url), "utf8")
 
-describe("разметка группы «Мебель»", () => {
-  it("FP-360: кнопка группы с иконкой и панель правее, как у других групп (tool-anchor + tool-panel)", () => {
+// change furniture-kind-groups: четыре якоря групп видов (data-furniture-group); панель одна и переезжает под кнопку открытой группы
+const anchorStart = toolbar.indexOf('data-tools="furniture"')
+const anchors = [...toolbar.matchAll(/<div class="tool-anchor" data-tools="furniture" data-furniture-group="([a-z]+)">([\s\S]*?)(?=<div class="tool-anchor"|<div class="tool-separator"|$)/g)]
+const panelStart = toolbar.indexOf('id="furniture-panel"')
+const panel = toolbar.slice(panelStart, toolbar.indexOf('<div class="tool-anchor"', panelStart))
+
+describe("разметка групп видов мебели", () => {
+  it("FP-360: четыре кнопки групп «Комната», «Спальня», «Кухня», «Санузел» идут первыми, каждая со своей иконкой; кнопки «Мебель» нет", () => {
     expect(anchorStart).toBeGreaterThan(0)
-    expect(anchor).toMatch(/<button id="tool-furniture" class="tool"[^>]*title="Мебель"/)
-    expect(anchor).toContain("<svg")
-    expect(panel).toMatch(/^id="furniture-panel" class="panel tool-panel"/)
+    expect(anchors.map((a) => a[1])).toEqual(["room", "bedroom", "kitchen", "bathroom"])
+    const titles = ["Комната", "Спальня", "Кухня", "Санузел"]
+    anchors.forEach((a, i) => {
+      expect(a[2]).toMatch(new RegExp(`<button id="tool-furniture-group-${a[1]}" class="tool"[^>]*title="${titles[i]}"`))
+      expect(a[2]).toContain("<svg")
+    })
+    expect(toolbar).not.toMatch(/title="Мебель"/)
+    expect(toolbar).not.toContain('id="tool-furniture"')
+    expect(toolbar.slice(0, anchorStart).includes("<button")).toBe(false)
   })
 
-  it("FP-361: в панели одна кнопка на вид каталога (сейчас «Стол»), выделенная как текущая; вне панели кнопок видов нет", () => {
+  it("FP-360a: панель одна, как у других групп (tool-panel), и лежит внутри якоря группы", () => {
+    expect([...toolbar.matchAll(/id="furniture-panel"/g)]).toHaveLength(1)
+    expect(panel).toMatch(/^id="furniture-panel" class="panel tool-panel"/)
+    expect(anchors[0]?.[2]).toContain('id="furniture-panel"')
+  })
+
+  it("FP-361: кнопки видов строятся из каталога (в разметке их нет) и показываются по группе открытой панели; вне панели кнопок видов нет", () => {
     expect(panel).toMatch(/id="furniture-kinds" class="group-tools"/)
     expect([...panel.matchAll(/<button/g)]).toHaveLength(0)
-    expect(toolbar).not.toContain("tool-furniture-")
+    expect(toolbar.replace(/tool-furniture-group-/g, "")).not.toContain("tool-furniture-")
     // TCR (change add-furniture-chair): в каталоге новый вид
     // TCR (change add-furniture-sofa): в каталоге новый вид
     // TCR (change add-furniture-desk-office-chair): в каталоге новые виды
@@ -41,7 +57,8 @@ describe("разметка группы «Мебель»", () => {
     expect(main).toContain("FURNITURE_KIND_ORDER.map((kind)")
     expect(main).toContain("button.id = `tool-furniture-${kind}`")
     expect(main).toContain('button.className = "group-tool"')
-    expect(main).toContain('button.classList.toggle("active", tool === "furniture" && kind === furnitureKind)')
+    expect(main).toContain('button.classList.toggle("active", menu.active && kind === menu.current[groupOf(kind)])')
+    expect(main).toContain("button.hidden = menu.panel === null || groupOf(kind) !== menu.panel")
   })
 
   it("FP-362: поля панели — «Ширина», «Длина», «Угол»; других полей у группы нет", () => {
@@ -68,14 +85,20 @@ describe("разметка группы «Мебель»", () => {
 })
 
 describe("связки в main.ts", () => {
-  it("FP-365: кнопки группы, инструмента и поля панели подключены", () => {
-    expect(main).toContain('toolFurnitureBtn.addEventListener("click"')
-    expect(main).toContain('button.addEventListener("click", () => applyFurnitureGroup(groupPick(furnitureGroupState(), kind)))')
+  it("FP-365: кнопки групп, видов и поля панели подключены", () => {
+    expect(main).toContain('button.addEventListener("click", () => applyFurnitureMenu(clickGroup(furnitureMenu(), group)))')
+    expect(main).toContain('button.addEventListener("click", () => applyFurnitureMenu(pickKind(furnitureMenu(), kind)))')
     for (const field of ["widthCm", "lengthCm", "angleDeg"]) expect(main).toContain(`applyItemField("${field}"`)
   })
 
-  it("FP-366: переходы группы — те же функции, что у групп «Проёмы» и «Коммуникации»", () => {
-    expect(main).toContain("groupButtonClick(furnitureGroupState())")
+  it("FP-366: переходы групп видов — те же функции, что у групп «Проёмы» и «Коммуникации»", () => {
+    expect(groups).toContain("groupButtonClick(")
+    expect(groups).toContain("groupPick(")
+  })
+
+  it("FP-368: выделение предмета открывает панель группы его вида, установка оставляет её открытой", () => {
+    expect(main).toContain("revealSelection(")
+    expect(main).toContain("placed(")
   })
 
   it("FP-367: шаги истории плана «Мебель» — записи furniture; общая запись стен на этом плане не пишется", () => {

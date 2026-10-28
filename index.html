@@ -23,9 +23,9 @@
             <div id="plan-switch" aria-label="Планы"></div>
           </header>
           <aside id="toolbar" class="panel">
-            <div class="tool-anchor" data-tools="furniture">
-              <button id="tool-furniture" class="tool" title="Мебель" type="button">
-                <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round"><rect x="3" y="7" width="18" height="5" rx="1"/><path d="M6 12v7M18 12v7"/></svg>
+            <div class="tool-anchor" data-tools="furniture" data-furniture-group="room">
+              <button id="tool-furniture-group-room" class="tool" title="Комната" type="button">
+                <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round"><path d="M5 11V8a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v3"/><path d="M3 13a2 2 0 0 1 4 0v2h10v-2a2 2 0 0 1 4 0v5H3z"/><path d="M5 18v2M19 18v2"/></svg>
               </button>
               <div id="furniture-panel" class="panel tool-panel">
                 <div id="furniture-kinds" class="group-tools" aria-label="Инструменты группы «Мебель»"></div>
@@ -58,6 +58,21 @@
                   <input id="furniture-angle" type="text" inputmode="decimal" />
                 </label>
               </div>
+            </div>
+            <div class="tool-anchor" data-tools="furniture" data-furniture-group="bedroom">
+              <button id="tool-furniture-group-bedroom" class="tool" title="Спальня" type="button">
+                <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round"><rect x="4" y="3" width="16" height="18" rx="1"/><rect x="6" y="15.5" width="5" height="3.5" rx="1"/><rect x="13" y="15.5" width="5" height="3.5" rx="1"/><path d="M4 11h16"/></svg>
+              </button>
+            </div>
+            <div class="tool-anchor" data-tools="furniture" data-furniture-group="kitchen">
+              <button id="tool-furniture-group-kitchen" class="tool" title="Кухня" type="button">
+                <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round"><rect x="4" y="7" width="16" height="14"/><path d="M4 10h16M9 3.500h6M10 3.500v3.500M14 3.500v3.500"/></svg>
+              </button>
+            </div>
+            <div class="tool-anchor" data-tools="furniture" data-furniture-group="bathroom">
+              <button id="tool-furniture-group-bathroom" class="tool" title="Санузел" type="button">
+                <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round"><rect x="3" y="3" width="18" height="5"/><path d="M3 3l18 5M21 3L3 8"/><path d="M8 8v6a4 4 0 0 0 8 0V8"/><ellipse cx="12" cy="15" rx="2" ry="2.5"/></svg>
+              </button>
             </div>
             <div class="tool-anchor" data-tools="demolition">
               <button id="tool-demolition" class="tool" title="Демонтаж" type="button">

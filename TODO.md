@@ -1360,3 +1360,14 @@ Follow-ups from `add-washbasin` (2026-10-28).
 ## Docs
 
 - [ ] The washbasin drawing follows the user's sketch (variant B of the HTML page), not a picture in `references/`; compare the numbers with a picture and replace the drawing in `src/furniture/washbasin-drawing.ts` if one is added (`.claude/rules/references.md`).
+---
+
+Follow-ups from `furniture-kind-groups` (2026-10-28).
+
+## Out of scope
+
+- [ ] Selecting items of different groups at once (marquee over a bed and a washbasin): the spec only says "the panel of the group of the item's kind". The code opens the panel of the first selected item's group (`revealItemPanel` in `src/main.ts`). Decide the rule in `furniture-plan` «Группы видов мебели» if it matters.
+
+## Tests
+
+- [ ] The group menu wiring in `src/main.ts` (panel moving under the open group's button, kind button visibility) is checked only by source assertions in `furniture-ui.test.ts` and by hand in the browser; the pure transitions are unit-tested in `furniture-groups.test.ts`.
