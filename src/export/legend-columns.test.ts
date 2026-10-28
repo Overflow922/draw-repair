@@ -43,6 +43,8 @@ const ITEMS: Record<FurnitureItem["kind"], FurnitureItem> = {
   toilet: item("l", "toilet", 2100, 400, 70, 72),
   // TCR (change add-furniture-tropical-shower): в каталоге новый вид (запись нужна типу Record; наборы FIFTEEN и ALL не меняются)
   tropicalShower: item("m", "tropicalShower", 2200, 400, 40, 30),
+  // TCR (change add-wall-shower-drain): в каталоге новый вид (запись нужна типу Record; наборы FIFTEEN и ALL не меняются)
+  wallShowerDrain: item("n", "wallShowerDrain", 2300, 400, 70, 8),
 }
 
 // страница «Мебель» со всеми материалами, батареей, стояком, воздуховодом, штукатуркой, гипсокартоном и предметами заданных видов

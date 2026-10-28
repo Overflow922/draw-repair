@@ -18,7 +18,11 @@ describe("каталог видов мебели", () => {
     // TCR (change add-furniture-appliances): в каталоге новые виды
     // TCR (change add-toilet): в каталоге новый вид
     // TCR (change add-furniture-tropical-shower): в каталоге новый вид
-    expect(FURNITURE_KIND_ORDER).toEqual(["table", "chair", "sofa", "desk", "officeChair", "tv", "wallCabinet", "bed", "nightstand", "slidingWardrobe", "doubleWardrobe", "curtains", "kitchenCabinet", "fridge", "wineCabinet", "hob", "dishwasher", "sink", "kitchenColumn", "oven", "microwave", "washer", "dryer", "toilet", "tropicalShower"])
+    // TCR (change add-wall-shower-drain): в каталоге новый вид
+    expect(FURNITURE_KIND_ORDER).toEqual(["table", "chair", "sofa", "desk", "officeChair", "tv", "wallCabinet", "bed", "nightstand", "slidingWardrobe", "doubleWardrobe", "curtains", "kitchenCabinet", "fridge", "wineCabinet", "hob", "dishwasher", "sink", "kitchenColumn", "oven", "microwave", "washer", "dryer", "toilet", "tropicalShower", "wallShowerDrain"])
+    expect(kindEntry("wallShowerDrain").label).toBe("Трап в стену")
+    expect(kindEntry("wallShowerDrain").plaqueWord).toBe("трап в стену")
+    expect(kindEntry("wallShowerDrain").defaults).toEqual({ widthCm: 70, lengthCm: 8, angleDeg: 0 })
     expect(kindEntry("tropicalShower").label).toBe("Тропический душ")
     expect(kindEntry("tropicalShower").plaqueWord).toBe("тропический душ")
     expect(kindEntry("tropicalShower").defaults).toEqual({ widthCm: 40, lengthCm: 30, angleDeg: 0 })

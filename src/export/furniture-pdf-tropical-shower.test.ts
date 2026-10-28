@@ -74,8 +74,9 @@ describe("легенда: образец тропического душа", () 
     const page = pagesOf(d)[5]
     if (!page) throw new Error("страницы «Мебель» нет")
     const labels = legendEntries(page).map((e) => e.label)
-    expect(labels.at(-1)).toBe("Тропический душ")
-    expect(labels.at(-2)).toBe("Унитаз")
+    // TCR (change add-wall-shower-drain): после «Тропического душа» в каталоге идёт «Трап в стену»
+    expect(labels.at(-2)).toBe("Тропический душ")
+    expect(labels.at(-3)).toBe("Унитаз")
     expect(Math.ceil(labels.length / LEGEND_COLUMN_CAPACITY) * LEGEND_COLUMN_CAPACITY).toBeGreaterThanOrEqual(labels.length)
     expect(LEGEND_COLUMN_CAPACITY * LEGEND_ROW_PITCH_MM).toBeLessThanOrEqual(222)
   })

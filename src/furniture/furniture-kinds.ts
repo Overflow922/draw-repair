@@ -24,6 +24,7 @@ import { dryerDrawing, washerDrawing } from "./laundry-drawing"
 import { TOILET_DEFAULTS, toiletBounds } from "./toilet"
 import { toiletDrawing } from "./toilet-drawing"
 import { tropicalShowerDrawing } from "./tropical-shower-drawing"
+import { wallShowerDrainDrawing } from "./wall-shower-drain-drawing"
 import type { ToiletSizes } from "../types"
 import type { ObstacleKind } from "./overlap"
 import { doubleWardrobeDrawing, slidingWardrobeDrawing } from "./wardrobe-drawing"
@@ -253,6 +254,17 @@ export const FURNITURE_KINDS = {
     defaults: { widthCm: 40, lengthCm: 30, angleDeg: 0 },
     drawing: tropicalShowerDrawing,
     icon: '<rect x="3" y="6" width="18" height="12" rx="2.500"/><rect x="5.500" y="8.500" width="13" height="7" rx="1"/><circle cx="8.500" cy="11" r="0.700"/><circle cx="12" cy="11" r="0.700"/><circle cx="15.500" cy="11" r="0.700"/><circle cx="8.500" cy="13.500" r="0.700"/><circle cx="12" cy="13.500" r="0.700"/><circle cx="15.500" cy="13.500" r="0.700"/>',
+    water: true,
+  },
+  // душевой трап, утопленный в стену (change add-wall-shower-drain, набросок варианта А): лоток в толще стены, наружу выходит щель;
+  // стоит в стене, поэтому наложение на стену, стену гипсокартона и штукатурку не пересечение
+  wallShowerDrain: {
+    label: "Трап в стену",
+    plaqueWord: "трап в стену",
+    defaults: { widthCm: 70, lengthCm: 8, angleDeg: 0 },
+    drawing: wallShowerDrainDrawing,
+    icon: '<rect x="2" y="6" width="20" height="10" rx="1"/><rect x="4" y="8" width="16" height="4" rx="0.500"/><rect x="5" y="14" width="14" height="1" rx="0.500"/>',
+    overlapExemptions: { obstacles: ["wall", "drywall", "plaster"] },
     water: true,
   },
 } as const satisfies Record<string, FurnitureKindEntry>

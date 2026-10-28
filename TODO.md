@@ -1334,4 +1334,16 @@ Follow-ups from `add-furniture-tropical-shower` (2026-10-28).
 
 ## Docs
 
-- [ ] The `pdf-export` scenario «Тридцать первая запись в третьем столбце» still says «двадцать три вида» and «33 записи»; the catalog has 25 kinds, so the legend of a page with all kinds has 35 entries (15 + 15 + 5). The test `src/export/legend-three-columns.test.ts` L3-01 already says 35; align the scenario at the next legend change.
+- [ ] The `pdf-export` scenario «Тридцать первая запись в третьем столбце» still says «двадцать три вида» and «33 записи»; the catalog has 26 kinds (after `add-wall-shower-drain`), so the legend of a page with all kinds has 36 entries (15 + 15 + 6). The test `src/export/legend-three-columns.test.ts` L3-01 already says 36; align the scenario at the next legend change.
+---
+
+Follow-ups from `add-wall-shower-drain` (2026-10-28).
+
+## Out of scope
+
+- [ ] The wall shower drain is exempt from overlaps with walls, drywall and plaster everywhere, not only where it really lies inside a wall: a drain standing in the middle of a room is not flagged unless it hits a window, door, opening, battery, communication or another item. A precise check («body entirely inside a wall piece») needs its own rule in `src/furniture/overlap.ts` (`furniture-plan` «Пересечения стола»).
+- [ ] The drain drawing follows the user's sketch (variant A of the HTML page), not a picture in `references/`; replace the drawing in `src/furniture/wall-shower-drain-drawing.ts` if a picture is added. Variants B–D of the sketch (outlet pipe, protruding cover, flow arrows) are not drawn.
+
+## Docs
+
+- [ ] The tray body is a solid line in the catalog; the sketch drew it dashed. A dashed line would need short segments in the drawing (as the nightstand does) and is hard to read in the 14 × 1.6 mm legend sample; revisit with the picture above.

@@ -177,6 +177,12 @@ describe("легенда страницы «Сантехника»", () => {
     expect(labels(pagesOf(d)[6])).toEqual(["Кирпич", "Штукатурка", "Гипсокартон", "Раковина", "Тропический душ"])
   })
 
+  it("PP-10c: трап в стену — прибор страницы «Сантехника»: его запись есть в легенде седьмой страницы (change add-wall-shower-drain)", () => {
+    const drain: FurnitureItem = { id: "t", kind: "wallShowerDrain", x: 100, y: 205, widthCm: 70, lengthCm: 8, angleDeg: 0 }
+    const d = withFurniture(base(), [table(), sink(), drain])
+    expect(labels(pagesOf(d)[6])).toEqual(["Кирпич", "Штукатурка", "Гипсокартон", "Раковина", "Трап в стену"])
+  })
+
   it("PP-10: «Кирпич», «Штукатурка», «Гипсокартон», «Раковина», «Стиральная машина»; стола и кухонного шкафа нет", () => {
     const d = withFurniture(base(), [table(), item("w", "washer", 200), item("k", "kitchenCabinet", 300), sink()])
     expect(labels(pagesOf(d)[6])).toEqual(["Кирпич", "Штукатурка", "Гипсокартон", "Раковина", "Стиральная машина"])
