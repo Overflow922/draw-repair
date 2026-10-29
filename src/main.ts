@@ -2288,6 +2288,15 @@ function drawPatternPreviews(): void {
 }
 
 function redraw(): void {
+  refresh(true)
+}
+
+// перерисовка под курсор: чертёж не менялся, подпись масштаба пересчитывать незачем (она собирает страницы всех планов)
+function redrawHover(): void {
+  refresh(false)
+}
+
+function refresh(scaleToo: boolean): void {
   if (workspace) {
     restoreRemnants()
     if (dirty) commitMounting()
@@ -2312,7 +2321,7 @@ function redraw(): void {
   updateAngleBox()
   syncHistoryButtons()
   syncRoomEditor()
-  syncScale()
+  if (scaleToo) syncScale()
   if (dirty) {
     dirty = false
     if (!readOnly) saveStore(store)
@@ -2999,7 +3008,7 @@ canvas.addEventListener("pointermove", (e) => {
     } else if (tool === "ruler" || tool === "eraser" || tool === "callout") {
       cursor = toWorld(e)
       if (tool === "callout") calloutTool.hover(cursor)
-      redraw()
+      redrawHover()
     }
     return
   }
@@ -3021,7 +3030,7 @@ canvas.addEventListener("pointermove", (e) => {
     if (tool === "light" || tool === "lightLine" || tool === "lightSwitch" || tool === "exhaust" || tool === "ruler" || tool === "eraser" || tool === "callout") {
       cursor = toWorld(e)
       if (tool === "callout") calloutTool.hover(cursor)
-      redraw()
+      redrawHover()
     }
     return
   }
@@ -3031,7 +3040,7 @@ canvas.addEventListener("pointermove", (e) => {
     else if (tool === "ruler" || tool === "eraser" || tool === "callout") {
       cursor = toWorld(e)
       if (tool === "callout") calloutTool.hover(cursor)
-      redraw()
+      redrawHover()
     }
     return
   }
@@ -3043,7 +3052,7 @@ canvas.addEventListener("pointermove", (e) => {
       marquee = { x1: marqueePending.x, y1: marqueePending.y, x2: x, y2: y }
       marqueeHits = marqueePicks(marquee)
       suppressClick = true
-      redraw()
+      redrawHover()
     }
     return
   }
@@ -3066,7 +3075,7 @@ canvas.addEventListener("pointermove", (e) => {
     itemTool.hover(cursor)
   } else cursor = toSnappedPoint(e)
   hoverWorld = toWorld(e)
-  redraw()
+  redrawHover()
 })
 
 // линейка показывает замеры только пока курсор над холстом; подсветка тени направления двери — тоже

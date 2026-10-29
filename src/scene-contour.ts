@@ -1,3 +1,4 @@
+import { sceneMemo } from "./scene-cache"
 import type { Point, Wall } from "./types"
 import { add, coveredInterval, degenerate, displayPolygons, dist, dot, lerp, mul, sub, uncovered } from "./wall-geometry"
 
@@ -53,7 +54,15 @@ export function hiddenBy(q1: Point, q2: Point, pieces: Point[][]): [number, numb
 
 // Контур сцены: рёбра всех кусков отображаемых тел, открытые снаружи — точки,
 // смещённые от ребра по наружной нормали, не лежат ни в одном куске (change fix-wall-snap-overlap, design D2).
+// кэш по значениям стен (как displayPolygons): привязка курсора зовёт контур на каждое движение, а он от курсора не зависит;
+// результат общий и защищён от записи
+const contourMemo = sceneMemo<SceneContour>()
+
 export function sceneContour(walls: Wall[]): SceneContour {
+  return contourMemo(walls, null, () => computeSceneContour(walls))
+}
+
+function computeSceneContour(walls: Wall[]): SceneContour {
   const pieces = walls.filter((w) => !degenerate(w)).flatMap((w) => displayPolygons(w, walls))
   const open: OpenEdge[] = []
   for (const piece of pieces) {
@@ -78,7 +87,18 @@ export const farEnd = (e: OpenEdge, v: Point): Point => (dist(e.p1, v) <= LINE_T
 // Выпуклые вершины контура: точки, где сходятся два открытых участка разных направлений, причём
 // каждый участок уходит от вершины внутрь полуплоскости другого (вогнутая вершина — наоборот).
 // Порядок — по порядку открытых участков (стены массива), каждая точка один раз.
-export function convexCorners(scene: SceneContour): ConvexCorner[] {
+const cornersMemo = new WeakMap<SceneContour, readonly ConvexCorner[]>()
+
+export function convexCorners(scene: SceneContour): readonly ConvexCorner[] {
+  let corners = cornersMemo.get(scene)
+  if (!corners) {
+    corners = computeConvexCorners(scene)
+    cornersMemo.set(scene, corners)
+  }
+  return corners
+}
+
+function computeConvexCorners(scene: SceneContour): ConvexCorner[] {
   const corners: ConvexCorner[] = []
   const { open } = scene
   for (let i = 0; i < open.length; i++) {
