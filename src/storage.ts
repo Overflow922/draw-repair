@@ -12,7 +12,7 @@ import type { PlanId } from "./plans"
 import { mergeAllPlaster } from "./rough/plaster-marks"
 import { PLASTER_THICKNESS, SCREED_THICKNESS, isThickness } from "./rough/rough-model"
 import { isDoor, isWindow, normalizeMaterial } from "./types"
-import type { Battery, BatteryCornerPoint, BatteryMark, Callout, CeilingContent, Communication, CornerRef, DemolitionMark, Dimension, DimPoint, Doorway, Drawing, DrawingStore, DrywallWall, EdgePoint, EdgeRef, ExhaustFan, FurnitureContent, ItemPoint, JambPoint, LightFixture, LightLine, LightSwitch, MountingContent, PlasterMark, PlumbingContent, Point, ReconstructionContent, RightAngleMark, RoomRecord, Screed, FurnitureItem, StretchCeiling, ToiletSizes, SwitchingContent, SwitchKey, View, Wall, WallDoor, WallElement, WallWindow } from "./types"
+import type { Battery, BatteryCornerPoint, BatteryMark, Callout, CeilingContent, Communication, CornerRef, DemolitionMark, Dimension, DimPoint, Doorway, Drawing, DrawingStore, DrywallWall, ElectricalContent, EdgePoint, EdgeRef, ExhaustFan, FurnitureContent, ItemPoint, JambPoint, LightFixture, LightLine, LightSwitch, MountingContent, PlasterMark, PlumbingContent, Point, ReconstructionContent, RightAngleMark, RoomRecord, Screed, FurnitureItem, StretchCeiling, ToiletSizes, SwitchingContent, SwitchKey, View, Wall, WallDoor, WallElement, WallWindow } from "./types"
 
 const KEY = "draw-repair:drawing"
 
@@ -565,6 +565,20 @@ function loadCeiling(raw: unknown): { ceiling?: CeilingContent } {
   }
 }
 
+// объекты плана «Электрооборудование» при загрузке (change add-electrical-plan, design D4): только выноски и примечания по
+// общим правилам; поле, не являющееся объектом, читается как отсутствующее; подложка, мебель и выключатели в поле не хранятся
+function loadElectrical(raw: unknown): { electrical?: ElectricalContent } {
+  if (typeof raw !== "object" || raw === null || Array.isArray(raw)) return {}
+  const x = raw as Record<string, unknown>
+  const notes = loadNoteList(x.notes)
+  return {
+    electrical: {
+      ...(x.callouts === undefined ? null : { callouts: loadCalloutList(x.callouts) }),
+      ...(notes === undefined ? null : { notes }),
+    },
+  }
+}
+
 const emptyDrawing = (name: string): Drawing => ({
   id: crypto.randomUUID(),
   name,
@@ -634,6 +648,7 @@ export function parseStore(raw: string): LoadedStore | null {
           ...loadFurniture(dr.furniture),
           ...loadPlumbing(dr.plumbing),
           ...loadCeiling(dr.ceiling),
+          ...loadElectrical(dr.electrical),
           ...loadSwitching(dr.switching),
           dimensions: (Array.isArray(dr.dimensions) ? dr.dimensions : []).filter(isDimension).map(copyDimension),
         }

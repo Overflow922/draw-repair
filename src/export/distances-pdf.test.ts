@@ -115,7 +115,7 @@ describe("страница «Освещение. Расстояния» в PDF: 
   it("DP-1: страниц десять; девятая — «Освещение. Расстояния» после «Потолков и освещения», десятая — «Группы включения»", () => {
     const d = withLights([spot("s", 100, 80)])
     const pages = pagesOf(d)
-    expect(pages).toHaveLength(10)
+    expect(pages).toHaveLength(11) // TCR (change add-electrical-plan): одиннадцать — страница плана «Электрооборудование»
     expect(pages.map((p) => p.title)).toEqual([
       "Обмерочный план",
       "Демонтаж",
@@ -127,8 +127,9 @@ describe("страница «Освещение. Расстояния» в PDF: 
       "Потолки и освещение",
       NAME,
       "Группы включения",
+      "Электрооборудование", // TCR (change add-electrical-plan): одиннадцатая страница
     ])
-    expect(build(d).getNumberOfPages()).toBe(10)
+    expect(build(d).getNumberOfPages()).toBe(11) // TCR (change add-electrical-plan): одиннадцать — страница плана «Электрооборудование»
   })
 
   it("DP-2: название страницы выведено в полосе названия плана и в графе 5 основной надписи", () => {
@@ -240,7 +241,7 @@ describe("страница «Освещение. Расстояния» в PDF: 
     const page = pageOf(d, 8)
     expect(page.walls).toEqual(pageOf(d, 5).walls)
     expect(page.distances?.lights).toEqual([])
-    expect(build(d).getNumberOfPages()).toBe(10)
+    expect(build(d).getNumberOfPages()).toBe(11) // TCR (change add-electrical-plan): одиннадцать — страница плана «Электрооборудование»
   })
 })
 
@@ -272,7 +273,7 @@ describe("легенда страницы «Освещение. Расстоян
 
   it("DP-22: записи видов освещения только на страницах «Потолки и освещение», «Освещение. Расстояния» и «Группы включения»", () => {
     const pages = pagesOf(withLights([spot("s", 100, 80)]))
-    expect(pages.map((p) => labels(p).includes("Точечный встроенный светильник"))).toEqual([false, false, false, false, false, false, false, true, true, true])
+    expect(pages.map((p) => labels(p).includes("Точечный встроенный светильник"))).toEqual([false, false, false, false, false, false, false, true, true, true, false]) // TCR (change add-electrical-plan): светильников на странице «Электрооборудование» нет
   })
 
   it("DP-23: записей плана «Группы включения» нет", () => {

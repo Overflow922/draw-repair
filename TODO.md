@@ -1389,3 +1389,15 @@ Follow-ups from `snap-wall-to-opening-jambs` (verify, 2026-10-29).
 ### Tests
 - Фильтр «сдвинутый квадрат не нарушает проём» (`candidateBlock` в `alongJambs`, `src/wall-snap.ts`) не покрыт: мутант без него проходит весь набор. Сцены, где сдвинутая вершина попала бы в проём, естественно не строятся (над проёмом у грани кандидата грани нет). Нужен либо тест с искусственным `candidateBlock`, либо решение, что проверка избыточна, и её удаление.
 - Фильтр коммуникаций у сдвинутой позиции отдельным тестом не проверен (как и у привязки к линии, см. раздел `snap-wall-to-opening-jambs`).
+
+## Follow-ups from `add-electrical-plan` (2026-10-29)
+
+### Tests
+
+- [ ] `src/main.ts` wiring of the «Электрооборудование» plan (`onElectrical()` branches in pointer/keyboard handlers, `drawElectricalPlan`) has no DOM test: only `electrical-wiring.test.ts` reads the source. The flow was checked by hand in Firefox (callout create/undo/redo/erase, switches and furniture not selectable or erasable).
+
+### Out of scope
+
+- Electrical tools (sockets, points, «привязка» dimensions) — the plan currently has only «Выноска», «Линейка», «Примечания», «Ластик»; «Размер» deliberately omitted.
+- «Линейка» snapping to switches and height-of-installation labels on the plan (design open questions).
+- `src/main.ts` keeps growing a branch per plan (`onDemolition() || onRough() || onCeiling() || onElectrical()`); a per-plan handler table would be a separate refactor.

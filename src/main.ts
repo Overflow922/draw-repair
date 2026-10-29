@@ -83,6 +83,9 @@ import { warningText } from "./furniture/warning"
 import { CEILING_DROP_DEFAULT, parseDropMm } from "./ceiling/ceiling"
 import { ceilingScene } from "./ceiling/ceiling-scene"
 import type { CeilingScene } from "./ceiling/ceiling-scene"
+import { renderElectrical } from "./electrical/electrical-render"
+import { electricalScene } from "./electrical/electrical-scene"
+import type { ElectricalScene } from "./electrical/electrical-scene"
 import { createCeilingTool } from "./ceiling/ceiling-tool"
 import type { CeilingToolHost } from "./ceiling/ceiling-tool"
 import { openCeiling, storedCeiling } from "./ceiling/ceiling-workspace"
@@ -545,7 +548,21 @@ function loadWorking(): void {
   fixtures = []
   ceilingCache = null
   ceilingItems = []
+  electricalCache = null
+  electricalItems = []
   obstacles = []
+  if (activePlanOf(d) === "electrical") {
+    // подложка и мебель «Мебели» и выключатели «Потолков и освещения» только для чтения; правятся выноски и примечания (design D2)
+    const s = electricalNow()
+    walls = [...s.base.underlay, ...s.base.own]
+    electricalItems = s.items
+    dimensions = []
+    doorways = s.base.base.doorways
+    batteries = s.base.base.batteries
+    workspace = null
+    remnantHome = new Map()
+    return
+  }
   if (activePlanOf(d) === "ceiling") {
     // подложка и мебель «Мебели» только для чтения: инструменты плана правят потолки, освещение, метки линий, выключатели и
     // вытяжки (design D4; слит с планом «Группы включения», change merge-lighting-plans)
@@ -1179,6 +1196,14 @@ let ceilingItems: readonly FurnitureItem[] = []
 let ceilingDropMm = CEILING_DROP_DEFAULT
 let ceilingPanelOpen = false
 let ceilingEditor: { editor: NumberEditor; id: string } | null = null
+
+// план «Электрооборудование» (change add-electrical-plan, design D2, D3): подложка «Мебели», мебель и выключатели «Потолков и освещения»
+// только для чтения — без выделения и правки; правятся только выноски и примечания плана. Сцена держится в кэше до смены плана.
+const onElectrical = (): boolean => activePlanOf(current()) === "electrical"
+let electricalCache: ElectricalScene | null = null
+const electricalNow = (): ElectricalScene => (electricalCache ??= electricalScene(current()))
+// мебель «Мебели» для «Линейки»: замер до предметов, как на «Мебели»
+let electricalItems: readonly FurnitureItem[] = []
 
 // объекты освещения (change add-ceiling-lighting, design D5–D7) лежат рядом с потолками; шаг истории плана — снимок обоих списков
 const NO_LIGHTS: LightFixture[] = []
@@ -2340,6 +2365,7 @@ function drawPlan(): void {
   if (onFurniture()) drawFurniturePlan()
   else if (onPlumbing()) drawPlumbingPlan()
   else if (onCeiling()) drawCeilingPlan()
+  else if (onElectrical()) drawElectricalPlan()
   else if (onReconstruction()) drawReconstructionPlan()
   else if (onRough()) drawRoughPlan()
   else if (onDemolition()) drawDemolitionPlan()
@@ -2495,6 +2521,32 @@ function drawCeilingPlan(): void {
     unit,
     view,
     { palette: paletteOf(theme), theme, ruler: rulerOf(walls, batteries, ceilingItems) },
+  )
+}
+
+// план «Электрооборудование» (change add-electrical-plan, design D3): подложка «Мебели», мебель серыми линиями, выключатели «Потолков и
+// освещения» без выделения и подсветки, выноски; «Линейка» меряет до мебели, подсветка ластика — только у выноски
+function drawElectricalPlan(): void {
+  const s = electricalNow()
+  const erasingCallout = tool === "eraser" && cursor ? calloutTool.pick(cursor) : null
+  renderElectrical(
+    canvas,
+    {
+      walls: s.base.underlay,
+      doorways,
+      communications: communicationsOf(),
+      batteries,
+      pieces: s.base.pieces,
+      drywall: s.base.own,
+      items: electricalItems,
+      switches: s.switches,
+      callouts: calloutTool.displayList(),
+      selectedCalloutId: calloutTool.selectedId(),
+      erasingCalloutId: erasingCallout?.id ?? null,
+    },
+    unit,
+    view,
+    { palette: paletteOf(theme), theme, ruler: rulerOf(walls, batteries, electricalItems) },
   )
 }
 
@@ -3041,6 +3093,15 @@ canvas.addEventListener("pointermove", (e) => {
     }
     return
   }
+  if (onElectrical()) {
+    // «Линейка», «Ластик» и «Выноска» следят за курсором; других жестов на плане нет
+    if (tool === "ruler" || tool === "eraser" || tool === "callout") {
+      cursor = toWorld(e)
+      if (tool === "callout") calloutTool.hover(cursor)
+      redrawHover()
+    }
+    return
+  }
   if (onDemolition()) {
     // протяжка пометки перерисовывает сама; «Линейка» и «Ластик» следят за курсором
     if (tool === "demolition") demolitionTool.move(toWorld(e), screenPoint(e))
@@ -3091,7 +3152,7 @@ canvas.addEventListener("pointerleave", () => {
   if (tool === "plaster") plasterTool.hover(null)
   if (tool === "rightAngle") rightAngleTool.hover(null)
   if (tool === "furniture") itemTool.hover(null)
-  if ((tool === "ruler" || (tool === "eraser" && (onDemolition() || onRough() || onCeiling())) || ((tool === "light" || tool === "lightLine" || tool === "lightSwitch" || tool === "exhaust") && onCeiling())) && cursor) cursor = null
+  if ((tool === "ruler" || (tool === "eraser" && (onDemolition() || onRough() || onCeiling() || onElectrical())) || ((tool === "light" || tool === "lightLine" || tool === "lightSwitch" || tool === "exhaust") && onCeiling())) && cursor) cursor = null
   redraw()
 })
 
@@ -3193,6 +3254,19 @@ canvas.addEventListener("pointerdown", (e) => {
       return
     }
     pressCeiling(p)
+    return
+  }
+  if (onElectrical()) {
+    // без инструмента выделяется только выноска; подложка, мебель и выключатели не выделяются (spec electrical-plan «Состав плана»)
+    if (!selectionAllowed(tool)) return
+    const p = toWorld(e)
+    if (calloutTool.press(p)) {
+      suppressClick = true
+      canvas.setPointerCapture(e.pointerId)
+    } else if (calloutTool.selectedId() !== null) {
+      calloutTool.deselect()
+      redraw()
+    }
     return
   }
   if (onDemolition()) {
@@ -3517,6 +3591,13 @@ canvas.addEventListener("click", (e) => {
     const at = toWorld(e)
     if (tool === "callout") calloutTool.click(at)
     else if (tool === "eraser" && !calloutTool.eraseAt(at) && !demolitionTool.erase(at)) eraseBatteryMark(at)
+    return
+  }
+  // на плане «Электрооборудование» «Выноска» ставится кликом, «Ластик» стирает только выноску: подложка, мебель и выключатели не стираются
+  if (onElectrical()) {
+    const at = toWorld(e)
+    if (tool === "callout") calloutTool.click(at)
+    else if (tool === "eraser") calloutTool.eraseAt(at)
     return
   }
   const p = toSnappedPoint(e)
@@ -4599,6 +4680,8 @@ window.addEventListener("keydown", (e) => {
       }
       return
     }
+    // мебель, подложка и выключатели не удаляются: выделенная выноска удалена выше, больше удалять нечего
+    if (onElectrical()) return
     if (groupMove || endpointDrag || panDrag || dimDrag || doorwayTool.dragging() || communicationTool.dragging() || batteryTool.dragging()) return
     deleteSelection()
     return
@@ -4640,6 +4723,21 @@ window.addEventListener("keydown", (e) => {
       resetLines()
       resetSwitches()
       resetExhausts()
+    } else if (action === "deactivate-tool") setTool("none")
+    return
+  }
+  if (e.key === "Escape" && onElectrical()) {
+    const action = escapeAction({
+      tool,
+      gestureActive: false,
+      dimensionDraft: false,
+      calloutDraft: calloutTool.hasDraft(),
+      hasSelection: calloutTool.selectedId() !== null,
+    })
+    if (action === "cancel-callout-draft") calloutTool.cancelDraft()
+    else if (action === "clear-selection") {
+      calloutTool.deselect()
+      redraw()
     } else if (action === "deactivate-tool") setTool("none")
     return
   }
@@ -4688,7 +4786,7 @@ window.addEventListener("keydown", (e) => {
     return
   }
   // на плане «Демонтаж» нет стен, материалов и элементов: стрелки ничего не двигают и не переключают
-  if (onDemolition() || onRough() || onCeiling()) return
+  if (onDemolition() || onRough() || onCeiling() || onElectrical()) return
   if (groupMove || endpointDrag || panDrag || dimDrag || doorwayTool.dragging() || communicationTool.dragging() || batteryTool.dragging()) return
   // выделенная коммуникация и выноска стрелками не двигаются и материал не переключается (spec communications)
   if (selectedCommunication || calloutTool.selectedId() !== null || selectedRoom !== null) return

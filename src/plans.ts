@@ -12,6 +12,7 @@ export const PLANS = [
   { id: "furniture", label: "Мебель" },
   { id: "plumbing", label: "Сантехника" },
   { id: "ceiling", label: "Потолки и освещение" },
+  { id: "electrical", label: "Электрооборудование" },
 ] as const
 
 export type PlanId = (typeof PLANS)[number]["id"]
@@ -48,6 +49,9 @@ const PLAN_TOOLS: Record<PlanId, readonly [Tool, ...Tool[]]> = {
   // «Линия освещения» (change add-light-lines), «Выключатель» (change add-light-switch) и «Вытяжка» (change add-exhaust-fan) перешли на этот
   // план из плана «Группы включения», слитого с ним (change merge-lighting-plans, design D7)
   ceiling: ["stretchCeiling", "light", "lightLine", "lightSwitch", "exhaust", "callout", "ruler", "notes", "eraser"],
+  // «Электрооборудование» (change add-electrical-plan, design D5): подложка «Мебели» и выключатели только для чтения, своих
+  // объектов нет; инструменты электрики встанут перед общими
+  electrical: ["callout", "ruler", "notes", "eraser"],
 }
 
 export const toolsOf = (plan: PlanId): readonly Tool[] => PLAN_TOOLS[plan]

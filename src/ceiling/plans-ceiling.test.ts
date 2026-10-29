@@ -17,7 +17,7 @@ const OTHER_PLANS = ["measure", "demolition", "mounting", "rough", "reconstructi
 describe("каталог", () => {
   it("CP-20: «Потолки и освещение» (ceiling) — восьмой, последний план каталога, после «Сантехники»", () => {
     // TCR (change merge-lighting-plans): плана «Группы включения» в каталоге больше нет, его объекты стали объектами этого плана
-    expect(PLANS.map((p) => p.id)).toEqual(["measure", "demolition", "mounting", "rough", "reconstruction", "furniture", "plumbing", "ceiling"])
+    expect(PLANS.map((p) => p.id)).toEqual(["measure", "demolition", "mounting", "rough", "reconstruction", "furniture", "plumbing", "ceiling", "electrical"]) // TCR (change add-electrical-plan): девять — девятый план «Электрооборудование»
     expect(PLANS[7]).toEqual({ id: "ceiling", label: "Потолки и освещение" })
     expect(isPlanId("switching")).toBe(false)
   })

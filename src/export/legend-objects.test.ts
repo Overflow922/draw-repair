@@ -93,6 +93,7 @@ describe("легенда: объекты на страницах докумен�
       ["Кирпич", "Батарея", "Стояк"], // TCR (change add-ceiling-plan): восьмая страница «Потолки и освещение»
       ["Кирпич"], // TCR (change split-ceiling-pdf-pages): девятая страница «Освещение. Расстояния» — только чистовые стены, батареи и стояка нет
       ["Кирпич", "Батарея", "Стояк"], // TCR (change add-switching-plan): десятая страница «Группы включения»
+      ["Кирпич", "Батарея", "Стояк"], // TCR (change add-electrical-plan): одиннадцатая страница «Электрооборудование»
     ])
   })
 
@@ -100,6 +101,6 @@ describe("легенда: объекты на страницах докумен�
   it("единственная батарея, помеченная сносом: на «Демонтаже» запись есть, на «Монтаже», «Черновых работах» и «Реконструкции» нет", () => {
     const pages = pagesOf(drawing({ batteries: [BATTERY], batteryDemolition: [{ id: "bm", batteryId: "b1" }] }))
     // TCR (change reconstruction-plan): пятая страница «Реконструкция» — подложка из тех же видимых батарей, что у «Монтажа»
-    expect(pages.map((p) => labels(p).includes("Батарея"))).toEqual([true, true, false, false, false, false, false, false, false, false]) // TCR (change split-ceiling-pdf-pages): десять — вторая страница плана «Потолки и освещение» // TCR (change furniture-plan-table): «Мебель» — как «Реконструкция» // TCR (change add-plumbing-plan): «Сантехника» — тоже // TCR (change add-ceiling-plan): восемь — восьмой план «Потолки и освещение» // TCR (change add-switching-plan): девять — девятый план «Группы включения»
+    expect(pages.map((p) => labels(p).includes("Батарея"))).toEqual([true, true, false, false, false, false, false, false, false, false, false]) // TCR (change split-ceiling-pdf-pages): десять — вторая страница плана «Потолки и освещение» // TCR (change furniture-plan-table): «Мебель» — как «Реконструкция» // TCR (change add-plumbing-plan): «Сантехника» — тоже // TCR (change add-ceiling-plan): восемь — восьмой план «Потолки и освещение» // TCR (change add-switching-plan): девять — девятый план «Группы включения» // TCR (change add-electrical-plan): батареи нет и на странице «Электрооборудование»
   })
 })

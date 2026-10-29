@@ -339,6 +339,13 @@ export interface PlumbingContent {
   notes?: string[]
 }
 
+// Собственные объекты плана «Электрооборудование» (change add-electrical-plan, design D4): только выноски и примечания;
+// подложка, мебель и выключатели берутся из других планов и здесь не хранятся
+export interface ElectricalContent {
+  callouts?: Callout[]
+  notes?: string[]
+}
+
 // Натяжной потолок помещения (change add-ceiling-plan, design D2): опорная точка — точка клика и место подписи «-50мм»;
 // действует, пока опорная точка лежит в помещении экспликации; dropMm — опускание полотна от плиты, целое больше нуля
 export interface StretchCeiling {
@@ -459,6 +466,8 @@ export interface Drawing {
   plumbing?: PlumbingContent
   // объекты плана «Потолки и освещение»; отсутствие — пустой план, при загрузке не дописывается (add-ceiling-plan design D2)
   ceiling?: CeilingContent
+  // выноски и примечания плана «Электрооборудование»; отсутствие — пустой план, при загрузке не дописывается (add-electrical-plan design D4)
+  electrical?: ElectricalContent
   // метки линий, выключатели и вытяжки плана «Потолки и освещение» (прежнее поле плана «Группы включения»); отсутствие — их нет, при
   // загрузке не дописывается (add-switching-plan design D2)
   switching?: SwitchingContent

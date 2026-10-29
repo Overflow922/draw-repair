@@ -25,6 +25,8 @@ import { furnitureScene } from "../furniture/furniture-scene"
 import { plumbingScene } from "../plumbing/plumbing-scene"
 import { drawCeilingScene } from "../ceiling/ceiling-render"
 import { switchingScene } from "../switching/switching-scene"
+import { drawElectricalScene } from "../electrical/electrical-render"
+import { electricalScene } from "../electrical/electrical-scene"
 import { drawSwitchingScene } from "../switching/switching-render"
 import type { LineLabelView } from "../switching/switching-render"
 import { visibleLines } from "../switching/light-lines"
@@ -203,6 +205,14 @@ export interface PlanPage {
   // слой плана «Группы включения» (change add-switching-plan, design D7): предметы «Мебели» серой подложкой и все объекты освещения
   // знаками, без потолков и расстояний; рядом лежит reconstruction (подложка)
   switching?: SwitchingLayer
+  // слой плана «Электрооборудование» (change add-electrical-plan, design D6): предметы «Мебели» серой подложкой и выключатели знаком;
+  // рядом лежит reconstruction (подложка)
+  electrical?: ElectricalLayer
+}
+
+export interface ElectricalLayer {
+  items: readonly FurnitureItem[]
+  switches: readonly LightSwitch[]
 }
 
 export interface SwitchingLayer {
@@ -370,6 +380,23 @@ export function pagesOf(drawing: Drawing): PlanPage[] {
           title: plan.label,
         }
       }
+      // страница «Электрооборудование» (change add-electrical-plan, design D6): подложка «Мебели» без размеров, предметы «Мебели» серым
+      // и выключатели «Потолков и освещения»; светильников, вытяжек, меток линий и потолков нет
+      case "electrical": {
+        const scene = electricalScene(drawing, reconstructionScene(drawing, mounting))
+        return {
+          walls: scene.base.underlay,
+          dimensions: [],
+          doorways: mounting.doorways,
+          ...shared,
+          ...(mounting.batteries.length ? { batteries: mounting.batteries } : null),
+          ...callouts,
+          ...notes,
+          reconstruction: { pieces: scene.base.pieces, drywall: scene.base.own },
+          electrical: { items: scene.items, switches: scene.switches },
+          title: plan.label,
+        }
+      }
     }
   }
   // третья страница плана «Группы включения» (change add-switching-plan, design D7; слит с планом «Потолки и освещение» в change
@@ -450,7 +477,10 @@ export function pageBounds(page: PlanPage, scale: number): BBox {
   const switches = (page.switching?.switches ?? []).flatMap((s) => switchExtent(s, kMm, PDF_METRICS.symbolMmPx))
   // центры вытяжек (change add-exhaust-fan): знак постоянного размера лежит у центра, как у объектов освещения
   const exhausts = (page.switching?.exhausts ?? []).map((f): Point => ({ x: f.x, y: f.y }))
-  const extra = [...marks, ...bodies, ...rects, ...calloutPoints, ...rough, ...reconstruction, ...items, ...ceilingItems, ...switchingItems, ...lights, ...switches, ...exhausts]
+  // предметы и выключатели страницы «Электрооборудование» (change add-electrical-plan): предметы без габаритов, знак выключателя с подписями
+  const electricalItems = (page.electrical?.items ?? []).flatMap(itemCorners)
+  const electricalSwitches = (page.electrical?.switches ?? []).flatMap((s) => switchExtent(s, kMm, PDF_METRICS.symbolMmPx))
+  const extra = [...marks, ...bodies, ...rects, ...calloutPoints, ...rough, ...reconstruction, ...items, ...ceilingItems, ...switchingItems, ...lights, ...switches, ...exhausts, ...electricalItems, ...electricalSwitches]
   const walls = page.reconstruction ? [...page.walls, ...page.reconstruction.drywall] : page.walls
   return wallsBBox(walls, page.dimensions, 0.5 * scale, page.doorways, scale, extra, batteries, page.furniture?.items)
 }
@@ -522,6 +552,8 @@ function drawPage(
       drawCeilingScene(ctx, w, h, { ...scene, items: [], ceilings: [], lights: page.distances.lights, lightBodies: page.distances.lightBodies }, unit, view, { ...opts, translucent: pdfTranslucent(doc) })
     // страница «Группы включения»: те же слои без потолков и расстояний (change add-switching-plan, design D7)
     else if (page.switching !== undefined) drawSwitchingScene(ctx, w, h, { ...scene, items: page.switching.items, lights: page.switching.lights, lineLabels: page.switching.lineLabels, switches: page.switching.switches, exhausts: page.switching.exhausts }, unit, view, { ...opts, translucent: pdfTranslucent(doc) })
+    // страница «Электрооборудование»: подложка, предметы серым и выключатели без освещения, потолков и расстояний (change add-electrical-plan, design D6)
+    else if (page.electrical !== undefined) drawElectricalScene(ctx, w, h, { ...scene, items: page.electrical.items, switches: page.electrical.switches }, unit, view, { ...opts, translucent: pdfTranslucent(doc) })
     else drawReconstructionScene(ctx, w, h, scene, unit, view, opts)
     return
   }

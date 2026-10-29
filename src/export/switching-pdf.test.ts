@@ -87,7 +87,7 @@ const YELLOW_FILLS = (ops: PaintOp[]): PaintOp[] => ops.filter((op) => op.kind =
 describe("страница «Группы включения»", () => {
   it("SW-30: страница десятая; на ней знаки светильника и люстры, без расстояний и подписи потолка", () => {
     const doc = build(full())
-    expect(doc.getNumberOfPages()).toBe(10)
+    expect(doc.getNumberOfPages()).toBe(11) // TCR (change add-electrical-plan): одиннадцать — страница плана «Электрооборудование»
     expect(redBars(parsePaint(doc, 10)).length).toBeGreaterThan(0)
     const shown = textsOn(10)
     for (const t of ["100", "80", "-50мм"]) expect(shown).not.toContain(t)
@@ -107,7 +107,7 @@ describe("страница «Группы включения»", () => {
 
   it("SW-33: страница без мебели и освещения остаётся", () => {
     const doc = build(room())
-    expect(doc.getNumberOfPages()).toBe(10)
+    expect(doc.getNumberOfPages()).toBe(11) // TCR (change add-electrical-plan): одиннадцать — страница плана «Электрооборудование»
     expect(redBars(parsePaint(doc, 10))).toEqual([])
   })
 

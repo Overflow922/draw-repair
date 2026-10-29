@@ -90,7 +90,7 @@ describe("освещение на странице PDF", () => {
   it("CL-P1: на восьмой странице знаки светильника и бра без размеров, размеры «100», «80» светильника и «120» бра — на девятой", () => {
     const d = withLights([spot("s", 100, 80), sconce])
     const doc = build(d)
-    expect(doc.getNumberOfPages()).toBe(10) // TCR (change add-switching-plan): девять — девятый план «Группы включения» // TCR (change split-ceiling-pdf-pages): десять — вторая страница плана «Потолки и освещение»
+    expect(doc.getNumberOfPages()).toBe(11) // TCR (change add-switching-plan): девять — девятый план «Группы включения» // TCR (change split-ceiling-pdf-pages): десять — вторая страница плана «Потолки и освещение» // TCR (change add-electrical-plan): одиннадцать — страница плана «Электрооборудование»
     expect(redBars(parsePaint(doc, 8)).length).toBeGreaterThan(0)
     for (const distance of ["100", "80", "120"]) expect(textsOn(8)).not.toContain(distance)
     expect(textsOn(9)).toEqual(expect.arrayContaining(["100", "80", "120"]))

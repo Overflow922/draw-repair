@@ -75,7 +75,8 @@ export function legendEntries(page: PlanPage): LegendEntry[] {
   // «Линия освещения» — после видов освещения, если на странице показана хотя бы одна метка (change add-light-lines, design D7)
   if ((page.switching?.lineLabels.length ?? 0) > 0) entries.push({ kind: "light-line", label: "Линия освещения" })
   // «Выключатель» — после «Линии освещения», если на странице есть хотя бы один выключатель (change add-light-switch, design D7)
-  if ((page.switching?.switches.length ?? 0) > 0) entries.push({ kind: "light-switch", label: "Выключатель" })
+  // страница «Электрооборудование» (change add-electrical-plan, design D6) даёт только эту запись: её предметы — подложка
+  if ((page.switching?.switches.length ?? page.electrical?.switches.length ?? 0) > 0) entries.push({ kind: "light-switch", label: "Выключатель" })
   // мебель: запись на каждый вид каталога, чьи предметы есть на странице, в порядке каталога (change furniture-items-catalog, design D6)
   for (const item of FURNITURE_KIND_ORDER)
     if (page.furniture?.items.some((i) => i.kind === item)) entries.push({ kind: "furniture", item, label: kindEntry(item).label })

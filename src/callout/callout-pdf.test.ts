@@ -142,7 +142,7 @@ describe("отрисовка страниц", () => {
   it("C-PDF-3b: PDF содержит шесть страниц и собирается с выносками на всех планах", () => {
     calls.length = 0
     const doc = buildPdfPages(pagesOf(all()), "cm", SCALE, "A4", font, "t", new Date(2026, 0, 1))
-    expect(doc.getNumberOfPages()).toBe(10) // TCR (change furniture-plan-table): шесть // TCR (change add-plumbing-plan): семь — седьмой план «Сантехника» // TCR (change add-ceiling-plan): восемь — восьмой план «Потолки и освещение» // TCR (change add-switching-plan): девять — девятый план «Группы включения» // TCR (change split-ceiling-pdf-pages): десять — вторая страница плана «Потолки и освещение»
+    expect(doc.getNumberOfPages()).toBe(11) // TCR (change furniture-plan-table): шесть // TCR (change add-plumbing-plan): семь — седьмой план «Сантехника» // TCR (change add-ceiling-plan): восемь — восьмой план «Потолки и освещение» // TCR (change add-switching-plan): девять — девятый план «Группы включения» // TCR (change split-ceiling-pdf-pages): десять — вторая страница плана «Потолки и освещение» // TCR (change add-electrical-plan): одиннадцать — страница плана «Электрооборудование»
   })
 })
 
@@ -233,6 +233,6 @@ describe("границы содержимого страницы", () => {
     expect(b.minX).toBeLessThanOrEqual(100)
     const doc = buildPdfPages(pagesOf(only), "cm", SCALE, "A4", font, "t", new Date(2026, 0, 1))
     // TCR (change add-rough-works-plan): страниц четыре; TCR (change reconstruction-plan): пять
-    expect(doc.getNumberOfPages()).toBe(10) // TCR (change furniture-plan-table): шесть // TCR (change add-plumbing-plan): семь — седьмой план «Сантехника» // TCR (change add-ceiling-plan): восемь — восьмой план «Потолки и освещение» // TCR (change add-switching-plan): девять — девятый план «Группы включения» // TCR (change split-ceiling-pdf-pages): десять — вторая страница плана «Потолки и освещение»
+    expect(doc.getNumberOfPages()).toBe(11) // TCR (change furniture-plan-table): шесть // TCR (change add-plumbing-plan): семь — седьмой план «Сантехника» // TCR (change add-ceiling-plan): восемь — восьмой план «Потолки и освещение» // TCR (change add-switching-plan): девять — девятый план «Группы включения» // TCR (change split-ceiling-pdf-pages): десять — вторая страница плана «Потолки и освещение» // TCR (change add-electrical-plan): одиннадцать — страница плана «Электрооборудование»
   })
 })

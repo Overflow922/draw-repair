@@ -115,10 +115,10 @@ describe("страница «Потолки и освещение» в PDF", () 
   it("CP-140: страниц восемь; восьмая — заливка помещения жёлтым, стол серыми линиями без габаритов, подпись «-50мм»", () => {
     const d = full()
     const pages = pagesOf(d)
-    expect(pages).toHaveLength(10) // TCR (change add-switching-plan): девять — девятый план «Группы включения» // TCR (change split-ceiling-pdf-pages): десять — вторая страница плана «Потолки и освещение»
+    expect(pages).toHaveLength(11) // TCR (change add-switching-plan): девять — девятый план «Группы включения» // TCR (change split-ceiling-pdf-pages): десять — вторая страница плана «Потолки и освещение» // TCR (change add-electrical-plan): одиннадцать — страница плана «Электрооборудование»
     expect(pages[7]?.title).toBe("Потолки и освещение")
     const doc = build(d)
-    expect(doc.getNumberOfPages()).toBe(10) // TCR (change add-switching-plan): девять — девятый план «Группы включения» // TCR (change split-ceiling-pdf-pages): десять — вторая страница плана «Потолки и освещение»
+    expect(doc.getNumberOfPages()).toBe(11) // TCR (change add-switching-plan): девять — девятый план «Группы включения» // TCR (change split-ceiling-pdf-pages): десять — вторая страница плана «Потолки и освещение» // TCR (change add-electrical-plan): одиннадцать — страница плана «Электрооборудование»
     const ops = parsePaint(doc, 8)
     expect(roomFillIndex(ops)).toBeGreaterThanOrEqual(0)
     // стол 80 × 160 см при 1:50 — 16 × 32 мм: серые линии, без заливки и без чёрных линий
@@ -188,7 +188,7 @@ describe("страница «Потолки и освещение» в PDF", () 
     const page = pagesOf(d)[7]
     expect(page?.walls).toEqual(pagesOf(d)[5]?.walls)
     expect(page?.ceiling?.ceilings).toEqual([])
-    expect(build(d).getNumberOfPages()).toBe(10) // TCR (change add-switching-plan): девять — девятый план «Группы включения» // TCR (change split-ceiling-pdf-pages): десять — вторая страница плана «Потолки и освещение»
+    expect(build(d).getNumberOfPages()).toBe(11) // TCR (change add-switching-plan): девять — девятый план «Группы включения» // TCR (change split-ceiling-pdf-pages): десять — вторая страница плана «Потолки и освещение» // TCR (change add-electrical-plan): одиннадцать — страница плана «Электрооборудование»
   })
 
   it("CP-145: заливка того же жёлтого, что на светлой схеме: страница не зависит от схемы экрана", () => {
@@ -212,7 +212,7 @@ describe("легенда страницы «Потолки и освещение
   })
 
   it("CP-151: «Натяжной потолок» только на своей странице", () => {
-    expect(pagesOf(full()).map((p) => labels(p).includes("Натяжной потолок"))).toEqual([false, false, false, false, false, false, false, true, false, false]) // TCR (change add-switching-plan): девять — девятый план «Группы включения» // TCR (change split-ceiling-pdf-pages): десять — вторая страница плана «Потолки и освещение» без потолков
+    expect(pagesOf(full()).map((p) => labels(p).includes("Натяжной потолок"))).toEqual([false, false, false, false, false, false, false, true, false, false, false]) // TCR (change add-switching-plan): девять — девятый план «Группы включения» // TCR (change split-ceiling-pdf-pages): десять — вторая страница плана «Потолки и освещение» без потолков // TCR (change add-electrical-plan): одиннадцатая страница без натяжного потолка
   })
 
   it("CP-152: недействующий потолок записи не даёт", () => {
@@ -220,11 +220,11 @@ describe("легенда страницы «Потолки и освещение
   })
 
   it("CP-153: «Гипсокартон» на «Реконструкции», «Мебели», «Сантехнике» и «Потолках и освещении»", () => {
-    expect(pagesOf(full()).map((p) => labels(p).includes("Гипсокартон"))).toEqual([false, false, false, false, true, true, true, true, true, true]) // TCR (change add-switching-plan): девять — девятый план «Группы включения» // TCR (change split-ceiling-pdf-pages): десять — вторая страница плана «Потолки и освещение» с гипсокартоном подложки
+    expect(pagesOf(full()).map((p) => labels(p).includes("Гипсокартон"))).toEqual([false, false, false, false, true, true, true, true, true, true, true]) // TCR (change add-switching-plan): девять — девятый план «Группы включения» // TCR (change split-ceiling-pdf-pages): десять — вторая страница плана «Потолки и освещение» с гипсокартоном подложки // TCR (change add-electrical-plan): гипсокартон подложки есть и на странице «Электрооборудование»
   })
 
   it("CP-154: «Стол» только на странице «Мебель»", () => {
-    expect(pagesOf(full()).map((p) => labels(p).includes("Стол"))).toEqual([false, false, false, false, false, true, false, false, false, false]) // TCR (change add-switching-plan): девять — девятый план «Группы включения» // TCR (change split-ceiling-pdf-pages): десять — вторая страница плана «Потолки и освещение» без мебели
+    expect(pagesOf(full()).map((p) => labels(p).includes("Стол"))).toEqual([false, false, false, false, false, true, false, false, false, false, false]) // TCR (change add-switching-plan): девять — девятый план «Группы включения» // TCR (change split-ceiling-pdf-pages): десять — вторая страница плана «Потолки и освещение» без мебели // TCR (change add-electrical-plan): мебель на странице «Электрооборудование» — подложка, записи вида нет
   })
 
   it("CP-155: образец «Натяжной потолок» — жёлтая заливка с тёмным контуром", () => {

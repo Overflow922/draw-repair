@@ -89,7 +89,7 @@ describe("страницы PDF", () => {
     const pages = pagesOf(base(list))
     // TCR (change add-rough-works-plan): страниц четыре — коммуникации лежат и на странице «Черновые работы»;
     // TCR (change reconstruction-plan): пять — и на странице «Реконструкция»
-    expect(pages).toHaveLength(10) // TCR (change furniture-plan-table): шесть — и на странице «Мебель» // TCR (change add-plumbing-plan): семь — седьмой план «Сантехника» // TCR (change add-ceiling-plan): восемь — восьмой план «Потолки и освещение» // TCR (change add-switching-plan): девять — девятый план «Группы включения» // TCR (change split-ceiling-pdf-pages): десять — вторая страница плана «Потолки и освещение»
+    expect(pages).toHaveLength(11) // TCR (change furniture-plan-table): шесть — и на странице «Мебель» // TCR (change add-plumbing-plan): семь — седьмой план «Сантехника» // TCR (change add-ceiling-plan): восемь — восьмой план «Потолки и освещение» // TCR (change add-switching-plan): девять — девятый план «Группы включения» // TCR (change split-ceiling-pdf-pages): десять — вторая страница плана «Потолки и освещение» // TCR (change add-electrical-plan): одиннадцать — страница плана «Электрооборудование»
     for (const p of withCommunications(pages)) expect(p.communications).toEqual(list)
   })
 
@@ -99,7 +99,7 @@ describe("страницы PDF", () => {
     const distances = pages.filter((p) => p.distances !== undefined)
     expect(distances).toHaveLength(1)
     expect(distances[0]?.communications).toBeUndefined()
-    expect(withCommunications(pages)).toHaveLength(9)
+    expect(withCommunications(pages)).toHaveLength(10) // TCR (change add-electrical-plan): на странице «Электрооборудование» коммуникации есть
   })
 
   it("CF-01b: без коммуникаций страницы их не несут", () => {

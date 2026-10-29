@@ -113,11 +113,11 @@ describe("страница «Сантехника» в PDF", () => {
   it("PP-01: страниц семь; седьмая — «Сантехника»: раковина линиями без заливки, зелёный гипсокартон, стола нет", () => {
     const d = withFurniture(base(), [table(), sink()])
     const pages = pagesOf(d)
-    expect(pages).toHaveLength(10) // TCR (change add-ceiling-plan): восемь — восьмой план «Потолки и освещение» // TCR (change add-switching-plan): девять — девятый план «Группы включения» // TCR (change split-ceiling-pdf-pages): десять — вторая страница плана «Потолки и освещение»
+    expect(pages).toHaveLength(11) // TCR (change add-ceiling-plan): восемь — восьмой план «Потолки и освещение» // TCR (change add-switching-plan): девять — девятый план «Группы включения» // TCR (change split-ceiling-pdf-pages): десять — вторая страница плана «Потолки и освещение» // TCR (change add-electrical-plan): одиннадцать — страница плана «Электрооборудование»
     expect(pages[6]?.title).toBe("Сантехника")
     expect(pages[6]?.furniture?.items.map((t) => t.id)).toEqual(["s"])
     const doc = build(d)
-    expect(doc.getNumberOfPages()).toBe(10) // TCR (change add-ceiling-plan): восемь — восьмой план «Потолки и освещение» // TCR (change add-switching-plan): девять — девятый план «Группы включения» // TCR (change split-ceiling-pdf-pages): десять — вторая страница плана «Потолки и освещение»
+    expect(doc.getNumberOfPages()).toBe(11) // TCR (change add-ceiling-plan): восемь — восьмой план «Потолки и освещение» // TCR (change add-switching-plan): девять — девятый план «Группы включения» // TCR (change split-ceiling-pdf-pages): десять — вторая страница плана «Потолки и освещение» // TCR (change add-electrical-plan): одиннадцать — страница плана «Электрооборудование»
     // раковина 45 × 40 см при 1:50 — 9 × 8 мм; стол 80 × 160 — 16 × 32 мм
     expect(inkStrokesOfSize(doc, 7, 9, 8).length).toBeGreaterThan(0)
     expect(fillsOfSize(doc, 7, 9, 8)).toBe(0)
@@ -166,7 +166,7 @@ describe("страница «Сантехника» в PDF", () => {
     expect(page?.walls).toHaveLength(2)
     expect(page?.walls).toEqual(pagesOf(d)[5]?.walls)
     expect(page?.furniture?.items).toEqual([])
-    expect(build(d).getNumberOfPages()).toBe(10) // TCR (change add-ceiling-plan): восемь — восьмой план «Потолки и освещение» // TCR (change add-switching-plan): девять — девятый план «Группы включения» // TCR (change split-ceiling-pdf-pages): десять — вторая страница плана «Потолки и освещение»
+    expect(build(d).getNumberOfPages()).toBe(11) // TCR (change add-ceiling-plan): восемь — восьмой план «Потолки и освещение» // TCR (change add-switching-plan): девять — девятый план «Группы включения» // TCR (change split-ceiling-pdf-pages): десять — вторая страница плана «Потолки и освещение» // TCR (change add-electrical-plan): одиннадцать — страница плана «Электрооборудование»
   })
 })
 
@@ -196,7 +196,7 @@ describe("легенда страницы «Сантехника»", () => {
 
   it("PP-11: «Гипсокартон» на «Реконструкции», «Мебели» и «Сантехнике», но не на первых четырёх страницах", () => {
     const pages = pagesOf(base())
-    expect(pages.map((p) => labels(p).includes("Гипсокартон"))).toEqual([false, false, false, false, true, true, true, true, true, true]) // TCR (change add-ceiling-plan): восемь — восьмой план «Потолки и освещение» // TCR (change add-switching-plan): девять — девятый план «Группы включения» // TCR (change split-ceiling-pdf-pages): десять — вторая страница плана «Потолки и освещение» с гипсокартоном подложки
+    expect(pages.map((p) => labels(p).includes("Гипсокартон"))).toEqual([false, false, false, false, true, true, true, true, true, true, true]) // TCR (change add-ceiling-plan): восемь — восьмой план «Потолки и освещение» // TCR (change add-switching-plan): девять — девятый план «Группы включения» // TCR (change split-ceiling-pdf-pages): десять — вторая страница плана «Потолки и освещение» с гипсокартоном подложки // TCR (change add-electrical-plan): гипсокартон подложки есть и на странице «Электрооборудование»
   })
 
   it("PP-12: стен гипсокартона нет — записи «Гипсокартон» на «Сантехнике» нет", () => {
@@ -205,6 +205,6 @@ describe("легенда страницы «Сантехника»", () => {
 
   it("PP-13: «Стол» только на странице «Мебель», на «Сантехнике» его нет", () => {
     const pages = pagesOf(withFurniture(base(), [table(), sink()]))
-    expect(pages.map((p) => labels(p).includes("Стол"))).toEqual([false, false, false, false, false, true, false, false, false, false]) // TCR (change add-ceiling-plan): восемь — восьмой план «Потолки и освещение» // TCR (change add-switching-plan): девять — девятый план «Группы включения» // TCR (change split-ceiling-pdf-pages): десять — вторая страница плана «Потолки и освещение» без мебели
+    expect(pages.map((p) => labels(p).includes("Стол"))).toEqual([false, false, false, false, false, true, false, false, false, false, false]) // TCR (change add-ceiling-plan): восемь — восьмой план «Потолки и освещение» // TCR (change add-switching-plan): девять — девятый план «Группы включения» // TCR (change split-ceiling-pdf-pages): десять — вторая страница плана «Потолки и освещение» без мебели // TCR (change add-electrical-plan): мебель на странице «Электрооборудование» — подложка, записи вида нет
   })
 })
