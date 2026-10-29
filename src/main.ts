@@ -47,6 +47,9 @@ import { formatRoomHeight, parseRoomHeight, reconcileRooms } from "./room-explic
 import { rulerReading } from "./ruler"
 import type { RulerReading } from "./ruler"
 import { rulerObjectsOf } from "./ruler-objects"
+import { drawingFileErrorMessage, importDrawingFile, serializeDrawingFile } from "./drawing-file/drawing-file"
+import { drawingFileName } from "./drawing-file/drawing-names"
+import { downloadText } from "./drawing-file/download"
 import { exportPages, pagesOf } from "./export/pdf"
 import { fitScale, scaleLabel } from "./export/fit-scale"
 import type { PageFormat } from "./export/pdf"
@@ -247,6 +250,9 @@ const roomHeightInput = document.querySelector<HTMLInputElement>("#room-height")
 const scaleLabelEl = document.querySelector<HTMLElement>("#scale-label")!
 const pdfFormat = document.querySelector<HTMLSelectElement>("#pdf-format")!
 const pdfExportBtn = document.querySelector<HTMLButtonElement>("#pdf-export")!
+const fileSaveBtn = document.querySelector<HTMLButtonElement>("#file-save")!
+const fileOpenBtn = document.querySelector<HTMLButtonElement>("#file-open")!
+const fileInput = document.querySelector<HTMLInputElement>("#file-input")!
 const toolOpeningsBtn = document.querySelector<HTMLButtonElement>("#tool-openings")!
 const openingsPanel = document.querySelector<HTMLElement>("#openings-panel")!
 const toolDoorwayBtn = document.querySelector<HTMLButtonElement>("#tool-doorway")!
@@ -4575,6 +4581,33 @@ pdfExportBtn.addEventListener("click", () => {
   const scale = fitScale(pages, format)
   if (scale === null) return
   exportPages(pages, unit, scale, format, drawing.name)
+})
+
+// файл чертежа (change export-import-drawing-file): активная вкладка со всеми планами ↔ файл; загрузка — новая вкладка,
+// как «+», без шага истории
+fileSaveBtn.addEventListener("click", () => {
+  commitWorking()
+  const drawing = current()
+  downloadText(serializeDrawingFile(drawing), drawingFileName(drawing.name))
+})
+
+fileOpenBtn.addEventListener("click", () => fileInput.click())
+
+function openDrawingFile(text: string): void {
+  const result = importDrawingFile(text, new Set(store.drawings.map((d) => d.name)), crypto.randomUUID())
+  if (!result.ok) {
+    alert(drawingFileErrorMessage(result.reason))
+    return
+  }
+  store.drawings.push(result.drawing)
+  dirty = true
+  activate(result.drawing.id)
+}
+
+fileInput.addEventListener("change", () => {
+  const file = fileInput.files?.[0]
+  fileInput.value = "" // повторный выбор того же файла снова вызывает событие
+  if (file) file.text().then(openDrawingFile, () => alert("Не удалось прочитать файл."))
 })
 
 // масштаб зависит от формата: подпись пересчитывается при его смене

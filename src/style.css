@@ -291,7 +291,9 @@ body {
 #undo-btn,
 #redo-btn,
 #ortho-toggle,
-#theme-toggle {
+#theme-toggle,
+#file-save,
+#file-open {
   width: 28px;
   height: 28px;
   padding: 0;

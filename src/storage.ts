@@ -596,6 +596,49 @@ export function serializeStore(store: DrawingStore): string {
   return JSON.stringify(store)
 }
 
+// чтение одного чертежа, прошедшего isDrawing: общее для документа хранилища и файла чертежа (drawing-storage
+// «Общие правила чтения чертежа»)
+export function readDrawing({ activePlan, demolition, mounting, batteryDemolition, ...dr }: Drawing): Drawing {
+  const batteries = loadBatteries(dr.batteries, dr.walls)
+  const notes = loadNoteList(dr.notes)
+  const demolitionNotes = loadNoteList(dr.demolitionNotes)
+  const roughNotes = loadNoteList(dr.roughNotes)
+  const mountingPart = loadMounting(mounting)
+  const walls = assignIds(dr.walls)
+  return {
+    // поля чертежа перечислены явно: масштаб, записанный прежними версиями, в модель не попадает (drawing-storage)
+    id: dr.id,
+    name: dr.name,
+    view: dr.view,
+    // активный план — необязательное поле: допустимое сохраняется, остальное отбрасывается (drawing-plans design D3)
+    ...loadActivePlan(activePlan),
+    walls,
+    ...loadDemolition(demolition, dr.walls),
+    ...mountingPart,
+    ...loadDoorways(dr.doorways, dr.walls),
+    ...loadCommunications(dr.communications),
+    ...batteries,
+    ...loadBatteryDemolition(batteryDemolition, batteries.batteries ?? []),
+    ...(Array.isArray(dr.callouts) ? { callouts: loadCalloutList(dr.callouts) } : null),
+    ...(Array.isArray(dr.demolitionCallouts) ? { demolitionCallouts: loadCalloutList(dr.demolitionCallouts) } : null),
+    ...(notes === undefined ? null : { notes }),
+    ...(demolitionNotes === undefined ? null : { demolitionNotes }),
+    ...loadPlaster(dr.roughPlaster, [...walls, ...(mountingPart.mounting?.walls ?? [])]),
+    ...loadScreeds(dr.roughScreeds),
+    ...loadRightAngles(dr.roughAngles),
+    ...(Array.isArray(dr.roughCallouts) ? { roughCallouts: loadCalloutList(dr.roughCallouts) } : null),
+    ...(roughNotes === undefined ? null : { roughNotes }),
+    ...loadRooms(dr.rooms),
+    ...loadReconstruction(dr.reconstruction),
+    ...loadFurniture(dr.furniture),
+    ...loadPlumbing(dr.plumbing),
+    ...loadCeiling(dr.ceiling),
+    ...loadElectrical(dr.electrical),
+    ...loadSwitching(dr.switching),
+    dimensions: (Array.isArray(dr.dimensions) ? dr.dimensions : []).filter(isDimension).map(copyDimension),
+  }
+}
+
 export function parseStore(raw: string): LoadedStore | null {
   let data: unknown
   try {
@@ -613,46 +656,7 @@ export function parseStore(raw: string): LoadedStore | null {
       typeof d.activeId === "string" && d.drawings.every((x) => isDrawing(x, version)) &&
       d.drawings.some((x) => (x as Drawing).id === d.activeId)
     ) {
-      const drawings = (d.drawings as Drawing[]).map(({ activePlan, demolition, mounting, batteryDemolition, ...dr }): Drawing => {
-        const batteries = loadBatteries(dr.batteries, dr.walls)
-        const notes = loadNoteList(dr.notes)
-        const demolitionNotes = loadNoteList(dr.demolitionNotes)
-        const roughNotes = loadNoteList(dr.roughNotes)
-        const mountingPart = loadMounting(mounting)
-        const walls = assignIds(dr.walls)
-        return {
-          // поля чертежа перечислены явно: масштаб, записанный прежними версиями, в модель не попадает (drawing-storage)
-          id: dr.id,
-          name: dr.name,
-          view: dr.view,
-          // активный план — необязательное поле: допустимое сохраняется, остальное отбрасывается (drawing-plans design D3)
-          ...loadActivePlan(activePlan),
-          walls,
-          ...loadDemolition(demolition, dr.walls),
-          ...mountingPart,
-          ...loadDoorways(dr.doorways, dr.walls),
-          ...loadCommunications(dr.communications),
-          ...batteries,
-          ...loadBatteryDemolition(batteryDemolition, batteries.batteries ?? []),
-          ...(Array.isArray(dr.callouts) ? { callouts: loadCalloutList(dr.callouts) } : null),
-          ...(Array.isArray(dr.demolitionCallouts) ? { demolitionCallouts: loadCalloutList(dr.demolitionCallouts) } : null),
-          ...(notes === undefined ? null : { notes }),
-          ...(demolitionNotes === undefined ? null : { demolitionNotes }),
-          ...loadPlaster(dr.roughPlaster, [...walls, ...(mountingPart.mounting?.walls ?? [])]),
-          ...loadScreeds(dr.roughScreeds),
-          ...loadRightAngles(dr.roughAngles),
-          ...(Array.isArray(dr.roughCallouts) ? { roughCallouts: loadCalloutList(dr.roughCallouts) } : null),
-          ...(roughNotes === undefined ? null : { roughNotes }),
-          ...loadRooms(dr.rooms),
-          ...loadReconstruction(dr.reconstruction),
-          ...loadFurniture(dr.furniture),
-          ...loadPlumbing(dr.plumbing),
-          ...loadCeiling(dr.ceiling),
-          ...loadElectrical(dr.electrical),
-          ...loadSwitching(dr.switching),
-          dimensions: (Array.isArray(dr.dimensions) ? dr.dimensions : []).filter(isDimension).map(copyDimension),
-        }
-      })
+      const drawings = (d.drawings as Drawing[]).map(readDrawing)
       return { store: { version: 3, activeId: d.activeId, drawings }, readOnly: false }
     }
     return null

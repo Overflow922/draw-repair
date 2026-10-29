@@ -1401,3 +1401,9 @@ Follow-ups from `snap-wall-to-opening-jambs` (verify, 2026-10-29).
 - Electrical tools (sockets, points, «привязка» dimensions) — the plan currently has only «Выноска», «Линейка», «Примечания», «Ластик»; «Размер» deliberately omitted.
 - «Линейка» snapping to switches and height-of-installation labels on the plan (design open questions).
 - `src/main.ts` keeps growing a branch per plan (`onDemolition() || onRough() || onCeiling() || onElectrical()`); a per-plan handler table would be a separate refactor.
+
+## Follow-ups from `export-import-drawing-file` (2026-10-29)
+
+### Tests
+
+- [ ] `src/main.ts` wiring of the drawing file buttons (`#file-save`, `#file-open`, hidden `#file-input` change handler, `openDrawingFile`, native `alert` on rejection, `downloadText` in `src/drawing-file/download.ts`) has no DOM test: the pure rules (`serializeDrawingFile`, `parseDrawingFile`, `importDrawingFile`, `drawingFileName`, `uniqueDrawingName`, `adoptDrawing`) are unit-tested. The flow was checked by hand in Firefox: download name and content, load as a new tab, repeated load, four rejection kinds, reload persistence, a table placed right before saving lands in the file.
