@@ -1,7 +1,9 @@
 import { CENTER_SNAP_RADIUS_PX, PX_PER_CM, SNAP_RADIUS_PX } from "./types"
 import type { Communication, Point, Wall, WallElement } from "./types"
+import type { TrackLine } from "./battery/battery-guide"
 import { violatesCommunications } from "./communications/guard"
 import { violatesDoorways } from "./doorway/doorway-guard"
+import { jambLines, snapToJambs } from "./doorway/jamb-snap"
 import { convexCorners, EDGE_SHIFT, edgeNormals, farEnd, hiddenBy, LINE_TOL, sceneContour } from "./scene-contour"
 import type { ConvexCorner, OpenEdge, SceneContour } from "./scene-contour"
 import { orthoDirection } from "./wall-angle"
@@ -48,8 +50,9 @@ export type SnapTarget = "face" | "cap" | "corner"
 
 export interface VertexSnap {
   point: Point
-  source: "wall" | "grid"
+  source: "wall" | "grid" | "jamb" // jamb — квадрат стороной на плоскости откоса элемента стены (change snap-wall-to-opening-jambs)
   normal?: Point // наружная нормаль грани или торца при прилипании (для квадрата установки)
+  tracks?: TrackLine[] // у jamb — пунктирные линии привязки от откоса до квадрата
   target?: SnapTarget // вид прилипания — грань или торец (опора начала цепочки)
   base?: Point // середина стороны квадрата, приставленной к грани/торцу (у торца — не вершина)
   parallel?: ParallelStart // у угла торца — начало стены, идущей вдоль оси существующей стены наружу
@@ -264,7 +267,7 @@ export function placementSquare(snap: VertexSnap, sizeCm: number): Point[] {
 export function chainEndSquare(end: Point, dir: Point, snap: VertexSnap | null, sizeCm: number): Point[] {
   const stuck =
     snap !== null &&
-    snap.source === "wall" &&
+    snap.source !== "grid" &&
     Math.abs(snap.point.x - end.x) <= EPS &&
     Math.abs(snap.point.y - end.y) <= EPS
   return stuck ? placementSquare(snap, sizeCm) : squareOnSide(end, mul(dir, -1), sizeCm)
@@ -319,8 +322,29 @@ export function snapVertex(
   for (const w of walls) if (!degenerate(w)) wallCandidates(w, p, scene, newHalf, reach, corners, accept)
   const best = nearest(p, accepted)
   if (best) return wallSnap(best)
+  const blocked = candidateBlock(walls, doorways, communications, newWallThicknessCm)
+  const jamb = snapToJambs(p, jambLines(walls, doorways), newWallThicknessCm, radiusCm, gridStepCm, (c) => {
+    if (overlapsBodies(squareOnSide(c.base, c.normal, newWallThicknessCm), scene().pieces)) return false
+    return !(blocked && blocked(c))
+  })
+  if (jamb) return jambSnap(jamb)
   const grid = (v: number): number => Math.round(v / gridStepCm) * gridStepCm
   return { point: { x: grid(p.x), y: grid(p.y) }, source: "grid" }
+}
+
+// Линии привязки к откосам для отрисовки: пока квадрат стоит в точке привязки. shown — где квадрат стоит на деле: курсор
+// до первого клика, конец сегмента в цепочке (конец, обрезанный ограничениями, — не в точке привязки: линии нет)
+export function jambTracks(snap: VertexSnap | null, shown: Point | null): TrackLine[] {
+  if (!snap?.tracks || !shown) return []
+  return dist(shown, snap.point) <= EPS ? snap.tracks : []
+}
+
+// квадрат установки — как у грани: normal и base неперечислимы, линии привязки — для отрисовки
+function jambSnap(c: { point: Point; base: Point; normal: Point; tracks: TrackLine[] }): VertexSnap {
+  const result: VertexSnap = { point: c.point, source: "jamb", tracks: c.tracks }
+  Object.defineProperty(result, "normal", { value: c.normal, enumerable: false })
+  Object.defineProperty(result, "base", { value: c.base, enumerable: false })
+  return result
 }
 
 // Привязка начальной вершины до первого клика (change fix-grid-square-touching-wall, design D1):
@@ -362,7 +386,7 @@ function candidateBlock(
   doorways: readonly WallElement[],
   communications: readonly Communication[],
   sizeCm: number,
-): ((c: Candidate) => boolean) | null {
+): ((c: Pick<Candidate, "base" | "normal">) => boolean) | null {
   if (!doorways.length && !communications.length) return null
   return (c) => {
     const probe: Wall = { id: "", a: c.base, b: add(c.base, mul(c.normal, sizeCm)), thicknessCm: sizeCm, type: "brick" }
@@ -563,7 +587,7 @@ export function wallClickAction(raw: Point, snap: VertexSnap, walls: Wall[], tol
     if (!degenerate(w) && displayPolygons(w, walls).some((poly) => pointInPolygon(raw, poly)))
       return { kind: "select", wall: w }
   }
-  if (snap.source === "wall") return { kind: "draw" }
+  if (snap.source !== "grid") return { kind: "draw" }
   const hit = hitWall(raw, walls, toleranceCm)
   return hit ? { kind: "select", wall: hit } : { kind: "draw" }
 }

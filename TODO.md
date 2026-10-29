@@ -1368,3 +1368,18 @@ Follow-ups from `furniture-kind-groups` (2026-10-28).
 ## Tests
 
 - [ ] The group menu wiring in `src/main.ts` (panel moving under the open group's button, kind button visibility) is checked only by source assertions in `furniture-ui.test.ts` and by hand in the browser; the pure transitions are unit-tested in `furniture-groups.test.ts`.
+
+---
+
+Follow-ups from `snap-wall-to-opening-jambs` (verify, 2026-10-29).
+
+## Out of scope
+
+- [ ] End of a segment with a fixed direction (ortho, typed angle) does not snap to the jamb plane: the ray x jamb line intersection is not used (`snapOnRay` in `src/wall-snap.ts`). Open question in the change's `design.md`; decide after using the start/second-vertex snap for a while.
+- [ ] The jamb line is shown only when the placement square is within the snap radius (12 px). A hint from farther away (about 35 px, snap still 12 px) was offered and declined by the user; revisit if the line is hard to find.
+
+## Tests
+
+- [ ] `snapVertex` jamb candidates are filtered by communications and by the doorway guard (`candidateBlock` in `src/wall-snap.ts`), but no test covers either filter; only the overlap with wall bodies is tested (WJ-8 in `src/wall-snap-jamb.test.ts`, which asserts only `source !== "jamb"`). Add: a communication inside the square rejects the position and the other side of the line is used; the guard case needs a scene where the probe block violates a doorway.
+- [ ] No direct test that the jamb line never reaches PDF, the saved drawing or history ("Линия не сохраняется"); covered only by `tracks` being used in `src/render.ts` and `src/main.ts` alone and by WJ-12 (inputs not mutated).
+- [ ] `wallJambTracks` wiring in `src/main.ts` (both `drawMeasurePlan` and `drawReconstructionPlan` pass `tracks`) was checked by hand in the browser (wall on the measure plan, drywall on the reconstruction plan); only `jambTracks` is unit-tested (`src/wall-snap-jamb-render.test.ts`).

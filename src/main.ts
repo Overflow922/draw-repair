@@ -15,7 +15,7 @@ import { applyNotesText, notesText } from "./notes/notes-actions"
 import { notesOf, withNotes } from "./notes/notes-store"
 import { moveEndpointBounded, moveWallsBounded, resizeWallBounded } from "./wall-edit"
 import type { EditMode } from "./wall-edit"
-import { centerSnapRadiusCm, chainEndSquare, placementSquare, snapRadiusCm, snapStartVertex, wallClickAction } from "./wall-snap"
+import { centerSnapRadiusCm, chainEndSquare, jambTracks, placementSquare, snapRadiusCm, snapStartVertex, wallClickAction } from "./wall-snap"
 import type { VertexSnap } from "./wall-snap"
 import type { TrackLine } from "./battery/battery-guide"
 import { parseAngleDeg, startRefOf } from "./wall-angle"
@@ -2552,6 +2552,7 @@ function drawReconstructionPlan(): void {
       marqueeHits,
       marquee,
       square,
+      tracks: wallJambTracks(),
       angle:
         chainStart && segment?.dir && segment.refRay && segment.angleDeg !== null
           ? { at: segment.start, from: segment.refRay, to: segment.dir, deg: segment.angleDeg }
@@ -2688,11 +2689,17 @@ function drawMeasurePlan(): void {
   })
 }
 
-// риски центровки: батареи по окну (change fix-battery-centering-and-numbers, design D2) и мебели (change furniture-center-snap)
+// линии привязки квадрата установки стены к плоскостям откосов (change snap-wall-to-opening-jambs)
+function wallJambTracks(): TrackLine[] {
+  return isWallTool() && cursor ? jambTracks(cursorSnap, chainStart ? (segment?.end ?? null) : cursor) : []
+}
+
+// риски центровки: батареи по окну (change fix-battery-centering-and-numbers, design D2), мебели (change furniture-center-snap)
+// и линии привязки стены к откосам
 function centerGuideTracks(): TrackLine[] | null {
   const guide = tool === "battery" || batteryTool.dragging() ? batteryTool.guide() : null
   const furnitureGuides = tool === "furniture" || itemTool.dragging() ? itemTool.guides() : []
-  const tracks = [...(guide ? [guide] : []), ...furnitureGuides]
+  const tracks = [...(guide ? [guide] : []), ...furnitureGuides, ...wallJambTracks()]
   return tracks.length > 0 ? tracks : null
 }
 
