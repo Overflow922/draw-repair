@@ -1,4 +1,5 @@
 import { drawCallouts } from "../callout/callout-render"
+import { previewSceneOf } from "../preview-scene"
 import { drawDimensionsLayer, drawGestureOverlays, drawHandles, drawPlacementHints, prepareCanvas, SCREEN_METRICS, tracePolygons } from "../render"
 import type { RenderOptions } from "../render"
 import { drawRoughScene } from "../rough/rough-render"
@@ -94,11 +95,12 @@ export function drawReconstructionScene(
   const own = [...scene.drywall]
   // геометрия стен ГКЛ считается по ним самим: подложка торцы и углы гипсокартона не меняет
   const drywallScene: Wall[] = scene.preview ? [...own, scene.preview] : own
+  const sceneOf = previewSceneOf(scene.preview ?? null, own, drywallScene)
   const drawn: RenderOptions = { ...opts, metrics: m, palette }
 
   const overlay = (c: CanvasRenderingContext2D): void => {
-    for (const { wall, color } of scene.outlines ?? []) drawHalo(c, wall, drywallScene, toScreen, color, m.contourPx)
-    for (const wall of own) drawDrywallWall(c, wall, drywallScene, toScreen, colors, m.contourPx)
+    for (const { wall, color } of scene.outlines ?? []) drawHalo(c, wall, sceneOf(wall), toScreen, color, m.contourPx)
+    for (const wall of own) drawDrywallWall(c, wall, sceneOf(wall), toScreen, colors, m.contourPx)
     if (scene.preview) {
       c.globalAlpha = PREVIEW_ALPHA
       drawDrywallWall(c, scene.preview, drywallScene, toScreen, colors, m.contourPx)

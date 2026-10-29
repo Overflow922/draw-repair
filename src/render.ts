@@ -11,6 +11,7 @@ import type { ElementLabel } from "./doorway/element-label"
 import { formatLength } from "./format-length"
 import { dimGeometry, dimensionGeometry, visibleWorld } from "./geometry"
 import type { DimGeometry } from "./geometry"
+import { previewSceneOf } from "./preview-scene"
 import { findRooms, formatArea } from "./room-area"
 import type { Room } from "./room-area"
 import { blockTexts, roomBlockLayout, roomBlocksOf } from "./room-block"
@@ -220,13 +221,14 @@ export function drawScene(
   const selectedDims = opts.selectedDims ?? []
   const singleWalls = selectedWalls.length === 1 && !selectedDims.length
   const singleDim = selectedDims.length === 1 && !selectedWalls.length
-  for (const wall of selectedWalls) drawOutline(ctx, wall, sceneWalls, toScreen, p.selection)
+  const sceneOf = previewSceneOf(preview, walls, sceneWalls)
+  for (const wall of selectedWalls) drawOutline(ctx, wall, sceneOf(wall), toScreen, p.selection)
   for (const wall of opts.marqueeHits?.walls ?? [])
-    if (!selectedWalls.includes(wall)) drawOutline(ctx, wall, sceneWalls, toScreen, p.marqueeWall)
-  if (opts.hover && !selectedWalls.includes(opts.hover)) drawOutline(ctx, opts.hover, sceneWalls, toScreen, p.erase)
+    if (!selectedWalls.includes(wall)) drawOutline(ctx, wall, sceneOf(wall), toScreen, p.marqueeWall)
+  if (opts.hover && !selectedWalls.includes(opts.hover)) drawOutline(ctx, opts.hover, sceneOf(opts.hover), toScreen, p.erase)
   const o = toScreen({ x: 0, y: 0 })
   const doorways = opts.doorways ?? []
-  for (const wall of walls) drawWall(ctx, wall, sceneWalls, 1, toScreen, o, m, p, doorways)
+  for (const wall of walls) drawWall(ctx, wall, sceneOf(wall), 1, toScreen, o, m, p, doorways)
   if (preview) drawWall(ctx, preview, sceneWalls, 0.4, toScreen, o, m, p, [])
   if (singleWalls) drawHandles(ctx, selectedWalls[0], toScreen, p)
   drawPlacementHints(ctx, toScreen, opts, m, p)
