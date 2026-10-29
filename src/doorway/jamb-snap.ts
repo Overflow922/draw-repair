@@ -1,6 +1,6 @@
 import type { TrackLine } from "../battery/battery-guide"
 import type { Point, Wall, WallElement } from "../types"
-import { add, dot, mul, perp, sub, unit } from "../wall-geometry"
+import { add, cross, dot, mul, perp, sub, unit } from "../wall-geometry"
 import type { Side } from "./doorway-faces"
 import { hostOf, hostPoint, jambsT } from "./doorway-faces"
 
@@ -136,6 +136,23 @@ export function snapToJambs(
     const vertex = alongLine(first.line, shifted, p, gridStepCm)
     const found = candidateOf(vertex, normal, half)
     if (accept(found)) return { ...found, tracks: [track(first.line, vertex, normal, half)] }
+  }
+  return null
+}
+
+// Квадрат, прилипший к грани стены, сдвигается вдоль грани к линии откоса (change jamb-snap-along-wall-face, design D1–D4):
+// только линии, перпендикулярные грани (направление параллельно нормали квадрата) — они дают сторону квадрата вдоль нормали.
+// c — кандидат грани: вершина и опора на грани, normal — наружная нормаль грани. null — сдвига нет.
+export function alignAlongFace(c: JambCandidate, lines: readonly JambLine[], thicknessCm: number, radiusCm: number, accept: JambAccept): JambSnap | null {
+  const half = thicknessCm / 2
+  const perpendicularToFace = lines.filter((line) => Math.abs(cross(line.dir, c.normal)) <= PERPENDICULAR_TOL)
+  for (const q of perpendicularToFace.flatMap((line) => positions(c.base, line, half, radiusCm)).sort(byDistance)) {
+    const m = lateral(q.line)
+    const shift = mul(m, q.side * half - dot(sub(c.base, q.line.origin), m))
+    const moved: JambCandidate = { point: add(c.point, shift), base: add(c.base, shift), normal: c.normal }
+    if (!accept(moved)) continue
+    const centre = add(moved.base, mul(c.normal, half))
+    return { ...moved, tracks: [track(q.line, centre, mul(m, q.side), half)] }
   }
   return null
 }

@@ -1383,3 +1383,9 @@ Follow-ups from `snap-wall-to-opening-jambs` (verify, 2026-10-29).
 - [ ] `snapVertex` jamb candidates are filtered by communications and by the doorway guard (`candidateBlock` in `src/wall-snap.ts`), but no test covers either filter; only the overlap with wall bodies is tested (WJ-8 in `src/wall-snap-jamb.test.ts`, which asserts only `source !== "jamb"`). Add: a communication inside the square rejects the position and the other side of the line is used; the guard case needs a scene where the probe block violates a doorway.
 - [ ] No direct test that the jamb line never reaches PDF, the saved drawing or history ("Линия не сохраняется"); covered only by `tracks` being used in `src/render.ts` and `src/main.ts` alone and by WJ-12 (inputs not mutated).
 - [ ] `wallJambTracks` wiring in `src/main.ts` (both `drawMeasurePlan` and `drawReconstructionPlan` pass `tracks`) was checked by hand in the browser (wall on the measure plan, drywall on the reconstruction plan); only `jambTracks` is unit-tested (`src/wall-snap-jamb-render.test.ts`).
+
+## Follow-ups from `jamb-snap-along-wall-face` (verify, 2026-10-29)
+
+### Tests
+- Фильтр «сдвинутый квадрат не нарушает проём» (`candidateBlock` в `alongJambs`, `src/wall-snap.ts`) не покрыт: мутант без него проходит весь набор. Сцены, где сдвинутая вершина попала бы в проём, естественно не строятся (над проёмом у грани кандидата грани нет). Нужен либо тест с искусственным `candidateBlock`, либо решение, что проверка избыточна, и её удаление.
+- Фильтр коммуникаций у сдвинутой позиции отдельным тестом не проверен (как и у привязки к линии, см. раздел `snap-wall-to-opening-jambs`).

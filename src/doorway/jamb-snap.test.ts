@@ -2,8 +2,8 @@ import { describe, expect, it } from "vitest"
 import type { Point, WallElement } from "../types"
 import { door, w } from "./doorway.test-utils"
 import { win } from "./window.test-utils"
-import { jambLines, snapToJambs } from "./jamb-snap"
-import type { JambLine } from "./jamb-snap"
+import { alignAlongFace, jambLines, snapToJambs } from "./jamb-snap"
+import type { JambCandidate, JambLine } from "./jamb-snap"
 
 // change snap-wall-to-opening-jambs: линии откосов и прилипание квадрата стороной к линии
 // (spec wall-drawing «Привязка к плоскости откоса проёма»). Эталоны — из спецификации и геометрии сцен.
@@ -149,10 +149,72 @@ describe("snapToJambs", () => {
     expect(JSON.parse(JSON.stringify(ls))).toEqual(copy)
   })
 
+  it("JS-15: линия — бесконечная в обе стороны (участок за стеной вне квадрата не отсекается)", () => {
+    near(snap({ x: 104, y: 400 }, lines(DOOR))!.point, 110, 400)
+  })
+
   it("JS-14: из параллельных линий берётся ближайшая — откос x = 190", () => {
     const r = snap({ x: 186, y: -60 }, lines(DOOR))
     // стороны квадрата курсора x = 176 и 196: до линии 190 — 14 и 6; ближайшая — правая, квадрат уходит влево от линии
     near(r!.base, 190, -60)
     near(r!.point, 180, -60)
+  })
+})
+
+// квадрат, прилипший к грани горизонтальной стены F сверху (y = −110): нормаль (0, −1), вершина и опора — на грани
+const onFaceF = (x: number): JambCandidate => ({ point: { x, y: -110 }, base: { x, y: -110 }, normal: { x: 0, y: -1 } })
+const align = (c: JambCandidate, ls: JambLine[], accept: (c: JambCandidate) => boolean = ANY) => alignAlongFace(c, ls, T, RADIUS, accept)
+
+describe("alignAlongFace", () => {
+  it("AF-1: квадрат у грани сдвигается вдоль неё до линии откоса: (104, −110) → (110, −110), вершина остаётся на грани", () => {
+    const r = align(onFaceF(104), lines(DOOR))
+    expect(r).not.toBeNull()
+    near(r!.point, 110, -110)
+    near(r!.base, 110, -110)
+    expect(r!.normal).toEqual({ x: 0, y: -1 })
+  })
+
+  it("AF-2: пунктир — от откоса на грани W до дальнего края стороны квадрата: (100, −10) — (100, −130)", () => {
+    const [t] = align(onFaceF(104), lines(DOOR))!.tracks
+    near(t.from, 100, -10)
+    near(t.to, 100, -130)
+  })
+
+  it("AF-3: вне радиуса привязки — сдвига нет", () => {
+    expect(align(onFaceF(130), lines(DOOR))).toBeNull()
+  })
+
+  it("AF-4: ближайшая из двух сторон — слева от линии: (96, −110) → (90, −110)", () => {
+    near(align(onFaceF(96), lines(DOOR))!.point, 90, -110)
+  })
+
+  it("AF-5: на самой линии — позиция снаружи проёма: (100, −110) → (90, −110)", () => {
+    near(align(onFaceF(100), lines(DOOR))!.point, 90, -110)
+  })
+
+  it("AF-6: позиция снаружи отклонена — берётся вторая сторона линии", () => {
+    near(align(onFaceF(100), lines(DOOR), (c) => c.point.x > 100)!.point, 110, -110)
+    expect(align(onFaceF(100), lines(DOOR), () => false)).toBeNull()
+  })
+
+  it("AF-7: линия, параллельная грани, вдоль грани не сдвигает: квадрат у вертикальной грани, линии x = 100 и 190 вертикальны", () => {
+    const onVerticalFace: JambCandidate = { point: { x: 95, y: -60 }, base: { x: 95, y: -60 }, normal: { x: 1, y: 0 } }
+    expect(align(onVerticalFace, lines(DOOR))).toBeNull()
+  })
+
+  it("AF-8: у вертикальной грани сдвиг идёт по вертикали к горизонтальной линии: (90, −204) → (90, −210)", () => {
+    const v = w(-300, -400, -300, 400, "V")
+    const ls = jambLines([v], [door("V", "a", 200, 90, 210, "dv")])
+    const onVerticalFace: JambCandidate = { point: { x: 90, y: -204 }, base: { x: 90, y: -204 }, normal: { x: 1, y: 0 } }
+    const r = align(onVerticalFace, ls)
+    near(r!.point, 90, -210)
+    near(r!.base, 90, -210)
+  })
+
+  it("AF-9: входные данные не изменяются", () => {
+    const c = onFaceF(104)
+    const copy = JSON.parse(JSON.stringify(c))
+    align(c, lines(DOOR))
+    expect(JSON.parse(JSON.stringify(c))).toEqual(copy)
   })
 })

@@ -70,10 +70,99 @@ describe("привязка вершины к плоскости откоса", (
     expect(r.tracks).toHaveLength(2)
   })
 
-  it("WJ-7: тела стен приоритетнее линии — у грани W вне проёма привязка к стене", () => {
-    // квадрат x ∈ [74, 94] у грани y = −10; сторона x = 94 — в 6 см от линии x = 100, но грань приоритетнее
-    expect(start({ x: 84, y: -14 }).source).toBe("wall")
-    expect(vertex({ x: 84, y: -14 }).source).toBe("wall")
+  it("WJ-7: тела стен приоритетнее линии поперёк грани, вдоль грани квадрат идёт к линии: (84, −14) → (90, −10)", () => {
+    // квадрат x ∈ [74, 94] у грани y = −10; сторона x = 94 — в 6 см от линии x = 100: сдвиг на 6 см вдоль грани
+    for (const r of [start({ x: 84, y: -14 }), vertex({ x: 84, y: -14 })]) {
+      expect(r.source).toBe("wall")
+      near(r.point, 90, -10)
+      expect(r.tracks).toHaveLength(1)
+    }
+  })
+
+  it("WJ-17: у грани свободной стены F квадрат подтягивается к линии откоса W: (104, −122) → (110, −110), пунктир (100, −10)–(100, −130)", () => {
+    const f = w(0, -100, 500, -100, "F")
+    const r = start({ x: 104, y: -122 }, [W0, f])
+    expect(r.source).toBe("wall")
+    near(r.point, 110, -110)
+    const sq = placementSquare(r, T)
+    expect(Math.min(...sq.map((q) => q.x))).toBeCloseTo(100, 6)
+    expect(Math.max(...sq.map((q) => q.x))).toBeCloseTo(120, 6)
+    expect(Math.min(...sq.map((q) => q.y))).toBeCloseTo(-130, 6)
+    expect(Math.max(...sq.map((q) => q.y))).toBeCloseTo(-110, 6)
+    near(r.tracks![0].from, 100, -10)
+    near(r.tracks![0].to, 100, -130)
+  })
+
+  it("WJ-18: без проёмов прилипание к грани прежнее: (104, −122) → (104, −110), линий нет", () => {
+    const f = w(0, -100, 500, -100, "F")
+    const r = start({ x: 104, y: -122 }, [W0, f], [])
+    expect(r.source).toBe("wall")
+    near(r.point, 104, -110)
+    expect(r.tracks).toBeUndefined()
+  })
+
+  it("WJ-19: сдвиг не отрывает квадрат от стены — тонкая стена (10 см) у короткой F (до x = 179): квадрат остаётся у грани без линии", () => {
+    // квадрат [169, 179] у конца F; сдвиг на линию x = 190 (на 11 см) дал бы [180, 190], не касающийся F
+    const f = w(0, -100, 179, -100, "F")
+    const r = snapStartVertex({ x: 179, y: -122 }, [W0, f], RADIUS, STEP, 10, [DOOR])
+    expect(r.source).toBe("wall")
+    near(r.point, 174, -110)
+    expect(r.tracks).toBeUndefined()
+  })
+
+  it("WJ-19b: тот же сдвиг у F подлиннее (до x = 185) допустим: квадрат остаётся касающимся стены", () => {
+    const f = w(0, -100, 185, -100, "F")
+    const r = snapStartVertex({ x: 185, y: -122 }, [W0, f], RADIUS, STEP, 10, [DOOR])
+    expect(r.source).toBe("wall")
+    expect(r.tracks).toHaveLength(1)
+    expect(Math.max(...placementSquare(r, 10).map((q) => q.x))).toBeCloseTo(190, 6)
+  })
+
+  it("WJ-22: сдвиг, при котором квадрат налагался бы на тело другой стены, не выполняется", () => {
+    // G (тело x ∈ [117, 137]) мешает квадрату [100, 120] у линии x = 100; квадрат у грани [94, 114] свободен
+    const g = w(127, -200, 127, -125, "G")
+    const r = start({ x: 104, y: -122 }, [W0, w(0, -100, 500, -100, "F"), g])
+    expect(r.source).toBe("wall")
+    near(r.point, 104, -110)
+    expect(r.tracks).toBeUndefined()
+  })
+
+  it("WJ-23: у торца свободной стены линия откоса квадрат не сдвигает: цель прилипания — торец, а не грань", () => {
+    const v = w(300, 0, 300, 500, "V")
+    const dv = door("V", "a", 100, 90, 210, "dv") // откосы y = 100 и 190: линии горизонтальны
+    const f = w(0, 110, 250, 110, "F") // свободный торец на x = 250, квадрат у торца лежит на y ∈ [100, 120]
+    const r = start({ x: 252, y: 112 }, [v, f], [dv])
+    expect(r.source).toBe("wall")
+    expect(r.tracks).toBeUndefined()
+  })
+  it("WJ-20: вторая вершина цепочки у грани F тоже подтягивается к линии откоса", () => {
+    const f = w(0, -100, 500, -100, "F")
+    const seg = chainSegment({
+      start: { x: 400, y: -300 },
+      ref: null,
+      raw: { x: 104, y: -122 },
+      walls: [W0, f],
+      radiusCm: RADIUS,
+      gridStepCm: STEP,
+      thicknessCm: T,
+      ortho: false,
+      typedAngleDeg: null,
+      typedLengthCm: null,
+      doorways: [DOOR],
+    })
+    expect(seg.snap.source).toBe("wall")
+    near(seg.snap.point, 110, -110)
+    expect(seg.snap.tracks).toHaveLength(1)
+  })
+
+  it("WJ-21: линия, параллельная грани, квадрат у грани не сдвигает: вертикальная стена с проёмом, свободная горизонтальная стена", () => {
+    const v = w(300, 0, 300, 500, "V")
+    const dv = door("V", "a", 100, 90, 210, "dv") // откосы y = 100, 190: линии горизонтальны
+    const f = w(0, 140, 250, 140, "F") // грань y = 130 сверху, горизонтальна — параллельна линиям
+    const r = start({ x: 104, y: 126 }, [v, f], [dv])
+    expect(r.source).toBe("wall")
+    near(r.point, 104, 130)
+    expect(r.tracks).toBeUndefined()
   })
 
   it("WJ-8: позиция, квадрат которой налагался бы на тело, не предлагается", () => {

@@ -3,7 +3,7 @@ import type { Communication, Point, Wall, WallElement } from "./types"
 import type { TrackLine } from "./battery/battery-guide"
 import { violatesCommunications } from "./communications/guard"
 import { violatesDoorways } from "./doorway/doorway-guard"
-import { jambLines, snapToJambs } from "./doorway/jamb-snap"
+import { alignAlongFace, jambLines, snapToJambs } from "./doorway/jamb-snap"
 import { convexCorners, EDGE_SHIFT, edgeNormals, farEnd, hiddenBy, LINE_TOL, sceneContour } from "./scene-contour"
 import type { ConvexCorner, OpenEdge, SceneContour } from "./scene-contour"
 import { orthoDirection } from "./wall-angle"
@@ -321,7 +321,7 @@ export function snapVertex(
   }
   for (const w of walls) if (!degenerate(w)) wallCandidates(w, p, scene, newHalf, reach, corners, accept)
   const best = nearest(p, accepted)
-  if (best) return wallSnap(best)
+  if (best) return alongJambs(best, walls, doorways, communications, newWallThicknessCm, radiusCm, scene)
   const blocked = candidateBlock(walls, doorways, communications, newWallThicknessCm)
   const jamb = snapToJambs(p, jambLines(walls, doorways), newWallThicknessCm, radiusCm, gridStepCm, (c) => {
     if (overlapsBodies(squareOnSide(c.base, c.normal, newWallThicknessCm), scene().pieces)) return false
@@ -337,6 +337,30 @@ export function snapVertex(
 export function jambTracks(snap: VertexSnap | null, shown: Point | null): TrackLine[] {
   if (!snap?.tracks || !shown) return []
   return dist(shown, snap.point) <= EPS ? snap.tracks : []
+}
+
+// Кандидат грани вдоль грани свободен: сдвигается к линии откоса (change jamb-snap-along-wall-face, design D3–D4). Сдвинутый
+// квадрат не налагается на тела и коммуникации, не нарушает проём и по-прежнему касается тела стены; иначе кандидат прежний.
+function alongJambs(
+  best: Candidate,
+  walls: Wall[],
+  doorways: readonly WallElement[],
+  communications: readonly Communication[],
+  sizeCm: number,
+  radiusCm: number,
+  scene: () => SceneContour,
+): VertexSnap {
+  if (best.target !== "face" || doorways.length === 0) return wallSnap(best)
+  const blocked = candidateBlock(walls, doorways, communications, sizeCm)
+  const aligned = alignAlongFace(best, jambLines(walls, doorways), sizeCm, radiusCm, (c) => {
+    const square = squareOnSide(c.base, c.normal, sizeCm)
+    if (overlapsBodies(square, scene().pieces) || (blocked && blocked(c))) return false
+    return scene().pieces.some((pc) => touchesConvex(square, pc))
+  })
+  if (!aligned) return wallSnap(best)
+  const result = wallSnap({ ...best, point: aligned.point, base: aligned.base })
+  result.tracks = aligned.tracks
+  return result
 }
 
 // квадрат установки — как у грани: normal и base неперечислимы, линии привязки — для отрисовки
@@ -370,7 +394,7 @@ export function snapStartVertex(
   // угол предлагается и здесь: Infinity — только для граней и торцов касаемых стен
   for (const w of touched) wallCandidates(w, p, scene, newWallThicknessCm / 2, Infinity, true, accept)
   const best = nearest(p, accepted)
-  return best ? wallSnap(best) : base
+  return best ? alongJambs(best, walls, doorways, communications, newWallThicknessCm, radiusCm, scene) : base
 }
 
 const lazyScene = (walls: Wall[]): (() => SceneContour) => {
