@@ -82,7 +82,16 @@ export interface SectionCornerPoint {
   at: { s: "lo" | "hi"; z: "floor" | "top" }
 }
 
-export type DimPoint = EdgePoint | JambPoint | BatteryCornerPoint | ItemPoint | SectionCornerPoint
+// угол детали разреза — точка замера: линия, деталь и угол прямоугольника (сторона по s и сторона по z: lo — левая и нижняя, hi —
+// правая и верхняя); после правки детали это тот же угол той же детали (change add-section-shapes, design D9)
+export interface ShapeCornerPoint {
+  kind: "shape"
+  lineId: string
+  shapeId: string
+  at: { s: "lo" | "hi"; z: "lo" | "hi" }
+}
+
+export type DimPoint = EdgePoint | JambPoint | BatteryCornerPoint | ItemPoint | SectionCornerPoint | ShapeCornerPoint
 
 export interface Dimension {
   from: DimPoint
@@ -313,11 +322,29 @@ export interface SectionLine {
   points: Point[]
 }
 
+// Деталь разреза (change add-section-shapes, design D1): заштрихованный прямоугольник на фигуре линии разреза в координатах
+// фигуры — s от левого края вправо, z от пола вверх, единицы чертежа; s0 < s1, z0 < z1
+export interface SectionShape {
+  id: string
+  lineId: string
+  s0: number
+  s1: number
+  z0: number
+  z1: number
+}
+
+// линии разреза и их детали — одно состояние для шага истории (change add-section-shapes, design D6)
+export interface SectionsState {
+  sections: SectionLine[]
+  shapes: SectionShape[]
+}
+
 // Собственные объекты плана «Реконструкция» (change reconstruction-plan, design D1): стены ГКЛ и их размеры, выноски и примечания
 export interface ReconstructionContent {
   walls: DrywallWall[]
   dimensions: Dimension[]
   sections?: SectionLine[]
+  sectionShapes?: SectionShape[]
   callouts?: Callout[]
   notes?: string[]
 }

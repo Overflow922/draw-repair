@@ -1426,3 +1426,15 @@ Follow-ups from `snap-wall-to-opening-jambs` (verify, 2026-10-29).
 - Overlapping drywall pieces of different heights on one figure (corner of a tall and a low wall cut by one line) are hatched and outlined separately, so the shared part shows a double outline; pieces of equal height are merged into one rectangle.
 - The 100 cm gap between the plan and a figure is fixed; a figure title or a dimension placed outside the figure can touch the next figure when two lines share a side.
 - Extra geometry drawn on a figure (shelves, etc.) — a later change.
+
+## Left out of `add-section-shapes` (2026-11-02)
+
+### Out of scope
+
+- [ ] Слияние контуров соприкасающихся деталей и сечений (общая фаза штриховки скрывает шов только частично).
+- [ ] Другие примитивы на фигуре (линии, окружности, отверстия): эскиз `references/section-shelves.png` их не содержит.
+- [ ] Две перекрывающиеся детали: правило «штриховка исключается» учитывает только пары деталь–сечение, общий участок двух деталей штрихуется заново (`src/section/section-shape-draw.ts`, `clipOutside`).
+
+### Bugs
+
+- [ ] Если стены гипсокартона позже понизили, деталь остаётся на месте и может выйти выше прямоугольника фигуры и перекрыть соседнюю фигуру в стопке: раскладка `section-layout.ts` считает высоту только по стенам.

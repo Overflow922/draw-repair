@@ -45,6 +45,7 @@ export function storedReconstruction(scene: WorkingScene, workspace: Workspace, 
     // линии разреза правит только инструмент «Разрез» (add-section-view, design D1); выноски и примечания плана не зависят
     // от сцены: хранятся как есть (change add-callout, add-plan-notes)
     ...(stored?.sections !== undefined ? { sections: stored.sections } : null),
+    ...(stored?.sectionShapes !== undefined ? { sectionShapes: stored.sectionShapes } : null),
     ...(stored?.callouts !== undefined ? { callouts: stored.callouts } : null),
     ...(stored?.notes !== undefined ? { notes: stored.notes } : null),
   }

@@ -1,9 +1,9 @@
 import { drawReconstructionScene } from "../reconstruction/reconstruction-render"
 import type { ReconstructionOptions, ReconstructionView } from "../reconstruction/reconstruction-render"
-import { SCREEN_METRICS, UNDERLINE_GAP_PX, drawDimensionGeom, drawUnderline, prepareCanvas, tracePolygons } from "../render"
-import type { RenderMetrics } from "../render"
+import { drawNumbers } from "../number-draw"
+import { SCREEN_METRICS, prepareCanvas, tracePolygons } from "../render"
 import { LIGHT_PALETTE } from "../theme"
-import type { Palette, Theme } from "../theme"
+import type { Theme } from "../theme"
 import { PX_PER_CM } from "../types"
 import type { Point, FurnitureItem, Unit, View } from "../types"
 import type { Overlap } from "./overlap"
@@ -52,24 +52,6 @@ export interface FurnitureView extends ReconstructionView {
 }
 
 const GHOST_ALPHA = 0.4
-
-// числа предмета: размерные линии в стиле размеров плана; нулевое расстояние — одно число у стороны
-function drawItemNumbers(c: CanvasRenderingContext2D, numbers: readonly ItemNumber[], underline: boolean, view: View, m: RenderMetrics, palette: Palette): void {
-  const k = PX_PER_CM * view.zoom
-  for (const n of numbers) {
-    if (n.geom) {
-      drawDimensionGeom(c, n.geom, n.text, palette.ink, view, m, palette, false, underline)
-      continue
-    }
-    const at = { x: (n.center.x - view.pan.x) * k, y: (n.center.y - view.pan.y) * k }
-    c.save()
-    c.textBaseline = "middle"
-    c.fillStyle = palette.ink
-    c.fillText(n.text, at.x, at.y)
-    c.restore()
-    if (underline) drawUnderline(c, { x: at.x, y: at.y + m.labelPx / 2 + UNDERLINE_GAP_PX }, { x: 1, y: 0 }, n.widthCm * k, palette.ink, m)
-  }
-}
 
 export function drawFurnitureScene(
   ctx: CanvasRenderingContext2D,
@@ -120,13 +102,13 @@ export function drawFurnitureScene(
     c.font = `${m.labelPx}px ${m.font}`
     c.textAlign = "center"
     c.textBaseline = "bottom"
-    for (const t of scene.items) if (t.id !== editable?.itemId) drawItemNumbers(c, itemSizeLayout(t, unit, k, m), false, view, m, palette)
+    for (const t of scene.items) if (t.id !== editable?.itemId) drawNumbers(c, itemSizeLayout(t, unit, k, m), false, view, m, palette)
     if (scene.itemGhost) {
       c.globalAlpha = GHOST_ALPHA
-      drawItemNumbers(c, itemSizeLayout(scene.itemGhost, unit, k, m), false, view, m, palette)
+      drawNumbers(c, itemSizeLayout(scene.itemGhost, unit, k, m), false, view, m, palette)
       c.globalAlpha = 1
     }
-    if (editable) drawItemNumbers(c, editable.numbers, true, view, m, palette)
+    if (editable) drawNumbers(c, editable.numbers, true, view, m, palette)
     c.restore()
     scene.above?.(c, toScreen)
   }

@@ -32,6 +32,7 @@ export function reconstructionScene(drawing: Drawing, base: MountingScene = moun
     own,
     [...base.walls, ...pieces.map((p) => p.wall), ...own],
     sectionObstacles([...base.walls, ...pieces.map((p) => p.wall), ...own], base.batteries, drawing.communications ?? [], base.walls),
+    drawing.reconstruction?.sectionShapes ?? [],
   )
   return {
     base,

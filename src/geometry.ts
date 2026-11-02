@@ -3,7 +3,7 @@ import { ZOOM_MAX, ZOOM_MIN } from "./types"
 import { batteryCorner } from "./battery/battery-geometry"
 import { hostOf, hostPoint, jambsT } from "./doorway/doorway-faces"
 import { itemPointAt, itemWidthAxis } from "./furniture/item"
-import { sectionCornerPosition, sectionCorners } from "./section/section-corners"
+import { sectionCornerPosition, sectionCorners, shapeCornerPosition, shapeCorners } from "./section/section-corners"
 import type { SectionEntry } from "./section/section-scene"
 import type { Battery, BatteryCornerPoint, Dimension, DimPoint, EdgeRef, FurnitureItem, ItemPoint, ItemPointAt, JambPoint, Point, View, Wall, WallElement } from "./types"
 import { convexCorners, sceneContour } from "./scene-contour"
@@ -515,6 +515,7 @@ export function dimPointPoint(
   if (point.kind === "corner") return cornerPosition(point, walls, batteries)
   if (point.kind === "item") return itemPosition(point, items)
   if (point.kind === "section") return sectionCornerPosition(point, sections)
+  if (point.kind === "shape") return shapeCornerPosition(point, sections)
   const wa = walls.find((w) => w.id === point.a.wallId)
   const wb = walls.find((w) => w.id === point.b.wallId)
   if (!wa || !wb) return null
@@ -609,7 +610,7 @@ export function nearestDimAnchor(
       bestDist = d
     }
   // углы сечений на фигурах разреза — последние по приоритету (change add-section-view, design D5)
-  for (const hit of sectionCorners(sections)) {
+  for (const hit of [...sectionCorners(sections), ...shapeCorners(sections)]) {
     const d = distance(p, hit.point)
     if (d > radius || d >= bestDist - TIE_CM) continue
     best = hit
@@ -684,7 +685,7 @@ export function measureDimension(
   const dx = b.x - a.x
   const dy = b.y - a.y
   // точки фигуры разреза: по большей проекции отрезка — по горизонтали (s) или по вертикали (высоте), при равенстве — по s
-  if (dim.from.kind === "section" || dim.to.kind === "section") {
+  if (dim.from.kind === "section" || dim.to.kind === "section" || dim.from.kind === "shape" || dim.to.kind === "shape") {
     const horizontal = Math.abs(dx) >= Math.abs(dy) - EPS
     return horizontal ? { valueCm: Math.abs(dx), direction: { x: dx < 0 ? -1 : 1, y: 0 } } : { valueCm: Math.abs(dy), direction: { x: 0, y: dy < 0 ? -1 : 1 } }
   }
@@ -727,14 +728,16 @@ export function dimLevelSnap(
   walls: Wall[],
   radius: number,
   elements: readonly WallElement[] = [],
+  batteries: readonly Battery[] = [],
+  items: readonly FurnitureItem[] = [],
+  sections: readonly SectionEntry[] = [],
 ): { offset: number; point: Point } | null {
   const cur = dimensionOffsetAt(p, axis)
   const u = dirOf(axis.a, axis.b)
   let best: { offset: number; point: Point } | null = null
   for (const d of dimensions) {
-    const ea = dimPointPoint(d.from, walls, elements)
-    const eb = dimPointPoint(d.to, walls, elements)
-    const g = ea && eb ? dimGeometry(ea, eb, d.offset) : null
+    // геометрия соседа — по его собственной оси измерения (у точек фигуры разреза это горизонталь или вертикаль)
+    const g = dimensionGeometry(d, walls, elements, batteries, items, sections)
     if (!g || Math.abs(cross(u, dirOf(g.a, g.b))) >= EPS) continue
     const level = dimensionOffsetAt(g.p1, axis)
     if (Math.abs(level - cur) <= radius && (!best || Math.abs(level - cur) < Math.abs(best.offset - cur)))

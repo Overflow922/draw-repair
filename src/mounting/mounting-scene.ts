@@ -122,7 +122,7 @@ export function mountingScene(drawing: Drawing): MountingScene {
     if (p.kind === "jamb") return ids.has(visible.get(p.elementId) ?? "")
     if (p.kind === "corner") return shown.has(p.batteryId)
     // приборов на «Монтаже» нет (change add-plumbing-plan)
-    if (p.kind === "item" || p.kind === "section") return false
+    if (p.kind === "item" || p.kind === "section" || p.kind === "shape") return false
     return ids.has(p.a.wallId) && ids.has(p.b.wallId)
   }
   const dimensions = (drawing.mounting?.dimensions ?? []).filter((d) => resolvable(d.from) && resolvable(d.to))

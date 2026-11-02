@@ -1,5 +1,6 @@
-import type { Point, SectionView } from "../types"
+import type { Point, SectionShape, SectionView } from "../types"
 import type { SectionFigure } from "./section-figure"
+import type { FigurePoint } from "./section-shape"
 
 // Положение фигур разреза вокруг габаритов плана (change add-section-view, design D4; spec section-view «Фигура разреза —
 // положение»). Положение вычисляется, пользователь его не выбирает. Чистые функции.
@@ -77,3 +78,14 @@ export function layoutFigures(
 
 // точка фигуры (s от левого края вправо, z вверх от пола) в координатах чертежа
 export const figureToWorld = (p: FigurePlacement, s: number, z: number): Point => ({ x: p.x + s, y: p.floorY - z })
+
+// прямоугольник детали в чертеже (change add-section-shapes, design D2): верх фигуры по z — меньший Y
+export const shapeWorldBox = (p: FigurePlacement, shape: SectionShape): Bounds => {
+  const a = figureToWorld(p, shape.s0, shape.z1)
+  const b = figureToWorld(p, shape.s1, shape.z0)
+  return { minX: a.x, minY: a.y, maxX: b.x, maxY: b.y }
+}
+
+// обратное преобразование: точка чертежа в координатах фигуры (change add-section-shapes, design D8); зеркальность взгляда
+// `down` уже заложена в самих s сечений фигуры, поэтому сама фигура всегда рисуется слева направо
+export const worldToFigure = (p: FigurePlacement, w: Point): FigurePoint => ({ s: w.x - p.x, z: p.floorY - w.y })

@@ -53,7 +53,7 @@ describe("инструменты", () => {
     expect(toolsOf("demolition")).toEqual(["demolition", "callout", "ruler", "notes", "eraser"])
     expect(toolsOf("mounting")).toEqual(["wall", "doorway", "door", "window", "battery", "dimension", "callout", "ruler", "notes", "eraser"])
     expect(toolsOf("rough")).toEqual(["plaster", "rightAngle", "screed", "callout", "ruler", "notes", "eraser"])
-    expect(toolsOf("reconstruction")).toEqual(["drywall", "section", "dimension", "callout", "ruler", "notes", "eraser"])
+    expect(toolsOf("reconstruction")).toEqual(["drywall", "section", "sectionShape", "dimension", "callout", "ruler", "notes", "eraser"])
     expect(toolsOf("furniture")).toEqual(["furniture", "dimension", "callout", "ruler", "notes", "eraser"])
   })
 })

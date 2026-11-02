@@ -13,6 +13,13 @@ import { createCalloutTool } from "./callout/callout-tool"
 import { sectionObstacles } from "./section/section-obstacles"
 import { sectionEntries } from "./section/section-scene"
 import type { SectionEntry } from "./section/section-scene"
+import { shapesOfLines } from "./section/section-shape"
+import { drawNumbers } from "./number-draw"
+import { shapeNumbers } from "./section/section-shape-numbers"
+import type { ShapeNumber } from "./section/section-shape-numbers"
+import { createSectionShapeTool } from "./section/section-shape-tool"
+import type { SectionShapeHost } from "./section/section-shape-tool"
+import type { SectionPreview } from "./section/section-draw"
 import { createSectionTool } from "./section/section-tool"
 import type { SectionToolHost } from "./section/section-tool"
 import type { CalloutToolHost } from "./callout/callout-tool"
@@ -153,7 +160,7 @@ import { afterPlace, escapeAction, resumesAfterSelectionCleared, selectionAllowe
 import { loadThemeChoice, paletteOf, resolveTheme, saveThemeChoice, themeToggleTitle, toggledTheme } from "./theme"
 import type { Theme } from "./theme"
 import { GRID_STEP_CM, MATERIALS, PX_PER_CM } from "./types"
-import type { Battery, BatteryMark, Communication, DemolitionMark, Dimension, DimPoint, Drawing, DrywallWall, ExhaustFan, Material, PlasterMark, Point, RightAngleMark, RoomRecord, Screed, StretchCeiling, FurnitureItem, LightFixture, LightKind, LightLine, LightSwitch, ToiletSizes, Unit, View, Wall, WallElement } from "./types"
+import type { Battery, BatteryMark, Communication, DemolitionMark, Dimension, DimPoint, Drawing, DrywallWall, ExhaustFan, Material, PlasterMark, Point, RightAngleMark, RoomRecord, Screed, SectionShape, SectionsState, StretchCeiling, FurnitureItem, LightFixture, LightKind, LightLine, LightSwitch, ToiletSizes, Unit, View, Wall, WallElement } from "./types"
 
 const canvas = document.querySelector<HTMLCanvasElement>("#canvas")!
 const canvasWrap = document.querySelector<HTMLElement>("#canvas-wrap")!
@@ -266,6 +273,9 @@ const toolWindowBtn = document.querySelector<HTMLButtonElement>("#tool-window")!
 const toolBatteryBtn = document.querySelector<HTMLButtonElement>("#tool-battery")!
 const toolCalloutBtn = document.querySelector<HTMLButtonElement>("#tool-callout")!
 const toolSectionBtn = document.querySelector<HTMLButtonElement>("#tool-section")!
+const sectionPanel = document.querySelector<HTMLElement>("#section-panel")!
+const toolSectionLineBtn = document.querySelector<HTMLButtonElement>("#tool-section-line")!
+const toolSectionShapeBtn = document.querySelector<HTMLButtonElement>("#tool-section-shape")!
 const toolNotesBtn = document.querySelector<HTMLButtonElement>("#tool-notes")!
 const notesPanel = document.querySelector<HTMLElement>("#notes-panel")!
 const notesInput = document.querySelector<HTMLTextAreaElement>("#notes-input")!
@@ -377,6 +387,8 @@ let tool: Tool = defaultToolOf(activePlanOf(current()))
 // активный инструмент группы выводится из tool
 let openingsCurrent: GroupTool = "doorway"
 let openingsPanelOpen = false
+let sectionCurrent: SectionGroupTool = "section"
+let sectionPanelOpen = false
 // группа «Коммуникации» (change add-communications, design D9): то же устройство, что у группы «Проёмы»
 let communicationsCurrent: CommunicationTool = "riser"
 let communicationsPanelOpen = false
@@ -1783,17 +1795,24 @@ const sectionEntriesNow = (): SectionEntry[] => {
   const own = walls.filter(isDrywallWall)
   const base = reconNow()
   const planWalls = [...base.underlay, ...base.pieces.map((p) => p.wall), ...own]
-  return sectionEntries(current().reconstruction?.sections ?? [], own, planWalls, sectionObstacles(planWalls, batteries, communicationsOf(), base.underlay))
+  return sectionEntries(current().reconstruction?.sections ?? [], own, planWalls, sectionObstacles(planWalls, batteries, communicationsOf(), base.underlay), sectionShapesNow())
+}
+const sectionShapesNow = (): readonly SectionShape[] => current().reconstruction?.sectionShapes ?? []
+// линии и детали разреза записываются в чертёж вместе; пустой список деталей поля не оставляет
+function setSectionsState(state: SectionsState): void {
+  const { sectionShapes: _dropped, ...rest } = current().reconstruction ?? { walls: [], dimensions: [] }
+  current().reconstruction = { ...rest, sections: state.sections, ...(state.shapes.length ? { sectionShapes: state.shapes } : null) }
 }
 const sectionHost: SectionToolHost = {
   lines: () => current().reconstruction?.sections ?? [],
   entries: sectionEntriesNow,
+  // удаление линии уносит её детали тем же шагом истории (change add-section-shapes, design D6)
   setLines: (next) => {
-    current().reconstruction = { ...(current().reconstruction ?? { walls: [], dimensions: [] }), sections: next }
+    setSectionsState({ sections: next, shapes: shapesOfLines(sectionShapesNow(), next) })
   },
   recordBefore: (before) => {
     nudgeBurst = false
-    recordSections(activeHistory(), before)
+    recordSections(activeHistory(), { sections: [...before], shapes: [...sectionShapesNow()] })
   },
   snap: (p) => snap(p, walls, GRID_STEP_CM, radiusCm()),
   radiusCm: () => radiusCm(),
@@ -1802,6 +1821,7 @@ const sectionHost: SectionToolHost = {
   selected: () => {
     calloutHost.selected()
     calloutTool.deselect()
+    sectionShapeTool.deselect()
   },
   changed: () => {
     dirty = true
@@ -1809,6 +1829,65 @@ const sectionHost: SectionToolHost = {
   redraw: () => redraw(),
 }
 const sectionTool = createSectionTool(sectionHost)
+
+// инструмент «Деталь разреза» (change add-section-shapes): детали лежат в чертеже рядом с линиями и пишутся в историю вместе с ними
+const sectionShapeHost: SectionShapeHost = {
+  lines: () => sectionHost.lines(),
+  shapes: sectionShapesNow,
+  entries: sectionEntriesNow,
+  setShapes: (next) => setSectionsState({ sections: [...sectionHost.lines()], shapes: next }),
+  recordBefore: (before) => {
+    nudgeBurst = false
+    recordSections(activeHistory(), before)
+  },
+  inBurst: () => nudgeBurst,
+  startBurst: () => {
+    nudgeBurst = true
+  },
+  radiusCm: () => radiusCm(),
+  newId: () => crypto.randomUUID(),
+  // одно выделение на холсте: выделение детали снимает выделение линии и выноски
+  selected: () => {
+    calloutHost.selected()
+    calloutTool.deselect()
+    sectionTool.deselect()
+  },
+  changed: () => {
+    dirty = true
+  },
+  redraw: () => redraw(),
+}
+const sectionShapeTool = createSectionShapeTool(sectionShapeHost)
+
+// числа ровно одной выделенной детали — габариты и расстояния; при активном инструменте их нет (spec section-view «Выделение,
+// перемещение и правка детали разреза»)
+function selectedShapeNumbers(): ShapeNumber[] {
+  const sel = onReconstruction() && tool !== "sectionShape" ? sectionShapeTool.selection() : null
+  return sel ? shapeNumbers(sel.entry, sel.shape, unit, PX_PER_CM * view.zoom, SCREEN_METRICS) : []
+}
+
+// нажатие на число выделенной детали: поле на месте числа; Enter — правка одним шагом истории
+function pressShapeNumber(p: Point): boolean {
+  const k = PX_PER_CM * view.zoom
+  const n = numberAt(p, selectedShapeNumbers(), NUMBER_HIT_PX / k)
+  if (!n) return false
+  itemNumberEditor?.close()
+  itemNumberEditor = null
+  const at = { x: (n.center.x - view.pan.x) * k, y: (n.center.y - view.pan.y) * k }
+  itemNumberEditor = openNumberEditor(
+    canvasWrap,
+    at,
+    formatCm(n.valueCm, unit),
+    (text) => {
+      sectionShapeTool.applyNumber(n.field, parseFloat(text.replace(",", ".")) * UNIT_TO_CM[unit])
+      redraw()
+    },
+    () => {
+      itemNumberEditor = null
+    },
+  )
+  return true
+}
 
 // инструмент установки активного вида; null — вне инструментов «Проём», «Дверь» и «Окно»
 const placingTool = () => (tool === "window" ? windowTool : tool === "door" ? doorTool : tool === "doorway" ? doorwayTool : null)
@@ -1841,6 +1920,34 @@ function closeOpeningsPanel(): void {
   syncOpeningsUI()
 }
 
+// группа «Разрез» (change add-section-shapes, design D3): кнопка группы, панель с инструментами «Линия разреза» и «Деталь разреза»
+type SectionGroupTool = "section" | "sectionShape"
+const sectionGroupState = (): GroupState<SectionGroupTool> => ({
+  current: sectionCurrent,
+  active: tool === "section" || tool === "sectionShape" ? tool : "other",
+  panelOpen: sectionPanelOpen,
+})
+
+function applySectionGroup(next: GroupState<SectionGroupTool>): void {
+  if (next.active !== "other" && next.active !== tool) setTool(next.active)
+  sectionCurrent = next.current
+  sectionPanelOpen = next.panelOpen
+  syncSectionUI()
+}
+
+function syncSectionUI(): void {
+  const s = sectionGroupState()
+  sectionPanel.classList.toggle("open", s.panelOpen)
+  toolSectionBtn.classList.toggle("active", groupButtonActive(s))
+  toolSectionLineBtn.classList.toggle("active", s.current === "section")
+  toolSectionShapeBtn.classList.toggle("active", s.current === "sectionShape")
+}
+
+function closeSectionPanel(): void {
+  sectionPanelOpen = false
+  syncSectionUI()
+}
+
 // поле ввода числа выделенного объекта: элемента стены или коммуникации
 // (каждое выделение другого объекта и снятие выделения начинаются с этого вызова, поэтому он же снимает выделение выноски)
 const closeEditors = (): void => {
@@ -1851,6 +1958,7 @@ const closeEditors = (): void => {
   batteryTool.closeEditor()
   calloutTool.deselect()
   sectionTool.deselect()
+  sectionShapeTool.deselect()
   deselectRoom()
 }
 
@@ -2177,7 +2285,7 @@ function syncToolUI(): void {
   toolWindowBtn.classList.toggle("active", tool === "window")
   toolBatteryBtn.classList.toggle("active", tool === "battery")
   toolCalloutBtn.classList.toggle("active", tool === "callout")
-  toolSectionBtn.classList.toggle("active", tool === "section")
+  syncSectionUI()
   syncNotesUI()
   toolDemolitionBtn.classList.toggle("active", tool === "demolition")
   syncRoughPanels()
@@ -2206,6 +2314,7 @@ function setTool(next: Tool): void {
   resetElementTools()
   calloutTool.reset()
   sectionTool.reset()
+  sectionShapeTool.reset()
   suppressClick = false
   nudgeBurst = false
   groupMove = null
@@ -2222,6 +2331,7 @@ function setTool(next: Tool): void {
   furniturePanelGroup = null
   setWallPanel(false)
   closeOpeningsPanel()
+  closeSectionPanel()
   closeCommunicationsPanel()
   closeLightPanel()
   syncToolUI()
@@ -2633,8 +2743,21 @@ function drawReconstructionPlan(): void {
       pieces: reconNow().pieces,
       drywall: own,
       sections: sectionEntriesNow(),
-      sectionMarks: { selected: sectionTool.selectedId(), erasing: tool === "eraser" && hoverWorld ? sectionTool.pick(hoverWorld) : null },
-      sectionPreview: sectionTool.preview(),
+      sectionMarks: {
+        selected: sectionTool.selectedId(),
+        erasing: tool === "eraser" && hoverWorld ? sectionTool.pick(hoverWorld) : null,
+        selectedShape: sectionShapeTool.selectedId(),
+        erasingShape: tool === "eraser" && hoverWorld ? (sectionShapeTool.pick(hoverWorld)?.shapeId ?? null) : null,
+      },
+      sectionPreview: sectionShapePreview() ?? sectionTool.preview(),
+      above: (c) => {
+        c.save()
+        c.font = `${SCREEN_METRICS.labelPx}px ${SCREEN_METRICS.font}`
+        c.textAlign = "center"
+        c.textBaseline = "bottom"
+        drawNumbers(c, selectedShapeNumbers(), true, view, SCREEN_METRICS, palette)
+        c.restore()
+      },
       preview,
       outlines,
       handles: only && isDrywallWall(only) && selectedDimensions.length === 0 ? only : null,
@@ -2809,7 +2932,7 @@ function centerGuideTracks(): TrackLine[] | null {
 
 // нажатая кнопка мыши: рамка, перетаскивание стен или размера, протяжка пометки, сдвиг вида
 function gestureActive(): boolean {
-  return !!(marquee || marqueePending || groupMove || endpointDrag || dimDrag || doorwayTool.dragging() || communicationTool.dragging() || batteryTool.dragging() || calloutTool.dragging() || demolitionTool.dragging() || plasterTool.dragging() || itemTool.dragging() || panDrag)
+  return !!(marquee || marqueePending || groupMove || endpointDrag || dimDrag || doorwayTool.dragging() || communicationTool.dragging() || batteryTool.dragging() || calloutTool.dragging() || sectionShapeTool.isDragging() || demolitionTool.dragging() || plasterTool.dragging() || itemTool.dragging() || panDrag)
 }
 
 // ластик: размер → коммуникация → батарея → проём → стена (wall-deletion «Инструмент «Ластик»», «Ластик и удаление
@@ -2835,6 +2958,11 @@ function eraserTarget(p: Point): {
   }
 }
 
+// привязка размерной линии к уровню соседних размеров с параллельной осью (общая для размещения и перетаскивания)
+function levelSnap(p: Point, axis: DimGeometry, others: Dimension[]): { offset: number; point: Point } | null {
+  return dimLevelSnap(p, axis, others, walls, radiusCm(), doorways, batteries, fixtures, sectionEntriesNow())
+}
+
 function dimDraftGeometry(): (DimGeometry & { valueCm: number }) | null {
   if (!dimDraft.a || !dimDraft.b || !cursor) return null
   const ea = endPoint(dimDraft.a)
@@ -2842,7 +2970,7 @@ function dimDraftGeometry(): (DimGeometry & { valueCm: number }) | null {
   if (!ea || !eb || pointsEqual(ea, eb)) return null
   const axis = draftGeometry(0)
   if (!axis) return null
-  return draftGeometry(dimLevelSnap(cursor, axis, dimensions, walls, radiusCm(), doorways)?.offset ?? dimensionOffsetAt(cursor, axis))
+  return draftGeometry(levelSnap(cursor, axis, dimensions)?.offset ?? dimensionOffsetAt(cursor, axis))
 }
 
 // геометрия размера между точками черновика с заданным смещением (число размера с углом батареи — по оси стены батареи)
@@ -3024,6 +3152,10 @@ function editMode(snapped: SnapResult): EditMode {
 }
 
 canvas.addEventListener("pointermove", (e) => {
+  if (sectionShapeTool.isDragging()) {
+    sectionShapeTool.dragTo(toWorld(e))
+    return
+  }
   if (calloutTool.dragging()) {
     calloutTool.dragTo(toWorld(e))
     redraw()
@@ -3072,7 +3204,7 @@ canvas.addEventListener("pointermove", (e) => {
     const axis = dimensionGeometry({ ...dimDrag.dim, offset: 0 }, walls, doorways, batteries, fixtures, sectionEntriesNow())
     if (axis) {
       const dragged = dimDrag.dim
-      const level = dimLevelSnap(p, axis, dimensions.filter((d) => d !== dragged), walls, radiusCm(), doorways)
+      const level = levelSnap(p, axis, dimensions.filter((d) => d !== dragged))
       dragged.offset = level ? level.offset : dimensionOffsetAt(p, axis)
       // передвинутый пользователем размер больше не автоматический: пересчёт его не заменяет (change auto-wall-dimensions, design D5)
       delete dragged.auto
@@ -3184,6 +3316,9 @@ canvas.addEventListener("pointermove", (e) => {
   } else if (tool === "section") {
     cursor = toWorld(e)
     sectionTool.hover(cursor)
+  } else if (tool === "sectionShape") {
+    cursor = toWorld(e)
+    sectionShapeTool.hover(cursor)
   } else if (placingTool()) {
     cursor = toWorld(e)
     placingTool()?.hover(cursor)
@@ -3356,7 +3491,7 @@ canvas.addEventListener("pointerdown", (e) => {
   // правка выделенного элемента на месте (change popups-buttons-only, design D6): правимое число, затем зона
   // направления выделенной двери — главнее любой цели нажатия
   const p = toWorld(e)
-  if (selectionEditing.pressNumber(p) || selectionEditing.pressZone(p) || (communicationsEditable() && communicationTool.pressNumber(p)) || batteryTool.pressNumber(p) || pressFurnitureNumber(p)) {
+  if (selectionEditing.pressNumber(p) || selectionEditing.pressZone(p) || (communicationsEditable() && communicationTool.pressNumber(p)) || batteryTool.pressNumber(p) || pressFurnitureNumber(p) || (onReconstruction() && pressShapeNumber(p))) {
     suppressClick = true
     return
   }
@@ -3367,6 +3502,13 @@ canvas.addEventListener("pointerdown", (e) => {
     return
   }
   // линия разреза и её фигура рисуются поверх стен: нажатие по ним главнее стен, линия не двигается (change add-section-view)
+  // деталь разреза рисуется поверх фигуры: нажатие по ней главнее линии; выделенную деталь тот же жест двигает (change add-section-shapes)
+  if (onReconstruction() && sectionShapeTool.press(p)) {
+    sectionShapeTool.beginDrag(p)
+    suppressClick = true
+    canvas.setPointerCapture(e.pointerId)
+    return
+  }
   if (onReconstruction() && sectionTool.press(p)) {
     suppressClick = true
     return
@@ -3461,6 +3603,10 @@ canvas.addEventListener("pointerdown", () => {
 })
 
 canvas.addEventListener("pointerup", (e) => {
+  if (sectionShapeTool.isDragging()) {
+    if (e.button === 0) sectionShapeTool.endDrag()
+    return
+  }
   if (calloutTool.dragging()) {
     if (e.button === 0) calloutTool.endDrag()
     return
@@ -3670,10 +3816,14 @@ canvas.addEventListener("click", (e) => {
     sectionTool.click(raw)
     return
   }
+  if (tool === "sectionShape") {
+    sectionShapeTool.click(raw)
+    return
+  }
   if (tool === "eraser") {
     // выноска главнее остальных объектов под курсором ластика; затем линия разреза плана «Реконструкция»
     if (calloutTool.eraseAt(raw)) return
-    if (onReconstruction() && sectionTool.eraseAt(raw)) return
+    if (onReconstruction() && (sectionShapeTool.eraseAt(raw) || sectionTool.eraseAt(raw))) return
     const { wall, dim, doorway, communication, battery } = eraserTarget(p)
     if (dim) deleteDimension(dim)
     // план «Мебель»: ластик стирает столы, подложка (стены, штукатурка, гипсокартон, элементы) не стирается
@@ -3743,7 +3893,7 @@ canvas.addEventListener("click", (e) => {
 function dimSectionScope(): SectionEntry[] {
   const first = dimDraft.a ?? dimDraft.b
   if (!first) return sectionEntriesNow()
-  return first.kind === "section" ? sectionEntriesNow().filter((e) => e.line.id === first.lineId) : []
+  return first.kind === "section" || first.kind === "shape" ? sectionEntriesNow().filter((e) => e.line.id === first.lineId) : []
 }
 
 function placeDimension(p: Point): void {
@@ -3765,7 +3915,7 @@ function placeDimension(p: Point): void {
     return
   }
   pushRecord()
-  dimensions.push({ from: dimDraft.a, to: dimDraft.b, offset: dimLevelSnap(p, axis, dimensions, walls, radiusCm(), doorways)?.offset ?? dimensionOffsetAt(p, axis) })
+  dimensions.push({ from: dimDraft.a, to: dimDraft.b, offset: levelSnap(p, axis, dimensions)?.offset ?? dimensionOffsetAt(p, axis) })
   dimDraft = emptyDraft()
   dirty = true
   redraw()
@@ -4058,7 +4208,9 @@ toolDuctBtn.addEventListener("click", () => applyCommunicationsGroup(communicati
 toolWindowBtn.addEventListener("click", () => setTool("window"))
 toolBatteryBtn.addEventListener("click", () => setTool("battery"))
 toolCalloutBtn.addEventListener("click", () => setTool("callout"))
-toolSectionBtn.addEventListener("click", () => setTool("section"))
+toolSectionBtn.addEventListener("click", () => applySectionGroup(groupButtonClick(sectionGroupState())))
+toolSectionLineBtn.addEventListener("click", () => applySectionGroup(groupPick(sectionGroupState(), "section")))
+toolSectionShapeBtn.addEventListener("click", () => applySectionGroup(groupPick(sectionGroupState(), "sectionShape")))
 
 // «Примечания»: инструмент без жестов на холсте; клик по кнопке активного инструмента переключает панель
 toolNotesBtn.addEventListener("click", () => {
@@ -4300,6 +4452,7 @@ function activate(id: string): void {
   resetElementTools()
   calloutTool.reset()
   closeOpeningsPanel()
+  closeSectionPanel()
   closeCommunicationsPanel()
   closeLightPanel()
   dimDraft = emptyDraft()
@@ -4501,11 +4654,18 @@ function stepExhausts(step: typeof undoExhausts): void {
 }
 
 // отмена или повтор шага линий разреза плана «Реконструкция» (change add-section-view, design D7): подставляется список до операции
+// резинка детали: прямоугольник до курсора; null — инструмент «Деталь разреза» не набирает деталь
+function sectionShapePreview(): SectionPreview | null {
+  const p = tool === "sectionShape" ? sectionShapeTool.preview() : null
+  return p?.shape ? { points: [], cursor: null, line: null, shape: { entry: p.entry, shape: p.shape } } : null
+}
+
 function stepSections(step: typeof undoSections): void {
-  const next = step(activeHistory(), sectionHost.lines())
+  const next = step(activeHistory(), { sections: [...sectionHost.lines()], shapes: [...sectionShapesNow()] })
   if (!next) return
-  sectionHost.setLines(next)
+  setSectionsState(next)
   sectionTool.deselect()
+  sectionShapeTool.deselect()
   dirty = true
   resetEditing()
   redraw()
@@ -4533,7 +4693,7 @@ function stepNotes(step: typeof undoNotes): void {
 }
 
 function undo(): void {
-  if (groupMove || endpointDrag || panDrag || dimDrag || doorwayTool.dragging() || communicationTool.dragging() || batteryTool.dragging() || calloutTool.dragging() || demolitionTool.dragging() || plasterTool.dragging() || itemTool.dragging()) return
+  if (groupMove || endpointDrag || panDrag || dimDrag || doorwayTool.dragging() || communicationTool.dragging() || batteryTool.dragging() || calloutTool.dragging() || sectionShapeTool.isDragging() || demolitionTool.dragging() || plasterTool.dragging() || itemTool.dragging()) return
   // открытое поле ввода выноски и поле примечаний сохраняют текст до отмены
   calloutTool.commitEditor()
   commitNotes()
@@ -4599,7 +4759,7 @@ function undo(): void {
 }
 
 function redo(): void {
-  if (groupMove || endpointDrag || panDrag || dimDrag || doorwayTool.dragging() || communicationTool.dragging() || batteryTool.dragging() || calloutTool.dragging() || demolitionTool.dragging() || plasterTool.dragging() || itemTool.dragging()) return
+  if (groupMove || endpointDrag || panDrag || dimDrag || doorwayTool.dragging() || communicationTool.dragging() || batteryTool.dragging() || calloutTool.dragging() || sectionShapeTool.isDragging() || demolitionTool.dragging() || plasterTool.dragging() || itemTool.dragging()) return
   calloutTool.commitEditor()
   commitNotes()
   const h = activeHistory()
@@ -4780,6 +4940,11 @@ window.addEventListener("keydown", (e) => {
       sectionTool.deleteSelected()
       return
     }
+    // выделенная деталь разреза удаляется одним шагом истории (change add-section-shapes)
+    if (sectionShapeTool.selectedId() !== null) {
+      if (!sectionShapeTool.isDragging()) sectionShapeTool.deleteSelected()
+      return
+    }
     if (onFurniture()) {
       if (!itemTool.dragging() && !dimDrag && !panDrag) deleteFurnitureSelection()
       return
@@ -4897,8 +5062,8 @@ window.addEventListener("keydown", (e) => {
       tool,
       gestureActive: !!chainStart,
       dimensionDraft: !!(dimDraft.a || dimDraft.b),
-      calloutDraft: calloutTool.hasDraft() || sectionTool.hasDraft(),
-      hasSelection: selectedDimensions.length + selectedWalls.length + selectedDoorways.length + selectedBatteries.length > 0 || selectedCommunication !== null || calloutTool.selectedId() !== null || sectionTool.selectedId() !== null || selectedRoom !== null || itemTool.hasSelection(),
+      calloutDraft: calloutTool.hasDraft() || sectionTool.hasDraft() || sectionShapeTool.hasDraft(),
+      hasSelection: selectedDimensions.length + selectedWalls.length + selectedDoorways.length + selectedBatteries.length > 0 || selectedCommunication !== null || calloutTool.selectedId() !== null || sectionTool.selectedId() !== null || sectionShapeTool.selectedId() !== null || selectedRoom !== null || itemTool.hasSelection(),
     })
     if (action === "end-gesture") endChain()
     else if (action === "cancel-dimension-draft") {
@@ -4907,14 +5072,21 @@ window.addEventListener("keydown", (e) => {
     } else if (action === "cancel-callout-draft") {
       calloutTool.cancelDraft()
       sectionTool.cancelDraft()
+      sectionShapeTool.cancelDraft()
     } else if (action === "clear-selection") {
       sectionTool.deselect()
+      sectionShapeTool.deselect()
       clearSelection()
     }
     else if (action === "deactivate-tool") setTool("none")
   }
   if (e.key !== "ArrowUp" && e.key !== "ArrowDown" && e.key !== "ArrowLeft" && e.key !== "ArrowRight") return
   if (e.target instanceof HTMLInputElement) return
+  // выделенная деталь разреза сдвигается стрелками на 10 см, с Shift на 1 см; серия нажатий — один шаг истории
+  if (onReconstruction() && sectionShapeTool.nudge(e.key, e.shiftKey)) {
+    e.preventDefault()
+    return
+  }
   // на плане «Мебель» стрелки сдвигают выделенные столы, без выделения ничего не меняют (материал стены не переключается)
   if (onFurniture()) {
     if (!itemTool.hasSelection() || itemTool.dragging() || calloutTool.selectedId() !== null) return

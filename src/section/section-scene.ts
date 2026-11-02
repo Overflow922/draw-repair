@@ -1,4 +1,4 @@
-import type { DrywallWall, Point, SectionLine, Wall } from "../types"
+import type { DrywallWall, Point, SectionLine, SectionShape, Wall } from "../types"
 import { sectionFigure } from "./section-figure"
 import type { SectionFigure } from "./section-figure"
 import { layoutFigures } from "./section-layout"
@@ -14,6 +14,8 @@ export interface SectionEntry {
   shown: SectionLine
   figure: SectionFigure
   placement: FigurePlacement
+  // детали разреза этой линии (change add-section-shapes, design D2)
+  shapes: readonly SectionShape[]
 }
 
 // четыре угла тела стены: прямоугольник оси шириной в толщину
@@ -56,6 +58,7 @@ export function sectionEntries(
   drywall: readonly DrywallWall[],
   planWalls: readonly Wall[],
   obstacles: readonly SectionObstacle[] = [],
+  shapes: readonly SectionShape[] = [],
 ): SectionEntry[] {
   if (lines.length === 0) return []
   const figures = lines.map((l) => sectionFigure(l, drywall))
@@ -66,6 +69,6 @@ export function sectionEntries(
     const figure = figures.find((f) => f.lineId === placement.lineId)
     if (line === undefined || figure === undefined) return []
     const shown = extendLine(line, freeShifts(line, drywall, obstacles))
-    return [{ line, shown, figure, placement }]
+    return [{ line, shown, figure, placement, shapes: shapes.filter((s) => s.lineId === line.id) }]
   })
 }

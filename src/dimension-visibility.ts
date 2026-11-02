@@ -20,7 +20,7 @@ const resolvable = (p: DimPoint, t: DimensionTargets): boolean => {
   if (p.kind === "jamb") return t.doorways.has(p.elementId)
   if (p.kind === "corner") return t.batteries.has(p.batteryId)
   if (p.kind === "item") return t.items?.has(p.itemId) ?? false
-  if (p.kind === "section") return t.sections?.has(p.lineId) ?? false
+  if (p.kind === "section" || p.kind === "shape") return t.sections?.has(p.lineId) ?? false
   return t.walls.has(p.a.wallId) && t.walls.has(p.b.wallId)
 }
 

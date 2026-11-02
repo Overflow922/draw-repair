@@ -121,10 +121,22 @@
                 </label>
               </div>
             </div>
-            <div class="tool-anchor" data-tools="section">
+            <div class="tool-anchor" data-tools="section sectionShape">
               <button id="tool-section" class="tool" title="Разрез" type="button">
                 <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12h18M3 9v6M21 9v6M7 12v6M7 18l-1.5-2M7 18l1.5-2M17 12v6M17 18l-1.5-2M17 18l1.5-2"/></svg>
               </button>
+              <div id="section-panel" class="panel tool-panel">
+                <div class="group-tools" aria-label="Инструменты группы «Разрез»">
+                  <button id="tool-section-line" class="group-tool active" title="Линия разреза" type="button">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12h18M3 9v6M21 9v6M7 12v6M7 18l-1.5-2M7 18l1.5-2M17 12v6M17 18l-1.5-2M17 18l1.5-2"/></svg>
+                    <span>Линия разреза</span>
+                  </button>
+                  <button id="tool-section-shape" class="group-tool" title="Деталь разреза" type="button">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><rect x="3.5" y="8" width="17" height="8"/><path d="M8 16l5-8M13 16l5-8M3.5 12l4-4M15 16l5.5-5.5"/></svg>
+                    <span>Деталь разреза</span>
+                  </button>
+                </div>
+              </div>
             </div>
             <div class="tool-anchor" data-tools="stretchCeiling">
               <button id="tool-stretch-ceiling" class="tool" title="Натяжной потолок" type="button">

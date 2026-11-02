@@ -1,8 +1,8 @@
 import { isNoteList } from "./notes/notes-store"
 import { historyKey } from "./plans"
 import type { PlanId } from "./plans"
-import { copyExhaustFan, copyLightFixture, copyLightLine, isExhaustFan, copyLightSwitch, copyStretchCeiling, isBattery, isLightLine, isLightSwitch, isLightFixture, isBatteryMark, isCallout, isCommunication, isDemolitionMark, isDimension, isDrawing, isDrywallWall, isPlasterMark, isRightAngle, isRoomRecord, isScreed, isSectionLine, copySectionLine, isFurnitureItem, isPlumbingDimension, isStretchCeiling, isWall, isWallElement, readFurnitureItem } from "./storage"
-import type { Battery, BatteryMark, Callout, Communication, DemolitionMark, Dimension, DimPoint, Drawing, ExhaustFan, ExhaustState, LightFixture, LightLine, LightSwitch, PlasterMark, RightAngleMark, RoomRecord, Screed, SectionLine, FurnitureItem, StretchCeiling, Wall, WallElement } from "./types"
+import { copyExhaustFan, copyLightFixture, copyLightLine, isExhaustFan, copyLightSwitch, copyStretchCeiling, isBattery, isLightLine, isLightSwitch, isLightFixture, isBatteryMark, isCallout, isCommunication, isDemolitionMark, isDimension, isDrawing, isDrywallWall, isPlasterMark, isRightAngle, isRoomRecord, isScreed, isSectionLine, copySectionLine, isSectionShape, copySectionShape, isFurnitureItem, isPlumbingDimension, isStretchCeiling, isWall, isWallElement, readFurnitureItem } from "./storage"
+import type { Battery, BatteryMark, Callout, Communication, DemolitionMark, Dimension, DimPoint, Drawing, ExhaustFan, ExhaustState, LightFixture, LightLine, LightSwitch, PlasterMark, RightAngleMark, RoomRecord, Screed, SectionsState, FurnitureItem, StretchCeiling, Wall, WallElement } from "./types"
 
 const KEY = "draw-repair:history"
 export const HISTORY_LIMIT = 50
@@ -30,8 +30,9 @@ export type HistoryEntry =
   | { kind: "callouts"; callouts: Callout[] }
   // шаг примечаний плана (change add-plan-notes, design D3): список примечаний плана до правки
   | { kind: "notes"; notes: string[] }
-  // шаг линий разреза плана «Реконструкция» (change add-section-view, design D7): список линий до операции
-  | { kind: "sections"; sections: SectionLine[] }
+  // шаг линий разреза плана «Реконструкция» (change add-section-view, design D7): список линий до операции; детали разреза
+  // (change add-section-shapes, design D6) — в той же записи, у записи без деталей и у старой записи поля нет
+  | { kind: "sections"; sections: SectionsState["sections"]; shapes?: SectionsState["shapes"] }
   // шаг плана «Черновые работы» (change add-rough-works-plan, design D7): списки штукатурки и стяжек до операции
   // и прямых углов (change plaster-right-angle, design D4); у записи, сохранённой до введения углов, поля нет
   | { kind: "rough"; plaster: PlasterMark[]; screeds: Screed[]; angles?: RightAngleMark[] }
@@ -84,6 +85,7 @@ const cloneDimPoint = (p: DimPoint): DimPoint => {
   if (p.kind === undefined) return { a: { ...p.a }, b: { ...p.b } }
   if (p.kind === "item") return { ...p, at: { ...p.at } }
   if (p.kind === "section") return { ...p, at: { ...p.at } }
+  if (p.kind === "shape") return { ...p, at: { ...p.at } }
   return { ...p }
 }
 
@@ -150,26 +152,38 @@ export function redoCallouts(history: DrawingHistory, current: readonly Callout[
 
 // Линии разреза (change add-section-view, design D7): как у выносок — работают только с верхней записью вида «sections»,
 // при другой записи возвращают null и стеки не меняют
-export function recordSections(history: DrawingHistory, sections: readonly SectionLine[]): void {
-  history.past.push({ kind: "sections", sections: sections.map(copySectionLine) })
+// Состояние — линии и их детали (change add-section-shapes, design D6): удаление линии с деталями и правка детали — один шаг.
+const sectionsEntry = (s: SectionsState): HistoryEntry => ({
+  kind: "sections",
+  sections: s.sections.map(copySectionLine),
+  ...(s.shapes.length === 0 ? null : { shapes: s.shapes.map(copySectionShape) }),
+})
+
+const sectionsStateOf = (e: { sections: SectionsState["sections"]; shapes?: SectionsState["shapes"] }): SectionsState => ({
+  sections: e.sections.map(copySectionLine),
+  shapes: (e.shapes ?? []).map(copySectionShape),
+})
+
+export function recordSections(history: DrawingHistory, before: SectionsState): void {
+  history.past.push(sectionsEntry(before))
   if (history.past.length > HISTORY_LIMIT) history.past.shift()
   history.future = []
 }
 
-export function undoSections(history: DrawingHistory, current: readonly SectionLine[]): SectionLine[] | null {
+export function undoSections(history: DrawingHistory, current: SectionsState): SectionsState | null {
   const e = history.past[history.past.length - 1]
   if (!e || e.kind !== "sections") return null
   history.past.pop()
-  history.future.push({ kind: "sections", sections: current.map(copySectionLine) })
-  return e.sections.map(copySectionLine)
+  history.future.push(sectionsEntry(current))
+  return sectionsStateOf(e)
 }
 
-export function redoSections(history: DrawingHistory, current: readonly SectionLine[]): SectionLine[] | null {
+export function redoSections(history: DrawingHistory, current: SectionsState): SectionsState | null {
   const e = history.future[history.future.length - 1]
   if (!e || e.kind !== "sections") return null
   history.future.pop()
-  history.past.push({ kind: "sections", sections: current.map(copySectionLine) })
-  return e.sections.map(copySectionLine)
+  history.past.push(sectionsEntry(current))
+  return sectionsStateOf(e)
 }
 
 // Примечания (change add-plan-notes, design D3): как у выносок — работают только с верхней записью вида «notes»,
@@ -534,7 +548,9 @@ const isHistoryEntry = (e: unknown): e is HistoryEntry => {
       (x.batteryMarks === undefined || (Array.isArray(x.batteryMarks) && x.batteryMarks.every(isBatteryMark)))
   if (x.kind === "callouts") return Array.isArray(x.callouts) && x.callouts.every(isCallout)
   if (x.kind === "notes") return isNoteList(x.notes)
-  if (x.kind === "sections") return Array.isArray(x.sections) && x.sections.every(isSectionLine)
+  if (x.kind === "sections")
+    return Array.isArray(x.sections) && x.sections.every(isSectionLine) &&
+      (x.shapes === undefined || (Array.isArray(x.shapes) && x.shapes.every(isSectionShape)))
   if (x.kind === "rough")
     return Array.isArray(x.plaster) && x.plaster.every(isPlasterMark) && Array.isArray(x.screeds) && x.screeds.every(isScreed) &&
       (x.angles === undefined || (Array.isArray(x.angles) && x.angles.every(isRightAngle)))
