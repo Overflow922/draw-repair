@@ -38,6 +38,8 @@ import { furnitureReachBodies } from "../furniture/item-wall-reach"
 import type { Shape } from "../communications/shape"
 import { drawReconstructionScene } from "../reconstruction/reconstruction-render"
 import { reconstructionScene } from "../reconstruction/reconstruction-scene"
+import { sectionExtent } from "../section/section-extent"
+import type { SectionEntry } from "../section/section-scene"
 import { drawRoughScene, roughExtent } from "../rough/rough-render"
 import type { RightAngleSign } from "../rough/rough-render"
 import { roughScene } from "../rough/rough-scene"
@@ -255,6 +257,8 @@ export interface RoughLayer {
 export interface ReconstructionLayer {
   pieces: readonly PlasterPiece[]
   drywall: readonly DrywallWall[]
+  // линии и фигуры разреза: только у страницы «Реконструкция» (change add-section-view, design D8)
+  sections?: readonly SectionEntry[]
 }
 
 // страницы чертежа: по одной на план каталога в порядке каталога; объекты обмерочного плана лежат в прежних полях
@@ -324,7 +328,7 @@ export function pagesOf(drawing: Drawing): PlanPage[] {
           ...(mounting.batteries.length ? { batteries: mounting.batteries } : null),
           ...callouts,
           ...notes,
-          reconstruction: { pieces: scene.pieces, drywall: scene.own },
+          reconstruction: { pieces: scene.pieces, drywall: scene.own, sections: scene.sections },
           title: plan.label,
         }
       }
@@ -466,6 +470,8 @@ export function pageBounds(page: PlanPage, scale: number): BBox {
   const rough = page.rough ? roughExtent(page.rough, kMm, PDF_METRICS.labelPx) : []
   // штукатурка подложки плана «Реконструкция»; стены гипсокартона входят в габариты как стены
   const reconstruction = page.reconstruction ? roughExtent({ pieces: page.reconstruction.pieces, screeds: [] }, kMm, PDF_METRICS.labelPx) : []
+  // фигуры разреза: рамка фигуры с названием над ней и обозначения на концах линий (change add-section-view, design D8)
+  const sections = (page.reconstruction?.sections ?? []).flatMap((e) => sectionExtent(e, kMm, PDF_METRICS.labelPx))
   // углы столов плана «Мебель» и их габариты, вынесенные наружу (change furniture-dimensions, design D5)
   const items = (page.furniture?.items ?? []).flatMap((t) => [...itemCorners(t), ...itemSizeOutsidePoints(t, kMm, PDF_METRICS)])
   // предметы страницы «Потолки и освещение» — без габаритов; подписи потолков лежат внутри помещений и габариты не расширяют
@@ -480,7 +486,7 @@ export function pageBounds(page: PlanPage, scale: number): BBox {
   // предметы и выключатели страницы «Электрооборудование» (change add-electrical-plan): предметы без габаритов, знак выключателя с подписями
   const electricalItems = (page.electrical?.items ?? []).flatMap(itemCorners)
   const electricalSwitches = (page.electrical?.switches ?? []).flatMap((s) => switchExtent(s, kMm, PDF_METRICS.symbolMmPx))
-  const extra = [...marks, ...bodies, ...rects, ...calloutPoints, ...rough, ...reconstruction, ...items, ...ceilingItems, ...switchingItems, ...lights, ...switches, ...exhausts, ...electricalItems, ...electricalSwitches]
+  const extra = [...marks, ...bodies, ...rects, ...calloutPoints, ...rough, ...reconstruction, ...sections, ...items, ...ceilingItems, ...switchingItems, ...lights, ...switches, ...exhausts, ...electricalItems, ...electricalSwitches]
   const walls = page.reconstruction ? [...page.walls, ...page.reconstruction.drywall] : page.walls
   return wallsBBox(walls, page.dimensions, 0.5 * scale, page.doorways, scale, extra, batteries, page.furniture?.items)
 }
@@ -538,6 +544,7 @@ function drawPage(
       batteries: page.batteries,
       pieces: page.reconstruction.pieces,
       drywall: page.reconstruction.drywall,
+      sections: page.reconstruction.sections,
       callouts: page.callouts,
     }
     // предметы страницы разрешают точки размеров к приборам плана «Сантехника» (change add-plumbing-plan, design D4)

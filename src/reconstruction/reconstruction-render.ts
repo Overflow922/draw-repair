@@ -4,6 +4,9 @@ import { drawDimensionsLayer, drawGestureOverlays, drawHandles, drawPlacementHin
 import type { RenderOptions } from "../render"
 import { drawRoughScene } from "../rough/rough-render"
 import type { RoughSceneView } from "../rough/rough-render"
+import { drawSections } from "../section/section-draw"
+import type { SectionMarks, SectionPreview } from "../section/section-draw"
+import type { SectionEntry } from "../section/section-scene"
 import { LIGHT_PALETTE } from "../theme"
 import type { Palette, Theme } from "../theme"
 import { PX_PER_CM } from "../types"
@@ -34,6 +37,10 @@ export interface ReconstructionView extends Omit<RoughSceneView, "screeds" | "bl
   handles?: DrywallWall | null
   // слой поверх стен гипсокартона и под размерами: столы плана «Мебель» (change furniture-plan-table, design D3)
   above?: (ctx: CanvasRenderingContext2D, toScreen: (p: Point) => Point) => void
+  // линии и фигуры разреза, их выделение и превью размещения (change add-section-view, design D2): поверх стен, под размерами
+  sections?: readonly SectionEntry[]
+  sectionMarks?: SectionMarks
+  sectionPreview?: SectionPreview | null
 }
 
 // опции холста и PDF: жесты построения (квадрат установки, размеры, рамка, линейка) приходят теми же полями, что у обмерочного плана
@@ -96,7 +103,7 @@ export function drawReconstructionScene(
   // геометрия стен ГКЛ считается по ним самим: подложка торцы и углы гипсокартона не меняет
   const drywallScene: Wall[] = scene.preview ? [...own, scene.preview] : own
   const sceneOf = previewSceneOf(scene.preview ?? null, own, drywallScene)
-  const drawn: RenderOptions = { ...opts, metrics: m, palette }
+  const drawn: RenderOptions = { ...opts, metrics: m, palette, dimSections: scene.sections }
 
   const overlay = (c: CanvasRenderingContext2D): void => {
     for (const { wall, color } of scene.outlines ?? []) drawHalo(c, wall, sceneOf(wall), toScreen, color, m.contourPx)
@@ -107,6 +114,7 @@ export function drawReconstructionScene(
       c.globalAlpha = 1
     }
     scene.above?.(c, toScreen)
+    if (scene.sections?.length || scene.sectionPreview) drawSections(c, scene.sections ?? [], view, m, palette, colors.stroke, scene.sectionMarks, scene.sectionPreview)
     if (scene.handles) drawHandles(c, scene.handles, toScreen, palette)
     drawPlacementHints(c, toScreen, drawn, m, palette)
     // размеры плана — по полному списку стен: подложка и гипсокартон

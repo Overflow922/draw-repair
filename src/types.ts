@@ -71,7 +71,18 @@ export interface ItemPoint {
   at: ItemPointAt
 }
 
-export type DimPoint = EdgePoint | JambPoint | BatteryCornerPoint | ItemPoint
+// угол штрихованного сечения на фигуре разреза плана «Реконструкция» — точка замера: линия, стена, номер рабочего отрезка и
+// угол прямоугольника (сторона по s и сторона по z); после правки стены и линии это тот же угол того же сечения
+// (change add-section-view, design D5)
+export interface SectionCornerPoint {
+  kind: "section"
+  lineId: string
+  wallId: string
+  segment: number
+  at: { s: "lo" | "hi"; z: "floor" | "top" }
+}
+
+export type DimPoint = EdgePoint | JambPoint | BatteryCornerPoint | ItemPoint | SectionCornerPoint
 
 export interface Dimension {
   from: DimPoint
@@ -291,10 +302,22 @@ export interface DrywallWall extends Wall {
   heightCm: number
 }
 
+// Линия разреза плана «Реконструкция» (change add-section-view, design D1): сторона экрана, в которую смотрит наблюдатель,
+// обозначение (буква) и вершины ступенчатой линии; фигура разреза в документе не хранится
+export type SectionView = "up" | "down" | "left" | "right"
+
+export interface SectionLine {
+  id: string
+  label: string
+  view: SectionView
+  points: Point[]
+}
+
 // Собственные объекты плана «Реконструкция» (change reconstruction-plan, design D1): стены ГКЛ и их размеры, выноски и примечания
 export interface ReconstructionContent {
   walls: DrywallWall[]
   dimensions: Dimension[]
+  sections?: SectionLine[]
   callouts?: Callout[]
   notes?: string[]
 }

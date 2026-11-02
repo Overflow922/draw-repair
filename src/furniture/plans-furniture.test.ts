@@ -58,7 +58,7 @@ describe("инструменты", () => {
     expect(toolsOf("demolition")).toEqual(["demolition", "callout", "ruler", "notes", "eraser"])
     expect(toolsOf("mounting")).toEqual(["wall", "doorway", "door", "window", "battery", "dimension", "callout", "ruler", "notes", "eraser"])
     expect(toolsOf("rough")).toEqual(["plaster", "rightAngle", "screed", "callout", "ruler", "notes", "eraser"])
-    expect(toolsOf("reconstruction")).toEqual(["drywall", "dimension", "callout", "ruler", "notes", "eraser"])
+    expect(toolsOf("reconstruction")).toEqual(["drywall", "section", "dimension", "callout", "ruler", "notes", "eraser"])
   })
 
   it("FP-206: «Выноска», «Линейка», «Примечания» и «Ластик» есть на каждом плане по одному разу", () => {

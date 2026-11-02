@@ -38,8 +38,8 @@ describe("каталог", () => {
 })
 
 describe("инструменты", () => {
-  it("RC-103: набор — «Гипсокартон», «Размер», «Выноска», «Линейка», «Примечания», «Ластик»; по умолчанию «Гипсокартон»", () => {
-    expect(toolsOf("reconstruction")).toEqual(["drywall", "dimension", "callout", "ruler", "notes", "eraser"])
+  it("RC-103: набор — «Гипсокартон», «Разрез», «Размер», «Выноска», «Линейка», «Примечания», «Ластик»; по умолчанию «Гипсокартон»", () => {
+    expect(toolsOf("reconstruction")).toEqual(["drywall", "section", "dimension", "callout", "ruler", "notes", "eraser"])
     expect(defaultToolOf("reconstruction")).toBe("drywall")
   })
 

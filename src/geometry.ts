@@ -3,6 +3,8 @@ import { ZOOM_MAX, ZOOM_MIN } from "./types"
 import { batteryCorner } from "./battery/battery-geometry"
 import { hostOf, hostPoint, jambsT } from "./doorway/doorway-faces"
 import { itemPointAt, itemWidthAxis } from "./furniture/item"
+import { sectionCornerPosition, sectionCorners } from "./section/section-corners"
+import type { SectionEntry } from "./section/section-scene"
 import type { Battery, BatteryCornerPoint, Dimension, DimPoint, EdgeRef, FurnitureItem, ItemPoint, ItemPointAt, JambPoint, Point, View, Wall, WallElement } from "./types"
 import { convexCorners, sceneContour } from "./scene-contour"
 import { faceCornerTol, pointInPolygon } from "./wall-geometry"
@@ -507,10 +509,12 @@ export function dimPointPoint(
   elements: readonly WallElement[] = [],
   batteries: readonly Battery[] = [],
   items: readonly FurnitureItem[] = [],
+  sections: readonly SectionEntry[] = [],
 ): Point | null {
   if (point.kind === "jamb") return jambPosition(point, walls, elements)
   if (point.kind === "corner") return cornerPosition(point, walls, batteries)
   if (point.kind === "item") return itemPosition(point, items)
+  if (point.kind === "section") return sectionCornerPosition(point, sections)
   const wa = walls.find((w) => w.id === point.a.wallId)
   const wb = walls.find((w) => w.id === point.b.wallId)
   if (!wa || !wb) return null
@@ -567,6 +571,7 @@ export function nearestDimAnchor(
   radius: number,
   batteries: readonly Battery[] = [],
   items: readonly FurnitureItem[] = [],
+  sections: readonly SectionEntry[] = [],
 ): DimAnchorHit | null {
   const vertex = nearestEdgeIntersection(p, walls, radius)
   let best: DimAnchorHit | null = vertex ? { point: vertex.point, anchor: { a: vertex.a, b: vertex.b } } : null
@@ -603,6 +608,13 @@ export function nearestDimAnchor(
       best = { point, anchor: { kind: "item", itemId: item.id, at } }
       bestDist = d
     }
+  // углы сечений на фигурах разреза — последние по приоритету (change add-section-view, design D5)
+  for (const hit of sectionCorners(sections)) {
+    const d = distance(p, hit.point)
+    if (d > radius || d >= bestDist - TIE_CM) continue
+    best = hit
+    bestDist = d
+  }
   return best
 }
 
@@ -664,12 +676,18 @@ export function measureDimension(
   elements: readonly WallElement[] = [],
   batteries: readonly Battery[] = [],
   items: readonly FurnitureItem[] = [],
+  sections: readonly SectionEntry[] = [],
 ): DimMeasure | null {
-  const a = dimPointPoint(dim.from, walls, elements, batteries, items)
-  const b = dimPointPoint(dim.to, walls, elements, batteries, items)
+  const a = dimPointPoint(dim.from, walls, elements, batteries, items, sections)
+  const b = dimPointPoint(dim.to, walls, elements, batteries, items, sections)
   if (!a || !b) return null
   const dx = b.x - a.x
   const dy = b.y - a.y
+  // точки фигуры разреза: по большей проекции отрезка — по горизонтали (s) или по вертикали (высоте), при равенстве — по s
+  if (dim.from.kind === "section" || dim.to.kind === "section") {
+    const horizontal = Math.abs(dx) >= Math.abs(dy) - EPS
+    return horizontal ? { valueCm: Math.abs(dx), direction: { x: dx < 0 ? -1 : 1, y: 0 } } : { valueCm: Math.abs(dy), direction: { x: 0, y: dy < 0 ? -1 : 1 } }
+  }
   const len = Math.hypot(dx, dy)
   const axis = axialPoint(dim.from) || axialPoint(dim.to) ? measureAxis(dim, walls, batteries, items) : null
   if (!axis) return { valueCm: len, direction: len < EPS ? { x: 1, y: 0 } : { x: dx / len, y: dy / len } }
@@ -688,10 +706,11 @@ export function dimensionGeometry(
   elements: readonly WallElement[] = [],
   batteries: readonly Battery[] = [],
   items: readonly FurnitureItem[] = [],
+  sections: readonly SectionEntry[] = [],
 ): (DimGeometry & { valueCm: number }) | null {
-  const a = dimPointPoint(dim.from, walls, elements, batteries, items)
-  const b = dimPointPoint(dim.to, walls, elements, batteries, items)
-  const m = measureDimension(dim, walls, elements, batteries, items)
+  const a = dimPointPoint(dim.from, walls, elements, batteries, items, sections)
+  const b = dimPointPoint(dim.to, walls, elements, batteries, items, sections)
+  const m = measureDimension(dim, walls, elements, batteries, items, sections)
   if (!a || !b || !m) return null
   const geom = dimGeometry(a, b, dim.offset, m.direction)
   return geom && { ...geom, valueCm: m.valueCm }
@@ -732,8 +751,9 @@ export function dimHitDistance(
   elements: readonly WallElement[] = [],
   batteries: readonly Battery[] = [],
   items: readonly FurnitureItem[] = [],
+  sections: readonly SectionEntry[] = [],
 ): number | null {
-  const g = dimensionGeometry(dim, walls, elements, batteries, items)
+  const g = dimensionGeometry(dim, walls, elements, batteries, items, sections)
   if (!g) return null
   const dx = g.p2.x - g.p1.x
   const dy = g.p2.y - g.p1.y

@@ -1407,3 +1407,22 @@ Follow-ups from `snap-wall-to-opening-jambs` (verify, 2026-10-29).
 ### Tests
 
 - [ ] `src/main.ts` wiring of the drawing file buttons (`#file-save`, `#file-open`, hidden `#file-input` change handler, `openDrawingFile`, native `alert` on rejection, `downloadText` in `src/drawing-file/download.ts`) has no DOM test: the pure rules (`serializeDrawingFile`, `parseDrawingFile`, `importDrawingFile`, `drawingFileName`, `uniqueDrawingName`, `adoptDrawing`) are unit-tested. The flow was checked by hand in Firefox: download name and content, load as a new tab, repeated load, four rejection kinds, reload persistence, a table placed right before saving lands in the file.
+
+## Follow-ups from `add-section-view` (2026-11-02)
+
+### Tests
+
+- [ ] `src/main.ts` wiring of the «Разрез» tool (pointer/click/dblclick/Enter/Esc/Delete branches, eraser pick, `stepSections` undo/redo, `dimSectionScope` for dimension snapping on a figure) has no DOM test: the pure rules (`section-placing`, `section-tool`, `section-hit`, `section-corners`, storage/history) are unit-tested. Checked by hand in Firefox: line A–A with a figure, delete / undo / redo / eraser, a dimension of 2500 mm between two corners of the figure section.
+
+### Docs
+
+- [ ] PDF legend has no entry for the section line / figure (the first-version spec does not ask for one).
+
+### Out of scope
+
+- Moving or stretching a section line, and editing its letter or view direction after placing (delete and redraw instead).
+- Non-axis-aligned lines (only horizontal and vertical segments are accepted).
+- Underlay walls, plaster and openings are not cut (no heights); only drywall (ГКЛ) walls are hatched.
+- Overlapping drywall pieces of different heights on one figure (corner of a tall and a low wall cut by one line) are hatched and outlined separately, so the shared part shows a double outline; pieces of equal height are merged into one rectangle.
+- The 100 cm gap between the plan and a figure is fixed; a figure title or a dimension placed outside the figure can touch the next figure when two lines share a side.
+- Extra geometry drawn on a figure (shelves, etc.) — a later change.

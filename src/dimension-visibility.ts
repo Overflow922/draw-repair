@@ -10,6 +10,8 @@ export interface DimensionTargets {
   batteries: ReadonlySet<string>
   // приборы плана «Сантехника»; на других планах точек приборов нет
   items?: ReadonlySet<string>
+  // линии разреза плана «Реконструкция» (change add-section-view); на других планах точек фигур нет
+  sections?: ReadonlySet<string>
 }
 
 // точка действует, пока опорная стена есть в сцене; откос — пока виден элемент подложки, угол — пока видна батарея, точка
@@ -18,6 +20,7 @@ const resolvable = (p: DimPoint, t: DimensionTargets): boolean => {
   if (p.kind === "jamb") return t.doorways.has(p.elementId)
   if (p.kind === "corner") return t.batteries.has(p.batteryId)
   if (p.kind === "item") return t.items?.has(p.itemId) ?? false
+  if (p.kind === "section") return t.sections?.has(p.lineId) ?? false
   return t.walls.has(p.a.wallId) && t.walls.has(p.b.wallId)
 }
 

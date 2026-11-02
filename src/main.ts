@@ -1,5 +1,5 @@
 import "./style.css"
-import { cloneScene, loadHistory, planHistory, record, recordCallouts, recordCeilingPlan, recordDemolition, recordFurniture, recordNotes, recordPlumbing, recordRough, recordSnapshot, redoCallouts, redoCeilingPlan, redoDemolition, redoEntry, redoFurniture, redoNotes, redoPlumbing, redoRough, saveHistory, undoCallouts, undoCeilingPlan, undoDemolition, undoEntry, undoFurniture, undoNotes, undoPlumbing, undoRough, recordSwitchingLines, redoSwitchingLines, undoSwitchingLines, recordSwitches, redoSwitches, undoSwitches, recordExhausts, redoExhausts, undoExhausts } from "./history"
+import { cloneScene, loadHistory, planHistory, record, recordCallouts, recordSections, redoSections, undoSections, recordCeilingPlan, recordDemolition, recordFurniture, recordNotes, recordPlumbing, recordRough, recordSnapshot, redoCallouts, redoCeilingPlan, redoDemolition, redoEntry, redoFurniture, redoNotes, redoPlumbing, redoRough, saveHistory, undoCallouts, undoCeilingPlan, undoDemolition, undoEntry, undoFurniture, undoNotes, undoPlumbing, undoRough, recordSwitchingLines, redoSwitchingLines, undoSwitchingLines, recordSwitches, redoSwitches, undoSwitches, recordExhausts, redoExhausts, undoExhausts } from "./history"
 import type { Scene } from "./history"
 import { dimLevelSnap, dimensionGeometry, dimensionOffsetAt, hitWall, nearestDimAnchor, dimPointPoint, pointsEqual, segmentIntersectsRect, snap, snapOthers, snapWithSource, zoomAt } from "./geometry"
 import type { DimGeometry, SnapResult } from "./geometry"
@@ -10,6 +10,11 @@ import { createBatteryTool } from "./battery/battery-tool"
 import type { BatteryToolHost } from "./battery/battery-tool"
 import { calloutsOf, withCallouts } from "./callout/callout-store"
 import { createCalloutTool } from "./callout/callout-tool"
+import { sectionObstacles } from "./section/section-obstacles"
+import { sectionEntries } from "./section/section-scene"
+import type { SectionEntry } from "./section/section-scene"
+import { createSectionTool } from "./section/section-tool"
+import type { SectionToolHost } from "./section/section-tool"
 import type { CalloutToolHost } from "./callout/callout-tool"
 import { applyNotesText, notesText } from "./notes/notes-actions"
 import { notesOf, withNotes } from "./notes/notes-store"
@@ -260,6 +265,7 @@ const toolDoorBtn = document.querySelector<HTMLButtonElement>("#tool-door")!
 const toolWindowBtn = document.querySelector<HTMLButtonElement>("#tool-window")!
 const toolBatteryBtn = document.querySelector<HTMLButtonElement>("#tool-battery")!
 const toolCalloutBtn = document.querySelector<HTMLButtonElement>("#tool-callout")!
+const toolSectionBtn = document.querySelector<HTMLButtonElement>("#tool-section")!
 const toolNotesBtn = document.querySelector<HTMLButtonElement>("#tool-notes")!
 const notesPanel = document.querySelector<HTMLElement>("#notes-panel")!
 const notesInput = document.querySelector<HTMLTextAreaElement>("#notes-input")!
@@ -380,7 +386,7 @@ let theme: Theme = resolveTheme(themeChoice, systemDark.matches)
 
 const emptyDraft = (): { a: DimPoint | null; b: DimPoint | null } => ({ a: null, b: null })
 
-const endPoint = (end: DimPoint): Point | null => dimPointPoint(end, walls, doorways, batteries, fixtures)
+const endPoint = (end: DimPoint): Point | null => dimPointPoint(end, walls, doorways, batteries, fixtures, sectionEntriesNow())
 
 const radiusCm = (): number => snapRadiusCm(view.zoom)
 
@@ -1770,6 +1776,40 @@ const calloutHost: CalloutToolHost = {
 }
 const calloutTool = createCalloutTool(calloutHost)
 
+// линии разреза плана «Реконструкция» (change add-section-view, design D6, D7): список лежит в содержимом плана; фигуры
+// вычисляются по живым стенам гипсокартона рабочего набора, а выбор и удаление ведёт адаптер, одним шагом истории
+const sectionEntriesNow = (): SectionEntry[] => {
+  if (!onReconstruction()) return []
+  const own = walls.filter(isDrywallWall)
+  const base = reconNow()
+  const planWalls = [...base.underlay, ...base.pieces.map((p) => p.wall), ...own]
+  return sectionEntries(current().reconstruction?.sections ?? [], own, planWalls, sectionObstacles(planWalls, batteries, communicationsOf(), base.underlay))
+}
+const sectionHost: SectionToolHost = {
+  lines: () => current().reconstruction?.sections ?? [],
+  entries: sectionEntriesNow,
+  setLines: (next) => {
+    current().reconstruction = { ...(current().reconstruction ?? { walls: [], dimensions: [] }), sections: next }
+  },
+  recordBefore: (before) => {
+    nudgeBurst = false
+    recordSections(activeHistory(), before)
+  },
+  snap: (p) => snap(p, walls, GRID_STEP_CM, radiusCm()),
+  radiusCm: () => radiusCm(),
+  newId: () => crypto.randomUUID(),
+  // одно выделение на холсте: выделение линии снимает выделение остальных объектов, в том числе выноски
+  selected: () => {
+    calloutHost.selected()
+    calloutTool.deselect()
+  },
+  changed: () => {
+    dirty = true
+  },
+  redraw: () => redraw(),
+}
+const sectionTool = createSectionTool(sectionHost)
+
 // инструмент установки активного вида; null — вне инструментов «Проём», «Дверь» и «Окно»
 const placingTool = () => (tool === "window" ? windowTool : tool === "door" ? doorTool : tool === "doorway" ? doorwayTool : null)
 
@@ -1810,6 +1850,7 @@ const closeEditors = (): void => {
   communicationTool.closeEditor()
   batteryTool.closeEditor()
   calloutTool.deselect()
+  sectionTool.deselect()
   deselectRoom()
 }
 
@@ -2136,6 +2177,7 @@ function syncToolUI(): void {
   toolWindowBtn.classList.toggle("active", tool === "window")
   toolBatteryBtn.classList.toggle("active", tool === "battery")
   toolCalloutBtn.classList.toggle("active", tool === "callout")
+  toolSectionBtn.classList.toggle("active", tool === "section")
   syncNotesUI()
   toolDemolitionBtn.classList.toggle("active", tool === "demolition")
   syncRoughPanels()
@@ -2163,6 +2205,7 @@ function setTool(next: Tool): void {
   selectedCommunication = null
   resetElementTools()
   calloutTool.reset()
+  sectionTool.reset()
   suppressClick = false
   nudgeBurst = false
   groupMove = null
@@ -2564,7 +2607,7 @@ function drawReconstructionPlan(): void {
   const erasingCallout = tool === "eraser" && hoverWorld ? calloutTool.pick(hoverWorld) : null
   const target = tool === "eraser" && cursor && !erasingCallout ? eraserTarget(cursor) : { wall: null, dim: null, doorway: null, communication: null, battery: null }
   const draft = dimDraftGeometry()
-  const snapHit = tool === "dimension" && cursor && (!dimDraft.a || !dimDraft.b) ? nearestDimAnchor(cursor, walls, doorways, radiusCm(), []) : null
+  const snapHit = tool === "dimension" && cursor && (!dimDraft.a || !dimDraft.b) ? nearestDimAnchor(cursor, walls, doorways, radiusCm(), [], [], dimSectionScope()) : null
   const outlines: { wall: DrywallWall; color: string }[] = []
   for (const wall of own) {
     if (target.wall === wall) outlines.push({ wall, color: palette.erase })
@@ -2589,6 +2632,9 @@ function drawReconstructionPlan(): void {
       batteries,
       pieces: reconNow().pieces,
       drywall: own,
+      sections: sectionEntriesNow(),
+      sectionMarks: { selected: sectionTool.selectedId(), erasing: tool === "eraser" && hoverWorld ? sectionTool.pick(hoverWorld) : null },
+      sectionPreview: sectionTool.preview(),
       preview,
       outlines,
       handles: only && isDrywallWall(only) && selectedDimensions.length === 0 ? only : null,
@@ -2802,7 +2848,7 @@ function dimDraftGeometry(): (DimGeometry & { valueCm: number }) | null {
 // геометрия размера между точками черновика с заданным смещением (число размера с углом батареи — по оси стены батареи)
 function draftGeometry(offset: number): (DimGeometry & { valueCm: number }) | null {
   if (!dimDraft.a || !dimDraft.b) return null
-  return dimensionGeometry({ from: dimDraft.a, to: dimDraft.b, offset }, walls, doorways, batteries, fixtures)
+  return dimensionGeometry({ from: dimDraft.a, to: dimDraft.b, offset }, walls, doorways, batteries, fixtures, sectionEntriesNow())
 }
 
 function draftRubber(end: Point): [Point, Point] | null {
@@ -3023,7 +3069,7 @@ canvas.addEventListener("pointermove", (e) => {
   }
   if (dimDrag) {
     const p = toWorld(e)
-    const axis = dimensionGeometry({ ...dimDrag.dim, offset: 0 }, walls, doorways, batteries, fixtures)
+    const axis = dimensionGeometry({ ...dimDrag.dim, offset: 0 }, walls, doorways, batteries, fixtures, sectionEntriesNow())
     if (axis) {
       const dragged = dimDrag.dim
       const level = dimLevelSnap(p, axis, dimensions.filter((d) => d !== dragged), walls, radiusCm(), doorways)
@@ -3135,6 +3181,9 @@ canvas.addEventListener("pointermove", (e) => {
   else if (tool === "callout") {
     cursor = toWorld(e)
     calloutTool.hover(cursor)
+  } else if (tool === "section") {
+    cursor = toWorld(e)
+    sectionTool.hover(cursor)
   } else if (placingTool()) {
     cursor = toWorld(e)
     placingTool()?.hover(cursor)
@@ -3315,6 +3364,11 @@ canvas.addEventListener("pointerdown", (e) => {
   if (calloutTool.press(p)) {
     suppressClick = true
     canvas.setPointerCapture(e.pointerId)
+    return
+  }
+  // линия разреза и её фигура рисуются поверх стен: нажатие по ним главнее стен, линия не двигается (change add-section-view)
+  if (onReconstruction() && sectionTool.press(p)) {
+    suppressClick = true
     return
   }
   // цель нажатия (change fix-midpoint-marker-priority, design D2): маркеры выделенной стены главнее
@@ -3516,7 +3570,7 @@ function marqueePicks(rect: { x1: number; y1: number; x2: number; y2: number }):
   // ось стены на участке её проёма стену не выделяет (multi-selection «Рамка выделения»)
   const wallsPicked = wallsInRect(min, max, walls, doorways).filter(editableWall)
   const dimsPicked = dimensions.filter((d) => {
-    const geom = dimensionGeometry(d, walls, doorways, batteries, fixtures)
+    const geom = dimensionGeometry(d, walls, doorways, batteries, fixtures, sectionEntriesNow())
     return !!geom && segmentIntersectsRect(geom.p1, geom.p2, min, max)
   })
   return {
@@ -3612,9 +3666,14 @@ canvas.addEventListener("click", (e) => {
     calloutTool.click(raw)
     return
   }
+  if (tool === "section") {
+    sectionTool.click(raw)
+    return
+  }
   if (tool === "eraser") {
-    // выноска главнее остальных объектов под курсором ластика
+    // выноска главнее остальных объектов под курсором ластика; затем линия разреза плана «Реконструкция»
     if (calloutTool.eraseAt(raw)) return
+    if (onReconstruction() && sectionTool.eraseAt(raw)) return
     const { wall, dim, doorway, communication, battery } = eraserTarget(p)
     if (dim) deleteDimension(dim)
     // план «Мебель»: ластик стирает столы, подложка (стены, штукатурка, гипсокартон, элементы) не стирается
@@ -3679,9 +3738,17 @@ canvas.addEventListener("click", (e) => {
   commitPoint()
 })
 
+// фигуры, на чьих сечениях сейчас можно ставить точки размера: первая точка — на любой, вторая — только на той же фигуре,
+// а после точки не на фигуре фигуры не предлагаются (change add-section-view, design D5)
+function dimSectionScope(): SectionEntry[] {
+  const first = dimDraft.a ?? dimDraft.b
+  if (!first) return sectionEntriesNow()
+  return first.kind === "section" ? sectionEntriesNow().filter((e) => e.line.id === first.lineId) : []
+}
+
 function placeDimension(p: Point): void {
   if (!dimDraft.a || !dimDraft.b) {
-    const hit = nearestDimAnchor(p, walls, doorways, radiusCm(), batteries.filter(editableBattery), fixtures)
+    const hit = nearestDimAnchor(p, walls, doorways, radiusCm(), batteries.filter(editableBattery), fixtures, dimSectionScope())
     if (!hit) return
     const point = hit.anchor
     if (!dimDraft.a) dimDraft.a = point
@@ -3856,6 +3923,7 @@ function deleteSelection(): void {
 
 canvas.addEventListener("dblclick", () => {
   if (calloutTool.hasDraft()) calloutTool.cancelDraft()
+  if (tool === "section") sectionTool.finish()
   endChain()
   if (dimDraft.a || dimDraft.b) {
     dimDraft = emptyDraft()
@@ -3990,6 +4058,7 @@ toolDuctBtn.addEventListener("click", () => applyCommunicationsGroup(communicati
 toolWindowBtn.addEventListener("click", () => setTool("window"))
 toolBatteryBtn.addEventListener("click", () => setTool("battery"))
 toolCalloutBtn.addEventListener("click", () => setTool("callout"))
+toolSectionBtn.addEventListener("click", () => setTool("section"))
 
 // «Примечания»: инструмент без жестов на холсте; клик по кнопке активного инструмента переключает панель
 toolNotesBtn.addEventListener("click", () => {
@@ -4358,11 +4427,13 @@ function stepPlumbing(step: typeof undoPlumbing): void {
 // (остатки берутся по текущему обмеру и демонтажу), на остальных планах запись подставляется как есть
 function restoreScene(e: Scene): void {
   if (reconWorkspace) {
-    // запись плана «Реконструкция» хранит стены гипсокартона и размеры; выноски и примечания в ней не хранятся (у них свои записи)
+    // запись плана «Реконструкция» хранит стены гипсокартона и размеры; линии разреза, выноски и примечания в ней не хранятся
+    // (у них свои записи)
     const stored = current().reconstruction
     current().reconstruction = {
       walls: e.walls.filter(isDrywallWall),
       dimensions: e.dimensions,
+      ...(stored?.sections ? { sections: stored.sections } : null),
       ...(stored?.callouts ? { callouts: stored.callouts } : null),
       ...(stored?.notes ? { notes: stored.notes } : null),
     }
@@ -4429,6 +4500,17 @@ function stepExhausts(step: typeof undoExhausts): void {
   redraw()
 }
 
+// отмена или повтор шага линий разреза плана «Реконструкция» (change add-section-view, design D7): подставляется список до операции
+function stepSections(step: typeof undoSections): void {
+  const next = step(activeHistory(), sectionHost.lines())
+  if (!next) return
+  sectionHost.setLines(next)
+  sectionTool.deselect()
+  dirty = true
+  resetEditing()
+  redraw()
+}
+
 function stepCallouts(step: typeof undoCallouts): void {
   const next = step(activeHistory(), calloutsOf(current(), activePlanOf(current())))
   if (!next) return
@@ -4478,6 +4560,10 @@ function undo(): void {
   }
   if (h.past[h.past.length - 1]?.kind === "exhausts") {
     stepExhausts(undoExhausts)
+    return
+  }
+  if (h.past[h.past.length - 1]?.kind === "sections") {
+    stepSections(undoSections)
     return
   }
   if (h.past[h.past.length - 1]?.kind === "callouts") {
@@ -4539,6 +4625,10 @@ function redo(): void {
   }
   if (h.future[h.future.length - 1]?.kind === "exhausts") {
     stepExhausts(redoExhausts)
+    return
+  }
+  if (h.future[h.future.length - 1]?.kind === "sections") {
+    stepSections(redoSections)
     return
   }
   if (h.future[h.future.length - 1]?.kind === "callouts") {
@@ -4673,11 +4763,21 @@ window.addEventListener("keydown", (e) => {
     else undo()
     return
   }
+  // Enter завершает набор вершин линии разреза (change add-section-view)
+  if (e.key === "Enter" && tool === "section" && !(e.target instanceof HTMLInputElement) && sectionTool.finish()) {
+    e.preventDefault()
+    return
+  }
   if (e.key === "Delete") {
     if (e.target instanceof HTMLInputElement) return
     // выделенная выноска удаляется одним шагом истории на любом плане
     if (calloutTool.selectedId() !== null) {
       if (!calloutTool.dragging()) calloutTool.deleteSelected()
+      return
+    }
+    // выделенная линия разреза удаляется одним шагом истории (change add-section-view)
+    if (sectionTool.selectedId() !== null) {
+      sectionTool.deleteSelected()
       return
     }
     if (onFurniture()) {
@@ -4797,15 +4897,20 @@ window.addEventListener("keydown", (e) => {
       tool,
       gestureActive: !!chainStart,
       dimensionDraft: !!(dimDraft.a || dimDraft.b),
-      calloutDraft: calloutTool.hasDraft(),
-      hasSelection: selectedDimensions.length + selectedWalls.length + selectedDoorways.length + selectedBatteries.length > 0 || selectedCommunication !== null || calloutTool.selectedId() !== null || selectedRoom !== null || itemTool.hasSelection(),
+      calloutDraft: calloutTool.hasDraft() || sectionTool.hasDraft(),
+      hasSelection: selectedDimensions.length + selectedWalls.length + selectedDoorways.length + selectedBatteries.length > 0 || selectedCommunication !== null || calloutTool.selectedId() !== null || sectionTool.selectedId() !== null || selectedRoom !== null || itemTool.hasSelection(),
     })
     if (action === "end-gesture") endChain()
     else if (action === "cancel-dimension-draft") {
       dimDraft = emptyDraft()
       redraw()
-    } else if (action === "cancel-callout-draft") calloutTool.cancelDraft()
-    else if (action === "clear-selection") clearSelection()
+    } else if (action === "cancel-callout-draft") {
+      calloutTool.cancelDraft()
+      sectionTool.cancelDraft()
+    } else if (action === "clear-selection") {
+      sectionTool.deselect()
+      clearSelection()
+    }
     else if (action === "deactivate-tool") setTool("none")
   }
   if (e.key !== "ArrowUp" && e.key !== "ArrowDown" && e.key !== "ArrowLeft" && e.key !== "ArrowRight") return
@@ -4822,7 +4927,7 @@ window.addEventListener("keydown", (e) => {
   if (onDemolition() || onRough() || onCeiling() || onElectrical()) return
   if (groupMove || endpointDrag || panDrag || dimDrag || doorwayTool.dragging() || communicationTool.dragging() || batteryTool.dragging()) return
   // выделенная коммуникация и выноска стрелками не двигаются и материал не переключается (spec communications)
-  if (selectedCommunication || calloutTool.selectedId() !== null || selectedRoom !== null) return
+  if (selectedCommunication || calloutTool.selectedId() !== null || sectionTool.selectedId() !== null || selectedRoom !== null) return
   if (selectedWalls.length || selectedDimensions.length || selectedDoorways.length || selectedBatteries.length) {
     if (!selectedWalls.length) {
       if (!selectedDoorways.length && !selectedBatteries.length) return

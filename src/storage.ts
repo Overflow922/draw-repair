@@ -11,8 +11,9 @@ import { isPlanId } from "./plans"
 import type { PlanId } from "./plans"
 import { mergeAllPlaster } from "./rough/plaster-marks"
 import { PLASTER_THICKNESS, SCREED_THICKNESS, isThickness } from "./rough/rough-model"
+import { checkSectionLine } from "./section/section-line"
 import { isDoor, isWindow, normalizeMaterial } from "./types"
-import type { Battery, BatteryCornerPoint, BatteryMark, Callout, CeilingContent, Communication, CornerRef, DemolitionMark, Dimension, DimPoint, Doorway, Drawing, DrawingStore, DrywallWall, ElectricalContent, EdgePoint, EdgeRef, ExhaustFan, FurnitureContent, ItemPoint, JambPoint, LightFixture, LightLine, LightSwitch, MountingContent, PlasterMark, PlumbingContent, Point, ReconstructionContent, RightAngleMark, RoomRecord, Screed, FurnitureItem, StretchCeiling, ToiletSizes, SwitchingContent, SwitchKey, View, Wall, WallDoor, WallElement, WallWindow } from "./types"
+import type { Battery, BatteryCornerPoint, BatteryMark, Callout, CeilingContent, Communication, CornerRef, DemolitionMark, Dimension, DimPoint, Doorway, Drawing, DrawingStore, DrywallWall, ElectricalContent, EdgePoint, EdgeRef, ExhaustFan, FurnitureContent, ItemPoint, JambPoint, LightFixture, LightLine, LightSwitch, MountingContent, PlasterMark, PlumbingContent, Point, ReconstructionContent, RightAngleMark, RoomRecord, Screed, SectionCornerPoint, SectionLine, SectionView, FurnitureItem, StretchCeiling, ToiletSizes, SwitchingContent, SwitchKey, View, Wall, WallDoor, WallElement, WallWindow } from "./types"
 
 const KEY = "draw-repair:drawing"
 
@@ -55,10 +56,21 @@ const isCornerPoint = (p: object): p is BatteryCornerPoint => {
     (x.end === "a" || x.end === "b") && (x.side === "back" || x.side === "front")
 }
 
-// без признака вида — пара граней (формат до этого change); любой другой вид, кроме "jamb" и "corner", не принимается
+// угол сечения на фигуре разреза: kind "section", линия, стена, номер рабочего отрезка, сторона s и сторона z (change add-section-view,
+// design D5)
+const isSectionPoint = (p: object): p is SectionCornerPoint => {
+  const x = p as Record<string, unknown>
+  if (x.kind !== "section" || typeof x.lineId !== "string" || x.lineId === "" || typeof x.wallId !== "string" || x.wallId === "") return false
+  if (typeof x.segment !== "number" || !Number.isInteger(x.segment) || x.segment < 0) return false
+  if (typeof x.at !== "object" || x.at === null) return false
+  const at = x.at as Record<string, unknown>
+  return (at.s === "lo" || at.s === "hi") && (at.z === "floor" || at.z === "top")
+}
+
+// без признака вида — пара граней (формат до этого change); любой другой вид, кроме "jamb", "corner" и "section", не принимается
 const isDimPoint = (p: unknown): p is DimPoint =>
   typeof p === "object" && p !== null &&
-  ((p as DimPoint).kind === undefined ? isEdgeRef((p as EdgePoint).a) && isEdgeRef((p as EdgePoint).b) : isJambPoint(p) || isCornerPoint(p))
+  ((p as DimPoint).kind === undefined ? isEdgeRef((p as EdgePoint).a) && isEdgeRef((p as EdgePoint).b) : isJambPoint(p) || isCornerPoint(p) || isSectionPoint(p))
 
 // точка прибора: kind "item", непустой идентификатор предмета «Мебели», центр или угол со знаками u, v (change add-plumbing-plan,
 // design D5)
@@ -328,6 +340,7 @@ const copyDimPoint = (p: DimPoint): DimPoint => {
   if (p.kind === "jamb") return { kind: "jamb", elementId: p.elementId, jamb: p.jamb, face: p.face }
   if (p.kind === "corner") return { kind: "corner", batteryId: p.batteryId, end: p.end, side: p.side }
   if (p.kind === "item") return { kind: "item", itemId: p.itemId, at: p.at.kind === "center" ? { kind: "center" } : { kind: "corner", u: p.at.u, v: p.at.v } }
+  if (p.kind === "section") return { kind: "section", lineId: p.lineId, wallId: p.wallId, segment: p.segment, at: { s: p.at.s, z: p.at.z } }
   return { a: { ...p.a }, b: { ...p.b } }
 }
 
@@ -374,8 +387,26 @@ const copyDrywall = (w: DrywallWall): DrywallWall => ({
   heightCm: w.heightCm,
 })
 
-// объекты плана «Реконструкция» при загрузке: некорректные стены и размеры отбрасываются по одному; размеры на отсутствующие стены
-// сохраняются; поле, не являющееся объектом, читается как отсутствующее; выноски и примечания — по общим правилам
+const isSectionView = (v: unknown): v is SectionView => v === "up" || v === "down" || v === "left" || v === "right"
+
+// линия разреза (change add-section-view, design D7): непустые идентификатор и обозначение, известное направление, вершины по
+// правилам линии (оси, нечётное число отрезков, без возврата назад); в документе и в истории проверка одна
+export const isSectionLine = (l: unknown): l is SectionLine => {
+  if (typeof l !== "object" || l === null) return false
+  const x = l as Record<string, unknown>
+  return typeof x.id === "string" && x.id !== "" && typeof x.label === "string" && x.label !== "" && isSectionView(x.view) &&
+    Array.isArray(x.points) && x.points.every(isPoint) && checkSectionLine(x.points, x.view).ok
+}
+
+export const copySectionLine = (l: SectionLine): SectionLine => ({
+  id: l.id,
+  label: l.label,
+  view: l.view,
+  points: l.points.map((p) => ({ x: p.x, y: p.y })),
+})
+
+// объекты плана «Реконструкция» при загрузке: некорректные стены, линии разреза и размеры отбрасываются по одному; размеры на
+// отсутствующие стены сохраняются; поле, не являющееся объектом, читается как отсутствующее; выноски и примечания — по общим правилам
 function loadReconstruction(raw: unknown): { reconstruction?: ReconstructionContent } {
   if (typeof raw !== "object" || raw === null || Array.isArray(raw)) return {}
   const x = raw as Record<string, unknown>
@@ -385,6 +416,7 @@ function loadReconstruction(raw: unknown): { reconstruction?: ReconstructionCont
     reconstruction: {
       walls: list(x.walls).filter(isStoredDrywall).map((w) => copyDrywall(w as DrywallWall)),
       dimensions: list(x.dimensions).filter(isDimension).map(copyDimension),
+      ...(x.sections === undefined ? null : { sections: list(x.sections).filter(isSectionLine).map(copySectionLine) }),
       ...(x.callouts === undefined ? null : { callouts: loadCalloutList(x.callouts) }),
       ...(notes === undefined ? null : { notes }),
     },

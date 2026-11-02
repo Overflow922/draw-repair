@@ -38,8 +38,8 @@ const PLAN_TOOLS: Record<PlanId, readonly [Tool, ...Tool[]]> = {
   // «Черновые работы» (change add-rough-works-plan, design D8): штукатурка и стяжка поверх подложки «Монтажа»
   // «Прямой угол» (change plaster-right-angle, design D4) — сразу после «Штукатурки»
   rough: ["plaster", "rightAngle", "screed", "callout", "ruler", "notes", "eraser"],
-  // «Реконструкция» (change reconstruction-plan, design D9): стены гипсокартона поверх подложки «Черновых работ»
-  reconstruction: ["drywall", "dimension", "callout", "ruler", "notes", "eraser"],
+  // «Реконструкция» (change reconstruction-plan, design D9): стены гипсокартона поверх подложки «Черновых работ»; «Разрез» (change add-section-view) — сразу после «Гипсокартона»
+  reconstruction: ["drywall", "section", "dimension", "callout", "ruler", "notes", "eraser"],
   // «Мебель» (change furniture-plan-table, design D1): столы поверх подложки «Реконструкции»; «Стол» — в группе «Мебель»
   furniture: ["furniture", "dimension", "callout", "ruler", "notes", "eraser"],
   // «Сантехника» (change add-plumbing-plan, design D1): приборы «Мебели» — подложка, своих предметов нет; по умолчанию «Размер»
