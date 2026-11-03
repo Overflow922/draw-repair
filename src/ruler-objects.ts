@@ -1,11 +1,13 @@
 import { batteryRect } from "./battery/battery-geometry"
 import { itemCorners } from "./furniture/item"
-import type { RulerObject } from "./ruler"
+import { plasterStrip } from "./rough/plaster"
+import type { PlasterPiece } from "./rough/plaster"
+import type { RulerObject, RulerPlaster } from "./ruler"
 import type { Battery, Communication, FurnitureItem, Point, Wall } from "./types"
 import { degenerate, dist } from "./wall-geometry"
 
 // Объекты плана для линейки (change ruler-objects-span, design D2): батарея, воздуховод, стояк и предмет мебели
-// приводятся к RulerObject. Чистые функции без DOM; входы не мутируются.
+// приводятся к RulerObject, полосы штукатурки — к RulerPlaster. Чистые функции без DOM; входы не мутируются.
 
 export interface RulerObjectSource {
   // стены плана: хозяева батарей
@@ -34,6 +36,11 @@ export function batteryRulerObject(battery: Battery, walls: readonly Wall[]): Ru
 export function communicationRulerObject(c: Communication): RulerObject {
   const center: Point = { x: c.x, y: c.y }
   return c.kind === "riser" ? { kind: "circle", center, diameterCm: c.diameterCm } : { kind: "rect", center, u: { x: 1, y: 0 }, widthCm: c.widthCm, depthCm: c.depthCm }
+}
+
+// полосы штукатурки плана для линейки (change ruler-plaster-layer, design D4): откос лежит внутри тела стены и луч не меняет
+export function rulerPlasterOf(pieces: readonly PlasterPiece[]): RulerPlaster[] {
+  return pieces.filter((piece) => piece.mark.face !== "reveal").map((piece) => ({ polygon: plasterStrip(piece), hostId: piece.wall.id }))
 }
 
 // порядок: батареи, коммуникации, мебель — он решает равенство расстояний до центров под курсором

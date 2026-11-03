@@ -57,12 +57,13 @@ import { createRightAngleTool } from "./rough/right-angle-tool"
 import type { RightAngleToolHost } from "./rough/right-angle-tool"
 import { createScreedTool } from "./rough/screed-tool"
 import type { ScreedToolHost } from "./rough/screed-tool"
+import type { PlasterPiece } from "./rough/plaster"
 import { findRooms } from "./room-area"
 import { roomBlockAt, roomBlockLayout, roomBlocksOf } from "./room-block"
 import { formatRoomHeight, parseRoomHeight, reconcileRooms } from "./room-explication"
 import { rulerReading } from "./ruler"
 import type { RulerReading } from "./ruler"
-import { rulerObjectsOf } from "./ruler-objects"
+import { rulerObjectsOf, rulerPlasterOf } from "./ruler-objects"
 import { drawingFileErrorMessage, importDrawingFile, serializeDrawingFile } from "./drawing-file/drawing-file"
 import { drawingFileName } from "./drawing-file/drawing-names"
 import { downloadText } from "./drawing-file/download"
@@ -2540,10 +2541,16 @@ function refresh(scaleToo: boolean): void {
   }
 }
 
-// замер линейки под курсором: стены плана и его объекты — батареи, коммуникации и (на плане «Мебель») мебель (change ruler-objects-span, design D6)
-function rulerOf(planWalls: Wall[], planBatteries: readonly Battery[], planItems: readonly FurnitureItem[] = []): RulerReading | null {
+// замер линейки под курсором: стены плана и его объекты — батареи, коммуникации и (на плане «Мебель») мебель (change ruler-objects-span, design D6);
+// полосы штукатурки плана, если она на нём нарисована, останавливают луч пролёта (change ruler-plaster-layer, design D4)
+function rulerOf(planWalls: Wall[], planBatteries: readonly Battery[], planItems: readonly FurnitureItem[] = [], pieces: readonly PlasterPiece[] = []): RulerReading | null {
   if (tool !== "ruler" || !cursor || gestureActive()) return null
-  return rulerReading(cursor, planWalls, rulerObjectsOf({ walls: planWalls, batteries: planBatteries, communications: communicationsOf(), items: planItems }))
+  return rulerReading(
+    cursor,
+    planWalls,
+    rulerObjectsOf({ walls: planWalls, batteries: planBatteries, communications: communicationsOf(), items: planItems }),
+    rulerPlasterOf(pieces),
+  )
 }
 
 function drawPlan(): void {
@@ -2605,7 +2612,7 @@ function drawFurniturePlan(): void {
       marqueeHits,
       marquee,
       tracks: centerGuideTracks(),
-      ruler: rulerOf(walls, batteries, items),
+      ruler: rulerOf(walls, batteries, items, s.base.pieces),
     },
   )
 }
@@ -2645,7 +2652,7 @@ function drawPlumbingPlan(): void {
       hoverDim: target.dim,
       marqueeHits,
       marquee,
-      ruler: rulerOf(walls, batteries, fixtures),
+      ruler: rulerOf(walls, batteries, fixtures, s.base.pieces),
     },
   )
 }
@@ -2706,7 +2713,7 @@ function drawCeilingPlan(): void {
     },
     unit,
     view,
-    { palette: paletteOf(theme), theme, ruler: rulerOf(walls, batteries, ceilingItems) },
+    { palette: paletteOf(theme), theme, ruler: rulerOf(walls, batteries, ceilingItems, s.base.pieces) },
   )
 }
 
@@ -2732,7 +2739,7 @@ function drawElectricalPlan(): void {
     },
     unit,
     view,
-    { palette: paletteOf(theme), theme, ruler: rulerOf(walls, batteries, electricalItems) },
+    { palette: paletteOf(theme), theme, ruler: rulerOf(walls, batteries, electricalItems, s.base.pieces) },
   )
 }
 
@@ -2811,7 +2818,7 @@ function drawReconstructionPlan(): void {
         chainStart && segment?.dir && segment.refRay && segment.angleDeg !== null
           ? { at: segment.start, from: segment.refRay, to: segment.dir, deg: segment.angleDeg }
           : null,
-      ruler: rulerOf(walls, batteries),
+      ruler: rulerOf(walls, batteries, [], reconNow().pieces),
     },
   )
 }
@@ -2839,7 +2846,7 @@ function drawRoughPlan(): void {
       selectedPlasterId: plasterTool.selectedId(),
       selectedScreedId: screedTool.selectedId(),
       ghost: plasterTool.ghost(),
-      ruler: rulerOf(s.base.walls, s.base.batteries),
+      ruler: rulerOf(s.base.walls, s.base.batteries, [], s.pieces),
       rightAngles: s.rightAngles.map((a) => ({ id: a.mark.id, point: a.corner.point, arms: a.corner.arms })),
       selectedRightAngleId: rightAngleTool.selectedId(),
       angleGhost: angleGhost && tool === "rightAngle" ? { point: angleGhost.point, arms: angleGhost.arms, strips: cornerStrips(angleGhost, s.pieces) } : null,

@@ -25,6 +25,12 @@ export type RulerObject =
   | { kind: "rect"; center: Point; u: Point; widthCm: number; depthCm: number } // u — единичная ось ширины, ось глубины v = (−u.y, u.x)
   | { kind: "circle"; center: Point; diameterCm: number }
 
+// полоса штукатурки для линейки (change ruler-plaster-layer, design D1): многоугольник полосы и стена-хозяин, на которой она лежит
+export interface RulerPlaster {
+  polygon: Point[]
+  hostId: string
+}
+
 type RulerRect = Extract<RulerObject, { kind: "rect" }>
 type RulerCircle = Extract<RulerObject, { kind: "circle" }>
 
@@ -48,14 +54,17 @@ const RAD_TO_DEG = 180 / Math.PI
 
 const roundHundredths = (deg: number): number => Math.round(deg * 100) / 100
 
-// стена под курсором главнее объекта; затем объект; иначе пролёт между стенами и торцами объектов (change ruler-objects-span, design D3)
-export function rulerReading(p: Point, walls: Wall[], objects: readonly RulerObject[] = []): RulerReading {
+// стена под курсором главнее полосы штукатурки (замер стены-хозяина) и объекта; иначе пролёт между стенами, полосами штукатурки
+// и торцами объектов (change ruler-objects-span, design D3; change ruler-plaster-layer, design D2–D3)
+export function rulerReading(p: Point, walls: Wall[], objects: readonly RulerObject[] = [], plaster: readonly RulerPlaster[] = []): RulerReading {
   const forms = walls.map((wall) => ({ wall, polys: displayPolygons(wall, walls) }))
   const wall = wallUnder(p, forms)
   if (wall) return wallReading(wall, walls)
+  const host = plasterHostUnder(p, plaster, walls)
+  if (host) return wallReading(host, walls)
   const object = objectUnder(p, objects)
   if (object) return objectReading(p, object)
-  const polys = [...forms.flatMap((f) => f.polys), ...objects.flatMap((o) => (o.kind === "rect" ? [rectCorners(o)] : []))]
+  const polys = [...forms.flatMap((f) => f.polys), ...plaster.map((s) => s.polygon), ...objects.flatMap((o) => (o.kind === "rect" ? [rectCorners(o)] : []))]
   const circles = objects.filter((o): o is RulerCircle => o.kind === "circle")
   return {
     kind: "space",
@@ -162,6 +171,23 @@ function wallUnder(p: Point, forms: WallForm[]): Wall | null {
     const d = distanceToWall(p, wall)
     if (d < bestD) {
       best = wall
+      bestD = d
+    }
+  }
+  return best
+}
+
+// стена-хозяин полосы штукатурки, в которой курсор; среди нескольких — с ближайшей осью, при равенстве — ранняя полоса
+function plasterHostUnder(p: Point, plaster: readonly RulerPlaster[], walls: readonly Wall[]): Wall | null {
+  let best: Wall | null = null
+  let bestD = Infinity
+  for (const strip of plaster) {
+    if (!pointInPolygon(p, strip.polygon)) continue
+    const host = walls.find((w) => w.id === strip.hostId)
+    if (!host) continue
+    const d = distanceToWall(p, host)
+    if (d < bestD) {
+      best = host
       bestD = d
     }
   }
