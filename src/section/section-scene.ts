@@ -63,7 +63,8 @@ export function sectionEntries(
   if (lines.length === 0) return []
   const figures = lines.map((l) => sectionFigure(l, drywall))
   const spans = new Map(lines.map((l) => [l.id, spanX(l)]))
-  const placements = layoutFigures(figures, planBounds(planWalls, lines), spans)
+  const fixed = new Map(lines.flatMap((l) => (l.figureAt === undefined ? [] : [[l.id, l.figureAt] as const])))
+  const placements = layoutFigures(figures, planBounds(planWalls, lines), spans, fixed)
   return placements.flatMap((placement) => {
     const line = lines.find((l) => l.id === placement.lineId)
     const figure = figures.find((f) => f.lineId === placement.lineId)

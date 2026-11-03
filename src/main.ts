@@ -9,7 +9,11 @@ import { batteriesInRect, hitBattery } from "./battery/battery-pick"
 import { createBatteryTool } from "./battery/battery-tool"
 import type { BatteryToolHost } from "./battery/battery-tool"
 import { calloutsOf, withCallouts } from "./callout/callout-store"
-import { createCalloutTool } from "./callout/callout-tool"
+import { CHAR_WIDTH } from "./doorway/element-label"
+import { createCalloutTool, measureLine } from "./callout/callout-tool"
+import { calloutLayout } from "./callout/callout-layout"
+import { doorLeaf } from "./doorway/doorway-layout"
+import { planSurroundings } from "./section/section-figure-surroundings"
 import { sectionObstacles } from "./section/section-obstacles"
 import { sectionEntries } from "./section/section-scene"
 import type { SectionEntry } from "./section/section-scene"
@@ -1828,7 +1832,30 @@ const sectionHost: SectionToolHost = {
   },
   redraw: () => redraw(),
 }
-const sectionTool = createSectionTool(sectionHost)
+// что не должна занимать переставляемая фигура, кроме других фигур и линий разреза (change move-section-figure, design D2):
+// стены, батареи, коммуникации, сектора открывания дверей, размеры и выноски плана; размеры, чья точка замера лежит на самой
+// фигуре, едут вместе с ней и препятствием не считаются; название фигуры — по кеглю экрана
+function figureSurroundings(lineId: string) {
+  const base = reconNow()
+  const planWalls = [...base.underlay, ...base.pieces.map((p) => p.wall), ...base.own]
+  const k = PX_PER_CM * view.zoom
+  const onFigure = (d: Dimension): boolean => [d.from, d.to].some((q) => (q.kind === "section" || q.kind === "shape") && q.lineId === lineId)
+  const geometries = dimensions
+    .filter((d) => !onFigure(d))
+    .flatMap((d) => dimensionGeometry(d, walls, doorways, batteries, fixtures, sectionEntriesNow()) ?? [])
+  return {
+    plan: planSurroundings({
+      obstacles: sectionObstacles(planWalls, batteries, communicationsOf(), base.underlay),
+      doors: base.base.doorways.flatMap((e) => (e.kind === "door" ? (doorLeaf(e, base.underlay) ?? []) : [])),
+      dimensions: geometries,
+      callouts: calloutsOf(current(), activePlanOf(current())).map((c) => calloutLayout(c, view, SCREEN_METRICS, measureLine)),
+      pxPerCm: k,
+      pan: view.pan,
+    }),
+    title: { width: (3 * SCREEN_METRICS.labelPx * CHAR_WIDTH) / k, height: (SCREEN_METRICS.labelPx * 1.4) / k },
+  }
+}
+const sectionTool = createSectionTool(sectionHost, figureSurroundings)
 
 // инструмент «Деталь разреза» (change add-section-shapes): детали лежат в чертеже рядом с линиями и пишутся в историю вместе с ними
 const sectionShapeHost: SectionShapeHost = {
@@ -2932,7 +2959,7 @@ function centerGuideTracks(): TrackLine[] | null {
 
 // нажатая кнопка мыши: рамка, перетаскивание стен или размера, протяжка пометки, сдвиг вида
 function gestureActive(): boolean {
-  return !!(marquee || marqueePending || groupMove || endpointDrag || dimDrag || doorwayTool.dragging() || communicationTool.dragging() || batteryTool.dragging() || calloutTool.dragging() || sectionShapeTool.isDragging() || demolitionTool.dragging() || plasterTool.dragging() || itemTool.dragging() || panDrag)
+  return !!(marquee || marqueePending || groupMove || endpointDrag || dimDrag || doorwayTool.dragging() || communicationTool.dragging() || batteryTool.dragging() || calloutTool.dragging() || sectionShapeTool.isDragging() || sectionTool.isDragging() || demolitionTool.dragging() || plasterTool.dragging() || itemTool.dragging() || panDrag)
 }
 
 // ластик: размер → коммуникация → батарея → проём → стена (wall-deletion «Инструмент «Ластик»», «Ластик и удаление
@@ -3154,6 +3181,10 @@ function editMode(snapped: SnapResult): EditMode {
 canvas.addEventListener("pointermove", (e) => {
   if (sectionShapeTool.isDragging()) {
     sectionShapeTool.dragTo(toWorld(e))
+    return
+  }
+  if (sectionTool.isDragging()) {
+    sectionTool.dragTo(toWorld(e))
     return
   }
   if (calloutTool.dragging()) {
@@ -3509,6 +3540,12 @@ canvas.addEventListener("pointerdown", (e) => {
     canvas.setPointerCapture(e.pointerId)
     return
   }
+  // выделенную фигуру тот же жест двигает по плану; невыделенную нажатие только выделяет (change move-section-figure)
+  if (onReconstruction() && sectionTool.beginDrag(p)) {
+    suppressClick = true
+    canvas.setPointerCapture(e.pointerId)
+    return
+  }
   if (onReconstruction() && sectionTool.press(p)) {
     suppressClick = true
     return
@@ -3605,6 +3642,10 @@ canvas.addEventListener("pointerdown", () => {
 canvas.addEventListener("pointerup", (e) => {
   if (sectionShapeTool.isDragging()) {
     if (e.button === 0) sectionShapeTool.endDrag()
+    return
+  }
+  if (sectionTool.isDragging()) {
+    if (e.button === 0) sectionTool.endDrag()
     return
   }
   if (calloutTool.dragging()) {
@@ -4693,7 +4734,7 @@ function stepNotes(step: typeof undoNotes): void {
 }
 
 function undo(): void {
-  if (groupMove || endpointDrag || panDrag || dimDrag || doorwayTool.dragging() || communicationTool.dragging() || batteryTool.dragging() || calloutTool.dragging() || sectionShapeTool.isDragging() || demolitionTool.dragging() || plasterTool.dragging() || itemTool.dragging()) return
+  if (groupMove || endpointDrag || panDrag || dimDrag || doorwayTool.dragging() || communicationTool.dragging() || batteryTool.dragging() || calloutTool.dragging() || sectionShapeTool.isDragging() || sectionTool.isDragging() || demolitionTool.dragging() || plasterTool.dragging() || itemTool.dragging()) return
   // открытое поле ввода выноски и поле примечаний сохраняют текст до отмены
   calloutTool.commitEditor()
   commitNotes()
@@ -4759,7 +4800,7 @@ function undo(): void {
 }
 
 function redo(): void {
-  if (groupMove || endpointDrag || panDrag || dimDrag || doorwayTool.dragging() || communicationTool.dragging() || batteryTool.dragging() || calloutTool.dragging() || sectionShapeTool.isDragging() || demolitionTool.dragging() || plasterTool.dragging() || itemTool.dragging()) return
+  if (groupMove || endpointDrag || panDrag || dimDrag || doorwayTool.dragging() || communicationTool.dragging() || batteryTool.dragging() || calloutTool.dragging() || sectionShapeTool.isDragging() || sectionTool.isDragging() || demolitionTool.dragging() || plasterTool.dragging() || itemTool.dragging()) return
   calloutTool.commitEditor()
   commitNotes()
   const h = activeHistory()

@@ -320,6 +320,8 @@ export interface SectionLine {
   label: string
   view: SectionView
   points: Point[]
+  // левая точка пола фигуры в чертеже; есть только у переставленной фигуры (change move-section-figure, design D1)
+  figureAt?: Point
 }
 
 // Деталь разреза (change add-section-shapes, design D1): заштрихованный прямоугольник на фигуре линии разреза в координатах

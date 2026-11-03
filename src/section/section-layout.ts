@@ -43,6 +43,8 @@ export function layoutFigures(
   figures: readonly SectionFigure[],
   bounds: Bounds,
   spans: ReadonlyMap<string, LineSpanX>,
+  // сохранённые позиции переставленных фигур (change move-section-figure, design D1): они стоят на своём месте и не занимают слот
+  fixed: ReadonlyMap<string, Point> = new Map(),
 ): FigurePlacement[] {
   const ordered = [...figures].sort((a, b) => labelRank(a.label) - labelRank(b.label))
   // дальняя граница уже занятого места у каждой стороны габаритов
@@ -52,24 +54,43 @@ export function layoutFigures(
     left: bounds.minX - SECTION_GAP_CM,
     right: bounds.maxX + SECTION_GAP_CM,
   }
+  // места переставленных фигур: автоматические фигуры обходят их (change move-section-figure, design D1), чтобы не лечь поверх
+  const pinned = ordered.flatMap((f): Bounds[] => {
+    const at = fixed.get(f.lineId)
+    return at === undefined ? [] : [{ minX: at.x, maxX: at.x + f.width, minY: at.y - f.height, maxY: at.y }]
+  })
+  const overlapping = (r: Bounds): Bounds | undefined =>
+    pinned.find((p) => r.minX < p.maxX && r.maxX > p.minX && r.minY < p.maxY && r.maxY > p.minY)
+  // сдвигает дальнюю границу стороны за занятое переставленной фигурой место, пока автоматическая фигура лежит на нём
+  const clearEdge = (f: SectionFigure, rectAt: (edgeValue: number) => Bounds, past: (p: Bounds) => number): void => {
+    for (let hit = overlapping(rectAt(edge[f.view])); hit !== undefined; hit = overlapping(rectAt(edge[f.view]))) edge[f.view] = past(hit)
+  }
   return ordered.map((f): FigurePlacement => {
     const base = { lineId: f.lineId, label: f.label, view: f.view, width: f.width, height: f.height }
+    const at = fixed.get(f.lineId)
+    if (at !== undefined) return { ...base, x: at.x, floorY: at.y }
     if (bySide(f.view) === "vertical") {
       const x = spans.get(f.lineId)?.minX ?? bounds.minX
+      const across = { minX: x, maxX: x + f.width }
       if (f.view === "up") {
+        clearEdge(f, (e) => ({ ...across, minY: e - f.height, maxY: e }), (p) => p.minY - SECTION_GAP_CM)
         const floorY = edge.up
         edge.up = floorY - f.height - SECTION_GAP_CM
         return { ...base, x, floorY }
       }
+      clearEdge(f, (e) => ({ ...across, minY: e, maxY: e + f.height }), (p) => p.maxY + SECTION_GAP_CM)
       const floorY = edge.down + f.height
       edge.down = floorY + SECTION_GAP_CM
       return { ...base, x, floorY }
     }
+    const rows = { minY: bounds.maxY - f.height, maxY: bounds.maxY }
     if (f.view === "right") {
+      clearEdge(f, (e) => ({ ...rows, minX: e, maxX: e + f.width }), (p) => p.maxX + SECTION_GAP_CM)
       const x = edge.right
       edge.right = x + f.width + SECTION_GAP_CM
       return { ...base, x, floorY: bounds.maxY }
     }
+    clearEdge(f, (e) => ({ ...rows, minX: e - f.width, maxX: e }), (p) => p.minX - SECTION_GAP_CM)
     const x = edge.left - f.width
     edge.left = x - SECTION_GAP_CM
     return { ...base, x, floorY: bounds.maxY }

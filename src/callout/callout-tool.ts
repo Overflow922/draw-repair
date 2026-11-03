@@ -53,7 +53,7 @@ const measureContext = document.createElement("canvas").getContext("2d")
 const FONT = `${SCREEN_METRICS.labelPx}px ${SCREEN_METRICS.font}`
 
 // ширина строки тем же шрифтом, каким рисует холст
-function measureLine(line: string): number {
+export function measureLine(line: string): number {
   if (!measureContext) return line.length * SCREEN_METRICS.labelPx * CHAR_WIDTH
   measureContext.font = FONT
   return measureContext.measureText(line).width

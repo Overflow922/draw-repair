@@ -414,6 +414,8 @@ export const copySectionLine = (l: SectionLine): SectionLine => ({
   label: l.label,
   view: l.view,
   points: l.points.map((p) => ({ x: p.x, y: p.y })),
+  // нечисловая позиция фигуры отбрасывается отдельно от линии (change move-section-figure, design D5)
+  ...(isPoint(l.figureAt) ? { figureAt: { x: l.figureAt.x, y: l.figureAt.y } } : null),
 })
 
 // деталь разреза (change add-section-shapes, design D6): непустые идентификаторы детали и линии, конечные границы s0 < s1, z0 < z1;
